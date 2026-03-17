@@ -47,32 +47,33 @@ namespace JsSampleReport.Controllers
 
                 var headerData = _memberDetail.GetCommonHeaders();
 
-                // Prepare parameters
-                var parameters = new Dictionary<string, string>
+                // Map member data to template-friendly format with null checks
+                var mappedData = allMemberData.Select(m => new
                 {
-                    { "ReportTitle", "Member Detail Report" },
-                    { "GeneratedBy", "System" }
-                };
+                    MemberId = m.MemberId ?? "",
+                    FullName = m.Name ?? "",
+                    Email = m.EmailId ?? "",
+                    MobileNo = m.MobileNo ?? "",
+                    Address = m.PermanentAddress ?? "",
+                    Nationality = m.Nationality ?? "",
+                    Occupation = m.Occupation ?? ""
+                }).ToList();
 
-                // Prepare subreport data
-                var subreportData = new Dictionary<string, object>
+                // Prepare complete data model - wrapped in a dictionary
+                var reportData = new Dictionary<string, object>
                 {
-                    {
-                        "HeaderReport",
-                        new Dictionary<string, object>
-                        {
-                            { "CommonHeader", headerData }
-                        }
-                    }
+                    { "StudentDataSet", mappedData },
+                    { "TotalRecords", mappedData.Count },
+                    { "ReportTitle", "Member Detail Report" },
+                    { "GeneratedBy", "System" },
+                    { "GeneratedDate", DateTime.Now },
+                    { "GeneratedDateString", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") }
                 };
 
                 var reportBytes = _jsReportService.GenerateReport(
                     reportPath: "Views/Report/MemberReport.html",
-                    data: allMemberData,
+                    data: reportData,
                     format: upperFormat
-                    //datasetName: "StudentDataSet",
-                    //parameters: parameters,
-                    //subreportData: subreportData
                 );
 
                 // Handle VIEW mode - return as base64 PDF
