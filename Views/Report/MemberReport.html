@@ -1,0 +1,132 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Member Detail Report</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            font-family: Arial, sans-serif;
+            font-size: 10pt;
+            table-layout: fixed;
+        }
+
+        th {
+            background-color: #4CAF50;
+            color: white;
+            font-weight: bold;
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #ddd;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        td {
+            padding: 8px;
+            border: 1px solid #ddd;
+            text-align: left;
+            vertical-align: top;
+            word-wrap: break-word;
+        }
+
+        .report-title {
+            text-align: center;
+            font-size: 16pt;
+            font-weight: bold;
+            padding: 15px;
+            background-color: #f2f2f2;
+            border: 1px solid #ddd;
+        }
+
+        .report-info {
+            text-align: center;
+            padding: 8px;
+            background-color: #f9f9f9;
+            border: 1px solid #ddd;
+        }
+
+        .org-info {
+            padding: 8px;
+            border: 1px solid #ddd;
+            background-color: #e8f5e8;
+        }
+
+        .org-label {
+            font-weight: bold;
+            width: 120px;
+            background-color: #f0f0f0;
+        }
+
+        .summary-row {
+            font-weight: bold;
+            background-color: #f2f2f2;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 9pt;
+            padding: 8px;
+            color: #666;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <table cellspacing="0" cellpadding="0">
+
+        <!-- ✅ Inherited header partial -->
+        {{> CommonHeader}}
+
+        <!-- Column Headers -->
+        <tr>
+            <th style="width: 5%;">S.N.</th>
+            <th style="width: 12%;">Member ID</th>
+            <th style="width: 15%;">Full Name</th>
+            <th style="width: 20%;">Email</th>
+            <th style="width: 12%;">Mobile No.</th>
+            <th style="width: 15%;">Address</th>
+            <th style="width: 10%;">Nationality</th>
+            <th style="width: 11%;">Occupation</th>
+        </tr>
+
+        <!-- Data Rows -->
+        {{#each StudentDataSet}}
+        <tr>
+            <td style="text-align: center;">{{inc @index}}</td>
+            <td>{{MemberId}}</td>
+            <td>{{FullName}}</td>
+            <td>{{Email}}</td>
+            <td>{{MobileNo}}</td>
+            <td>{{Address}}</td>
+            <td>{{Nationality}}</td>
+            <td>{{Occupation}}</td>
+        </tr>
+        {{/each}}
+
+        <!-- Summary -->
+        <tr>
+            <td colspan="8" style="height: 10px;">&nbsp;</td>
+        </tr>
+        <tr class="summary-row">
+            <td colspan="2">Total Records:</td>
+            <td colspan="6">{{TotalRecords}}</td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+            <td colspan="8" style="height: 10px;">&nbsp;</td>
+        </tr>
+        <tr>
+            <td colspan="8" class="footer">
+                This is a computer-generated report. No signature is required.
+            </td>
+        </tr>
+
+    </table>
+</body>
+</html>
