@@ -62,10 +62,14 @@ if (app.Environment.IsDevelopment())
 }
 
 // ✅ Also add this — tells the app to serve views from /Views folder
-app.UseStaticFiles();
+//app.UseStaticFiles();
 app.UseHttpsRedirection();
 app.UseCors("AllowReactApp");
 app.UseAuthorization();
+// ✅ To view Reports in browser, we need to map controller routes that can return views, not just API endpoints. So we add this:
+app.MapControllerRoute(
+    name: "default",
+    pattern: "{controller=Home}/{action=Index}/{id?}");
 app.MapControllers();
 
 app.Run();

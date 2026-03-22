@@ -1,5 +1,4 @@
-﻿@* Views/Report/MemberReport.cshtml *@
-@model Dictionary<string, object>
+﻿@* @model Dictionary<string, object>
 @{
     Layout = null;
     var dataSet = Model["StudentDataSet"] as IEnumerable<dynamic>;
@@ -118,6 +117,123 @@
         </tr>
 
         <!-- Footer -->
+@*         <tr>
+            <td colspan="8" style="height: 10px;">&nbsp;</td>
+        </tr>
+        <tr>
+            <td colspan="8" class="footer">
+                This is a computer-generated report. No signature is required.
+            </td>
+        </tr>
+
+    </table>
+</body>
+</html>  *@
+
+
+@* Views/Report/MemberReport.cshtml *@
+@model Dictionary<string, object>
+@{
+    Layout = null;
+    var dataSet = Model["StudentDataSet"] as IEnumerable<dynamic>;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Member Detail Report</title>
+    <style>
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            font-family: Arial, sans-serif;
+            font-size: 10pt;
+            table-layout: fixed;
+        }
+        th {
+            background-color: #4CAF50;
+            color: white;
+            font-weight: bold;
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #ddd;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        td {
+            padding: 8px;
+            border: 1px solid #ddd;
+            text-align: left;
+            vertical-align: top;
+            word-wrap: break-word;
+        }
+        .summary-row {
+            font-weight: bold;
+            background-color: #f2f2f2;
+            padding: 10px;
+            border: 1px solid #ddd;
+        }
+        .footer {
+            text-align: center;
+            font-size: 9pt;
+            padding: 8px;
+            color: #666;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div style="width: 230mm; min-height: 297mm; margin: 0 auto; background: white;  box-shadow: 0 0 10px rgba(0,0,0,0.3); box-sizing: border-box;"> 
+
+    @* ✅ CommonHeader is now OUTSIDE and ABOVE the data table *@
+    @await Html.PartialAsync("_CommonHeader", Model)
+
+    @* ✅ Data table starts separately below *@
+    <table cellspacing="0" cellpadding="0" style="margin-top: 150px;">
+
+        <!-- Column Headers -->
+        <tr>
+            <th style="width: 5%;">S.N.</th>
+            <th style="width: 12%;">Member ID</th>
+            <th style="width: 15%;">Full Name</th>
+            <th style="width: 20%;">Email</th>
+            <th style="width: 12%;">Mobile No.</th>
+            <th style="width: 15%;">Address</th>
+            <th style="width: 10%;">Nationality</th>
+            <th style="width: 11%;">Occupation</th>
+        </tr>
+
+        <!-- Data Rows -->
+        @{ int sn = 0; }
+        @foreach (var row in dataSet!)
+        {
+            sn++;
+            <tr>
+                <td style="text-align: center;">@sn</td>
+                <td>@row.MemberId</td>
+                <td>@row.Name</td>
+                <td>@row.EmailId</td>
+                <td>@row.MobileNo</td>
+                <td>@row.PermanentAddress</td>
+                <td>@row.Nationality</td>
+                <td>@row.Occupation</td>
+            </tr>
+        }
+
+        <!-- Summary -->
+        <tr>
+            <td colspan="8" style="height: 10px;">&nbsp;</td>
+        </tr>
+        @if (Model.ContainsKey("TotalRecords"))
+        {
+            <tr class="summary-row">
+                <td colspan="2">Total Records:</td>
+                <td colspan="6">@Model["TotalRecords"]</td>
+            </tr>
+        }
+
+        <!-- Footer -->
         <tr>
             <td colspan="8" style="height: 10px;">&nbsp;</td>
         </tr>
@@ -128,5 +244,6 @@
         </tr>
 
     </table>
+    </div>
 </body>
 </html>

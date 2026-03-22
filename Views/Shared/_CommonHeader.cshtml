@@ -1,89 +1,108 @@
-﻿@using JsSampleReport.Dtos.ReportDtos
-@model Dictionary<string, object>
+﻿
+@* Views/Shared/_CommonHeader.cshtml *@
 
+@using JsSampleReport.Dtos.ReportDtos
+@model Dictionary<string, object>
 
 @if (Model.ContainsKey("HeaderDataSet") && Model["HeaderDataSet"] is IEnumerable<CommonHeader> headers)
 {
     foreach (var h in headers)
     {
-        <tr>
-            <td colspan="8" style="padding: 0;">
-                <table style="width: 100%; border: none; border-collapse: collapse; font-family: Arial, sans-serif;">
+        <div style="width: 100%; height: 25%; font-family: 'Times New Roman', Times, serif,">
 
-                    <!-- Row 1: Logo | Company Name | Reg No -->
-                    <tr>
-                        <!-- Logo -->
-                        <td rowspan="3" style="width: 15%; border: none; vertical-align: middle; padding: 10px;">
-                            @if (!string.IsNullOrEmpty(h.CompanyLogo))
-                            {
-                                <img src="@h.CompanyLogo"
-                                     style="width: 90px; height: 90px; object-fit: cover; border-radius: 50%;" />
-                            }
-                        </td>
+            <!-- Row 1: Logo | Company Name | Reg No -->
+            <div style="display: flex; align-items: flex-start; width: 100%;">
 
-                        <!-- Company Name -->
-                        <td style="width: 55%; border: none; text-align: center; vertical-align: bottom; padding: 5px;">
-                            <span style="font-size: 20pt; font-weight: bold;">@h.CompanyName</span>
-                        </td>
+                <!-- Logo — left, spans all 3 rows -->
+                <div style="width: 15%; display: flex; align-items: center; justify-content: center; padding: 10px;">
+                    @if (!string.IsNullOrEmpty(h.CompanyLogo))
+                    {
+                        <img src="@h.CompanyLogo"
+                             style="width: 90px; height: 90px; object-fit: contain;" />
+                    }
+                </div>
 
-                        <!-- Reg No -->
-                        <td style="width: 30%; border: none; text-align: right; vertical-align: top; padding: 10px;">
+                <!-- Center + Right stacked -->
+                <div style="width: 100%; display: flex; flex-direction: column;  margin-top: 3px">
+
+                    <!-- Company Name + Reg No -->
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start">
+                        <div style="flex: 1; text-align: center;">
+                            <div style="font-size: 20pt; font-weight: bold;">@h.CompanyName</div>
+                            <div style="font-size: 11pt; margin-top: 2px;">@h.CompanyAddress</div>
+                        </div>
+                        <div style="text-align: right; padding: 5px 10px; white-space: nowrap;">
                             @if (!string.IsNullOrEmpty(h.RegisteredNo))
                             {
                                 <span style="font-size: 10pt;"><strong>Reg.No :</strong> @h.RegisteredNo</span>
                             }
-                        </td>
-                    </tr>
+                        </div>
+                    </div>
 
-                    <!-- Row 2: Company Address -->
-                    <tr>
-                        <td style="border: none; text-align: center; vertical-align: top; padding: 2px;">
-                            <span style="font-size: 11pt;">@h.CompanyAddress</span>
-                        </td>
-                        <td style="border: none;"></td>
-                    </tr>
+                    
 
-                    <!-- Row 3: Phone+Fax | Email+Website+PanNo -->
-                    <tr>
-                        <!-- Phone & Fax -->
-                        <td style="border: none; vertical-align: top; padding: 8px 5px;">
+                    <!-- Phone+Fax | Email+Website+PanNo -->
+                    <div style="display: flex; justify-content: space-between; padding: 30px 0;">
+
+                        <!-- Phone & Fax — left -->
+                        <div style="flex: 1; padding: 5px 10px;">
                             @if (!string.IsNullOrEmpty(h.PhoneNo))
                             {
-                                <div><strong>PhoneNo:</strong> @h.PhoneNo</div>
+                                <div>
+                                    <span style="font-weight: 600; ">PhoneNo:</span>
+                                    @h.PhoneNo
+                                
+                                </div>
                             }
                             @if (!string.IsNullOrEmpty(h.FaxNo))
                             {
-                                <div style="margin-top: 4px;"><strong>Fax No :</strong> @h.FaxNo</div>
+                                    <div style="margin-top: 8px;">
+                                        <span style="font-weight: 600; ">Fax No :</span>
+                                        @h.FaxNo
+                                
+                                    </div>
                             }
-                        </td>
+                        </div>
 
-                        <!-- Email, Website, PanNo -->
-                        <td style="border: none; vertical-align: top; padding: 8px 10px;">
+                        <!-- Email, Website, PanNo — right -->
+                        <div style="flex: 1; padding: 5px 10px;">
                             @if (!string.IsNullOrEmpty(h.CompanyEmailId))
                             {
-                                <div><strong>Email :</strong> @h.CompanyEmailId</div>
+                                <div>
+                                    <span style="font-weight: 600; ">Email :</span>
+                                    @h.CompanyEmailId
+                                
+                                </div>
                             }
                             @if (!string.IsNullOrEmpty(h.CompanyWebSite))
                             {
-                                <div style="margin-top: 4px;"><strong>WebSite :</strong> @h.CompanyWebSite</div>
+                                <div style="margin-top: 8px;">
+                                    <span style="font-weight: 600; ">WebSite :</span>
+                                    @h.CompanyWebSite
+                                
+                                </div>
                             }
                             @if (!string.IsNullOrEmpty(h.PanNo))
                             {
-                                <div style="margin-top: 4px;"><strong>Pan No :</strong> @h.PanNo</div>
+                                <div style="margin-top: 8px; font-size: 10pt;"><span style="font-weight: 600; ">Pan No :</span> @h.PanNo</div>
                             }
-                        </td>
-                    </tr>
+                        </div>
 
-                    <!-- Divider Line -->
-                    <tr>
-                        <td colspan="3" style="border: none; padding: 5px 0;">
-                            <hr style="border: none; border-top: 1.5px solid #333; margin: 0;" />
-                        </td>
-                    </tr>
+                    </div>
+                   
 
-                </table>
-            </td>
-        </tr>
+                </div>
+
+            </div>
+
+            <!-- Divider Line -->
+            <hr style="border: none; border-top: 2px solid #333; margin-bottom: 2px" />
+
+        </div>
     }
 }
+
+
+
+
 
