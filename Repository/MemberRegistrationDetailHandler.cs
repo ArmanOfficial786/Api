@@ -1,8 +1,8 @@
 ﻿using Dapper;
 using JsSampleProject.Dtos.MemberDtos;
-using JsSampleProject.Dtos.ReportDtos;
 using JsSampleProject.Interface;
 using JsSampleReport;
+using JsSampleReport.Dtos.ReportDtos;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Data;

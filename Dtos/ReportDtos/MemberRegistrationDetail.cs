@@ -1,4 +1,4 @@
-﻿namespace JsSampleProject.Dtos.MemberDtos
+﻿namespace JsSampleReport.Dtos.ReportDtos
 {
     public class MemberRegistrationDetail
     {

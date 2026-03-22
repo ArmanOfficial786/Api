@@ -1,106 +1,31 @@
 using jsreport.AspNetCore;
 using jsreport.Types;
 using JsSampleReport.Inteface;
-using Microsoft.AspNetCore.Hosting;
-using System.Runtime.Intrinsics.X86;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.Abstractions;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Mvc.Razor;
+using Microsoft.AspNetCore.Mvc.Rendering;
+using Microsoft.AspNetCore.Mvc.ViewFeatures;
+using Microsoft.AspNetCore.Routing;
 
 namespace JsSampleReport.Services.ReportService
 {
-    /// <summary>
-    /// Simplified jsreport service for generating reports
-    /// </summary>
     public class JsReportService : IJsReportService
     {
-        private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly ILogger<JsReportService> _logger;
         private readonly IJsReportMVCService _jsReportMVCService;
+        private readonly IServiceProvider _serviceProvider;  // ✅ replaces IWebHostEnvironment
 
         public JsReportService(
-            IWebHostEnvironment webHostEnvironment,
             ILogger<JsReportService> logger,
-            IJsReportMVCService jsReportMVCService)
+            IJsReportMVCService jsReportMVCService,
+            IServiceProvider serviceProvider)
         {
-            _webHostEnvironment = webHostEnvironment;
             _logger = logger;
             _jsReportMVCService = jsReportMVCService;
+            _serviceProvider = serviceProvider;
         }
-
-        /// <summary>
-        /// Generate report from HTML template
-        /// </summary>
-        //public byte[] GenerateReport(string reportPath, object data, string format)
-        //{
-        //    try
-        //    {
-        //        _logger.LogInformation($"Generating report: Path={reportPath}, Format={format}");
-
-        //        var templateFilePath = Path.Combine(_webHostEnvironment.ContentRootPath, reportPath);
-
-        //        if (!File.Exists(templateFilePath))
-        //        {
-        //            throw new FileNotFoundException($"Report template not found: {templateFilePath}");
-        //        }
-
-        //        // Read the HTML template
-        //        var templateContent = File.ReadAllText(templateFilePath);
-
-        //        // Define custom Handlebars helpers
-        //        var helpers = @"
-        //            function inc(value) {
-        //                return parseInt(value) + 1;
-        //            }
-
-        //            function year(date) {
-        //                if (!date) return '';
-        //                var d = new Date(date);
-        //                return d.getFullYear();
-        //            }
-
-        //            function formatDate(date, format) {
-        //                if (!date) return '';
-        //                var d = new Date(date);
-        //                return d.toISOString().split('T')[0];
-        //            }
-        //        ";
-
-        //        // Create jsreport render request
-        //        var renderRequest = new RenderRequest()
-        //        {
-        //            Template = new Template()
-        //            {
-        //                Content = templateContent,
-        //                Engine = Engine.Handlebars,
-        //                Recipe = GetRecipe(format.ToUpper()),
-        //                Helpers = helpers
-        //            },
-        //            Data = data  // Pass data directly
-        //        };
-
-        //        // Configure recipe-specific options
-        //        ConfigureRecipeOptions(renderRequest, format.ToUpper());
-
-        //        _logger.LogInformation("Rendering report with jsreport...");
-
-        //        // Render the report using jsreport
-        //        var result = _jsReportMVCService.RenderAsync(renderRequest).GetAwaiter().GetResult();
-
-        //        // Convert stream to byte array
-        //        using (var memoryStream = new MemoryStream())
-        //        {
-        //            result.Content.CopyTo(memoryStream);
-        //            var reportBytes = memoryStream.ToArray();
-
-        //            _logger.LogInformation($"Report generated successfully in {format} format. Size: {reportBytes.Length} bytes");
-
-        //            return reportBytes;
-        //        }
-        //    }
-        //    catch (Exception ex)
-        //    {
-        //        _logger.LogError(ex, $"Report generation error: {ex.Message}");
-        //        throw new Exception($"Report rendering failed: {ex.Message}", ex);
-        //    }
-        //}
 
         public byte[] GenerateReport(string reportPath, object data, string format)
         {
@@ -108,58 +33,17 @@ namespace JsSampleReport.Services.ReportService
             {
                 _logger.LogInformation($"Generating report: Path={reportPath}, Format={format}");
 
-                var templateFilePath = Path.Combine(_webHostEnvironment.ContentRootPath, reportPath);
-
-                if (!File.Exists(templateFilePath))
-                    throw new FileNotFoundException($"Report template not found: {templateFilePath}");
-
-                // ✅ Load the main template
-                var templateContent = File.ReadAllText(templateFilePath);
-
-                // ✅ Load CommonHeader partial from the same folder as the template
-                var templateDir = Path.GetDirectoryName(templateFilePath)!;
-                var commonHeaderPath = Path.Combine(templateDir, "CommonHeader.html");
-
-                if (!File.Exists(commonHeaderPath))
-                    throw new FileNotFoundException($"CommonHeader partial not found: {commonHeaderPath}");
-
-                // ✅ Escape the partial content for safe JS string embedding
-                var commonHeaderContent = File.ReadAllText(commonHeaderPath)
-                    .Replace("\\", "\\\\")   // escape backslashes first
-                    .Replace("`", "\\`");    // escape backticks (we'll use template literals)
-
-                // ✅ Register partial + custom helpers
-                var helpers = $@"
-            // Register CommonHeader as a Handlebars partial
-            Handlebars.registerPartial('CommonHeader', `{commonHeaderContent}`);
-
-            function inc(value) {{
-                return parseInt(value) + 1;
-            }}
-
-            function year(date) {{
-                if (!date) return '';
-                var d = new Date(date);
-                return d.getFullYear();
-            }}
-
-            function formatDate(date, format) {{
-                if (!date) return '';
-                var d = new Date(date);
-                return d.toISOString().split('T')[0];
-            }}
-        ";
+                // ✅ Render .cshtml to HTML string instead of reading .html file
+                var htmlContent = RenderViewAsync(reportPath, data).GetAwaiter().GetResult();
 
                 var renderRequest = new RenderRequest()
                 {
                     Template = new Template()
                     {
-                        Content = templateContent,
-                        Engine = Engine.Handlebars,
-                        Recipe = GetRecipe(format.ToUpper()),
-                        Helpers = helpers
+                        Content = htmlContent,
+                        Engine = Engine.None,      // ✅ already rendered, no engine needed
+                        Recipe = GetRecipe(format.ToUpper())
                     },
-                    Data = data
                 };
 
                 ConfigureRecipeOptions(renderRequest, format.ToUpper());
@@ -182,8 +66,48 @@ namespace JsSampleReport.Services.ReportService
             }
         }
 
+        // ✅ Only new addition — renders .cshtml to raw HTML string
+        private async Task<string> RenderViewAsync(string viewName, object model)
+        {
+            var httpContext = new DefaultHttpContext { RequestServices = _serviceProvider };
+            var actionContext = new ActionContext(
+                httpContext,
+                new RouteData(),
+                new ActionDescriptor()
+            );
 
+            var viewEngine = _serviceProvider.GetRequiredService<IRazorViewEngine>();
+            var tempDataProvider = _serviceProvider.GetRequiredService<ITempDataProvider>();
 
+            // Try absolute path first (e.g. "~/Views/Report/MemberReport.cshtml")
+            var viewResult = viewEngine.GetView(null, viewName, false);
+            if (!viewResult.Success)
+                viewResult = viewEngine.FindView(actionContext, viewName, false);
+
+            if (!viewResult.Success)
+                throw new InvalidOperationException($"View '{viewName}' not found.");
+
+            await using var sw = new StringWriter();
+
+            var viewData = new ViewDataDictionary(
+                new EmptyModelMetadataProvider(),
+                new ModelStateDictionary())
+            { Model = model };
+
+            var viewContext = new ViewContext(
+                actionContext,
+                viewResult.View,
+                viewData,
+                new TempDataDictionary(httpContext, tempDataProvider),
+                sw,
+                new HtmlHelperOptions()
+            );
+
+            await viewResult.View.RenderAsync(viewContext);
+            return sw.ToString();
+        }
+
+        // ✅ Unchanged — exactly same as before
         private Recipe GetRecipe(string format)
         {
             return format switch
@@ -197,9 +121,7 @@ namespace JsSampleReport.Services.ReportService
             };
         }
 
-        /// <summary>
-        /// Configure recipe-specific options
-        /// </summary>
+        // ✅ Unchanged — exactly same as before
         private void ConfigureRecipeOptions(RenderRequest request, string format)
         {
             switch (format)
@@ -218,36 +140,12 @@ namespace JsSampleReport.Services.ReportService
                         Landscape = false
                     };
                     break;
-
                 case "EXCEL":
                 case "XLSX":
-                    request.Template.HtmlToXlsx = new HtmlToXlsx
-                    {
-                        HtmlEngine = "chrome"
-                    };
-                    break;
-
-                //case "PNG":
-                //    request.Template.ChromeImage = new ChromeImage
-                //    {
-                //        Type = ChromeImageType.Png,
-                //        Quality = 100,
-                //        WaitForJS = false
-                //    };
-                //    request.Template.Chrome = new Chrome
-                //    {
-                //        PrintBackground = true
-                //    };
-                //    break;
-
-                case "DOCX":
-                case "WORD":
-                    // Docx recipe doesn't require additional configuration
+                    request.Template.HtmlToXlsx = new HtmlToXlsx { HtmlEngine = "chrome" };
                     break;
             }
         }
     }
 }
-
-
 

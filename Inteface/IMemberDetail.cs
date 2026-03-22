@@ -1,5 +1,5 @@
 ﻿using JsSampleProject.Dtos.MemberDtos;
-using JsSampleProject.Dtos.ReportDtos;
+using JsSampleReport.Dtos.ReportDtos;
 
 namespace JsSampleProject.Interface
 {

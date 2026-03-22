@@ -1,4 +1,4 @@
-﻿namespace JsSampleProject.Dtos.ReportDtos
+﻿namespace JsSampleReport.Dtos.ReportDtos
 {
     public class CommonHeader
     {

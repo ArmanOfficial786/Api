@@ -47,31 +47,19 @@ namespace JsSampleReport.Controllers
 
                 var headerData = _memberDetail.GetCommonHeaders();
 
-                // Map member data to template-friendly format with null checks
-                var mappedData = allMemberData.Select(m => new
-                {
-                    MemberId = m.MemberId ?? "",
-                    FullName = m.Name ?? "",
-                    Email = m.EmailId ?? "",
-                    MobileNo = m.MobileNo ?? "",
-                    Address = m.PermanentAddress ?? "",
-                    Nationality = m.Nationality ?? "",
-                    Occupation = m.Occupation ?? ""
-                }).ToList();
+           
 
                 // Prepare complete data model - wrapped in a dictionary
                 var reportData = new Dictionary<string, object>
                 {
-                    { "StudentDataSet", mappedData },
-                    { "TotalRecords", mappedData.Count },
-                    { "ReportTitle", "Member Detail Report" },
-                    { "GeneratedBy", "System" },
-                    { "GeneratedDate", DateTime.Now },
-                    { "GeneratedDateString", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") }
-                };
+                    { "StudentDataSet", allMemberData },
+                    //{ "TotalRecords", allMemberData.Count },
+                    //{ "ReportTitle", "Member Detail Report" },
+                    {"HeaderDataSet", headerData }
+                                   };
 
                 var reportBytes = _jsReportService.GenerateReport(
-                    reportPath: "Views/Report/MemberReport.html",
+                    reportPath: "Views/Report/MemberReport.cshtml",
                     data: reportData,
                     format: upperFormat
                 );
