@@ -1,21 +1,5 @@
-﻿namespace JsSampleReport.Inteface
+﻿namespace JsSampleReport.Inteface.ReportInterface
 {
-
-    /// <summary>
-    /// jsreport specific interface following RDLC pattern
-    /// </summary>
-    //public interface IJsReportService
-    //{
-    //    byte[] GenerateReport<T>(
-    //        string reportPath,
-    //        IEnumerable<T> data,
-    //        string format,
-    //        string datasetName,
-    //        Dictionary<string, string>? parameters = null,
-    //        Dictionary<string, object>? subreportData = null)
-    //        where T : class;
-    //}
-
 
     public interface IJsReportService
     {
@@ -30,5 +14,9 @@
             string reportPath,
             object data,
             string format);
+        string RenderAndCacheReport(string reportKey, string reportPath, object data);
+        byte[] GenerateReportFromHtml(string htmlContent, string format);
+        bool IsCached(string reportKey);          // ✅ check if key exists
+        string? GetFromCache(string reportKey);      // ✅ pull from cache
     }
 }

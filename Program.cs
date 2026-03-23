@@ -4,7 +4,7 @@ using jsreport.Local;
 using JsSampleProject.Interface;
 using JsSampleProject.ServiceHandler;
 using JsSampleReport;
-using JsSampleReport.Inteface;
+using JsSampleReport.Inteface.ReportInterface;
 using JsSampleReport.Services.ReportService;
 using Microsoft.EntityFrameworkCore;
 
@@ -48,8 +48,13 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DatabaseConnectionString")));
 
 // Register application services
+builder.Services.AddMemoryCache();
+// ✅ 2. Register JsReportService as SINGLETON (not Scoped/Transient)
+//    Scoped = new instance per request = cache not shared between requests
+builder.Services.AddSingleton<IJsReportService, JsReportService>();
+// ✅ 3. Your other services
 builder.Services.AddScoped<IMemberDetail, MemberRegistrationDetailHandler>();
-builder.Services.AddScoped<IJsReportService, JsReportService>();
+
 
 
 var app = builder.Build();
