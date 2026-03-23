@@ -66,7 +66,10 @@ namespace JsSampleReport.Controllers
                 var webRoot = ReportUtils.GetWebRootPath(
                     _webHostEnvironment, _reportSettings, _logger);
 
-                ReportUtils.ConvertLogoToBase64(headerData, webRoot, _logger);
+                //ReportUtils.ConvertLogoToBase64(headerData, webRoot, _logger);
+
+                ReportUtils.ConvertImagesToBase64(headerData, nameof(CommonHeader.CompanyLogo), webRoot, _logger);
+                ReportUtils.ConvertImagesToBase64(memberIdCardData, nameof(MemberIdCardResponseModel.MemberPhoto), webRoot, _logger);
 
                 var reportData = new Dictionary<string, object>
                 {

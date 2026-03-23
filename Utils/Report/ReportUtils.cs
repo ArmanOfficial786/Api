@@ -66,42 +66,39 @@ namespace JsSampleReport.Utils.Report
         // ══════════════════════════════════════════════════════════════════
         // Convert logo relative path → base64 data URL
         // ══════════════════════════════════════════════════════════════════
-        public static void ConvertLogoToBase64(
-            IEnumerable<CommonHeader> headers,
-            string webRootPath,
-            ILogger logger)
-        {
-            if (headers == null) return;
 
-            foreach (var header in headers)
+        public static void ConvertImagesToBase64<T>(
+    IEnumerable<T> items,
+    string propertyName,
+    string webRootPath,
+    ILogger logger)
+        {
+            if (items == null) return;
+
+            var property = typeof(T).GetProperty(propertyName)
+                ?? throw new ArgumentException($"Property '{propertyName}' not found on {typeof(T).Name}");
+
+            foreach (var item in items)
             {
-                if (string.IsNullOrWhiteSpace(header.CompanyLogo)) continue;
+                var imagePath = property.GetValue(item) as string;
+                if (string.IsNullOrWhiteSpace(imagePath)) continue;
 
                 try
                 {
-                    var relativePath = header.CompanyLogo
-                        .Replace('/', Path.DirectorySeparatorChar)
-                        .Replace('\\', Path.DirectorySeparatorChar)
-                        .TrimStart(Path.DirectorySeparatorChar);
-
-                    var fullPath = Path.Combine(webRootPath, relativePath);
-
-                    logger.LogInformation($"Logo resolved path: {fullPath}");
+                    var fullPath = Path.Combine(webRootPath,
+                        imagePath.Replace('/', Path.DirectorySeparatorChar)
+                                 .TrimStart(Path.DirectorySeparatorChar));
 
                     if (!File.Exists(fullPath))
                     {
-                        logger.LogWarning($"❌ Logo not found: {fullPath}");
-                        header.CompanyLogo = string.Empty;
+                        logger.LogWarning($"❌ Image not found: {fullPath}");
+                        property.SetValue(item, string.Empty);
                         continue;
                     }
 
-                    var imgBytes = File.ReadAllBytes(fullPath);
-                    var base64 = Convert.ToBase64String(imgBytes);
                     var ext = Path.GetExtension(fullPath).TrimStart('.').ToLower();
-
                     var mimeType = ext switch
                     {
-                        "png" => "image/png",
                         "jpg" or "jpeg" => "image/jpeg",
                         "gif" => "image/gif",
                         "bmp" => "image/bmp",
@@ -109,16 +106,71 @@ namespace JsSampleReport.Utils.Report
                         _ => "image/png"
                     };
 
-                    header.CompanyLogo = $"data:{mimeType};base64,{base64}";
-                    logger.LogInformation("✅ Logo converted to base64 successfully.");
+                    var base64 = Convert.ToBase64String(File.ReadAllBytes(fullPath));
+                    property.SetValue(item, $"data:{mimeType};base64,{base64}");
+                    logger.LogInformation("✅ Image converted to base64.");
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, $"Logo conversion failed: {header.CompanyLogo}");
-                    header.CompanyLogo = string.Empty;
+                    logger.LogError(ex, $"Image conversion failed: {imagePath}");
+                    property.SetValue(item, string.Empty);
                 }
             }
         }
+
+        //public static void ConvertLogoToBase64(
+        //    IEnumerable<CommonHeader> headers,
+        //    string webRootPath,
+        //    ILogger logger)
+        //{
+        //    if (headers == null) return;
+
+        //    foreach (var header in headers)
+        //    {
+        //        if (string.IsNullOrWhiteSpace(header.CompanyLogo)) continue;
+
+        //        try
+        //        {
+        //            var relativePath = header.CompanyLogo
+        //                .Replace('/', Path.DirectorySeparatorChar)
+        //                .Replace('\\', Path.DirectorySeparatorChar)
+        //                .TrimStart(Path.DirectorySeparatorChar);
+
+        //            var fullPath = Path.Combine(webRootPath, relativePath);
+
+        //            logger.LogInformation($"Logo resolved path: {fullPath}");
+
+        //            if (!File.Exists(fullPath))
+        //            {
+        //                logger.LogWarning($"❌ Logo not found: {fullPath}");
+        //                header.CompanyLogo = string.Empty;
+        //                continue;
+        //            }
+
+        //            var imgBytes = File.ReadAllBytes(fullPath);
+        //            var base64 = Convert.ToBase64String(imgBytes);
+        //            var ext = Path.GetExtension(fullPath).TrimStart('.').ToLower();
+
+        //            var mimeType = ext switch
+        //            {
+        //                "png" => "image/png",
+        //                "jpg" or "jpeg" => "image/jpeg",
+        //                "gif" => "image/gif",
+        //                "bmp" => "image/bmp",
+        //                "webp" => "image/webp",
+        //                _ => "image/png"
+        //            };
+
+        //            header.CompanyLogo = $"data:{mimeType};base64,{base64}";
+        //            logger.LogInformation("✅ Logo converted to base64 successfully.");
+        //        }
+        //        catch (Exception ex)
+        //        {
+        //            logger.LogError(ex, $"Logo conversion failed: {header.CompanyLogo}");
+        //            header.CompanyLogo = string.Empty;
+        //        }
+        //    }
+        //}
 
         // ══════════════════════════════════════════════════════════════════
         // Content type + extension for any format
