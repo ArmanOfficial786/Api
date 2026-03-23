@@ -130,10 +130,10 @@ namespace JsSampleReport.Services.ReportService
                 case "VIEW":
                     request.Template.Chrome = new Chrome
                     {
-                        MarginTop = "1cm",
-                        MarginBottom = "1cm",
-                        MarginLeft = "1cm",
-                        MarginRight = "1cm",
+                        MarginTop = "1mm",
+                        MarginBottom = "1mm",
+                        MarginLeft = "5mm",
+                        MarginRight = "5mm",
                         DisplayHeaderFooter = false,
                         PrintBackground = true,
                         Format = "A4",

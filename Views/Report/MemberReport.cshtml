@@ -151,8 +151,8 @@
             table-layout: fixed;
         }
         th {
-            background-color: #4CAF50;
-            color: white;
+            /* background-color: #4CAF50; */
+            color: black;
             font-weight: bold;
             padding: 10px;
             text-align: left;
@@ -183,14 +183,15 @@
         }
     </style>
 </head>
-<body>
+<body style="margin: 0; padding: 0;">
     <div style="width: 230mm; min-height: 297mm; margin: 0 auto; background: white;  box-shadow: 0 0 10px rgba(0,0,0,0.3); box-sizing: border-box;"> 
 
     @* ✅ CommonHeader is now OUTSIDE and ABOVE the data table *@
     @await Html.PartialAsync("_CommonHeader", Model)
+    <div style="display: flex; justify-content: center; align-items: center; margin-top: 5px;font-size: 20pt; font-weight: bold;">Member Report</div>
 
     @* ✅ Data table starts separately below *@
-    <table cellspacing="0" cellpadding="0" style="margin-top: 150px;">
+    <table cellspacing="0" cellpadding="0" style="margin-top: 10px;">
 
         <!-- Column Headers -->
         <tr>

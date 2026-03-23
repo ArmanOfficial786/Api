@@ -1,5 +1,6 @@
 ﻿using JsSampleProject.Dtos.MemberDtos;
 using JsSampleProject.Interface;
+using JsSampleReport.Dtos.ReportDtos;
 using JsSampleReport.Inteface;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,15 +13,18 @@ namespace JsSampleReport.Controllers
         private readonly IMemberDetail _memberDetail;
         private readonly IJsReportService _jsReportService;
         private readonly ILogger<MemberDetailController> _logger;
+        private readonly IWebHostEnvironment _webHostEnvironment;
 
         public MemberDetailController(
             IMemberDetail memberDetail,
             IJsReportService jsReportService,
-            ILogger<MemberDetailController> logger)
+            ILogger<MemberDetailController> logger,
+            IWebHostEnvironment webHostEnvironment)
         {
             _memberDetail = memberDetail;
             _jsReportService = jsReportService;
             _logger = logger;
+            _webHostEnvironment = webHostEnvironment;
         }
 
         [HttpPost("generate-report")]
@@ -46,8 +50,10 @@ namespace JsSampleReport.Controllers
                 }
 
                 var headerData = _memberDetail.GetCommonHeaders();
+                // ✅ Convert CompanyLogo relative path → base64 data URL
+                ConvertLogoToBase64(headerData);
 
-           
+
 
                 // Prepare complete data model - wrapped in a dictionary
                 var reportData = new Dictionary<string, object>
@@ -90,7 +96,56 @@ namespace JsSampleReport.Controllers
                 });
             }
         }
+        // ✅ Converts relative logo path to base64 data URL for each header
+        private void ConvertLogoToBase64(IEnumerable<CommonHeader> headers)
+        {
+            if (headers == null) return;
 
+            foreach (var header in headers)
+            {
+                if (string.IsNullOrWhiteSpace(header.CompanyLogo))
+                    continue;
+
+                try
+                {
+                    // ✅ Use WebRootPath if available, otherwise fallback to C:\inetpub\wwwroot
+                    var webRoot = @"C:\inetpub\wwwroot";
+
+                    var relativePath = header.CompanyLogo.TrimStart('/').Replace('/', Path.DirectorySeparatorChar);
+                    var fullPath = Path.Combine(webRoot, relativePath);
+
+                    _logger.LogInformation($"Looking for logo at: {fullPath}");
+
+                    if (!System.IO.File.Exists(fullPath))
+                    {
+                        _logger.LogWarning($"Company logo not found at path: {fullPath}");
+                        header.CompanyLogo = string.Empty;
+                        continue;
+                    }
+
+                    var bytes = System.IO.File.ReadAllBytes(fullPath);
+                    var base64 = Convert.ToBase64String(bytes);
+
+                    var ext = Path.GetExtension(fullPath).TrimStart('.').ToLower();
+                    var mimeType = ext switch
+                    {
+                        "png" => "image/png",
+                        "jpg" or "jpeg" => "image/jpeg",
+                        "gif" => "image/gif",
+                        "bmp" => "image/bmp",
+                        "webp" => "image/webp",
+                        _ => "image/png"
+                    };
+
+                    header.CompanyLogo = $"data:{mimeType};base64,{base64}";
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Failed to convert logo to base64: {header.CompanyLogo}");
+                    header.CompanyLogo = string.Empty;
+                }
+            }
+        }
         private (string contentType, string extension) GetContentTypeAndExtension(string format)
         {
             return format switch

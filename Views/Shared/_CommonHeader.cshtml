@@ -8,13 +8,13 @@
 {
     foreach (var h in headers)
     {
-        <div style="width: 100%; height: 25%; font-family: 'Times New Roman', Times, serif,">
+        <div style="width: 100%; font-family: 'Times New Roman', Times, serif, ">
 
             <!-- Row 1: Logo | Company Name | Reg No -->
             <div style="display: flex; align-items: flex-start; width: 100%;">
 
                 <!-- Logo — left, spans all 3 rows -->
-                <div style="width: 15%; display: flex; align-items: center; justify-content: center; padding: 10px;">
+                <div style="width: 15%; display: flex; align-items: center; justify-content: center; ">
                     @if (!string.IsNullOrEmpty(h.CompanyLogo))
                     {
                         <img src="@h.CompanyLogo"
@@ -96,7 +96,7 @@
             </div>
 
             <!-- Divider Line -->
-            <hr style="border: none; border-top: 2px solid #333; margin-bottom: 2px" />
+            <hr style="border: none; border-top: 1.6px solid #333; margin-bottom: 2px" />
 
         </div>
     }
