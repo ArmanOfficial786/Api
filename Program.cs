@@ -4,6 +4,7 @@ using jsreport.Local;
 using JsSampleProject.Interface;
 using JsSampleProject.ServiceHandler;
 using JsSampleReport;
+using JsSampleReport.Dtos.ReportDtos;
 using JsSampleReport.Inteface.ReportInterface;
 using JsSampleReport.Services.ReportService;
 using Microsoft.EntityFrameworkCore;
@@ -46,6 +47,10 @@ builder.Services.AddCors(options =>
 // Configure Database
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DatabaseConnectionString")));
+
+// ✅ Register ReportSettings from appsettings.json
+builder.Services.Configure<ReportSettings>(
+    builder.Configuration.GetSection(ReportSettings.SectionName));
 
 // Register application services
 builder.Services.AddMemoryCache();
