@@ -1,0 +1,402 @@
+﻿@model Dictionary<string, object>
+@using JsSampleReport.Dtos.ReportDtos
+@using JsSampleReport.Dtos.RequestDtos
+@{
+    Layout = null;
+
+    var rows = (Model["MemberIdCardDataSet"]
+                    as IEnumerable<MemberIdCardResponseModel>)
+               ?.ToList()
+               ?? new List<MemberIdCardResponseModel>();
+
+    // ✅ Extract header once — outside loop
+    var companyName    = "";
+    var companyLogo    = "";
+    var companyAddress = "";
+    var companyPhone   = "";
+
+    if (Model.ContainsKey("HeaderDataSet") &&
+        Model["HeaderDataSet"] is IEnumerable<CommonHeader> hdrs)
+    {
+        var h       = hdrs.FirstOrDefault();
+        companyName    = h?.CompanyName    ?? "";
+        companyLogo    = h?.CompanyLogo    ?? "";
+        companyAddress = h?.CompanyAddress ?? "";
+        companyPhone   = h?.PhoneNo        ?? "";
+    }
+
+    // ✅ Group into rows of 2 — prevents half-page card splits
+    var cardRows = rows
+        .Select((member, index) => new { member, index })
+        .GroupBy(x => x.index / 2)
+        .ToList();
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Member ID Cards</title>
+    <style>
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: Arial, sans-serif;
+            background: #fff;
+            margin: 0;
+            padding: 0;
+        }
+
+        .page-wrapper {
+            width: 210mm;
+            margin: 0 auto;
+            background: white;
+            padding: 4mm;
+        }
+
+        /* ── Card row — 2 columns, page-break safe ──────────────── */
+        .card-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10mm;
+            margin-top: 8px;
+            align-items: start;
+            page-break-inside: avoid;
+            break-inside:      avoid;
+            -webkit-column-break-inside: avoid;
+        }
+
+        /* ── Single ID card ─────────────────────────────────────── */
+        .id-card {
+            border: 1px solid #CBD5E1;
+            border-radius: 6px;
+            overflow: hidden;
+            background: #ffffff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.13);
+            page-break-inside: avoid;
+            break-inside:      avoid;
+            -webkit-column-break-inside: avoid;
+        }
+
+        /* ── Card Header — white bg, blue bottom border ─────────── */
+        .card-header {
+            background: #ffffff;
+            border-bottom: 1px solid #E2E8F0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+            padding: 7px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 6px;
+        }
+
+        .header-logo {
+            width: 36px;
+            height: 36px;
+            object-fit: contain;
+            flex-shrink: 0;
+        }
+
+        .header-logo-placeholder {
+            width: 36px;
+            height: 36px;
+            flex-shrink: 0;
+        }
+
+        .header-center {
+            flex: 1;
+            text-align: center;
+            padding: 0 4px;
+        }
+
+        .header-company-name {
+            font-size: 10pt;
+            font-weight: bold;
+            color: #0F172A;
+            line-height: 1.3;
+        }
+
+        .header-company-address {
+            font-size: 7pt;
+            color: #475569;
+            margin-top: 1px;
+            line-height: 1.3;
+        }
+
+        /* ── Card Title ─────────────────────────────────────────── */
+        .card-title {
+            text-align: center;
+            font-size: 9.5pt;
+            font-weight: bold;
+            color: #1D4ED8;
+            padding: 5px 0 4px 0;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            border-bottom: 1px solid #E2E8F0;
+            background: #F8FAFF;
+        }
+
+        /* ── Card Body ──────────────────────────────────────────── */
+        .card-body {
+            display: flex;
+            padding: 8px 10px;
+            gap: 10px;
+            align-items: flex-start;
+        }
+
+        /* ── Photo box ──────────────────────────────────────────── */
+        .photo-box {
+            width: 65px;
+            height: 78px;
+            border: 1.5px solid #94A3B8;
+            background: #F8FAFC;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .photo-box img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .no-photo {
+            font-size: 6.5pt;
+            color: #94A3B8;
+            text-align: center;
+            line-height: 1.4;
+        }
+
+        /* ── Fields section ─────────────────────────────────────── */
+        .fields-section {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .field-row {
+            display: flex;
+            align-items: flex-start;
+            font-size: 7.5pt;
+            line-height: 1.8;
+            border-bottom: 1px dotted #E2E8F0;
+        }
+
+        .field-row:last-child {
+            border-bottom: none;
+        }
+
+        .field-label {
+            color: #374151;
+            font-weight: bold;
+            min-width: 52px;
+            flex-shrink: 0;
+        }
+
+        .field-colon {
+            color: #374151;
+            font-weight: bold;
+            margin-right: 4px;
+            flex-shrink: 0;
+        }
+
+        .field-value {
+            color: #111827;
+            word-break: break-word;
+            flex: 1;
+        }
+
+        /* ── Card Footer ────────────────────────────────────────── */
+        .card-footer {
+            border-top: 1px solid #E2E8F0;
+            background: #FAFAFA;
+            padding: 6px 12px 5px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+
+        .sign-block {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+        }
+
+        .sign-line {
+            width: 70px;
+            border-top: 1px solid #374151;
+        }
+
+        .sign-label {
+            font-size: 6.5pt;
+            color: #374151;
+            font-weight: bold;
+        }
+
+        @@media print {
+            body         { background: white; padding: 0; }
+            .page-wrapper { width: 100%; }
+        }
+
+    </style>
+</head>
+<body>
+<div class="page-wrapper">
+
+    @* ── Page-level Common Header ─────────────────────────────── *@
+    @await Html.PartialAsync("_CommonHeader", Model)
+
+    @* ── Card Rows — grouped in pairs, each row is page-break safe *@
+    @foreach (var cardRow in cardRows)
+    {
+        <div class="card-row">
+
+            @foreach (var item in cardRow)
+            {
+                var member = item.member;
+
+                <div class="id-card">
+
+                    @* ── Card Header ─────────────────────────────── *@
+                    <div class="card-header">
+
+                        @* Logo — left *@
+                        @if (!string.IsNullOrEmpty(companyLogo))
+                        {
+                            <img class="header-logo"
+                                 src="@companyLogo" alt="Logo" />
+                        }
+                        else
+                        {
+                            <div class="header-logo-placeholder"></div>
+                        }
+
+                        @* Company name + address — center *@
+                        <div class="header-center">
+                            <div class="header-company-name">@companyName</div>
+                            <div class="header-company-address">
+                                @companyAddress
+                                @if (!string.IsNullOrEmpty(companyPhone))
+                                {
+                                    <span>, PhoneNo: @companyPhone</span>
+                                }
+                            </div>
+                        </div>
+
+                    </div>
+
+                    @* ── Card Title ───────────────────────────────── *@
+                    <div class="card-title">Identity Card</div>
+
+                    @* ── Card Body ────────────────────────────────── *@
+                    <div class="card-body">
+
+                        @* Photo *@
+                        <div class="photo-box">
+                            @if (!string.IsNullOrEmpty(member.MemberPhoto))
+                            {
+                                <img src="@member.MemberPhoto" alt="Photo" />
+                            }
+                            else
+                            {
+                                <div class="no-photo">No<br />Photo</div>
+                            }
+                        </div>
+
+                        @* Fields *@
+                        <div class="fields-section">
+
+                            <div class="field-row">
+                                <span class="field-label">Mem Id</span>
+                                <span class="field-colon"> : </span>
+                                <span class="field-value">
+                                    @(member.MemberId ?? "—")
+                                </span>
+                            </div>
+
+                            <div class="field-row">
+                                <span class="field-label">Name</span>
+                                <span class="field-colon"> : </span>
+                                <span class="field-value">
+                                    @(member.Name ?? "—")
+                                </span>
+                            </div>
+
+                            <div class="field-row">
+                                <span class="field-label">D.O.B</span>
+                                <span class="field-colon"> : </span>
+                                <span class="field-value">
+                                    @(string.IsNullOrEmpty(member.DateOfBirth)
+                                        ? "—" : member.DateOfBirth)
+                                </span>
+                            </div>
+
+                            <div class="field-row">
+                                <span class="field-label">Ctz No</span>
+                                <span class="field-colon"> : </span>
+                                <span class="field-value">
+                                    @(string.IsNullOrEmpty(member.CitizenshipNo)
+                                        ? "—" : member.CitizenshipNo)
+                                </span>
+                            </div>
+
+                            <div class="field-row">
+                                <span class="field-label">F Name</span>
+                                <span class="field-colon"> : </span>
+                                <span class="field-value">
+                                    @(string.IsNullOrEmpty(member.FatherName)
+                                        ? "—" : member.FatherName)
+                                </span>
+                            </div>
+
+                            <div class="field-row">
+                                <span class="field-label">Address</span>
+                                <span class="field-colon"> : </span>
+                                <span class="field-value">
+                                    @(string.IsNullOrEmpty(member.TemporaryAddress)
+                                        ? "—" : member.TemporaryAddress)
+                                </span>
+                            </div>
+
+                            <div class="field-row">
+                                <span class="field-label">Ph. No</span>
+                                <span class="field-colon"> : </span>
+                                <span class="field-value">
+                                    @(string.IsNullOrEmpty(member.PhoneNo)
+                                        ? "—" : member.PhoneNo)
+                                </span>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    @* ── Card Footer ──────────────────────────────── *@
+                    <div class="card-footer">
+                        <div class="sign-block">
+                            <div class="sign-line"></div>
+                            <div class="sign-label">User Sign</div>
+                        </div>
+                        <div class="sign-block">
+                            <div class="sign-line"></div>
+                            <div class="sign-label">Auth Sign</div>
+                        </div>
+                    </div>
+
+                </div>
+            }
+
+            @* ✅ If odd number of members — empty cell keeps grid aligned *@
+            @if (cardRow.Count() == 1)
+            {
+                <div></div>
+            }
+
+        </div>
+    }
+
+</div>
+</body>
+</html>

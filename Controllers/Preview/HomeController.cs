@@ -1,4 +1,5 @@
-﻿using JsSampleProject.Interface;
+﻿using JsSampleReport.Dtos.RequestDtos;
+using JsSampleReport.Inteface.ServiceInterface;
 using Microsoft.AspNetCore.Mvc;
 
 namespace JsSampleReport.Controllers.Preview
@@ -16,7 +17,7 @@ namespace JsSampleReport.Controllers.Preview
         public IActionResult MemberReport()
         {
             var allMemberData = _memberDetail.GetMemberRegistrationDetail(
-                new JsSampleProject.Dtos.MemberDtos.MemberDetailRequest
+                new MemberDetailRequest
                 {
                     fromDate = "2024-01-01",
                     toDate = "2024-12-31",
@@ -34,7 +35,8 @@ namespace JsSampleReport.Controllers.Preview
                 { "HeaderDataSet",  headerData ?? [] }
             };
 
-            return View("~/Views/Report/MemberReport.cshtml", model);
+            //return View("~/Views/Report/MemberReport.cshtml", model);
+            return View("~/Views/Report/MemberIdCard.cshtml", model);
         }
     }
 }

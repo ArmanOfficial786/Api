@@ -1,4 +1,4 @@
-﻿namespace JsSampleProject.Dtos.MemberDtos
+﻿namespace JsSampleReport.Dtos.RequestDtos
 {
     public class MemberDetailRequest
     {

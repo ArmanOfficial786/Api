@@ -241,10 +241,10 @@
 
 
 
-using JsSampleProject.Dtos.MemberDtos;
-using JsSampleProject.Interface;
 using JsSampleReport.Dtos.ReportDtos;
+using JsSampleReport.Dtos.RequestDtos;
 using JsSampleReport.Inteface.ReportInterface;
+using JsSampleReport.Inteface.ServiceInterface;
 using JsSampleReport.Utils;
 using JsSampleReport.Utils.Report;
 using Microsoft.AspNetCore.Mvc;

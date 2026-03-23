@@ -1,11 +1,12 @@
 ﻿using jsreport.AspNetCore;
 using jsreport.Binary;
 using jsreport.Local;
-using JsSampleProject.Interface;
 using JsSampleProject.ServiceHandler;
 using JsSampleReport;
 using JsSampleReport.Dtos.ReportDtos;
 using JsSampleReport.Inteface.ReportInterface;
+using JsSampleReport.Inteface.ServiceInterface;
+using JsSampleReport.Repository;
 using JsSampleReport.Services.ReportService;
 using Microsoft.EntityFrameworkCore;
 
@@ -59,6 +60,7 @@ builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<IJsReportService, JsReportService>();
 // ✅ 3. Your other services
 builder.Services.AddScoped<IMemberDetail, MemberRegistrationDetailHandler>();
+builder.Services.AddScoped<IMemberIdCard, MemberIdCardRepository>();
 
 
 

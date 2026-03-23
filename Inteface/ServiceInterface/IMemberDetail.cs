@@ -1,7 +1,7 @@
-﻿using JsSampleProject.Dtos.MemberDtos;
-using JsSampleReport.Dtos.ReportDtos;
+﻿using JsSampleReport.Dtos.ReportDtos;
+using JsSampleReport.Dtos.RequestDtos;
 
-namespace JsSampleProject.Interface
+namespace JsSampleReport.Inteface.ServiceInterface
 {
     public interface IMemberDetail
     {
