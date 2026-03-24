@@ -60,7 +60,7 @@ namespace JsSampleReport.Utils.Report
 
             // 4️⃣ Last fallback — log warning
             logger.LogWarning("⚠️ WebRootPath not resolved. Check ReportSettings:WebRootPath in appsettings.json");
-            return @"C:\inetpub\wwwroot";
+            return @"C:\inetpub\wwwroot\Images";
         }
 
         // ══════════════════════════════════════════════════════════════════
