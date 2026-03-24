@@ -40,5 +40,8 @@
         public int EvenOdd { get; set; }
 
         public string? MemberPhoto { get; set; }
+
+        public string? UserSignature { get; set; }  // ArmanSignature.png → base64
+        public string? AuthSignature { get; set; }
     }
 }

@@ -60,7 +60,7 @@ namespace JsSampleReport.Controllers
 
                 // ── VIEW PATH ─────────────────────────────────────────────
                 _logger.LogInformation("🔄 DB CALL — fetching fresh data");
-                var memberIdCardData = _memberIdCardService.GetMemberIdCardData(request);
+                var memberIdCardData = _memberIdCardService.GetMemberIdCardData(request).ToList();
                 var headerData = _memberDetail.GetCommonHeaders();
                 // ✅ WebRootPath resolved from appsettings.json
                 var webRoot = ReportUtils.GetWebRootPath(
@@ -70,6 +70,20 @@ namespace JsSampleReport.Controllers
 
                 ReportUtils.ConvertImagesToBase64(headerData, nameof(CommonHeader.CompanyLogo), webRoot, _logger);
                 ReportUtils.ConvertImagesToBase64(memberIdCardData, nameof(MemberIdCardResponseModel.MemberPhoto), webRoot, _logger);
+
+
+                // ✅ Step 1 — Set static file paths FIRST (they are null from DB)
+                foreach (var member in memberIdCardData)
+                {
+                    member.UserSignature = "ArmanSignature.png";
+                    member.AuthSignature = "AuthSignature.png";
+                }
+
+                // ✅ Convert both static signature images to base64
+                ReportUtils.ConvertImagesToBase64(memberIdCardData,nameof(MemberIdCardResponseModel.UserSignature),webRoot, _logger);
+                ReportUtils.ConvertImagesToBase64(memberIdCardData,nameof(MemberIdCardResponseModel.AuthSignature),webRoot, _logger);
+
+            
 
                 var reportData = new Dictionary<string, object>
                 {

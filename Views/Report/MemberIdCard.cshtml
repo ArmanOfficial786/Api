@@ -225,6 +225,14 @@
             gap: 2px;
         }
 
+        .sign-image {
+            font-size: 15pt;
+            width: 70px;
+            height: 20px;
+            display: block;
+            
+        }
+
         .sign-line {
             width: 70px;
             border-top: 1px solid #374151;
@@ -376,10 +384,12 @@
                     @* ── Card Footer ──────────────────────────────── *@
                     <div class="card-footer">
                         <div class="sign-block">
+                            <img class="sign-image" src="@member.UserSignature" alt="UserSign" />
                             <div class="sign-line"></div>
                             <div class="sign-label">User Sign</div>
                         </div>
                         <div class="sign-block">
+                            <img class="sign-image" src="@member.AuthSignature" alt="UserSign" />
                             <div class="sign-line"></div>
                             <div class="sign-label">Auth Sign</div>
                         </div>
