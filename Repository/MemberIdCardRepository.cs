@@ -17,7 +17,7 @@ namespace JsSampleReport.Repository
             _context = context;
         }
 
-        public List<MemberIdCardResponseModel> GetMemberIdCardData(MemberIdCardRequest request)
+        public async Task<List<MemberIdCardResponseModel>> GetMemberIdCardData(MemberIdCardRequest request)
         {
             var sqlFilterExp = BuildSqlFilter(request);
             var sqlOrderBy = " ORDER BY RegistrationOn ASC";

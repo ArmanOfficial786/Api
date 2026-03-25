@@ -34,7 +34,7 @@ namespace JsSampleReport.Controllers
         }
 
         [HttpPost("generate-report")]
-        public IActionResult GenerateReport(
+        public async Task<IActionResult> GenerateReport(
             [FromBody] MemberDetailRequest request,
             [FromQuery] string format = "VIEW")
         {
@@ -66,19 +66,19 @@ namespace JsSampleReport.Controllers
                 // ── VIEW PATH ─────────────────────────────────────────────
                 _logger.LogInformation("🔄 DB CALL — fetching fresh data");
 
-                var allMemberData = _memberDetail.GetMemberRegistrationDetail(request);
+                var allMemberData = await _memberDetail.GetMemberRegistrationDetail(request);
 
                 if (allMemberData == null || !allMemberData.Any())
                     return NotFound(new { success = false, message = "No data found" });
 
-                var headerData = _memberDetail.GetCommonHeaders();
+                var headerData = await _memberDetail.GetCommonHeaders();
 
                 // ✅ WebRootPath resolved from appsettings.json
                 var webRoot = ReportUtils.GetWebRootPath(
                     _webHostEnvironment, _reportSettings, _logger);
 
                 //ReportUtils.ConvertLogoToBase64(headerData, webRoot, _logger);
-                ReportUtils.ConvertImagesToBase64(headerData, nameof(CommonHeader.CompanyLogo), webRoot, _logger);
+                await ReportUtils.ConvertUniqueImagesToBase64Async(headerData, nameof(CommonHeader.CompanyLogo), webRoot, _logger);
 
                 var reportData = new Dictionary<string, object>
                 {

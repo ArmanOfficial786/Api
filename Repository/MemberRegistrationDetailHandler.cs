@@ -22,7 +22,7 @@ namespace JsSampleProject.ServiceHandler
             _logger = logger;
         }
 
-        public List<MemberRegistrationDetail> GetMemberRegistrationDetail(MemberDetailRequest request)
+        public async Task<List<MemberRegistrationDetail>> GetMemberRegistrationDetail(MemberDetailRequest request)
         {
             var sqlFilterExp = BuildSqlFilter(request);
             var connectionString = _context.Database.GetConnectionString();
@@ -41,7 +41,7 @@ namespace JsSampleProject.ServiceHandler
             }
         }
 
-        public List<CommonHeader> GetCommonHeaders()
+        public async Task<List<CommonHeader>> GetCommonHeaders()
         {
             var connectionString = _context.Database.GetConnectionString();
             using (var connection = new SqlConnection(connectionString))

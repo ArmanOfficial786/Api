@@ -14,9 +14,9 @@ namespace JsSampleReport.Controllers.Preview
         }
 
         [HttpGet("preview/member-report")]
-        public IActionResult MemberReport()
+        public async Task<IActionResult> MemberReport()
         {
-            var allMemberData = _memberDetail.GetMemberRegistrationDetail(
+            var allMemberData = await _memberDetail.GetMemberRegistrationDetail(
                 new MemberDetailRequest
                 {
                     fromDate = "2024-01-01",
@@ -27,7 +27,7 @@ namespace JsSampleReport.Controllers.Preview
                     pageSize = 0
                 });
 
-            var headerData = _memberDetail.GetCommonHeaders();
+            var headerData = await _memberDetail.GetCommonHeaders();
 
             var model = new Dictionary<string, object>
             {

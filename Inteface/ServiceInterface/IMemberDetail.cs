@@ -5,7 +5,7 @@ namespace JsSampleReport.Inteface.ServiceInterface
 {
     public interface IMemberDetail
     {
-        List<MemberRegistrationDetail> GetMemberRegistrationDetail(MemberDetailRequest request);
-        List<CommonHeader> GetCommonHeaders();
+        Task<List<MemberRegistrationDetail>> GetMemberRegistrationDetail(MemberDetailRequest request);
+        Task<List<CommonHeader>> GetCommonHeaders();
     }
 }
