@@ -61,6 +61,7 @@ builder.Services.AddSingleton<IJsReportService, JsReportService>();
 // ✅ 3. Your other services
 builder.Services.AddScoped<IMemberDetail, MemberRegistrationDetailHandler>();
 builder.Services.AddScoped<IMemberIdCard, MemberIdCardRepository>();
+builder.Services.AddScoped<IAccountStatement, AccountStatementRepository>();
 
 
 
