@@ -158,7 +158,7 @@ namespace JsSampleReport.Controllers
             _reportSettings = reportSettings;
         }
 
-        [HttpPost("generate-report")]
+        [HttpPost("MemberDetailReport")]
         public async Task<IActionResult> GenerateReport(
             [FromBody] MemberDetailRequest request,
             [FromQuery] string format = "VIEW")
