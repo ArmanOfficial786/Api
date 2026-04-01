@@ -105,6 +105,7 @@ using JsSampleReport.Dtos.ReportDtos;
 using JsSampleReport.Inteface.ReportInterface;
 using JsSampleReport.Inteface.ServiceInterface;
 using JsSampleReport.Repository;
+using JsSampleReport.Services.CommonService;
 using JsSampleReport.Services.ReportService;
 using Microsoft.EntityFrameworkCore;
 
@@ -154,6 +155,8 @@ builder.Services.AddSingleton<IJsReportService, JsReportService>();
 builder.Services.AddScoped<IMemberDetail, MemberRegistrationDetailHandler>();
 builder.Services.AddScoped<IMemberIdCard, MemberIdCardRepository>();
 builder.Services.AddScoped<IAccountStatement, AccountStatementRepository>();
+builder.Services.AddScoped<IBranch, BranchRepository>();
+builder.Services.AddScoped<IOrderBy, OrderByService>();
 
 var app = builder.Build();
 

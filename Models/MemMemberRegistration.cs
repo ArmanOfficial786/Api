@@ -184,4 +184,6 @@ public partial class MemMemberRegistration
     public DateTime? VerifiedOn { get; set; }
 
     public string? RegistrationNo { get; set; }
+
+    public virtual UsmOffice UsmOffice { get; set; } = null!;
 }

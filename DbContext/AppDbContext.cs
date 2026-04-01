@@ -18,7 +18,11 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<MemMemberRegistration> MemMemberRegistrations { get; set; }
 
-//    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    public virtual DbSet<UsmOffice> UsmOffices { get; set; }
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) 
+    { 
+    }
 //#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
 //        => optionsBuilder.UseSqlServer("Server=DESKTOP-G41KGSS\\SQLEXPRESS;Database=NexGenCoSysDBDev;Persist Security Info=True;User ID=SA;Password=cosys123;TrustServerCertificate=True;Encrypt=False");
 
@@ -99,6 +103,40 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.VotersId).HasMaxLength(50);
             entity.Property(e => e.WardNo).HasMaxLength(50);
             entity.Property(e => e.WaterSupplyNo).HasMaxLength(50);
+
+            entity.HasOne(d => d.UsmOffice).WithMany(p => p.MemMemberRegistrations)
+                .HasForeignKey(d => d.UsmOfficeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_MemMemberRegistration_UsmOffice");
+        });
+
+        modelBuilder.Entity<UsmOffice>(entity =>
+        {
+            entity.ToTable("UsmOffice");
+
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.Description).HasColumnType("ntext");
+            entity.Property(e => e.EmailAddress).HasMaxLength(100);
+            entity.Property(e => e.FaxNumbers).HasMaxLength(200);
+            entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_UsmOffice_IsActive");
+            entity.Property(e => e.JoinedOn).HasColumnType("datetime");
+            entity.Property(e => e.JoinedOnBs)
+                .HasMaxLength(50)
+                .HasColumnName("JoinedOnBS");
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.OfficeDetailAddress).HasMaxLength(200);
+            entity.Property(e => e.OfficeDetailAddressNepali).HasMaxLength(200);
+            entity.Property(e => e.OfficeName).HasMaxLength(100);
+            entity.Property(e => e.OfficeNameNepali).HasMaxLength(100);
+            entity.Property(e => e.OfficeShortCode).HasMaxLength(50);
+            entity.Property(e => e.OfficeUrl)
+                .HasMaxLength(200)
+                .HasColumnName("OfficeURL");
+            entity.Property(e => e.PhoneNumbers).HasMaxLength(500);
+            entity.Property(e => e.SycStateVdcid).HasColumnName("SycStateVDCId");
+            entity.Property(e => e.SycVdcid).HasColumnName("SycVDCId");
+            entity.Property(e => e.Tole).HasMaxLength(250);
+            entity.Property(e => e.WardNo).HasMaxLength(50);
         });
 
         OnModelCreatingPartial(modelBuilder);
