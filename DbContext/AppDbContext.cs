@@ -16,18 +16,27 @@ public partial class AppDbContext : DbContext
     {
     }
 
+    public virtual DbSet<ComCalendar> ComCalendars { get; set; }
+
     public virtual DbSet<MemMemberRegistration> MemMemberRegistrations { get; set; }
 
     public virtual DbSet<UsmOffice> UsmOffices { get; set; }
 
-    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) 
-    { 
-    }
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
 //#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
 //        => optionsBuilder.UseSqlServer("Server=DESKTOP-G41KGSS\\SQLEXPRESS;Database=NexGenCoSysDBDev;Persist Security Info=True;User ID=SA;Password=cosys123;TrustServerCertificate=True;Encrypt=False");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<ComCalendar>(entity =>
+        {
+            entity.ToTable("ComCalendar");
+
+            entity.Property(e => e.ComCalendarId).ValueGeneratedNever();
+            entity.Property(e => e.EnglishEndDate).HasColumnType("datetime");
+            entity.Property(e => e.EnglishStartDate).HasColumnType("datetime");
+        });
+
         modelBuilder.Entity<MemMemberRegistration>(entity =>
         {
             entity.ToTable("MemMemberRegistration");

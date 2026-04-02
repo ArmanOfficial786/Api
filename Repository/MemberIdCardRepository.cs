@@ -11,15 +11,17 @@ namespace JsSampleReport.Repository
     public class MemberIdCardRepository : IMemberIdCard
     {
         private readonly AppDbContext _context;
+        private readonly IDateConverterService _dateConverter;
 
-        public MemberIdCardRepository(AppDbContext context)
+        public MemberIdCardRepository(AppDbContext context, IDateConverterService dateConverter)
         {
             _context = context;
+            _dateConverter = dateConverter;
         }
 
         public async Task<List<MemberIdCardResponseModel>> GetMemberIdCardData(MemberIdCardRequest request)
         {
-            var sqlFilterExp = BuildSqlFilter(request);
+            var sqlFilterExp = await BuildSqlFilter(request);
             var sqlOrderBy = " ORDER BY RegistrationOn ASC";
 
             var connectionString = _context.Database.GetConnectionString();
@@ -41,7 +43,7 @@ namespace JsSampleReport.Repository
             }
         }
 
-        private string BuildSqlFilter(MemberIdCardRequest request)
+        private async Task<string> BuildSqlFilter(MemberIdCardRequest request)
         {
             var sqlFilterExp = string.Empty;
 
@@ -62,7 +64,12 @@ namespace JsSampleReport.Repository
 
             if (!string.IsNullOrEmpty(request.fromDate) && !string.IsNullOrEmpty(request.toDate))
             {
-                sqlFilterExp += $" And MR.RegistrationOn between '{request.fromDate}' And '{request.toDate}'";
+                //sqlFilterExp += $" And MR.RegistrationOn between '{request.fromDate}' And '{request.toDate}'";
+                string fromDateAd = await _dateConverter.BsToAdStringAsync(request.fromDate);
+                string toDateAd = await _dateConverter.BsToAdStringAsync(request.toDate);
+
+                if (!string.IsNullOrEmpty(fromDateAd) && !string.IsNullOrEmpty(toDateAd))
+                    sqlFilterExp += $" And MR.RegistrationOn BETWEEN '{fromDateAd}' AND '{toDateAd}'";
             }
 
             return sqlFilterExp;

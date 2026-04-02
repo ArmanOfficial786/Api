@@ -157,6 +157,7 @@ builder.Services.AddScoped<IMemberIdCard, MemberIdCardRepository>();
 builder.Services.AddScoped<IAccountStatement, AccountStatementRepository>();
 builder.Services.AddScoped<IBranch, BranchRepository>();
 builder.Services.AddScoped<IOrderBy, OrderByService>();
+builder.Services.AddScoped<IDateConverterService, DateConverterService>();  
 
 var app = builder.Build();
 
