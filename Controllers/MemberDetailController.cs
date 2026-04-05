@@ -159,7 +159,7 @@ namespace JsSampleReport.Controllers
         }
 
         [HttpPost("MemberDetailReport")]
-        public async Task<IActionResult> GenerateReport(
+        public async Task<ActionResult<GeneralResponse<ReportResponseDtos>>> GenerateReport(
             [FromBody] MemberDetailRequest request,
             [FromQuery] string format = "VIEW")
         {
@@ -167,8 +167,15 @@ namespace JsSampleReport.Controllers
 
             try
             {
+                var response = new GeneralResponse<ReportResponseDtos>();   
                 if (request == null || !ModelState.IsValid)
-                    return BadRequest(new { success = false, message = "Invalid request" });
+                {
+                    response.IsValid = false;
+                    response.StatusCode = 400;
+                    response.Message = "Invalid request";
+                    return BadRequest(response);
+                }
+                    //return BadRequest(new { success = false, message = "Invalid request" });
 
                 var upperFormat = format.ToUpper();
                 var reportKey = ReportUtils.GenerateReportKey(request, "MemberReport");
@@ -255,12 +262,31 @@ namespace JsSampleReport.Controllers
 
                 if (upperFormat == "VIEW")
                 {
-                    return Ok(new
+                    //return Ok(new
+                    //{
+                    //    success = true,
+                    //    pdfData = Convert.ToBase64String(pdfBytes),
+                    //    reportName = "Member Detail Report"
+                    //});
+
+                    response.IsValid = true;
+                    response.StatusCode = 200;
+                    response.Message = "Success";
+                    response.Data = new ReportResponseDtos
                     {
-                        success = true,
-                        pdfData = Convert.ToBase64String(pdfBytes),
-                        reportName = "Member Detail Report"
-                    });
+                        PdfData = Convert.ToBase64String(pdfBytes),
+                        ReportName = "MemberIdCard Report",
+                        Pagination = new Pagination
+                        {
+                            CurrentPage = request.currentPage,
+                            TotalPages = 1,
+                            TotalRecord = 1,
+                            PageSize = request.pageSize,
+                            HasNextPage = false,
+                            HasPreviousPage = false
+                        }
+                    };
+                    return Ok(response);
                 }
 
                 return await ReportExportHelper.ExportFromCacheAsync(

@@ -1,4 +1,5 @@
-﻿using JsSampleReport.Inteface.ServiceInterface;
+﻿using JsSampleReport.Dtos.RequestDtos;
+using JsSampleReport.Inteface.ServiceInterface;
 using JsSampleReport.Services.CommonService;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -20,17 +21,35 @@ namespace JsSampleReport.Controllers
         }
         // ✅ Single endpoint — returns ALL report enums at once
         [HttpGet("GetAllOrderBy")]
-        public IActionResult GetAllOrderBy()
+        public async Task<ActionResult<GeneralResponse<AllReportOrderByResponseModel>>> GetAllOrderBy()
         {
             try
             {
+                var response = new GeneralResponse<AllReportOrderByResponseModel>();
                 var result = _orderByService.GetAllReportOrderBy();
-                return Ok(new { success = true, data = result });
+                if (result == null)
+                {
+                    response.IsValid = false;
+                    response.StatusCode = 404;
+                    response.Message = "No data found";
+                    return NotFound(response);
+                }
+                response.IsValid = true;
+                response.StatusCode = 200;
+                response.Message = "Success";
+                response.Data = result;
+
+                return Ok(response);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error fetching OrderBy list");
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, new GeneralResponse<AllReportOrderByResponseModel>
+                {
+                    IsValid = false,
+                    StatusCode = 500,
+                    Message = ex.Message
+                });
             }
         }
     }

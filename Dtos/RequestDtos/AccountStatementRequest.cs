@@ -27,7 +27,7 @@
     // SP final SELECT returns:
     //   LedgerNo, LedgerHead, MainLedger, SubLedger, SubLedger1,
     //   DebitAmount, CreditAmount, Balance
-    public class AccountStatementResponseModel
+    public class AccountStatementModel
     {
         public string? LedgerNo { get; set; }   // "80","90" or AcoLedgerHead.LedgerNo
         public string? LedgerHead { get; set; }   // ASSETS / LIABILITIES / INCOME / EXPENSES
@@ -53,5 +53,10 @@
         public decimal TodayBankCr { get; set; }
         public decimal TodayBankBalance { get; set; }
         public decimal ClosingBankBalance { get; set; }
+    }
+
+    public class AccountStatementDtos
+    {
+
     }
 }

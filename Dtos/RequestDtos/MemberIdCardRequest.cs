@@ -1,17 +1,19 @@
-﻿namespace JsSampleReport.Dtos.RequestDtos
+﻿using System.Text.Json.Serialization;
+
+namespace JsSampleReport.Dtos.RequestDtos
 {
     public class MemberIdCardRequest
     {
         public string? fromDate { get; set; }
-        public string? memberId { get; set; }
         public string? toDate { get; set; }
+        public string? memberId { get; set; }
         public long branchId { get; set; }
         public long memberGroupId { get; set; }
         public int currentPage { get; set; } = 0;
         public int pageSize { get; set; } = 0;
         
     }
-    public class MemberIdCardResponseModel
+    public class MemberIdCardModel
     {
         public long MemMemberRegistrationId { get; set; }
 
@@ -44,4 +46,14 @@
         public string? UserSignature { get; set; }  // ArmanSignature.png → base64
         public string? AuthSignature { get; set; }
     }
+
+    //public class ReportResponseDtos 
+    //{
+    //    public string? PdfData { get; set; }
+    //    public string? ReportName { get; set; }
+    //    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    //    public Pagination? Pagination { get; set; }
+
+    //}
+
 }

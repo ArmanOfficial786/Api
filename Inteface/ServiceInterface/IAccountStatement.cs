@@ -4,7 +4,7 @@ namespace JsSampleReport.Inteface.ServiceInterface
 {
     public interface IAccountStatement
     {
-        Task<List<AccountStatementResponseModel>>
+        Task<List<AccountStatementModel>>
             GetAccountStatementTypeAsync(AccountStatementRequest request);
 
         Task<List<CashBankBalanceModel>>

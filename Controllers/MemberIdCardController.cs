@@ -36,15 +36,22 @@ namespace JsSampleReport.Controllers
         }
 
         [HttpPost("MemberIdCard")]
-        public async Task<IActionResult> GetMemberIdCardData(
+        public async Task<ActionResult<GeneralResponse<ReportResponseDtos>>> GetMemberIdCardData(
             [FromBody] MemberIdCardRequest request,
             [FromQuery] string format = "VIEW")
         {
 
             try
             {
+                var response = new GeneralResponse<ReportResponseDtos>();
                 if (request == null || !ModelState.IsValid)
-                    return BadRequest(new { success = false, message = "Invalid request" });
+                {
+                    response.IsValid = false;
+                    response.StatusCode = 400;
+                    response.Message = "Invalid request";
+                    return BadRequest(response);
+                }
+                    //return BadRequest(new { success = false, message = "Invalid request" });
 
                 var upperFormat = format.ToUpper();
                 var reportKey = ReportUtils.GenerateReportKey(request, "MemberIdCard");
@@ -141,7 +148,7 @@ namespace JsSampleReport.Controllers
                 // ✅ Only MemberPhoto is unique per member — needs per-item conversion
                 await ReportUtils.ConvertUniqueImagesToBase64Async(
                     memberIdCardData,
-                    nameof(MemberIdCardResponseModel.MemberPhoto),
+                    nameof(MemberIdCardModel.MemberPhoto),
                     webRoot, _logger);
 
 
@@ -169,12 +176,41 @@ namespace JsSampleReport.Controllers
 
                 if (upperFormat == "VIEW")
                 {
-                    return Ok(new
+                    //return Ok(new
+                    //{
+                    //    success = true,
+                    //    pdfData = Convert.ToBase64String(pdfBytes),
+                    //    reportName = "MemberIdCard Report",
+                    //    // ✅ Static pagination (temporary)
+                    //    pagination = new
+                    //    {
+                    //        currentPage = request.currentPage,
+                    //        totalPages = 1,
+                    //        totalRecord = memberIdCardData.Count,
+                    //        pageSize = request.pageSize,
+                    //        hasNextPage = false,
+                    //        hasPreviousPage = false
+                    //    }
+                    //});
+
+                    response.IsValid = true;
+                    response.StatusCode = 200;
+                    response.Message = "Success";
+                    response.Data = new ReportResponseDtos
                     {
-                        success = true,
-                        pdfData = Convert.ToBase64String(pdfBytes),
-                        reportName = "MemberIdCard Report"
-                    });
+                        PdfData = Convert.ToBase64String(pdfBytes),
+                        ReportName = "MemberIdCard Report",
+                        Pagination = new Pagination
+                        {
+                            CurrentPage = request.currentPage,  
+                            TotalPages = 1,
+                            TotalRecord = memberIdCardData.Count,
+                            PageSize = request.pageSize,       
+                            HasNextPage = false,
+                            HasPreviousPage = false
+                        }
+                    };
+                    return Ok(response);
                 }
 
 

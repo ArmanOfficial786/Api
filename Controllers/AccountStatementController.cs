@@ -37,7 +37,7 @@ namespace JsSampleReport.Controllers
         }
 
         [HttpPost("AccountStatementReport")]
-        public async Task<IActionResult> GenerateReport(
+        public async Task<ActionResult<GeneralResponse<ReportResponseDtos>>> GenerateReport(
             [FromBody] AccountStatementRequest request,
             [FromQuery] string format = "VIEW")
         {
@@ -45,8 +45,15 @@ namespace JsSampleReport.Controllers
 
             try
             {
+                var response = new GeneralResponse<ReportResponseDtos>();
                 if (request == null || !ModelState.IsValid)
-                    return BadRequest(new { success = false, message = "Invalid request" });
+                {
+                    response.IsValid = false;
+                    response.StatusCode = 400;
+                    response.Message = "Invalid request";
+                    return BadRequest(response);
+                }
+                    //return BadRequest(new { success = false, message = "Invalid request" });
 
                 var upperFormat = format.ToUpper();
                 var reportKey = ReportUtils.GenerateReportKey(request, "AccountStatement");
@@ -89,7 +96,13 @@ namespace JsSampleReport.Controllers
                     $" | Headers={headerData.Count}");
 
                 if (!statementData.Any())
-                    return NotFound(new { success = false, message = "No data found" });
+                {
+                    response.IsValid = false;
+                    response.StatusCode = 404;
+                    response.Message = "No data found";
+                    return NotFound(response);
+                }
+                    //return NotFound(new { success = false, message = "No data found" });
 
                 var webRoot = ReportUtils.GetWebRootPath(
                     _webHostEnvironment, _reportSettings, _logger);
@@ -135,12 +148,31 @@ namespace JsSampleReport.Controllers
 
                    
 
-                    return Ok(new
+                    //return Ok(new
+                    //{
+                    //    success = true,
+                    //    pdfData = Convert.ToBase64String(pdfBytes),
+                    //    reportName = "Account Statement Report"
+                    //});
+
+                    response.IsValid = true;
+                    response.StatusCode = 200;
+                    response.Message = "Report generated successfully";
+                    response.Data = new ReportResponseDtos
                     {
-                        success = true,
-                        pdfData = Convert.ToBase64String(pdfBytes),
-                        reportName = "Account Statement Report"
-                    });
+                        PdfData = Convert.ToBase64String(pdfBytes),
+                        ReportName = "MemberIdCard Report",
+                        Pagination = new Pagination
+                        {
+                            CurrentPage = 1,//request.currentPage,
+                            TotalPages = 1,
+                            TotalRecord =1,  //memberIdCardData.Count,
+                            PageSize =   1,
+                            HasNextPage = false,
+                            HasPreviousPage = false
+                        }
+                    };
+                    return Ok(response);
                 }
 
            

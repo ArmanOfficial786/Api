@@ -5,9 +5,9 @@
     Layout = null;
 
     var rows = (Model["MemberIdCardDataSet"]
-                    as IEnumerable<MemberIdCardResponseModel>)
+                    as IEnumerable<MemberIdCardModel>)
                ?.ToList()
-               ?? new List<MemberIdCardResponseModel>();
+               ?? new List<MemberIdCardModel>();
 
     // ✅ Extract header once — outside loop
     var companyName    = "";

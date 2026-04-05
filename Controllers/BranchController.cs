@@ -1,4 +1,5 @@
-﻿using JsSampleReport.Inteface.ServiceInterface;
+﻿using JsSampleReport.Dtos.RequestDtos;
+using JsSampleReport.Inteface.ServiceInterface;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,21 +18,39 @@ namespace JsSampleReport.Controllers
             _logger = logger;
         }
         [HttpGet("GetAllBranches")]
-        public async Task<IActionResult> GetAllBranches()
+        public async Task<ActionResult<GeneralResponse<List<BranchResponse>>>> GetAllBranches()
         {
             try
             {
+                var response = new GeneralResponse<List<BranchResponse>>();
                 var branches = await _branchService.GetAllBranches();
 
                 if (!branches.Any())
-                    return NotFound(new { success = false, message = "No branches found" });
+                { 
+                    response.IsValid = false;
+                    response.StatusCode = 400;
+                    response.Message = "No branches found";
+                    response.Data = null;
+                    return BadRequest(response);
+                }
 
-                return Ok(new { success = true, data = branches });
+                //return Ok(new { success = true, data = branches });
+                response.IsValid = true;
+                response.StatusCode = 200;
+                response.Message = "Success";
+                response.Data = branches;
+                return Ok(response);
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error fetching branches");
-                return StatusCode(500, new { success = false, message = ex.Message });
+                return StatusCode(500, new GeneralResponse<string>
+                {
+                    IsValid = false,
+                    StatusCode = 500,
+                    Message = ex.Message,
+                    Data = null
+                });
             }
         }
     }

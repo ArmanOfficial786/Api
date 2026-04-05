@@ -19,7 +19,7 @@ namespace JsSampleReport.Repository
             _dateConverter = dateConverter;
         }
 
-        public async Task<List<MemberIdCardResponseModel>> GetMemberIdCardData(MemberIdCardRequest request)
+        public async Task<List<MemberIdCardModel>> GetMemberIdCardData(MemberIdCardRequest request)
         {
             var sqlFilterExp = await BuildSqlFilter(request);
             var sqlOrderBy = " ORDER BY RegistrationOn ASC";
@@ -33,7 +33,7 @@ namespace JsSampleReport.Repository
                 parameters.Add("@SqlFilterExp", sqlFilterExp);
                 parameters.Add("@SqlOrderBy", sqlOrderBy);
 
-                var results = connection.Query<MemberIdCardResponseModel>(
+                var results = connection.Query<MemberIdCardModel>(
                     "sp_4_11_GetMemberIDCard",
                     parameters,
                     commandType: CommandType.StoredProcedure
@@ -47,9 +47,10 @@ namespace JsSampleReport.Repository
         {
             var sqlFilterExp = string.Empty;
 
-            if (!string.IsNullOrEmpty(request.memberId))
+            if (!string.IsNullOrWhiteSpace(request.memberId)
+                && request.memberId.Trim() != "string")
             {
-                sqlFilterExp += $" And MR.MemberId = '{request.memberId}'";
+                sqlFilterExp += $" AND MR.MemberId = '{request.memberId.Trim()}'";
             }
 
             if (request.branchId != -1 && request.branchId != 0)

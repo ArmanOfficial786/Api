@@ -132,7 +132,7 @@ namespace JsSampleReport.Repository
         }
 
         // ── Main account statement ────────────────────────────────────
-        public async Task<List<AccountStatementResponseModel>>
+        public async Task<List<AccountStatementModel>>
             GetAccountStatementTypeAsync(AccountStatementRequest request)
         {
             var sqlFilterExp = BuildSqlFilterExp(request);
@@ -147,7 +147,7 @@ namespace JsSampleReport.Repository
             parameters.Add("@SqlFilterExpOrderBy", sqlFilterExpOrderBy);
             parameters.Add("@SqlFilterExpType", sqlFilterExpType);
 
-            var result = await connection.QueryAsync<AccountStatementResponseModel>(
+            var result = await connection.QueryAsync<AccountStatementModel>(
                 "sp_6_56_GetAccountStatementType",
                 parameters,
                 commandType: CommandType.StoredProcedure,

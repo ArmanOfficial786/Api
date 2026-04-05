@@ -69,7 +69,7 @@ namespace JsSampleReport.Utils.Report
         // ══════════════════════════════════════════════════════════════════
         // Export from server cache — NO DB call
         // ══════════════════════════════════════════════════════════════════
-        public static async Task<IActionResult> ExportFromCacheAsync(
+        public static async Task<ActionResult> ExportFromCacheAsync(
             string reportKey,
             string format,
             string reportName,

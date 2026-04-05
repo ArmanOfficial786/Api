@@ -5,9 +5,9 @@
     Layout = null;
 
     var dataSet = (Model["AccountStatementDataSet"]
-                      as IEnumerable<AccountStatementResponseModel>)
+                      as IEnumerable<AccountStatementModel>)
                   ?.ToList()
-                  ?? new List<AccountStatementResponseModel>();
+                  ?? new List<AccountStatementModel>();
 
     var balanceData = (Model["CashBankBalanceDataSet"]
                           as IEnumerable<CashBankBalanceModel>)
