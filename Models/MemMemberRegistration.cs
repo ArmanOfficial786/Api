@@ -185,5 +185,7 @@ public partial class MemMemberRegistration
 
     public string? RegistrationNo { get; set; }
 
+    public virtual SycMemberGroup SycMemberGroup { get; set; } = null!;
+
     public virtual UsmOffice UsmOffice { get; set; } = null!;
 }

@@ -20,6 +20,10 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<MemMemberRegistration> MemMemberRegistrations { get; set; }
 
+    public virtual DbSet<SycCollectionCenter> SycCollectionCenters { get; set; }
+
+    public virtual DbSet<SycMemberGroup> SycMemberGroups { get; set; }
+
     public virtual DbSet<UsmOffice> UsmOffices { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
@@ -113,10 +117,69 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.WardNo).HasMaxLength(50);
             entity.Property(e => e.WaterSupplyNo).HasMaxLength(50);
 
+            entity.HasOne(d => d.SycMemberGroup).WithMany(p => p.MemMemberRegistrations)
+                .HasForeignKey(d => d.SycMemberGroupId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_MemMemberRegistration_SycMemberGroup");
+
             entity.HasOne(d => d.UsmOffice).WithMany(p => p.MemMemberRegistrations)
                 .HasForeignKey(d => d.UsmOfficeId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_MemMemberRegistration_UsmOffice");
+        });
+
+        modelBuilder.Entity<SycCollectionCenter>(entity =>
+        {
+            entity.ToTable("SycCollectionCenter");
+
+            entity.Property(e => e.Address).HasMaxLength(255);
+            entity.Property(e => e.CollectionCenterName).HasMaxLength(255);
+            entity.Property(e => e.CollectionCenterShortCode).HasMaxLength(20);
+            entity.Property(e => e.ContactNo).HasMaxLength(20);
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.Description).HasColumnType("ntext");
+            entity.Property(e => e.DurationType)
+                .HasMaxLength(1)
+                .IsUnicode(false)
+                .IsFixedLength()
+                .HasComment("D=Days, W=Weeks, M=Months,  Y=Years");
+            entity.Property(e => e.InstallmentType).HasMaxLength(3);
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.LoanScheduleDateType).HasMaxLength(1);
+            entity.Property(e => e.MeetingStartDateOn).HasColumnType("datetime");
+            entity.Property(e => e.MeetingStartDateOnBs).HasMaxLength(10);
+            entity.Property(e => e.MeetingTime).HasMaxLength(10);
+            entity.Property(e => e.MemberYearlyPaymentAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.RegistrationOn).HasColumnType("datetime");
+            entity.Property(e => e.RegistrationOnBs).HasMaxLength(10);
+            entity.Property(e => e.SycVdcid).HasColumnName("SycVDCId");
+
+            entity.HasOne(d => d.UsmOffice).WithMany(p => p.SycCollectionCenters)
+                .HasForeignKey(d => d.UsmOfficeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_SycCollectionCenter_UsmOffice");
+        });
+
+        modelBuilder.Entity<SycMemberGroup>(entity =>
+        {
+            entity.ToTable("SycMemberGroup");
+
+            entity.Property(e => e.Address).HasMaxLength(255);
+            entity.Property(e => e.ContactNo).HasMaxLength(100);
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.Description).HasColumnType("ntext");
+            entity.Property(e => e.GroupShortCode).HasMaxLength(20);
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.RegistrationOn).HasColumnType("datetime");
+            entity.Property(e => e.RegistrationOnBs).HasMaxLength(50);
+
+            entity.HasOne(d => d.SycCollectionCenter).WithMany(p => p.SycMemberGroups)
+                .HasForeignKey(d => d.SycCollectionCenterId)
+                .HasConstraintName("FK_SycMemberGroup_SycCollectionCenter");
+
+            entity.HasOne(d => d.UsmOffice).WithMany(p => p.SycMemberGroups)
+                .HasForeignKey(d => d.UsmOfficeId)
+                .HasConstraintName("FK_SycMemberGroup_UsmOffice");
         });
 
         modelBuilder.Entity<UsmOffice>(entity =>

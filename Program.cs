@@ -159,6 +159,8 @@ builder.Services.AddScoped<IBranch, BranchRepository>();
 builder.Services.AddScoped<IOrderBy, OrderByService>();
 builder.Services.AddScoped<IDateConverterService, DateConverterService>();
 builder.Services.AddScoped<IMemberLookUp, MemberLookUpRepository>();
+builder.Services.AddScoped<ICollectionCenter, CollectionCenterRepository>();
+builder.Services.AddScoped<IMemberGroup, MemberGroupRepository>();
 
 var app = builder.Build();
 
