@@ -1,5 +1,6 @@
 ﻿using JsSampleReport.Dtos.RequestDtos;
 using JsSampleReport.Inteface.ServiceInterface;
+using JsSampleReport.Utils.Enum;
 using static JsSampleReport.Utils.Enum.Enums;
 
 namespace JsSampleReport.Services.CommonService
@@ -14,7 +15,8 @@ namespace JsSampleReport.Services.CommonService
                 .Select(e => new OrderByResponse
                 {
                     Value = Convert.ToInt32(e),
-                    DisplayName = e.ToString()
+                    //DisplayName = e.ToString()
+                    DisplayName = e.GetDisplayName()
                 })
                 .ToList();
         }

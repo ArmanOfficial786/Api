@@ -7,6 +7,7 @@ namespace JsSampleReport.Dtos.RequestDtos
         public string? fromDate { get; set; }
         public string? toDate { get; set; }
         public string? memberId { get; set; }
+        public string? orderby { get; set; }
         public long branchId { get; set; }
         public long memberGroupId { get; set; }
         public int currentPage { get; set; } = 0;

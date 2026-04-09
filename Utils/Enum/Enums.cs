@@ -1,14 +1,20 @@
-﻿namespace JsSampleReport.Utils.Enum
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace JsSampleReport.Utils.Enum
 {
     public class Enums
     {
         // ✅ MemberIdCard OrderBy
     public enum MemberIdCardOrderBy
     {
+        [Display(Name = "Member Name")]
         name = 1,
+        [Display(Name = "Registration Date")]
         sex = 2,
         memberId = 3,
+        [Display(Name = "Age")]
         BirthOnBs = 4,
+        [Display(Name = "Registration Date")]
         RegistrationOn = 5
     }
 

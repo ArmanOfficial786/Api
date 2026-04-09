@@ -22,7 +22,8 @@ namespace JsSampleReport.Repository
         public async Task<List<MemberIdCardModel>> GetMemberIdCardData(MemberIdCardRequest request)
         {
             var sqlFilterExp = await BuildSqlFilter(request);
-            var sqlOrderBy = " ORDER BY RegistrationOn ASC";
+            var sqlOrderBy = BuildOrderBy(request.orderby);
+            //var sqlOrderBy = request.orderby;
 
             var connectionString = _context.Database.GetConnectionString();
 
@@ -74,6 +75,38 @@ namespace JsSampleReport.Repository
             }
 
             return sqlFilterExp;
+        }
+        // ================= ORDER BY BUILDER =================
+        private static string BuildOrderBy(string? orderBy)
+        {
+            if (string.IsNullOrWhiteSpace(orderBy) || orderBy == "-1")
+                return " ORDER BY MR.RegistrationOn ASC";
+
+            switch (orderBy.Trim().ToLower())
+            {
+                case "1":
+                case "name":
+                case "membername":
+                    return " ORDER BY Name ASC";
+
+                case "2":
+                case "sex":
+                    return " ORDER BY Sex ASC"; //alias of Geneder
+                case "3":
+                case "memberid":
+                    return " ORDER BY MR.MemberId ASC";
+                case "4":
+                case "birthonbs":
+                    return " ORDER BY MR.BirthOnBS ASC";
+
+                case "5":
+                case "registrationon":
+                    return " ORDER BY MR.RegistrationOn ASC";
+
+                default:
+                    return " ORDER BY MR.RegistrationOn ASC";
+            }
+
         }
     }
 }
