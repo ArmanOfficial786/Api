@@ -10,10 +10,12 @@ namespace JsSampleReport.Repository
     public class AccountStatementRepository : IAccountStatement
     {
         private readonly AppDbContext _context;
+        private readonly IDateConverterService _dateConverter;
 
-        public AccountStatementRepository(AppDbContext context)
+        public AccountStatementRepository(AppDbContext context, IDateConverterService dateConverter)
         {
             _context = context;
+            _dateConverter = dateConverter;
         }
 
         // ══════════════════════════════════════════════════════════════
@@ -21,17 +23,19 @@ namespace JsSampleReport.Repository
         // Appended inside SP WHERE vp.IsActive=1 + @SqlFilterExp
         // Uses v.VoucherOn (NOT v.VoucherDate)
         // ══════════════════════════════════════════════════════════════
-        private string BuildSqlFilterExp(AccountStatementRequest request)
+        private async Task<string> BuildSqlFilterExp(AccountStatementRequest request)
         {
             var filter = string.Empty;
 
-            if (!string.IsNullOrEmpty(request.FromDate) &&
-                !string.IsNullOrEmpty(request.ToDate) &&
-                request.FromDate != "-1" &&
-                request.ToDate != "-1")
+            if (!string.IsNullOrEmpty(request.FromDate) &&!string.IsNullOrEmpty(request.ToDate) &&request.FromDate != "-1" &&request.ToDate != "-1")
             {
-                filter += $" AND v.VoucherOn >= '{request.FromDate}'" +
-                          $" AND v.VoucherOn <= '{request.ToDate}'";
+                string fromDateAd = await _dateConverter.BsToAdStringAsync(request.FromDate);
+                string toDateAd = await _dateConverter.BsToAdStringAsync(request.ToDate);
+
+                if (!string.IsNullOrEmpty(fromDateAd) && !string.IsNullOrEmpty(toDateAd))
+                {
+                    filter += $" AND v.VoucherOn BETWEEN '{fromDateAd}' AND '{toDateAd}'";
+                }
             }
 
             if (!string.IsNullOrEmpty(request.BranchSelected) &&
@@ -135,7 +139,7 @@ namespace JsSampleReport.Repository
         public async Task<List<AccountStatementModel>>
             GetAccountStatementTypeAsync(AccountStatementRequest request)
         {
-            var sqlFilterExp = BuildSqlFilterExp(request);
+            var sqlFilterExp = await BuildSqlFilterExp(request);
             var sqlFilterExpOrderBy = BuildSqlFilterExpOrderBy(request);
             var sqlFilterExpType = BuildSqlFilterExpType(request);
 
