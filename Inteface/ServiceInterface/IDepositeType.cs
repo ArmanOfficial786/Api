@@ -2,8 +2,8 @@
 
 namespace JsSampleReport.Inteface.ServiceInterface
 {
-    public interface IBranch
+    public interface IDepositeType
     {
-        Task<List<BranchResponse>> GetByUserId(long usmUserId);
+        Task<List<DepositTypeResponse>> GetAllDepositeType();
     }
 }

@@ -1,4 +1,48 @@
 ﻿
+//using JsSampleReport.Dtos.RequestDtos;
+//using JsSampleReport.Inteface.ServiceInterface;
+//using Microsoft.EntityFrameworkCore;
+
+//namespace JsSampleReport.Repository
+//{
+//    public class BranchRepository : IBranch
+//    {
+//        private readonly AppDbContext _context;
+
+//        public BranchRepository(AppDbContext context)
+//        {
+//            _context = context;
+//        }
+
+//        public async Task<List<BranchResponse>> GetAllBranches()
+//        {
+//            var branchList = await _context.UsmOffices
+//                .Where(x => x.IsActive)
+//                .OrderBy(x => x.OfficeName)
+//                .Select(x => new BranchResponse
+//                {
+//                    BranchId = x.UsmOfficeId,
+//                    BranchName = x.OfficeName
+//                })
+//                .ToListAsync();
+
+//            // ✅ Prepend "All" as default first option
+//            branchList.Insert(0, new BranchResponse
+//            {
+//                BranchId = -1,
+//                BranchName = "All"
+//            });
+
+//            return branchList;
+//        }
+//    }
+//}
+
+
+
+
+
+
 using JsSampleReport.Dtos.RequestDtos;
 using JsSampleReport.Inteface.ServiceInterface;
 using Microsoft.EntityFrameworkCore;
@@ -14,24 +58,28 @@ namespace JsSampleReport.Repository
             _context = context;
         }
 
-        public async Task<List<BranchResponse>> GetAllBranches()
+        public async Task<List<BranchResponse>> GetByUserId(long usmUserId)
         {
-            var branchList = await _context.UsmOffices
-                .Where(x => x.IsActive)
-                .OrderBy(x => x.OfficeName)
-                .Select(x => new BranchResponse
+            var branchList = await (
+                from relation in _context.UsmRelationUserToOffices
+                join office in _context.UsmOffices
+                    on relation.UsmOfficeId equals office.UsmOfficeId
+                where relation.UsmUserId == usmUserId
+                   && office.IsActive == true
+                orderby office.OfficeName
+                select new BranchResponse
                 {
-                    BranchId = x.UsmOfficeId,
-                    BranchName = x.OfficeName
-                })
-                .ToListAsync();
+                    BranchId = office.UsmOfficeId,
+                    BranchName = office.OfficeName
+                }
+            ).ToListAsync();
 
-            // ✅ Prepend "All" as default first option
-            branchList.Insert(0, new BranchResponse
-            {
-                BranchId = -1,
-                BranchName = "All"
-            });
+            //// ✅ Prepend "All" as default first option
+            //branchList.Insert(0, new BranchResponse
+            //{
+            //    BranchId = -1,
+            //    BranchName = "All"
+            //});
 
             return branchList;
         }

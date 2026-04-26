@@ -51,9 +51,13 @@ public partial class UsmOffice
 
     public int? SycStateVdcid { get; set; }
 
+    public virtual ICollection<HurCollector> HurCollectors { get; set; } = new List<HurCollector>();
+
     public virtual ICollection<MemMemberRegistration> MemMemberRegistrations { get; set; } = new List<MemMemberRegistration>();
 
     public virtual ICollection<SycCollectionCenter> SycCollectionCenters { get; set; } = new List<SycCollectionCenter>();
 
     public virtual ICollection<SycMemberGroup> SycMemberGroups { get; set; } = new List<SycMemberGroup>();
+
+    public virtual ICollection<UsmRelationUserToOffice> UsmRelationUserToOffices { get; set; } = new List<UsmRelationUserToOffice>();
 }

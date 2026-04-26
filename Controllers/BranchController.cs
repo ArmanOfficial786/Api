@@ -23,7 +23,8 @@ namespace JsSampleReport.Controllers
             try
             {
                 var response = new GeneralResponse<List<BranchResponse>>();
-                var branches = await _branchService.GetAllBranches();
+                long usmUserId = 160;
+                var branches = await _branchService.GetByUserId(usmUserId);
 
                 if (!branches.Any())
                 { 

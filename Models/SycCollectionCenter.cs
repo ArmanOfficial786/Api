@@ -62,6 +62,8 @@ public partial class SycCollectionCenter
 
     public long? MemberYearlyPaymentLedgerId { get; set; }
 
+    public virtual HurCollector? HurCollector { get; set; }
+
     public virtual ICollection<SycMemberGroup> SycMemberGroups { get; set; } = new List<SycMemberGroup>();
 
     public virtual UsmOffice UsmOffice { get; set; } = null!;

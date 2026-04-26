@@ -1,26 +1,32 @@
-﻿namespace JsSampleReport.Dtos.RequestDtos
+﻿using Microsoft.CodeAnalysis.Operations;
+
+namespace JsSampleReport.Dtos.RequestDtos
 {
     // ── Request ───────────────────────────────────────────────────
     public class AccountStatementRequest
     {
         // Dates in English format: "yyyy-MM-dd"
         // e.g. "2025-01-14"  (no Nepali conversion in this layer)
-        public string FromDate { get; set; } = string.Empty;
-        public string ToDate { get; set; } = string.Empty;
+        public string? FromDate { get; set; } = string.Empty;
+        public string? ToDate { get; set; } = string.Empty;
+        public string? BranchSelected { get; set; }
+        public List<long> BranchId { get; set; } = new();
 
-        // Comma-separated branch IDs, e.g. "1,2,3"  or "-1" for All
-        public string BranchSelected { get; set; } = "-1";
-        public long BranchId { get; set; } = -1;
-        public string BranchName { get; set; } = "All";
+        public string? BranchName { get; set; }
+
+        public bool SameCompanyName { get; set; } = true; // default to true
 
         // Summary | SubLedger | Detail
-        public string ReportType { get; set; } = "Summary";
+        public string? ReportType { get; set; } 
 
         // All | Cash | Bank | CashBank | NonCash
-        public string TransactionType { get; set; } = "All";
+        public string? TransactionType { get; set; } //= "All";
 
         // -1 | Ledger Name | Debit Amount | Credit Amount | Balance
-        public string OrderBy { get; set; } = "-1";
+        public string? OrderBy { get; set; } //= "-1";
+
+
+       
     }
 
     // ── Main SP output — exact column names from sp_6_56_GetAccountStatementType ──

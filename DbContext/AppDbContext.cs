@@ -18,13 +18,19 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<ComCalendar> ComCalendars { get; set; }
 
+    public virtual DbSet<HurCollector> HurCollectors { get; set; }
+
     public virtual DbSet<MemMemberRegistration> MemMemberRegistrations { get; set; }
 
     public virtual DbSet<SycCollectionCenter> SycCollectionCenters { get; set; }
 
+    public virtual DbSet<SycDepositType> SycDepositTypes { get; set; }
+
     public virtual DbSet<SycMemberGroup> SycMemberGroups { get; set; }
 
     public virtual DbSet<UsmOffice> UsmOffices { get; set; }
+
+    public virtual DbSet<UsmRelationUserToOffice> UsmRelationUserToOffices { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
 //#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
@@ -39,6 +45,34 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.ComCalendarId).ValueGeneratedNever();
             entity.Property(e => e.EnglishEndDate).HasColumnType("datetime");
             entity.Property(e => e.EnglishStartDate).HasColumnType("datetime");
+        });
+
+        modelBuilder.Entity<HurCollector>(entity =>
+        {
+            entity.ToTable("HurCollector");
+
+            entity.Property(e => e.CollectorCode).HasMaxLength(10);
+            entity.Property(e => e.CollectorDetailAddress).HasMaxLength(200);
+            entity.Property(e => e.CollectorFullName).HasMaxLength(100);
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.EmailAddress).HasMaxLength(100);
+            entity.Property(e => e.Imeino).HasColumnName("IMEINo");
+            entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_SycCollector_IsActive");
+            entity.Property(e => e.JoinedOn).HasColumnType("datetime");
+            entity.Property(e => e.JoinedOnBs)
+                .HasMaxLength(50)
+                .HasColumnName("JoinedOnBS");
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.MobileNumber).HasMaxLength(100);
+            entity.Property(e => e.PhoneNumber).HasMaxLength(100);
+            entity.Property(e => e.PhotoFile).HasMaxLength(500);
+            entity.Property(e => e.PinCode).HasMaxLength(10);
+            entity.Property(e => e.Remarks).HasColumnType("ntext");
+
+            entity.HasOne(d => d.UsmOffice).WithMany(p => p.HurCollectors)
+                .HasForeignKey(d => d.UsmOfficeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_HurCollector_UsmOffice");
         });
 
         modelBuilder.Entity<MemMemberRegistration>(entity =>
@@ -154,10 +188,45 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.RegistrationOnBs).HasMaxLength(10);
             entity.Property(e => e.SycVdcid).HasColumnName("SycVDCId");
 
+            entity.HasOne(d => d.HurCollector).WithMany(p => p.SycCollectionCenters)
+                .HasForeignKey(d => d.HurCollectorId)
+                .HasConstraintName("FK_SycCollectionCenter_HurCollector");
+
             entity.HasOne(d => d.UsmOffice).WithMany(p => p.SycCollectionCenters)
                 .HasForeignKey(d => d.UsmOfficeId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_SycCollectionCenter_UsmOffice");
+        });
+
+        modelBuilder.Entity<SycDepositType>(entity =>
+        {
+            entity.ToTable("SycDepositType");
+
+            entity.Property(e => e.CollectorCommission).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.DepositTypeCode).HasMaxLength(20);
+            entity.Property(e => e.DepositTypeName).HasMaxLength(200);
+            entity.Property(e => e.DurationType).HasMaxLength(1);
+            entity.Property(e => e.InterestActivationOn).HasColumnType("datetime");
+            entity.Property(e => e.InterestActivationOnBs).HasMaxLength(50);
+            entity.Property(e => e.InterestCalculationType)
+                .HasMaxLength(1)
+                .IsUnicode(false)
+                .IsFixedLength()
+                .HasDefaultValue("N", "DF_SycDepositType_InterestCalculationType");
+            entity.Property(e => e.InterestRate).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_SycDepositType_IsActive");
+            entity.Property(e => e.LastInterestTransferDateOnBs).HasMaxLength(10);
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.MaxPerDayWithDrawal).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.MaximumDepositAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.MinimumBalance).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.MinimumDepositForInterest).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.MinimumPerDayWithDrawal).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.MininumDepositAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.Remarks).HasColumnType("ntext");
+            entity.Property(e => e.SycDepositCategoryId).HasComment("D=Days, M=Month, Y=Year");
+            entity.Property(e => e.TaxRate).HasColumnType("numeric(18, 2)");
         });
 
         modelBuilder.Entity<SycMemberGroup>(entity =>
@@ -209,6 +278,18 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.SycVdcid).HasColumnName("SycVDCId");
             entity.Property(e => e.Tole).HasMaxLength(250);
             entity.Property(e => e.WardNo).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<UsmRelationUserToOffice>(entity =>
+        {
+            entity.HasKey(e => new { e.UsmUserId, e.UsmOfficeId });
+
+            entity.ToTable("UsmRelationUserToOffice");
+
+            entity.HasOne(d => d.UsmOffice).WithMany(p => p.UsmRelationUserToOffices)
+                .HasForeignKey(d => d.UsmOfficeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UsmRelationUserToOffice_UsmOffice");
         });
 
         OnModelCreatingPartial(modelBuilder);

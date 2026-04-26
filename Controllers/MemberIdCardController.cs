@@ -295,7 +295,6 @@ namespace JsSampleReport.Controllers
         [HttpPost("MemberIdCard")]
         public async Task<ActionResult> GetMemberIdCardData(
             [FromBody] MemberIdCardRequest request,
-            [FromQuery] string requestType = "VIEW",
             [FromQuery] string format = "VIEW")
         {
             try

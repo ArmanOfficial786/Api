@@ -27,7 +27,7 @@ namespace JsSampleReport.Repository
         {
             var filter = string.Empty;
 
-            if (!string.IsNullOrEmpty(request.FromDate) &&!string.IsNullOrEmpty(request.ToDate) &&request.FromDate != "-1" &&request.ToDate != "-1")
+            if (!string.IsNullOrEmpty(request.FromDate) && !string.IsNullOrEmpty(request.ToDate) && request.FromDate != "-1" && request.ToDate != "-1")
             {
                 string fromDateAd = await _dateConverter.BsToAdStringAsync(request.FromDate);
                 string toDateAd = await _dateConverter.BsToAdStringAsync(request.ToDate);
@@ -39,11 +39,18 @@ namespace JsSampleReport.Repository
             }
 
             if (!string.IsNullOrEmpty(request.BranchSelected) &&
-                request.BranchSelected != "-1" &&
-                request.BranchSelected != "string")
+              request.BranchSelected != "-1" &&
+              request.BranchSelected != "string")
             {
                 filter += $" AND v.UsmOfficeId IN ({request.BranchSelected})";
             }
+
+            if (request.BranchId != null && request.BranchId.Any(id => id > 0))
+            {
+                var branchIds = string.Join(",", request.BranchId.Where(id => id > 0));
+                filter += $" AND v.UsmOfficeId IN ({branchIds})";
+            }
+            
 
             return filter;
         }
@@ -186,3 +193,8 @@ namespace JsSampleReport.Repository
         }
     }
 }
+
+
+
+
+
