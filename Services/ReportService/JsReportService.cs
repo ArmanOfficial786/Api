@@ -732,23 +732,11 @@ namespace JsSampleReport.Services.ReportService
 
                 case "EXCEL":
                 case "XLSX":
-                    //request.Template.HtmlToXlsx =
-                    //    new HtmlToXlsx { HtmlEngine = "chrome" };
+                    request.Template.HtmlToXlsx =
+                        new HtmlToXlsx { HtmlEngine = "chrome" };
 
                     // ✅ Only use properties that exist in your jsreport version
-                    request.Template.HtmlToXlsx = new HtmlToXlsx();
-                    // Set HtmlEngine if the property exists
-                    var htmlToXlsxType = typeof(HtmlToXlsx);
-                    var htmlEngineProp = htmlToXlsxType.GetProperty("HtmlEngine");
-                    if (htmlEngineProp != null && htmlEngineProp.CanWrite)
-                    {
-                        htmlEngineProp.SetValue(request.Template.HtmlToXlsx, "chrome");
-                        _logger.LogInformation("✅ Set HtmlEngine=chrome for Excel generation");
-                    }
-                    else
-                    {
-                        _logger.LogWarning("⚠️ HtmlEngine property not available in this jsreport version");
-                    }
+                  
 
                     break;
             }
