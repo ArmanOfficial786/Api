@@ -1,430 +1,9 @@
-//using jsreport.AspNetCore;
-//using jsreport.Types;
-//using JsSampleReport.Inteface.ReportInterface;
-//using Microsoft.AspNetCore.Mvc;
-//using Microsoft.AspNetCore.Mvc.Abstractions;
-//using Microsoft.AspNetCore.Mvc.ModelBinding;
-//using Microsoft.AspNetCore.Mvc.Razor;
-//using Microsoft.AspNetCore.Mvc.Rendering;
-//using Microsoft.AspNetCore.Mvc.ViewFeatures;
-//using Microsoft.AspNetCore.Routing;
-
-//namespace JsSampleReport.Services.ReportService
-//{
-//    public class JsReportService : IJsReportService
-//    {
-//        private readonly ILogger<JsReportService> _logger;
-//        private readonly IJsReportMVCService _jsReportMVCService;
-//        private readonly IServiceProvider _serviceProvider;  // ✅ replaces IWebHostEnvironment
-
-//        public JsReportService(
-//            ILogger<JsReportService> logger,
-//            IJsReportMVCService jsReportMVCService,
-//            IServiceProvider serviceProvider)
-//        {
-//            _logger = logger;
-//            _jsReportMVCService = jsReportMVCService;
-//            _serviceProvider = serviceProvider;
-//        }
-
-//        public byte[] GenerateReport(string reportPath, object data, string format)
-//        {
-//            try
-//            {
-//                _logger.LogInformation($"Generating report: Path={reportPath}, Format={format}");
-
-//                // ✅ Render .cshtml to HTML string instead of reading .html file
-//                var htmlContent = RenderViewAsync(reportPath, data).GetAwaiter().GetResult();
-
-//                var renderRequest = new RenderRequest()
-//                {
-//                    Template = new Template()
-//                    {
-//                        Content = htmlContent,
-//                        Engine = Engine.None,      // ✅ already rendered, no engine needed
-//                        Recipe = GetRecipe(format.ToUpper())
-//                    },
-//                };
-
-//                ConfigureRecipeOptions(renderRequest, format.ToUpper());
-
-//                _logger.LogInformation("Rendering report with jsreport...");
-
-//                var result = _jsReportMVCService.RenderAsync(renderRequest).GetAwaiter().GetResult();
-
-//                using var memoryStream = new MemoryStream();
-//                result.Content.CopyTo(memoryStream);
-//                var reportBytes = memoryStream.ToArray();
-
-//                _logger.LogInformation($"Report generated: {format}, {reportBytes.Length} bytes");
-//                return reportBytes;
-//            }
-//            catch (Exception ex)
-//            {
-//                _logger.LogError(ex, $"Report generation error: {ex.Message}");
-//                throw new Exception($"Report rendering failed: {ex.Message}", ex);
-//            }
-//        }
-
-//        // ✅ Only new addition — renders .cshtml to raw HTML string
-//        private async Task<string> RenderViewAsync(string viewName, object model)
-//        {
-//            var httpContext = new DefaultHttpContext { RequestServices = _serviceProvider };
-//            var actionContext = new ActionContext(
-//                httpContext,
-//                new RouteData(),
-//                new ActionDescriptor()
-//            );
-
-//            var viewEngine = _serviceProvider.GetRequiredService<IRazorViewEngine>();
-//            var tempDataProvider = _serviceProvider.GetRequiredService<ITempDataProvider>();
-
-//            // Try absolute path first (e.g. "~/Views/Report/MemberReport.cshtml")
-//            var viewResult = viewEngine.GetView(null, viewName, false);
-//            if (!viewResult.Success)
-//                viewResult = viewEngine.FindView(actionContext, viewName, false);
-
-//            if (!viewResult.Success)
-//                throw new InvalidOperationException($"View '{viewName}' not found.");
-
-//            await using var sw = new StringWriter();
-
-//            var viewData = new ViewDataDictionary(
-//                new EmptyModelMetadataProvider(),
-//                new ModelStateDictionary())
-//            { Model = model };
-
-//            var viewContext = new ViewContext(
-//                actionContext,
-//                viewResult.View,
-//                viewData,
-//                new TempDataDictionary(httpContext, tempDataProvider),
-//                sw,
-//                new HtmlHelperOptions()
-//            );
-
-//            await viewResult.View.RenderAsync(viewContext);
-//            return sw.ToString();
-//        }
-
-//        // ✅ Unchanged — exactly same as before
-//        private Recipe GetRecipe(string format)
-//        {
-//            return format switch
-//            {
-//                "PDF" or "VIEW" => Recipe.ChromePdf,
-//                "HTML" => Recipe.Html,
-//                "EXCEL" or "XLSX" => Recipe.HtmlToXlsx,
-//                "DOCX" or "WORD" => Recipe.Docx,
-//                "PNG" => Recipe.ChromeImage,
-//                _ => Recipe.ChromePdf
-//            };
-//        }
-
-//        // ✅ Unchanged — exactly same as before
-//        private void ConfigureRecipeOptions(RenderRequest request, string format)
-//        {
-//            switch (format)
-//            {
-//                case "PDF":
-//                case "VIEW":
-//                    request.Template.Chrome = new Chrome
-//                    {
-//                        MarginTop = "1mm",
-//                        MarginBottom = "1mm",
-//                        MarginLeft = "5mm",
-//                        MarginRight = "5mm",
-//                        DisplayHeaderFooter = false,
-//                        PrintBackground = true,
-//                        Format = "A4",
-//                        Landscape = false
-//                    };
-//                    break;
-//                case "EXCEL":
-//                case "XLSX":
-//                    request.Template.HtmlToXlsx = new HtmlToXlsx { HtmlEngine = "chrome" };
-//                    break;
-//            }
-//        }
-//    }
-//}
-
-
-
-//============This is exactly how SSRS, Crystal Reports, FastReport work internally — render once, export many times from server-side cache.=========================
-
-//using DocumentFormat.OpenXml;
-//using DocumentFormat.OpenXml.Packaging;
-//using DocumentFormat.OpenXml;
-//using DocumentFormat.OpenXml.Packaging;
-//using DocumentFormat.OpenXml.Wordprocessing;
-//using HtmlToOpenXml;
-//using jsreport.AspNetCore;
-//using jsreport.Types;
-//using JsSampleReport.Inteface.ReportInterface;
-//using Microsoft.AspNetCore.Mvc;
-//using Microsoft.AspNetCore.Mvc.Abstractions;
-//using Microsoft.AspNetCore.Mvc.ModelBinding;
-//using Microsoft.AspNetCore.Mvc.Razor;
-//using Microsoft.AspNetCore.Mvc.Rendering;
-//using Microsoft.AspNetCore.Mvc.ViewFeatures;
-//using Microsoft.AspNetCore.Routing;
-//using Microsoft.Extensions.Caching.Memory;
-
-//namespace JsSampleReport.Services.ReportService
-//{
-//    public class JsReportService : IJsReportService
-//    {
-//        private readonly ILogger<JsReportService> _logger;
-//        private readonly IJsReportMVCService _jsReportMVCService;
-//        private readonly IServiceProvider _serviceProvider;
-//        private readonly IMemoryCache _cache;
-
-//        public JsReportService(
-//            ILogger<JsReportService> logger,
-//            IJsReportMVCService jsReportMVCService,
-//            IServiceProvider serviceProvider,
-//            IMemoryCache cache)
-//        {
-//            _logger = logger;
-//            _jsReportMVCService = jsReportMVCService;
-//            _serviceProvider = serviceProvider;
-//            _cache = cache;
-//        }
-
-//        // ── Check if key exists in cache ──────────────────────────────────────
-//        public bool IsCached(string reportKey)
-//            => _cache.TryGetValue(reportKey, out _);
-
-//        // ── Pull HTML string from cache ───────────────────────────────────────
-//        public string? GetFromCache(string reportKey)
-//            => _cache.TryGetValue(reportKey, out string? html) ? html : null;
-
-//        // ── Original — direct generate (used if needed) ───────────────────────
-//        public byte[] GenerateReport(string reportPath, object data, string format)
-//        {
-//            try
-//            {
-//                _logger.LogInformation($"GenerateReport: {reportPath}, Format={format}");
-//                var html = RenderViewAsync(reportPath, data).GetAwaiter().GetResult();
-//                return GenerateReportFromHtml(html, format);
-//            }
-//            catch (Exception ex)
-//            {
-//                _logger.LogError(ex, $"GenerateReport error: {ex.Message}");
-//                throw new Exception($"Report rendering failed: {ex.Message}", ex);
-//            }
-//        }
-
-//        // ── Render .cshtml → HTML string, cache it, return HTML ───────────────
-//        public string RenderAndCacheReport(string reportKey,
-//                                           string reportPath,
-//                                           object data)
-//        {
-//            try
-//            {
-//                // Return from cache if already rendered
-//                if (_cache.TryGetValue(reportKey, out string? cachedHtml))
-//                {
-//                    _logger.LogInformation($"✅ Cache HIT : {reportKey}");
-//                    return cachedHtml!;
-//                }
-
-//                _logger.LogInformation($"🔄 Cache MISS — Rendering: {reportKey}");
-
-//                var html = RenderViewAsync(reportPath, data).GetAwaiter().GetResult();
-
-//                // Cache for 30 min sliding, max 2 hours absolute
-//                _cache.Set(reportKey, html, new MemoryCacheEntryOptions()
-//                    .SetSlidingExpiration(TimeSpan.FromMinutes(30))
-//                    .SetAbsoluteExpiration(TimeSpan.FromHours(2)));
-
-//                _logger.LogInformation($"✅ Cached: {reportKey}");
-//                return html;
-//            }
-//            catch (Exception ex)
-//            {
-//                _logger.LogError(ex, $"RenderAndCacheReport error: {ex.Message}");
-//                throw new Exception($"Render and cache failed: {ex.Message}", ex);
-//            }
-//        }
-
-//        // ── Convert HTML → any format via jsreport ────────────────────────────
-//        public byte[] GenerateReportFromHtml(string htmlContent, string format)
-//        {
-//            try
-//            {
-//                _logger.LogInformation($"GenerateReportFromHtml: Format={format}");
-//                // ✅ Bypass jsreport for DOCX — Word can open HTML natively
-//                // jsreport has no HTML→DOCX recipe without a .docx template file
-//                if (format.ToUpper() is "DOCX" or "WORD")
-//                {
-//                    _logger.LogInformation("✅ DOCX: Returning HTML bytes with Word MIME");
-//                    //return System.Text.Encoding.UTF8.GetBytes(htmlContent);
-//                    return ConvertHtmlToDocx(htmlContent);
-//                }
-
-//                var renderRequest = new RenderRequest()
-//                {
-//                    Template = new Template()
-//                    {
-//                        Content = htmlContent,
-//                        Engine = Engine.None,
-//                        Recipe = GetRecipe(format.ToUpper())
-//                    }
-//                };
-
-//                ConfigureRecipeOptions(renderRequest, format.ToUpper());
-
-//                var result = _jsReportMVCService
-//                                 .RenderAsync(renderRequest)
-//                                 .GetAwaiter().GetResult();
-
-//                using var ms = new MemoryStream();
-//                result.Content.CopyTo(ms);
-//                var bytes = ms.ToArray();
-
-//                _logger.LogInformation($"✅ Generated {format}: {bytes.Length} bytes");
-//                return bytes;
-//            }
-//            catch (Exception ex)
-//            {
-//                _logger.LogError(ex, $"GenerateReportFromHtml error: {ex.Message}");
-//                throw new Exception($"Generation from HTML failed: {ex.Message}", ex);
-//            }
-//        }
-
-//        // ✅ Fixed ConvertHtmlToDocx — proper async handling
-//        private byte[] ConvertHtmlToDocx(string htmlContent)
-//        {
-//            try
-//            {
-//                using var ms = new MemoryStream();
-
-//                using (var wordDoc = WordprocessingDocument.Create(
-//                           ms, WordprocessingDocumentType.Document, true))
-//                {
-//                    var mainPart = wordDoc.AddMainDocumentPart();
-
-//                    // ✅ Must initialize Document with Body first
-//                    mainPart.Document = new Document();
-//                    var body = mainPart.Document.AppendChild(new Body());
-
-//                    // ✅ HtmlConverter — ParseHtml is async in newer versions
-//                    var converter = new HtmlConverter(mainPart);
-//                    var task = converter.ParseHtml(htmlContent);
-//                    task.GetAwaiter().GetResult(); // ✅ Wait for async ParseHtml
-
-//                    mainPart.Document.Save();
-//                }
-
-//                var bytes = ms.ToArray();
-//                _logger.LogInformation($"✅ DOCX generated: {bytes.Length} bytes");
-//                return bytes;
-//            }
-//            catch (Exception ex)
-//            {
-//                _logger.LogError(ex, "❌ ConvertHtmlToDocx failed");
-//                throw new Exception($"DOCX conversion failed: {ex.Message}", ex);
-//            }
-//        }
-
-//        // ── Render Razor .cshtml → raw HTML string ────────────────────────────
-//        // ✅ Uses CreateScope() — safe for Singleton registration
-//        private async Task<string> RenderViewAsync(string viewName, object model)
-//        {
-//            // ✅ Create a new scope per render call
-//            // This prevents captive dependency issues when JsReportService
-//            // is registered as Singleton but Razor services are Scoped
-//            using var scope = _serviceProvider.CreateScope();
-//            var scopedProvider = scope.ServiceProvider;
-
-//            var httpContext = new DefaultHttpContext
-//            { RequestServices = scopedProvider };
-
-//            var actionContext = new ActionContext(
-//                httpContext,
-//                new RouteData(),
-//                new ActionDescriptor());
-
-//            var viewEngine = scopedProvider.GetRequiredService<IRazorViewEngine>();
-//            var tempDataProvider = scopedProvider.GetRequiredService<ITempDataProvider>();
-
-//            // Try GetView first (absolute path), then FindView (by name)
-//            var viewResult = viewEngine.GetView(null, viewName, false);
-//            if (!viewResult.Success)
-//                viewResult = viewEngine.FindView(actionContext, viewName, false);
-
-//            if (!viewResult.Success)
-//                throw new InvalidOperationException($"View '{viewName}' not found.");
-
-//            await using var sw = new StringWriter();
-
-//            var viewData = new ViewDataDictionary(
-//                new EmptyModelMetadataProvider(),
-//                new ModelStateDictionary())
-//            { Model = model };
-
-//            var viewContext = new ViewContext(
-//                actionContext,
-//                viewResult.View,
-//                viewData,
-//                new TempDataDictionary(httpContext, tempDataProvider),
-//                sw,
-//                new HtmlHelperOptions());
-
-//            await viewResult.View.RenderAsync(viewContext);
-//            return sw.ToString();
-//        }
-
-//        private Recipe GetRecipe(string format) => format switch
-//        {
-//            "PDF" or "VIEW" => Recipe.ChromePdf,
-//            "HTML" => Recipe.Html,
-//            "EXCEL" or "XLSX" => Recipe.HtmlToXlsx,
-//            //"DOCX" or "WORD" => Recipe.Html,
-//            "PNG" => Recipe.ChromeImage,
-//            _ => Recipe.ChromePdf
-//        };
-
-//        private void ConfigureRecipeOptions(RenderRequest request, string format)
-//        {
-//            switch (format)
-//            {
-//                case "PDF":
-//                case "VIEW":
-//                    request.Template.Chrome = new Chrome
-//                    {
-//                        MarginTop = "1mm",
-//                        MarginBottom = "1mm",
-//                        MarginLeft = "5mm",
-//                        MarginRight = "5mm",
-//                        DisplayHeaderFooter = false,
-//                        PrintBackground = true,
-//                        Format = "A4",
-//                        Landscape = false
-//                    };
-//                    break;
-
-//                case "EXCEL":
-//                case "XLSX":
-//                    request.Template.HtmlToXlsx =
-//                        new HtmlToXlsx { HtmlEngine = "chrome" };
-//                    break;
-//            }
-//        }
-//    }
-//}
-
-
-
-
-
-
 
 using jsreport.AspNetCore;
 using jsreport.Types;
+using JsSampleReport.Dtos.ReportDtos;
 using JsSampleReport.Inteface.ReportInterface;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -433,15 +12,32 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 
 namespace JsSampleReport.Services.ReportService
 {
+    /// <summary>
+    /// Workflow:
+    /// 1. RenderAndCacheReportAsync()      - Render Razor .cshtml to HTML and cache it
+    /// 2. GenerateReportFromHtmlAsync()    - Convert cached HTML to PDF, Excel, Word, etc.
+    /// 
+    /// This prevents DB calls during export — render once, export many times from cache.
+    /// 
+    /// Method Sequence:
+    /// ├─ CACHE HELPERS (IsCached, GetFromCache)
+    /// ├─ RENDER PATH (RenderAndCacheReportAsync → RenderViewAsync)
+    /// ├─ EXPORT PATH (GenerateReportFromHtmlAsync)
+    /// ├─ JSREPORT ENGINE (RenderHtmlAsPdfAsync, GetRecipe, ApplyFormatOptions)
+    /// ├─ LIBREOFFICE (ConvertPdfToDocxAsync, FindLibreOfficePath)
+    /// └─ INTERNAL HELPERS
+    /// </summary>
     public class JsReportService : IJsReportService
     {
         private readonly ILogger<JsReportService> _logger;
         private readonly IJsReportMVCService _jsReportMVCService;
         private readonly IServiceProvider _serviceProvider;
         private readonly IMemoryCache _cache;
+        private const int LibreOfficeTimeoutMs = 30000; // 30 seconds
 
         public JsReportService(
             ILogger<JsReportService> logger,
@@ -455,18 +51,31 @@ namespace JsSampleReport.Services.ReportService
             _cache = cache;
         }
 
-        // ══════════════════════════════════════════════════════════════════
-        // Cache helpers
-        // ══════════════════════════════════════════════════════════════════
+        // ╔════════════════════════════════════════════════════════════════════╗
+        // ║ CACHE HELPERS — Used everywhere (before DB calls for exports)      ║
+        // ╚════════════════════════════════════════════════════════════════════╝
+
+        /// <summary>
+        /// Check if report HTML is cached (e.g., for export check before DB call)
+        /// </summary>
         public bool IsCached(string reportKey)
             => _cache.TryGetValue(reportKey, out _);
 
+        /// <summary>
+        /// Retrieve cached HTML without DB call (for exports)
+        /// </summary>
         public string? GetFromCache(string reportKey)
             => _cache.TryGetValue(reportKey, out string? html) ? html : null;
 
-        // ══════════════════════════════════════════════════════════════════
-        // Render .cshtml → HTML → cache — ASYNC
-        // ══════════════════════════════════════════════════════════════════
+        // ╔════════════════════════════════════════════════════════════════════╗
+        // ║ RENDER PATH — Initial .cshtml rendering to HTML → Cache            ║
+        // ║ Called ONCE per report (with DB query)                             ║
+        // ╚════════════════════════════════════════════════════════════════════╝
+
+        /// <summary>
+        /// Render Razor view to HTML and cache for later exports
+        /// Call once per report — then export multiple times from cache
+        /// </summary>
         public async Task<string> RenderAndCacheReportAsync(
             string reportKey,
             string reportPath,
@@ -474,6 +83,7 @@ namespace JsSampleReport.Services.ReportService
         {
             try
             {
+                // ✅ Return cached if already rendered
                 if (_cache.TryGetValue(reportKey, out string? cachedHtml))
                 {
                     _logger.LogInformation("✅ Cache HIT: {Key}", reportKey);
@@ -482,8 +92,10 @@ namespace JsSampleReport.Services.ReportService
 
                 _logger.LogInformation("🔄 Cache MISS — Rendering: {Key}", reportKey);
 
+                // ✅ Render Razor .cshtml to HTML string
                 var html = await RenderViewAsync(reportPath, data);
 
+                // ✅ Cache with sliding + absolute expiration
                 _cache.Set(reportKey, html, new MemoryCacheEntryOptions()
                     .SetSlidingExpiration(TimeSpan.FromMinutes(30))
                     .SetAbsoluteExpiration(TimeSpan.FromHours(2)));
@@ -498,29 +110,32 @@ namespace JsSampleReport.Services.ReportService
             }
         }
 
-        // ══════════════════════════════════════════════════════════════════
-        // HTML → any format — ASYNC
-        // ══════════════════════════════════════════════════════════════════
+        // ╔════════════════════════════════════════════════════════════════════╗
+        // ║ EXPORT PATH — Convert cached HTML to PDF, Excel, Word, PNG        ║
+        // ║ Called MANY times (NO DB calls — uses cache)                       ║
+        // ╚════════════════════════════════════════════════════════════════════╝
+
+        /// <summary>
+        /// Convert HTML to any format (PDF, Excel, Word, PNG)
+        /// Always called with cached HTML — NO DB CALLS
+        /// </summary>
         public async Task<byte[]> GenerateReportFromHtmlAsync(
             string htmlContent,
             string format)
         {
             try
             {
-                _logger.LogInformation(
-                    "GenerateReportFromHtmlAsync: Format={Format}", format);
-
                 var upperFormat = format.ToUpper();
+                _logger.LogInformation("📄 Exporting to {Format}...", upperFormat);
 
-                // ✅ DOCX — PDF → LibreOffice → DOCX
+                // ✅ Word: HTML → PDF → DOCX (via LibreOffice)
                 if (upperFormat is "DOCX" or "WORD")
                 {
-                    _logger.LogInformation("✅ DOCX: PDF → LibreOffice → DOCX");
-                    var pdfBytes = await GeneratePdfBytesAsync(htmlContent);
+                    var pdfBytes = await RenderHtmlAsPdfAsync(htmlContent);
                     return await ConvertPdfToDocxAsync(pdfBytes);
                 }
 
-                // ✅ All other formats — jsreport
+                // ✅ All others: HTML → [format] via jsreport
                 var renderRequest = new RenderRequest
                 {
                     Template = new Template
@@ -531,30 +146,32 @@ namespace JsSampleReport.Services.ReportService
                     }
                 };
 
-                ConfigureRecipeOptions(renderRequest, upperFormat);
-
+                ApplyFormatOptions(renderRequest, upperFormat);
                 var result = await _jsReportMVCService.RenderAsync(renderRequest);
 
                 using var ms = new MemoryStream();
                 await result.Content.CopyToAsync(ms);
                 var bytes = ms.ToArray();
 
-                _logger.LogInformation(
-                    "✅ Generated {Format}: {Bytes} bytes", format, bytes.Length);
+                _logger.LogInformation("✅ Exported {Format}: {Bytes} bytes", upperFormat, bytes.Length);
                 return bytes;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex,
-                    "❌ GenerateReportFromHtmlAsync error: {Msg}", ex.Message);
-                throw new Exception($"Generation from HTML failed: {ex.Message}", ex);
+                _logger.LogError(ex, "❌ Export error ({Format}): {Msg}", format.ToUpper(), ex.Message);
+                throw new Exception($"Export to {format} failed: {ex.Message}", ex);
             }
         }
 
-        // ══════════════════════════════════════════════════════════════════
-        // PDF bytes — ASYNC (internal — used for DOCX conversion)
-        // ══════════════════════════════════════════════════════════════════
-        private async Task<byte[]> GeneratePdfBytesAsync(string htmlContent)
+        // ╔════════════════════════════════════════════════════════════════════╗
+        // ║ JSREPORT ENGINE — HTML → PDF/Excel/PNG conversions                ║
+        // ║ Internal methods called by GenerateReportFromHtmlAsync              ║
+        // ╚════════════════════════════════════════════════════════════════════╝
+
+        /// <summary>
+        /// Render HTML as PDF via jsreport (used internally for DOCX conversion)
+        /// </summary>
+        private async Task<byte[]> RenderHtmlAsPdfAsync(string htmlContent)
         {
             var renderRequest = new RenderRequest
             {
@@ -583,100 +200,281 @@ namespace JsSampleReport.Services.ReportService
             return ms.ToArray();
         }
 
-        // ══════════════════════════════════════════════════════════════════
-        // PDF → DOCX via LibreOffice — ASYNC
-        // ══════════════════════════════════════════════════════════════════
+        /// <summary>
+        /// Map export format string to jsreport recipe enum
+        /// </summary>
+        private static Recipe GetRecipe(string format) => format switch
+        {
+            "PDF" or "VIEW" => Recipe.ChromePdf,
+            "HTML" => Recipe.Html,
+            "EXCEL" or "XLSX" => Recipe.HtmlToXlsx,
+            "PNG" => Recipe.ChromeImage,
+            _ => Recipe.ChromePdf
+        };
+
+        /// <summary>
+        /// Apply format-specific options (margins, page size, etc.) to jsreport request
+        /// </summary>
+        private static void ApplyFormatOptions(RenderRequest request, string format)
+        {
+            switch (format)
+            {
+                case "PDF":
+                case "VIEW":
+                    request.Template.Chrome = new Chrome
+                    {
+                        MarginTop = "1mm",
+                        MarginBottom = "1mm",
+                        MarginLeft = "5mm",
+                        MarginRight = "5mm",
+                        DisplayHeaderFooter = false,
+                        PrintBackground = true,
+                        Format = "A4",
+                        Landscape = false
+                    };
+                    break;
+
+                case "EXCEL":
+                case "XLSX":
+                    request.Template.HtmlToXlsx = new HtmlToXlsx { HtmlEngine = "chrome" };
+                    break;
+            }
+        }
+
+        // ╔════════════════════════════════════════════════════════════════════╗
+        // ║ LIBREOFFICE — PDF → DOCX conversion via LibreOffice              ║
+        // ║ Only used for Word/DOCX exports                                    ║
+        // ╚════════════════════════════════════════════════════════════════════╝
+
+        /// <summary>
+        /// Convert PDF to DOCX using LibreOffice
+        /// </summary>
         private async Task<byte[]> ConvertPdfToDocxAsync(byte[] pdfBytes)
         {
+
             var tempDir = Path.Combine(Path.GetTempPath(), $"report_{Guid.NewGuid()}");
             var pdfPath = Path.Combine(tempDir, "report.pdf");
             var docxPath = Path.Combine(tempDir, "report.docx");
 
             Directory.CreateDirectory(tempDir);
+            _logger.LogInformation("📁 Created temp directory: {TempDir}", tempDir);
 
             try
             {
+                // ✅ Write PDF file
                 await File.WriteAllBytesAsync(pdfPath, pdfBytes);
+                _logger.LogInformation("📄 PDF written: {Path} ({Size} bytes)", pdfPath, pdfBytes.Length);
 
-                var libreOfficePath = GetLibreOfficePath();
-
-                using var process = new System.Diagnostics.Process
+                // ✅ Verify PDF exists
+                if (!File.Exists(pdfPath))
                 {
-                    StartInfo = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = libreOfficePath,
-                        Arguments = $"--headless --convert-to docx \"{pdfPath}\" --outdir \"{tempDir}\"",
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    }
+                    throw new FileNotFoundException($"PDF file was not created at: {pdfPath}");
+                }
+                _logger.LogInformation("✅ PDF file verified to exist");
+
+                var libreOfficePath = FindLibreOfficePath();
+                _logger.LogInformation("🔍 LibreOffice path: {Path}", libreOfficePath);
+
+                // ✅ Try multiple command formats
+                var commands = new[]
+                {
+                    // Format 1: Standard (most common)
+                    new { args = $"--headless --convert-to docx \"{pdfPath}\" --outdir \"{tempDir}\"", name = "Standard headless" },
+
+                    // Format 2: With batch mode
+                    new { args = $"--headless --invisible --convert-to docx:MS Word 2007 XML \"{pdfPath}\" --outdir \"{tempDir}\"", name = "With filter" },
+
+                    // Format 3: Simpler version
+                    new { args = $"--convert-to docx \"{pdfPath}\" --outdir \"{tempDir}\"", name = "No headless" }
                 };
 
-                process.Start();
+                Exception? lastException = null;
 
-                // ✅ Async read — prevents deadlock
-                var outputTask = process.StandardOutput.ReadToEndAsync();
-                var errorTask = process.StandardError.ReadToEndAsync();
-
-                await Task.WhenAll(outputTask, errorTask);
-                await process.WaitForExitAsync();
-
-                _logger.LogInformation("LibreOffice output: {Out}", outputTask.Result);
-
-                if (!File.Exists(docxPath))
+                foreach (var cmd in commands)
                 {
-                    _logger.LogError("❌ LibreOffice failed: {Err}", errorTask.Result);
-                    throw new Exception($"LibreOffice conversion failed: {errorTask.Result}");
+                    try
+                    {
+                        _logger.LogInformation("🔄 Attempt: {Name}", cmd.name);
+                        _logger.LogInformation("   Command: {Exe} {Args}", libreOfficePath, cmd.args);
+
+                        // Clear any leftover docx
+                        if (File.Exists(docxPath))
+                        {
+                            File.Delete(docxPath);
+                            _logger.LogInformation("🗑️  Deleted existing docx file");
+                        }
+
+                        using var process = new System.Diagnostics.Process
+                        {
+                            StartInfo = new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = libreOfficePath,
+                                Arguments = cmd.args,
+                                RedirectStandardOutput = true,
+                                RedirectStandardError = true,
+                                UseShellExecute = false,
+                                CreateNoWindow = true,
+                                WorkingDirectory = tempDir  // ✅ Set working directory
+                            }
+                        };
+
+                        process.Start();
+                        _logger.LogInformation("▶️  Process started (PID: {Pid})", process.Id);
+
+                        // ✅ Async read to prevent deadlock
+                        var outputTask = process.StandardOutput.ReadToEndAsync();
+                        var errorTask = process.StandardError.ReadToEndAsync();
+
+                        // ✅ Wait with timeout
+                        var delayTask = Task.Delay(LibreOfficeTimeoutMs);
+                        var outputComplete = await Task.WhenAny(outputTask, delayTask);
+                        var errorComplete = await Task.WhenAny(errorTask, delayTask);
+
+                        if (outputComplete == delayTask || errorComplete == delayTask)
+                        {
+                            process.Kill();
+                            _logger.LogError("⏱️  LibreOffice timed out after {Timeout}ms", LibreOfficeTimeoutMs);
+                            throw new TimeoutException($"LibreOffice conversion timed out after {LibreOfficeTimeoutMs}ms");
+                        }
+
+                        await process.WaitForExitAsync();
+
+                        var output = outputTask.IsCompletedSuccessfully ? outputTask.Result : "";
+                        var error = errorTask.IsCompletedSuccessfully ? errorTask.Result : "";
+                        var exitCode = process.ExitCode;
+
+                        _logger.LogInformation("📤 Output: {Output}", string.IsNullOrEmpty(output) ? "(empty)" : output);
+                        if (!string.IsNullOrEmpty(error))
+                            _logger.LogInformation("⚠️  Stderr: {Error}", error);
+                        _logger.LogInformation("🔍 Exit code: {ExitCode}", exitCode);
+
+                        // ✅ List all files in temp directory
+                        var files = Directory.GetFiles(tempDir);
+                        _logger.LogInformation("📂 Files in temp directory ({Count}):", files.Length);
+                        foreach (var file in files)
+                        {
+                            var info = new FileInfo(file);
+                            _logger.LogInformation("   - {FileName} ({Size} bytes)", info.Name, info.Length);
+                        }
+
+                        // ✅ Check if conversion succeeded
+                        if (File.Exists(docxPath))
+                        {
+                            var docxBytes = await File.ReadAllBytesAsync(docxPath);
+                            _logger.LogInformation("✅ PDF→DOCX successful: {Bytes} bytes", docxBytes.Length);
+                            return docxBytes;
+                        }
+
+                        _logger.LogWarning("⚠️  DOCX not created with {Name} attempt", cmd.name);
+                        lastException = new FileNotFoundException($"DOCX file not created at: {docxPath}");
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "⚠️  {Name} failed, trying next format", cmd.name);
+                        lastException = ex;
+                    }
                 }
 
-                var docxBytes = await File.ReadAllBytesAsync(docxPath);
-                _logger.LogInformation("✅ PDF→DOCX: {Bytes} bytes", docxBytes.Length);
-                return docxBytes;
+                // ✅ All formats failed
+                var errorMessage = lastException?.Message ?? "Unknown error";
+                _logger.LogError("❌ All LibreOffice conversion attempts failed: {Error}", errorMessage);
+                throw new Exception($"LibreOffice conversion failed after {commands.Length} attempts: {errorMessage}", lastException);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "❌ ConvertPdfToDocxAsync failed");
+                throw;
             }
             finally
             {
-                if (Directory.Exists(tempDir))
-                    Directory.Delete(tempDir, recursive: true);
+                try
+                {
+                    if (Directory.Exists(tempDir))
+                    {
+                        Directory.Delete(tempDir, recursive: true);
+                        _logger.LogInformation("🗑️  Temp directory cleaned up: {TempDir}", tempDir);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "⚠️  Failed to cleanup temp directory: {TempDir}", tempDir);
+                }
             }
         }
 
-        // ══════════════════════════════════════════════════════════════════
-        // Resolve LibreOffice path
-        // ══════════════════════════════════════════════════════════════════
-        private string GetLibreOfficePath()
+        /// <summary>
+        /// Find LibreOffice installation path (Windows or Linux)
+        /// Auto-detects common installation locations
+        /// </summary>
+        private string FindLibreOfficePath()
         {
+            // ✅ Auto-detect common installation paths
             var paths = new[]
             {
+                // Windows installations
                 @"C:\Program Files\LibreOffice\program\soffice.exe",
                 @"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+                @"C:\Program Files\LibreOffice\soffice.exe",
+                @"C:\Program Files (x86)\LibreOffice\soffice.exe",
+
+                // Linux installations
+                "/usr/bin/soffice",
                 "/usr/bin/libreoffice",
-                "/usr/bin/soffice"
+                "/snap/bin/libreoffice",
+                "/opt/libreoffice/program/soffice"
             };
 
-            var found = paths.FirstOrDefault(File.Exists)
-                ?? throw new FileNotFoundException(
-                       "LibreOffice not found. Install from https://www.libreoffice.org");
+            _logger.LogInformation("🔍 Searching for LibreOffice in {Count} paths", paths.Length);
 
-            _logger.LogInformation("✅ LibreOffice found: {Path}", found);
-            return found;
+            foreach (var path in paths)
+            {
+                _logger.LogDebug("  Checking: {Path}", path);
+                if (File.Exists(path))
+                {
+                    _logger.LogInformation("✅ LibreOffice found: {Path}", path);
+                    return path;
+                }
+            }
+
+            // ✅ Not found — provide helpful error
+            var error = "LibreOffice not found in common installation paths.\n" +
+                       "Checked paths:\n" +
+                       string.Join("\n", paths.Select(p => $"  - {p}")) +
+                       "\n\nSolution:\n" +
+                       "1. Install LibreOffice from https://www.libreoffice.org\n" +
+                       "2. Or set CustomPath in appsettings.json LibreOfficeSettings.CustomPath";
+
+            _logger.LogError("❌ {Error}", error);
+            throw new FileNotFoundException(error);
         }
 
-        // ══════════════════════════════════════════════════════════════════
-        // Razor .cshtml → HTML — TRUE ASYNC
-        // ══════════════════════════════════════════════════════════════════
+        // ╔════════════════════════════════════════════════════════════════════╗
+        // ║ INTERNAL HELPERS — Razor rendering (called by RenderAndCacheAsync) ║
+        // ╚════════════════════════════════════════════════════════════════════╝
+
+        /// <summary>
+        /// Render Razor .cshtml file to HTML string (called by RenderAndCacheReportAsync)
+        /// </summary>
         private async Task<string> RenderViewAsync(string viewName, object model)
         {
+            // ✅ Create scope to avoid captive dependency issues
             using var scope = _serviceProvider.CreateScope();
             var scopedProvider = scope.ServiceProvider;
+
             var httpContext = new DefaultHttpContext { RequestServices = scopedProvider };
-            var actionContext = new ActionContext(httpContext, new RouteData(), new ActionDescriptor());
+            var actionContext = new ActionContext(
+                httpContext,
+                new RouteData(),
+                new ActionDescriptor());
+
             var viewEngine = scopedProvider.GetRequiredService<IRazorViewEngine>();
             var tempDataProvider = scopedProvider.GetRequiredService<ITempDataProvider>();
 
+            // ✅ Try absolute path first, then by name
             var viewResult = viewEngine.GetView(null, viewName, false);
             if (!viewResult.Success)
                 viewResult = viewEngine.FindView(actionContext, viewName, false);
+
             if (!viewResult.Success)
                 throw new InvalidOperationException($"View '{viewName}' not found.");
 
@@ -698,51 +496,5 @@ namespace JsSampleReport.Services.ReportService
             await viewResult.View.RenderAsync(viewContext);
             return sw.ToString();
         }
-
-        // ══════════════════════════════════════════════════════════════════
-        // Helpers
-        // ══════════════════════════════════════════════════════════════════
-        private static Recipe GetRecipe(string format) => format switch
-        {
-            "PDF" or "VIEW" => Recipe.ChromePdf,
-            "HTML" => Recipe.Html,
-            "EXCEL" or "XLSX" => Recipe.HtmlToXlsx,
-            "PNG" => Recipe.ChromeImage,
-            _ => Recipe.ChromePdf
-        };
-
-        private  void ConfigureRecipeOptions(RenderRequest request, string format)
-        {
-            switch (format)
-            {
-                case "PDF":
-                case "VIEW":
-                    request.Template.Chrome = new Chrome
-                    {
-                        MarginTop = "1mm",
-                        MarginBottom = "1mm",
-                        MarginLeft = "5mm",
-                        MarginRight = "5mm",
-                        DisplayHeaderFooter = false,
-                        PrintBackground = true,
-                        Format = "A4",
-                        Landscape = false
-                    };
-                    break;
-
-                case "EXCEL":
-                case "XLSX":
-                    request.Template.HtmlToXlsx =
-                        new HtmlToXlsx { HtmlEngine = "chrome" };
-
-                    // ✅ Only use properties that exist in your jsreport version
-                  
-
-                    break;
-            }
-        }
     }
 }
-
-
-
