@@ -17,16 +17,20 @@
         //// ✅ Async — use in new controllers
         //Task<string> RenderAndCacheReport(string reportKey, string reportPath, object data);
         //Task<byte[]> GenerateReportFromHtml(string htmlContent, string format);
-        //bool IsCached(string reportKey);          
-        //string? GetFromCache(string reportKey);
+        //bool IsHtmlCached(string reportKey);          
+        //string? GetCachedHtml(string reportKey);
         //
 
-        // ✅ Cache helpers
-        bool IsCached(string reportKey);
-        string? GetFromCache(string reportKey);
+        // ── HTML Cache ─────────────────────────────────────────────────────
+        bool IsHtmlCached(string reportKey);
+        string? GetCachedHtml(string reportKey);
+
+        // ── PDF Cache ──────────────────────────────────────────────────────
+        void StorePdfInCache(string reportKey, byte[] pdfBytes);
+        byte[]? GetCachedPdf(string reportKey);
 
         // ✅ Async only — all controllers use these
-        Task<string> RenderAndCacheReportAsync(string reportKey, string reportPath, object data);
-        Task<byte[]> GenerateReportFromHtmlAsync(string htmlContent, string format);
+        Task<string> RenderRazorToHtmlAndCacheAsync(string reportKey, string reportPath, object data);
+        Task<byte[]> ExportReportToFormatAsync(string htmlContent, string format, string? reportKey = null);
     }
 }

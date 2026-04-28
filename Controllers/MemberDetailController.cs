@@ -51,10 +51,10 @@
 //                // ✅ Debug log from utils
 //                ReportExportHelper.LogCacheState(
 //                    upperFormat, reportKey,
-//                    _jsReportService.IsCached(reportKey), _logger);
+//                    _jsReportService.IsHtmlCached(reportKey), _logger);
 
 //                // ── EXPORT PATH ───────────────────────────────────────────
-//                if (upperFormat != "VIEW" && _jsReportService.IsCached(reportKey))
+//                if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
 //                {
 //                    _logger.LogInformation("✅ NO DB CALL — serving from server cache");
 //                    return ReportExportHelper.ExportFromCache(
@@ -182,10 +182,10 @@ namespace JsSampleReport.Controllers
 
                 ReportExportHelper.LogCacheState(
                     upperFormat, reportKey,
-                    _jsReportService.IsCached(reportKey), _logger);
+                    _jsReportService.IsHtmlCached(reportKey), _logger);
 
                 // ── EXPORT PATH ───────────────────────────────────────────
-                if (upperFormat != "VIEW" && _jsReportService.IsCached(reportKey))
+                if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
                 {
                     _logger.LogInformation("✅ NO DB CALL — serving from cache");
                     return await ReportExportHelper.ExportFromCacheAsync(
@@ -243,7 +243,7 @@ namespace JsSampleReport.Controllers
                     { "TotalRecords",   allMemberData.Count }
                 };
 
-                var htmlContent = await _jsReportService.RenderAndCacheReportAsync(
+                var htmlContent = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
                     reportKey: reportKey,
                     reportPath: "Views/Report/MemberReport.cshtml",
                     data: reportData);
@@ -255,7 +255,7 @@ namespace JsSampleReport.Controllers
                 // ════════════════════════════════════════════════════════
             
 
-                var pdfBytes = await _jsReportService.GenerateReportFromHtmlAsync(
+                var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
                     htmlContent, "PDF");
 
            

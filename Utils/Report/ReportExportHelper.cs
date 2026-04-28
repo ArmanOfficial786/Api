@@ -1,65 +1,4 @@
-﻿//using JsSampleReport.Inteface.ReportInterface;
-//using Microsoft.AspNetCore.Mvc;
-//namespace JsSampleReport.Utils.Report
-//{
-//    public static class ReportExportHelper
-//    {
-//        // ══════════════════════════════════════════════════════════════════
-//        // Export from server cache — NO DB call
-//        // Shared across all report controllers
-//        // ══════════════════════════════════════════════════════════════════
-//        public static IActionResult ExportFromCache(
-//            string reportKey,
-//            string format,
-//            string reportName,
-//            IJsReportService jsReportService,
-//            ILogger logger)
-//        {
-//            var cachedHtml = jsReportService.GetFromCache(reportKey);
-
-//            if (cachedHtml == null)
-//            {
-//                logger.LogWarning($"❌ Cache miss on export: {reportKey}");
-//                return new BadRequestObjectResult(new
-//                {
-//                    success = false,
-//                    message = "Report session expired. Please view the report again."
-//                });
-//            }
-
-//            logger.LogInformation($"✅ Exporting from cache: Key={reportKey}, Format={format}");
-
-//            var reportBytes = jsReportService.GenerateReportFromHtml(cachedHtml, format);
-//            var (contentType, _) = ReportUtils.GetContentTypeAndExtension(format);
-//            var fileName = ReportUtils.GetFileName(reportName, format);
-
-//            return new FileContentResult(reportBytes, contentType)
-//            {
-//                FileDownloadName = fileName
-//            };
-//        }
-
-//        // ══════════════════════════════════════════════════════════════════
-//        // Log cache state — shared debug helper for all controllers
-//        // ══════════════════════════════════════════════════════════════════
-//        public static void LogCacheState(
-//            string format,
-//            string reportKey,
-//            bool isCached,
-//            ILogger logger)
-//        {
-//            logger.LogInformation("==========================================");
-//            logger.LogInformation($"FORMAT    : {format}");
-//            logger.LogInformation($"CACHE KEY : {reportKey}");
-//            logger.LogInformation($"IS CACHED : {isCached}");
-//            logger.LogInformation("==========================================");
-//        }
-//    }
-//}
-
-
-
-using JsSampleReport.Inteface.ReportInterface;
+﻿using JsSampleReport.Inteface.ReportInterface;
 using Microsoft.AspNetCore.Mvc;
 
 namespace JsSampleReport.Utils.Report
@@ -76,27 +15,29 @@ namespace JsSampleReport.Utils.Report
             IJsReportService jsReportService,
             ILogger logger)
         {
-            var cachedHtml = jsReportService.GetFromCache(reportKey);
-
-            if (cachedHtml == null)
+            var htmlContent = jsReportService.GetCachedHtml(reportKey);
+            if (string.IsNullOrEmpty(htmlContent))
             {
-                logger.LogWarning("❌ Cache miss on export: {Key}", reportKey);
+                logger.LogWarning("⚠️ HTML not cached for key: {Key}", reportKey);
                 return new BadRequestObjectResult(new
                 {
                     success = false,
-                    message = "Report session expired. Please view the report again."
+                    message = "Report not cached. Please view the report first."
                 });
             }
 
-            logger.LogInformation("✅ Exporting from cache: Key={Key}, Format={Format}",
-                reportKey, format);
+            // ✅ Pass reportKey — DOCX uses PDF cache, others use HTML cache
+            var fileBytes = await jsReportService.ExportReportToFormatAsync(
+                htmlContent,
+                format,
+                reportKey);   // ← reportKey always passed
 
-            // ✅ Async — no blocking
-            var reportBytes = await jsReportService.GenerateReportFromHtmlAsync(cachedHtml, format);
             var (contentType, _) = ReportUtils.GetContentTypeAndExtension(format);
             var fileName = ReportUtils.GetFileName(reportName, format);
 
-            return new FileContentResult(reportBytes, contentType)
+            logger.LogInformation("✅ Export done: {Format} | {File}", format, fileName);
+
+            return new FileContentResult(fileBytes, contentType)
             {
                 FileDownloadName = fileName
             };
@@ -108,13 +49,13 @@ namespace JsSampleReport.Utils.Report
         public static void LogCacheState(
             string format,
             string reportKey,
-            bool isCached,
+            bool IsHtmlCached,
             ILogger logger)
         {
             logger.LogInformation("==========================================");
             logger.LogInformation("FORMAT    : {Format}", format);
             logger.LogInformation("CACHE KEY : {Key}", reportKey);
-            logger.LogInformation("IS CACHED : {IsCached}", isCached);
+            logger.LogInformation("IS CACHED : {IsHtmlCached}", IsHtmlCached);
             logger.LogInformation("==========================================");
         }
     }

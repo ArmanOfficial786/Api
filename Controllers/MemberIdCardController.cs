@@ -58,10 +58,10 @@
 
 //                ReportExportHelper.LogCacheState(
 //                    upperFormat, reportKey,
-//                    _jsReportService.IsCached(reportKey), _logger);
+//                    _jsReportService.IsHtmlCached(reportKey), _logger);
 
 //                // ── EXPORT PATH — no DB call ──────────────────────────
-//                if (upperFormat != "VIEW" && _jsReportService.IsCached(reportKey))
+//                if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
 //                {
 //                    _logger.LogInformation("✅ NO DB CALL — serving from cache");
 //                    return await ReportExportHelper.ExportFromCacheAsync(
@@ -163,7 +163,7 @@
 //                    { "TotalRecords",        memberIdCardData.Count }
 //                };
 
-//                var htmlContent = await _jsReportService.RenderAndCacheReportAsync(
+//                var htmlContent = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
 //                    reportKey: reportKey,
 //                    reportPath: "Views/Report/MemberIdCard.cshtml",
 //                    data: reportData);
@@ -172,7 +172,7 @@
 //                // STAGE 5 — PDF generation
 //                // ════════════════════════════════════════════════════════
 
-//                var pdfBytes = await _jsReportService.GenerateReportFromHtmlAsync(htmlContent, "PDF");
+//                var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF");
 
 //                if (upperFormat == "VIEW")
 //                {
@@ -307,10 +307,10 @@ namespace JsSampleReport.Controllers
 
                 ReportExportHelper.LogCacheState(
                     upperFormat, reportKey,
-                    _jsReportService.IsCached(reportKey), _logger);
+                    _jsReportService.IsHtmlCached(reportKey), _logger);
 
                 // ── EXPORT — cache hit → skip DB entirely ─────────────────────────
-                if (upperFormat != "VIEW" && _jsReportService.IsCached(reportKey))
+                if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
                 {
                     _logger.LogInformation("✅ NO DB CALL — serving from cache");
                     return await ReportExportHelper.ExportFromCacheAsync(
@@ -365,13 +365,13 @@ namespace JsSampleReport.Controllers
                     { "TotalRecords",        memberIdCardData.Count },
                 };
 
-                var htmlContent = await _jsReportService.RenderAndCacheReportAsync(
+                var htmlContent = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
                     reportKey: reportKey,
                     reportPath: "Views/Report/MemberIdCard.cshtml",
                     data: reportData);
 
                 // ── STAGE 5: PDF generation ───────────────────────────────────────
-                var pdfBytes = await _jsReportService.GenerateReportFromHtmlAsync(
+                var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
                     htmlContent, "PDF");
 
                 // ── VIEW — return binary PDF blob ─────────────────────────────────

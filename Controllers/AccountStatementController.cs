@@ -59,10 +59,10 @@ namespace JsSampleReport.Controllers
                 var reportKey = ReportUtils.GenerateReportKey(request, "AccountStatement");
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.IsCached(reportKey), _logger);
+                    _jsReportService.IsHtmlCached(reportKey), _logger);
 
                 // ── EXPORT PATH ───────────────────────────────────────
-                if (upperFormat != "VIEW" && _jsReportService.IsCached(reportKey))
+                if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
                 {
                     _logger.LogInformation("✅ NO DB CALL — serving from cache");
                     return await ReportExportHelper.ExportFromCacheAsync(
@@ -131,7 +131,7 @@ namespace JsSampleReport.Controllers
                 // ── Razor render ──────────────────────────────────────
             
                 var htmlContent = await Task.Run(() =>
-                    _jsReportService.RenderAndCacheReportAsync(
+                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
                         reportKey: reportKey,
                         reportPath: "Views/Report/AccountStatementReport.cshtml",
                         data: reportData));
@@ -143,7 +143,7 @@ namespace JsSampleReport.Controllers
                     // ── jsreport PDF ──────────────────────────────────
                    
                     var pdfBytes = await Task.Run(() =>
-                        _jsReportService.GenerateReportFromHtmlAsync(htmlContent, "PDF"));
+                        _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey));
                 
 
                    
