@@ -26,11 +26,10 @@ namespace JsSampleReport.Utils.Report
                 });
             }
 
-            // ✅ Pass reportKey — DOCX uses PDF cache, others use HTML cache
+            // ✅ Export from cache
             var fileBytes = await jsReportService.ExportReportToFormatAsync(
                 htmlContent,
-                format,
-                reportKey);   // ← reportKey always passed
+                format);
 
             var (contentType, _) = ReportUtils.GetContentTypeAndExtension(format);
             var fileName = ReportUtils.GetFileName(reportName, format);
