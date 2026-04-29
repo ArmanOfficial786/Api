@@ -1,5 +1,5 @@
-﻿
-@* Views/Shared/_CommonHeader.cshtml *@
+﻿@* 
+
 
 @using JsSampleReport.Dtos.ReportDtos
 @model Dictionary<string, object>
@@ -101,8 +101,94 @@
         </div>
     }
 }
+ *@
 
 
+@* Views/Shared/_CommonHeader.cshtml *@
+@using JsSampleReport.Dtos.ReportDtos
+@model Dictionary<string, object>
 
+@if (Model.ContainsKey("HeaderDataSet") && Model["HeaderDataSet"] is IEnumerable<CommonHeader> headers)
+{
+    foreach (var h in headers)
+    {
+        <table style="width:100%; border-collapse:collapse;
+            font-family:'Times New Roman',Times,serif;
+            margin-bottom:4px;">
 
+            <!-- ── ROW 1: Logo | Company Name + Address | Reg No ── -->
+            <tr>
+                <td rowspan="2" style="width:90px; vertical-align:top;
+                    text-align:center; padding:0 4px 4px 4px;" >
+                    @if (!string.IsNullOrEmpty(h.CompanyLogo))
+                    {
+                        <img src="@h.CompanyLogo"
+                             style="width:80px; height:80px; object-fit:contain;" />
+                    }
+                </td>
 
+                <td style="text-align:center; vertical-align:bottom; padding:4px 4px 0 4px;">
+                    <div style="font-size:20pt; font-weight:bold;">@h.CompanyName</div>
+                    <div style="font-size:11pt; margin-top:2px;">@h.CompanyAddress</div>
+                </td>
+
+                <td style="width:160px; vertical-align:top; text-align:right;
+                    padding:4px; white-space:nowrap;">
+                    @if (!string.IsNullOrEmpty(h.RegisteredNo))
+                    {
+                        <div style="font-size:10pt;">
+                            <strong>Reg.No :</strong> @h.RegisteredNo
+                        </div>
+                    }
+                </td>
+            </tr>
+
+            <!-- ── ROW 2: (Logo continues via rowspan) | Phone+Fax left, Email+Web+Pan right ── -->
+            <tr>
+                <td colspan="2" style="padding:10px 4px 4px 4px;">
+                    <table style="width:100%; border:none; border-collapse:collapse;">
+                        <tr>
+                            <!-- Phone & Fax — left -->
+                            <td style="text-align:left; vertical-align:top;
+                                padding:2px 8px; font-size:9pt;">
+                                @if (!string.IsNullOrEmpty(h.PhoneNo))
+                                {
+                                    <div><strong>PhoneNo:</strong> @h.PhoneNo</div>
+                                }
+                                @if (!string.IsNullOrEmpty(h.FaxNo))
+                                {
+                                    <div style="margin-top:8px;">
+                                        <strong>Fax No :</strong> @h.FaxNo
+                                    </div>
+                                }
+                            </td>
+
+                            <!-- Email, WebSite, PanNo — right -->
+                            <td style="text-align:right; vertical-align:top;
+                                padding:2px 8px; font-size:9pt;">
+                                @if (!string.IsNullOrEmpty(h.CompanyEmailId))
+                                {
+                                    <div><strong>Email :</strong> @h.CompanyEmailId</div>
+                                }
+                                @if (!string.IsNullOrEmpty(h.CompanyWebSite))
+                                {
+                                    <div style="margin-top:8px;">
+                                        <strong>WebSite :</strong> @h.CompanyWebSite
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(h.PanNo))
+                                {
+                                    <div style="margin-top:8px;">
+                                        <strong>Pan No :</strong> @h.PanNo
+                                    </div>
+                                }
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+
+        </table>
+        <hr style="border:none; border-top:1.6px solid #333; margin:2px 0 6px 0;" />
+    }
+}

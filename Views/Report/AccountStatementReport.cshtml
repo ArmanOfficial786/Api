@@ -15,6 +15,8 @@
     var branchName      = Model.ContainsKey("BranchName")      ? Model["BranchName"]?.ToString()      : "All";
     var fromDate        = Model.ContainsKey("FromDate")        ? Model["FromDate"]?.ToString()        : "";
     var toDate          = Model.ContainsKey("ToDate")          ? Model["ToDate"]?.ToString()          : "";
+    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
 
     var balance     = balanceData.FirstOrDefault();
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
@@ -103,18 +105,22 @@
 </head>
 <body>
 <div class="report-container">
-
+     <!-- ========== COMMON HEADER (partial – emits multiple <tr> rows) ========== -->
+          @if (!isExcel)
+          {
+               @await Html.PartialAsync("_CommonHeader", Model)
+          }
     <!--
         ╔══════════════════════════════════════════════════════════════════╗
         ║  SINGLE MASTER TABLE – no nested tables, all grouping flat      ║
         ║  using <tr> rows with appropriate colspan / styling.            ║
         ╚══════════════════════════════════════════════════════════════════╝
     -->
+
     <table data-sheet-name="AccountStatementReport">
         <tbody>
 
-            <!-- ========== COMMON HEADER (partial – emits multiple <tr> rows) ========== -->
-            @await Html.PartialAsync("_CommonHeader", Model)
+           
 
             <!-- ========== REPORT TITLE ROW ========== -->
             <tr>
@@ -128,18 +134,18 @@
             <!-- ========== META INFORMATION ROWS ========== -->
             <tr>
                 <td colspan="3" style="padding:4px 8px;">
-                    <strong>Branch Name :</strong>&nbsp;@branchName
+                    <strong>Branch Name :</strong>@branchName
                 </td>
                 <td colspan="3" style="padding:4px 8px; text-align:right;">
-                    <strong>From Date :</strong>&nbsp;@fromDate
+                    <strong>From Date :</strong>@fromDate
                 </td>
             </tr>
             <tr>
                 <td colspan="3" style="padding:4px 8px;">
-                    <strong>Report Generated On :</strong>&nbsp;@generatedOn
+                    <strong>Report Generated On :</strong>@generatedOn
                 </td>
                 <td colspan="3" style="padding:4px 8px; text-align:right;">
-                    <strong>To Date :</strong>&nbsp;@toDate
+                    <strong>To Date :</strong>@toDate
                 </td>
             </tr>
             <tr><td colspan="6" style="height:6px;"></td></tr>

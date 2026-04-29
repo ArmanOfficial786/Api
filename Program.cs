@@ -119,6 +119,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddJsReport(new LocalReporting()
     .UseBinary(JsReportBinary.GetBinary())
     .KillRunningJsReportProcesses()
+    .Configure(cfg => cfg.DoTrustUserCode())  // ← required for custom extensions
     .AsUtility()
     .Create());
 

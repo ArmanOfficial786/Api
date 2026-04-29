@@ -33,6 +33,12 @@
 	  
   </ItemGroup>
 
+	<ItemGroup>
+		<None Include="jsreport\**\*.*">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
+
 
   <ItemGroup>
     <Folder Include="DbContext\" />

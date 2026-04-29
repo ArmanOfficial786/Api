@@ -56,7 +56,7 @@ namespace JsSampleReport.Controllers
                     //return BadRequest(new { success = false, message = "Invalid request" });
 
                 var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, "AccountStatement");
+                var reportKey = ReportUtils.GenerateReportKey(request, "AccountStatement") + $"_{upperFormat}"; 
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.IsHtmlCached(reportKey), _logger);
@@ -125,7 +125,8 @@ namespace JsSampleReport.Controllers
                     { "TransactionType",         request.TransactionType },
                     { "BranchName",              request.BranchName      },
                     { "FromDate",                request.FromDate        },
-                    { "ToDate",                  request.ToDate          }
+                    { "ToDate",                  request.ToDate          },
+                    { "Format",                  upperFormat             }
                 };
 
                 // ── Razor render ──────────────────────────────────────
