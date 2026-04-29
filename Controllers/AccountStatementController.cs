@@ -5,7 +5,6 @@ using JsSampleReport.Inteface.ServiceInterface;
 using JsSampleReport.Utils.Report;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
-using System.Diagnostics;
 
 namespace JsSampleReport.Controllers
 {
@@ -46,6 +45,7 @@ namespace JsSampleReport.Controllers
             try
             {
                 var response = new GeneralResponse<ReportResponseDtos>();
+                var reportName = "AccountStatement";
                 if (request == null || !ModelState.IsValid)
                 {
                     response.IsValid = false;
@@ -53,27 +53,24 @@ namespace JsSampleReport.Controllers
                     response.Message = "Invalid request";
                     return BadRequest(response);
                 }
-                    //return BadRequest(new { success = false, message = "Invalid request" });
+                    
 
                 var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, "AccountStatement") + $"_{upperFormat}"; 
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}"; 
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.IsHtmlCached(reportKey), _logger);
 
-                // ── EXPORT PATH ───────────────────────────────────────
+                // ── NO DB CALL — serving from cache ───────────────────────────────────────
                 if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
                 {
-                    _logger.LogInformation("✅ NO DB CALL — serving from cache");
                     return await ReportExportHelper.ExportFromCacheAsync(
                         reportKey, upperFormat,
-                        "AccountStatementReport",
+                        reportName,
                         _jsReportService, _logger);
                 }
 
                 // ── DB: All three calls in parallel ───────────────────
-           
-
                 var statementTask = _accountStatementService
                                         .GetAccountStatementTypeAsync(request);
 
@@ -84,16 +81,9 @@ namespace JsSampleReport.Controllers
 
                 await Task.WhenAll(statementTask, balanceTask, headerTask);
 
-             
-
                 var statementData = await statementTask;
                 var balanceData = await balanceTask;
                 var headerData = await headerTask;
-
-                _logger.LogInformation(
-                    $"⏱️ Records            : Statement={statementData.Count}" +
-                    $" | Balance={balanceData.Count}" +
-                    $" | Headers={headerData.Count}");
 
                 if (!statementData.Any())
                 {
@@ -102,7 +92,6 @@ namespace JsSampleReport.Controllers
                     response.Message = "No data found";
                     return NotFound(response);
                 }
-                    //return NotFound(new { success = false, message = "No data found" });
 
                 var webRoot = ReportUtils.GetWebRootPath(
                     _webHostEnvironment, _reportSettings, _logger);
@@ -145,29 +134,19 @@ namespace JsSampleReport.Controllers
                    
                     var pdfBytes = await Task.Run(() =>
                         _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey));
-                
-
                    
-
-                    //return Ok(new
-                    //{
-                    //    success = true,
-                    //    pdfData = Convert.ToBase64String(pdfBytes),
-                    //    reportName = "Account Statement Report"
-                    //});
-
                     response.IsValid = true;
                     response.StatusCode = 200;
                     response.Message = "Report generated successfully";
                     response.Data = new ReportResponseDtos
                     {
                         PdfData = Convert.ToBase64String(pdfBytes),
-                        ReportName = "MemberIdCard Report",
+                        ReportName = reportName,
                         Pagination = new Pagination
                         {
-                            CurrentPage = 1,//request.currentPage,
+                            CurrentPage = 1,
                             TotalPages = 1,
-                            TotalRecord =1,  //memberIdCardData.Count,
+                            TotalRecord =1,  
                             PageSize =   1,
                             HasNextPage = false,
                             HasPreviousPage = false
@@ -180,7 +159,7 @@ namespace JsSampleReport.Controllers
 
                 return await ReportExportHelper.ExportFromCacheAsync(
                     reportKey, upperFormat,
-                    "AccountStatementReport",
+                    reportName,
                     _jsReportService, _logger);
             }
             catch (Exception ex)
@@ -192,7 +171,7 @@ namespace JsSampleReport.Controllers
                     message = "An error occurred while processing your request.",
                     error = ex.Message
                 });
-            }
+            };
         }
     }
 }

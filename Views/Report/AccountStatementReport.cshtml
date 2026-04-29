@@ -23,7 +23,7 @@
 
     decimal grandDebit  = dataSet.Sum(x => x.DebitAmount);
     decimal grandCredit = dataSet.Sum(x => x.CreditAmount);
-    var groupedByLedgerHead = dataSet.GroupBy(x => x.LedgerHead).ToList();
+    var groupedByLedgerHead = dataSet.GroupBy(x => x.LedgerHead) .OrderBy(g => g.Key).ToList();
 
     string FormatBalance(decimal amount) =>
         amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
@@ -62,12 +62,14 @@
     @@media print {
         /* Restore page margins (top, right, bottom, left) */
         @@page {
+            width: 210mm; 
             margin: 1cm;
         }
 
         body {
             margin: 0;
             padding: 0;
+            width: 210mm;  
         }
 
         /* Prevent page breaks inside table rows */
@@ -134,18 +136,18 @@
             <!-- ========== META INFORMATION ROWS ========== -->
             <tr>
                 <td colspan="3" style="padding:4px 8px;">
-                    <strong>Branch Name :</strong>@branchName
+                    <strong>Branch Name :</strong> @branchName
                 </td>
                 <td colspan="3" style="padding:4px 8px; text-align:right;">
-                    <strong>From Date :</strong>@fromDate
+                    <strong>From Date :</strong> @fromDate
                 </td>
             </tr>
             <tr>
                 <td colspan="3" style="padding:4px 8px;">
-                    <strong>Report Generated On :</strong>@generatedOn
+                    <strong>Report Generated On :</strong> @generatedOn
                 </td>
                 <td colspan="3" style="padding:4px 8px; text-align:right;">
-                    <strong>To Date :</strong>@toDate
+                    <strong>To Date :</strong> @toDate
                 </td>
             </tr>
             <tr><td colspan="6" style="height:6px;"></td></tr>
@@ -210,6 +212,7 @@
 
                     var mainLedgerGroups = ledgerGroup
                         .GroupBy(x => new { x.LedgerNo, x.MainLedger })
+                        .OrderBy(g => decimal.TryParse(g.Key.LedgerNo, out var n) ? n : decimal.MaxValue)
                         .ToList();
 
                     <!-- ========== LedgerHead header row (summary) ========== -->
@@ -247,6 +250,11 @@
                         </tr>
                         rowCounter++;
                     }
+                       <!-- ========== LedgerHead full-width separator line ========== -->
+                    <tr>
+                        <td colspan="6"
+                            style="border-bottom:1.5px solid #000; padding:0; height:0; line-height:0; font-size:0;"></td>
+                    </tr>
                 }
 
                 <!-- ========== Grand Total row ========== -->
@@ -280,6 +288,7 @@
 
                     var mainLedgerGroups = ledgerGroup
                         .GroupBy(x => new { x.LedgerNo, x.MainLedger })
+                        .OrderBy(g => decimal.TryParse(g.Key.LedgerNo, out var n) ? n : decimal.MaxValue)
                         .ToList();
 
                     <!-- ========== LedgerHead header row ========== -->
@@ -333,6 +342,11 @@
                             rowCounter++;
                         }
                     }
+                       <!-- ========== LedgerHead full-width separator line ========== -->
+                    <tr>
+                        <td colspan="6"
+                            style="border-bottom:1.5px solid #000; padding:0; height:0; line-height:0; font-size:0;"></td>
+                    </tr>
                 }
 
                 <!-- ========== Grand Total row ========== -->
@@ -366,6 +380,7 @@
 
                     var mainLedgerGroups = ledgerGroup
                         .GroupBy(x => new { x.LedgerNo, x.MainLedger })
+                        .OrderBy(g => decimal.TryParse(g.Key.LedgerNo, out var n) ? n : decimal.MaxValue)
                         .ToList();
 
                     <!-- ========== LedgerHead header row ========== -->
@@ -422,6 +437,11 @@
                             rowCounter++;
                         }
                     }
+                       <!-- ========== LedgerHead full-width separator line ========== -->
+                    <tr>
+                        <td colspan="6"
+                            style="border-bottom:1.5px solid #000; padding:0; height:0; line-height:0; font-size:0;"></td>
+                    </tr>
                 }
 
                 <!-- ========== Grand Total row ========== -->

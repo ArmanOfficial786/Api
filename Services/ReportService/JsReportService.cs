@@ -187,6 +187,7 @@ namespace JsSampleReport.Services.ReportService
                 case "XLSX":
                     request.Template.HtmlToXlsx = new HtmlToXlsx { HtmlEngine = "chrome" };
                     break;
+
             }
         }
 

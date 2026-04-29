@@ -303,7 +303,7 @@ namespace JsSampleReport.Controllers
                     return BadRequest(new { success = false, message = "Invalid request" });
 
                 var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, "MemberIdCard");
+                var reportKey = ReportUtils.GenerateReportKey(request, "MemberIdCard") + $"_{upperFormat}";
 
                 ReportExportHelper.LogCacheState(
                     upperFormat, reportKey,
@@ -371,8 +371,7 @@ namespace JsSampleReport.Controllers
                     data: reportData);
 
                 // ── STAGE 5: PDF generation ───────────────────────────────────────
-                var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
-                    htmlContent, "PDF");
+             
 
                 // ── VIEW — return binary PDF blob ─────────────────────────────────
                 // ✅ No base64 — raw bytes only — ~33% smaller than JSON base64
@@ -381,6 +380,8 @@ namespace JsSampleReport.Controllers
                 // Frontend: fetch → stream → Blob → URL.createObjectURL → <iframe>
                 if (upperFormat == "VIEW")
                 {
+                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
+                 htmlContent, "PDF", reportKey);
                     var pagination = new
                     {
                         currentPage = request.currentPage,
