@@ -250,7 +250,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 
-namespace JsSampleReport.Controllers
+namespace JsSampleReport.Controllers.Member
 {
     [Route("api/[controller]")]
     [ApiController]

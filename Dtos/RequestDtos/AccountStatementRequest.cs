@@ -14,8 +14,7 @@ namespace JsSampleReport.Dtos.RequestDtos
 
         public string? BranchName { get; set; }
 
-        public bool SameCompanyName { get; set; } = true; // default to true
-
+        public bool SameCompanyName { get; set; }
         // Summary | SubLedger | Detail
         public string? ReportType { get; set; } 
 

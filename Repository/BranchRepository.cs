@@ -43,7 +43,7 @@
 
 
 
-using JsSampleReport.Dtos.RequestDtos;
+using JsSampleReport.Dtos.RequestDtos.Common;
 using JsSampleReport.Inteface.ServiceInterface;
 using Microsoft.EntityFrameworkCore;
 

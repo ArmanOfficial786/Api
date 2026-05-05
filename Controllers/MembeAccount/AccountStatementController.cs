@@ -1,19 +1,21 @@
 ﻿using JsSampleReport.Dtos.ReportDtos;
 using JsSampleReport.Dtos.RequestDtos;
+using JsSampleReport.Dtos.RequestDtos.Common;
 using JsSampleReport.Inteface.ReportInterface;
 using JsSampleReport.Inteface.ServiceInterface;
 using JsSampleReport.Utils.Report;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
-namespace JsSampleReport.Controllers
+namespace JsSampleReport.Controllers.MembeAccount
 {
-    [Route("api/[controller]")]
     [ApiController]
+    [Route("api/[controller]")]
     public class AccountStatementController : ControllerBase
     {
         private readonly IAccountStatement _accountStatementService;
         private readonly IMemberDetail _memberDetail;
+        private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly IOptions<ReportSettings> _reportSettings;
@@ -25,7 +27,8 @@ namespace JsSampleReport.Controllers
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             IOptions<ReportSettings> reportSettings,
-            ILogger<AccountStatementController> logger)
+            ILogger<AccountStatementController> logger,
+            ICommonHeaderRepository commonHeaderRepository)
         {
             _accountStatementService = accountStatementService;
             _memberDetail = memberDetail;
@@ -33,6 +36,7 @@ namespace JsSampleReport.Controllers
             _webHostEnvironment = webHostEnvironment;
             _reportSettings = reportSettings;
             _logger = logger;
+            _commonHeaderRepository = commonHeaderRepository;
         }
 
         [HttpPost("AccountStatementReport")]
@@ -77,7 +81,17 @@ namespace JsSampleReport.Controllers
                 var balanceTask = _accountStatementService
                                         .GetCashAndBankBalanceOpeningClosingAsync(request);
 
-                var headerTask = _memberDetail.GetCommonHeaders();
+                //var headerTask = _memberDetail.GetCommonHeaders();
+
+                string? branchIdForHeader = null;
+                if (request.SameCompanyName &&
+                   !string.IsNullOrEmpty(request.BranchSelected) &&
+                   request.BranchSelected != "-1" &&
+                   request.BranchSelected.Split(',').Length == 1)
+                {
+                    branchIdForHeader = request.BranchSelected;
+                }
+                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
 
                 await Task.WhenAll(statementTask, balanceTask, headerTask);
 
@@ -115,7 +129,8 @@ namespace JsSampleReport.Controllers
                     { "BranchName",              request.BranchName      },
                     { "FromDate",                request.FromDate        },
                     { "ToDate",                  request.ToDate          },
-                    { "Format",                  upperFormat             }
+                    { "Format",                  upperFormat             },
+                    { "SameCompanyName",         request.SameCompanyName }
                 };
 
                 // ── Razor render ──────────────────────────────────────

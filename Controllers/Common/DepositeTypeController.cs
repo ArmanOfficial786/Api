@@ -1,9 +1,10 @@
 ﻿using JsSampleReport.Dtos.RequestDtos;
+using JsSampleReport.Dtos.RequestDtos.Common;
 using JsSampleReport.Inteface.ServiceInterface;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
-namespace JsSampleReport.Controllers
+namespace JsSampleReport.Controllers.Common
 {
     [Route("api/[controller]")]
     [ApiController]

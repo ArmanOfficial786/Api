@@ -38,6 +38,23 @@ namespace JsSampleReport.Repository
                 }
             }
 
+            // ✅ SameCompanyName = true → ignore branch filter (show all branches = main company)
+            if (!request.SameCompanyName)
+            {
+                if (!string.IsNullOrEmpty(request.BranchSelected)
+                    && request.BranchSelected != "-1"
+                    && request.BranchSelected != "string")
+                {
+                    filter += $" AND v.UsmOfficeId IN ({request.BranchSelected})";
+                }
+
+                if (request.BranchId != null && request.BranchId.Any(id => id > 0))
+                {
+                    var branchIds = string.Join(",", request.BranchId.Where(id => id > 0));
+                    filter += $" AND v.UsmOfficeId IN ({branchIds})";
+                }
+            }
+
             if (!string.IsNullOrEmpty(request.BranchSelected) &&
               request.BranchSelected != "-1" &&
               request.BranchSelected != "string")

@@ -1,4 +1,4 @@
-﻿namespace JsSampleReport.Dtos.RequestDtos
+﻿namespace JsSampleReport.Dtos.RequestDtos.Common
 {
     public class CollectionCenterReqResponseDtos
     {

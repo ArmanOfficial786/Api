@@ -125,6 +125,7 @@
 
 using JsSampleReport.Dtos.ReportDtos;
 using JsSampleReport.Dtos.RequestDtos;
+using JsSampleReport.Dtos.RequestDtos.Common;
 using JsSampleReport.Inteface.ReportInterface;
 using JsSampleReport.Inteface.ServiceInterface;
 using JsSampleReport.Utils.Report;
@@ -132,7 +133,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
 
-namespace JsSampleReport.Controllers
+namespace JsSampleReport.Controllers.Member
 {
     [ApiController]
     [Route("api/[controller]")]

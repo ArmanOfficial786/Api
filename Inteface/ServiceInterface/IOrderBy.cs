@@ -1,4 +1,4 @@
-﻿using JsSampleReport.Dtos.RequestDtos;
+﻿using JsSampleReport.Dtos.RequestDtos.Common;
 
 namespace JsSampleReport.Inteface.ServiceInterface
 {

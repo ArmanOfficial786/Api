@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using System.Text.Json.Serialization;
 
-namespace JsSampleReport.Dtos.RequestDtos
+namespace JsSampleReport.Dtos.RequestDtos.Common
 {
     public class GeneralResponse<T>
     {

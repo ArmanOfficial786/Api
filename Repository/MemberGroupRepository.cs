@@ -1,4 +1,4 @@
-﻿using JsSampleReport.Dtos.RequestDtos;
+﻿using JsSampleReport.Dtos.RequestDtos.Common;
 using JsSampleReport.Inteface.ServiceInterface;
 using JsSampleReport.Models;
 using Microsoft.EntityFrameworkCore;
