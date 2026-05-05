@@ -19,12 +19,12 @@ namespace JsSampleReport.Controllers.Common
             _logger = logger;
         }
         [HttpGet("GetAllBranches")]
-        public async Task<ActionResult<GeneralResponse<List<BranchResponse>>>> GetAllBranches()
+        public async Task<ActionResult<GeneralResponse<List<BranchResponse>>>> GetAllBranches([FromQuery] long userId)
         {
             try
             {
                 var response = new GeneralResponse<List<BranchResponse>>();
-                long usmUserId = 160;
+                long usmUserId = userId;
                 var branches = await _branchService.GetByUserId(usmUserId);
 
                 if (!branches.Any())

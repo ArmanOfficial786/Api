@@ -84,7 +84,8 @@ namespace JsSampleReport.Controllers.MembeAccount
                 //var headerTask = _memberDetail.GetCommonHeaders();
 
                 string? branchIdForHeader = null;
-                if (request.SameCompanyName &&
+                if (
+                   !request.SameCompanyName &&
                    !string.IsNullOrEmpty(request.BranchSelected) &&
                    request.BranchSelected != "-1" &&
                    request.BranchSelected.Split(',').Length == 1)

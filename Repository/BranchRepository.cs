@@ -74,12 +74,7 @@ namespace JsSampleReport.Repository
                 }
             ).ToListAsync();
 
-            //// ✅ Prepend "All" as default first option
-            //branchList.Insert(0, new BranchResponse
-            //{
-            //    BranchId = -1,
-            //    BranchName = "All"
-            //});
+         
 
             return branchList;
         }
