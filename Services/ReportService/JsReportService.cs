@@ -1,6 +1,6 @@
 using jsreport.AspNetCore;
 using jsreport.Types;
-using JsSampleReport.Inteface.ReportInterface;
+using NexgenCosysReport.Inteface.ReportInterface;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
@@ -11,7 +11,7 @@ using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Caching.Memory;
 
-namespace JsSampleReport.Services.ReportService
+namespace NexgenCosysReport.Services.ReportService
 {
     /// <summary>
     /// Report Service - Handles rendering Razor views to HTML and exporting to various formats
@@ -73,26 +73,21 @@ namespace JsSampleReport.Services.ReportService
                 // ✅ Return cached if already rendered
                 if (_cache.TryGetValue(reportKey, out string? cachedHtml))
                 {
-                    _logger.LogInformation("✅ Cache HIT: {Key}", reportKey);
                     return cachedHtml!;
                 }
-
-                _logger.LogInformation("🔄 Cache MISS — Rendering: {Key}", reportKey);
 
                 // ✅ Render Razor .cshtml to HTML string
                 var html = await RenderRazorViewToStringAsync(reportPath, data);
 
                 // ✅ Cache with sliding + absolute expiration
                 _cache.Set(reportKey, html, new MemoryCacheEntryOptions()
-                    .SetSlidingExpiration(TimeSpan.FromMinutes(30))
-                    .SetAbsoluteExpiration(TimeSpan.FromHours(2)));
-
-                _logger.LogInformation("✅ Cached: {Key}", reportKey);
+                    .SetSlidingExpiration(TimeSpan.FromMinutes(10))
+                    .SetAbsoluteExpiration(TimeSpan.FromMinutes(20)));
+               ;
                 return html;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "❌ RenderRazorToHtmlAndCacheAsync error: {Msg}", ex.Message);
                 throw new Exception($"Render and cache failed: {ex.Message}", ex);
             }
         }

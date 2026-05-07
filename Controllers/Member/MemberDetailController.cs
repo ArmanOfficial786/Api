@@ -1,13 +1,13 @@
-﻿//using JsSampleReport.Dtos.ReportDtos;
-//using JsSampleReport.Dtos.RequestDtos;
-//using JsSampleReport.Inteface.ReportInterface;
-//using JsSampleReport.Inteface.ServiceInterface;
-//using JsSampleReport.Utils;
-//using JsSampleReport.Utils.Report;
+//using NexgenCosysReport.Dtos.ReportDtos;
+//using NexgenCosysReport.Dtos.RequestDtos;
+//using NexgenCosysReport.Inteface.ReportInterface;
+//using NexgenCosysReport.Inteface.ServiceInterface;
+//using NexgenCosysReport.Utils;
+//using NexgenCosysReport.Utils.Report;
 //using Microsoft.AspNetCore.Mvc;
 //using Microsoft.Extensions.Options;
 
-//namespace JsSampleReport.Controllers
+//namespace NexgenCosysReport.Controllers
 //{
 //    [ApiController]
 //    [Route("api/[controller]")]
@@ -45,26 +45,26 @@
 
 //                var upperFormat = format.ToUpper();
 
-//                // ✅ Key from utils — works with any request type
+//                // ? Key from utils � works with any request type
 //                var reportKey = ReportUtils.GenerateReportKey(request, "MemberReport");
 
-//                // ✅ Debug log from utils
+//                // ? Debug log from utils
 //                ReportExportHelper.LogCacheState(
 //                    upperFormat, reportKey,
 //                    _jsReportService.IsHtmlCached(reportKey), _logger);
 
-//                // ── EXPORT PATH ───────────────────────────────────────────
+//                // -- EXPORT PATH -------------------------------------------
 //                if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
 //                {
-//                    _logger.LogInformation("✅ NO DB CALL — serving from server cache");
+//                    _logger.LogInformation("? NO DB CALL � serving from server cache");
 //                    return ReportExportHelper.ExportFromCache(
 //                        reportKey, upperFormat,
 //                        "MemberDetailReport",
 //                        _jsReportService, _logger);
 //                }
 
-//                // ── VIEW PATH ─────────────────────────────────────────────
-//                _logger.LogInformation("🔄 DB CALL — fetching fresh data");
+//                // -- VIEW PATH ---------------------------------------------
+//                _logger.LogInformation("?? DB CALL � fetching fresh data");
 
 //                var allMemberData = await _memberDetail.GetMemberRegistrationDetail(request);
 
@@ -73,7 +73,7 @@
 
 //                var headerData = await _memberDetail.GetCommonHeaders();
 
-//                // ✅ WebRootPath resolved from appsettings.json
+//                // ? WebRootPath resolved from appsettings.json
 //                var webRoot = ReportUtils.GetWebRootPath(
 //                    _webHostEnvironment, _reportSettings, _logger);
 
@@ -123,17 +123,17 @@
 
 
 
-using JsSampleReport.Dtos.ReportDtos;
-using JsSampleReport.Dtos.RequestDtos;
-using JsSampleReport.Dtos.RequestDtos.Common;
-using JsSampleReport.Inteface.ReportInterface;
-using JsSampleReport.Inteface.ServiceInterface;
-using JsSampleReport.Utils.Report;
+using NexgenCosysReport.Dtos.ReportDtos;
+using NexgenCosysReport.Dtos.RequestDtos;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.Inteface.ReportInterface;
+using NexgenCosysReport.Inteface.ServiceInterface;
+using NexgenCosysReport.Utils.Report;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
 
-namespace JsSampleReport.Controllers.Member
+namespace NexgenCosysReport.Controllers.Member
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -185,10 +185,10 @@ namespace JsSampleReport.Controllers.Member
                     upperFormat, reportKey,
                     _jsReportService.IsHtmlCached(reportKey), _logger);
 
-                // ── EXPORT PATH ───────────────────────────────────────────
+                // -- EXPORT PATH -------------------------------------------
                 if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
                 {
-                    _logger.LogInformation("✅ NO DB CALL — serving from cache");
+                    _logger.LogInformation("? NO DB CALL � serving from cache");
                     return await ReportExportHelper.ExportFromCacheAsync(
                         reportKey, upperFormat,
                         "MemberDetailReport",
@@ -198,9 +198,9 @@ namespace JsSampleReport.Controllers.Member
                 var webRoot = ReportUtils.GetWebRootPath(
                     _webHostEnvironment, _reportSettings, _logger);
 
-                // ════════════════════════════════════════════════════════
-                // STAGE 1 — DB queries concurrently
-                // ════════════════════════════════════════════════════════
+                // --------------------------------------------------------
+                // STAGE 1 � DB queries concurrently
+                // --------------------------------------------------------
               
 
                 var memberTask = _memberDetail.GetMemberRegistrationDetail(request);
@@ -216,9 +216,9 @@ namespace JsSampleReport.Controllers.Member
                 if (!allMemberData.Any())
                     return NotFound(new { success = false, message = "No data found" });
 
-                // ════════════════════════════════════════════════════════
-                // STAGE 2 — CompanyLogo is common — read ONCE
-                // ════════════════════════════════════════════════════════
+                // --------------------------------------------------------
+                // STAGE 2 � CompanyLogo is common � read ONCE
+                // --------------------------------------------------------
               
 
                 var header = headerData.FirstOrDefault();
@@ -232,9 +232,9 @@ namespace JsSampleReport.Controllers.Member
 
                
 
-                // ════════════════════════════════════════════════════════
-                // STAGE 3 — Razor render
-                // ════════════════════════════════════════════════════════
+                // --------------------------------------------------------
+                // STAGE 3 � Razor render
+                // --------------------------------------------------------
               
 
                 var reportData = new Dictionary<string, object>
@@ -251,9 +251,9 @@ namespace JsSampleReport.Controllers.Member
 
             
 
-                // ════════════════════════════════════════════════════════
-                // STAGE 4 — PDF generation
-                // ════════════════════════════════════════════════════════
+                // --------------------------------------------------------
+                // STAGE 4 � PDF generation
+                // --------------------------------------------------------
             
 
                 var pdfBytes = await _jsReportService.ExportReportToFormatAsync(

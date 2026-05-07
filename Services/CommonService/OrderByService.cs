@@ -1,13 +1,13 @@
-﻿using JsSampleReport.Dtos.RequestDtos.Common;
-using JsSampleReport.Inteface.ServiceInterface;
-using JsSampleReport.Utils.Enum;
-using static JsSampleReport.Utils.Enum.Enums;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.Inteface.ServiceInterface;
+using NexgenCosysReport.Utils.Enum;
+using static NexgenCosysReport.Utils.Enum.Enums;
 
-namespace JsSampleReport.Services.CommonService
+namespace NexgenCosysReport.Services.CommonService
 {
     public class OrderByService : IOrderBy
     {
-        // ✅ Generic helper — converts any enum to list
+        // ? Generic helper � converts any enum to list
         private List<OrderByResponse> ConvertEnumToList<TEnum>() where TEnum : Enum
         {
             return Enum.GetValues(typeof(TEnum))
@@ -27,7 +27,7 @@ namespace JsSampleReport.Services.CommonService
             {
                 MemberIdCard = ConvertEnumToList<MemberIdCardOrderBy>(),
                 SavingTypeWiseBalance = ConvertEnumToList<SavingTypeWiseBalanceOrderBy>()
-                // ✅ Add more: AccountStatement = ConvertEnumToList<AccountStatementOrderBy>()
+                // ? Add more: AccountStatement = ConvertEnumToList<AccountStatementOrderBy>()
             };
         }
     }

@@ -1,8 +1,8 @@
-﻿using Microsoft.CodeAnalysis.Operations;
+using Microsoft.CodeAnalysis.Operations;
 
-namespace JsSampleReport.Dtos.RequestDtos
+namespace NexgenCosysReport.Dtos.RequestDtos
 {
-    // ── Request ───────────────────────────────────────────────────
+    // -- Request ---------------------------------------------------
     public class AccountStatementRequest
     {
        

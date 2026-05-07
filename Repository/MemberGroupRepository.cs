@@ -1,9 +1,9 @@
-﻿using JsSampleReport.Dtos.RequestDtos.Common;
-using JsSampleReport.Inteface.ServiceInterface;
-using JsSampleReport.Models;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.Inteface.ServiceInterface;
+using NexgenCosysReport.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace JsSampleReport.Repository
+namespace NexgenCosysReport.Repository
 {
     public class MemberGroupRepository : IMemberGroup
     {
@@ -40,7 +40,7 @@ namespace JsSampleReport.Repository
 
                 var entities = await query.ToListAsync();
 
-                // Map to DTO – convert nullable long? to long (provide default 0 or handle null)
+                // Map to DTO � convert nullable long? to long (provide default 0 or handle null)
                 result = entities.Select(p => new MemberGroupResponseDto
                 {
                     MemberGroupId = p.SycMemberGroupId,

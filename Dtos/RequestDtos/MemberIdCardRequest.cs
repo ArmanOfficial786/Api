@@ -1,6 +1,6 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
-namespace JsSampleReport.Dtos.RequestDtos
+namespace NexgenCosysReport.Dtos.RequestDtos
 {
     public class MemberIdCardRequest
     {
@@ -44,7 +44,7 @@ namespace JsSampleReport.Dtos.RequestDtos
 
         public string? MemberPhoto { get; set; }
 
-        public string? UserSignature { get; set; }  // ArmanSignature.png → base64
+        public string? UserSignature { get; set; }  // ArmanSignature.png ? base64
         public string? AuthSignature { get; set; }
     }
 

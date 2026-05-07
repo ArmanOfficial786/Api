@@ -1,13 +1,13 @@
-﻿using JsSampleReport.Inteface.ReportInterface;
+using NexgenCosysReport.Inteface.ReportInterface;
 using Microsoft.AspNetCore.Mvc;
 
-namespace JsSampleReport.Utils.Report
+namespace NexgenCosysReport.Utils.Report
 {
     public static class ReportExportHelper
     {
-        // ══════════════════════════════════════════════════════════════════
-        // Export from server cache — NO DB call
-        // ══════════════════════════════════════════════════════════════════
+        // ------------------------------------------------------------------
+        // Export from server cache � NO DB call
+        // ------------------------------------------------------------------
         public static async Task<ActionResult> ExportFromCacheAsync(
             string reportKey,
             string format,
@@ -18,7 +18,7 @@ namespace JsSampleReport.Utils.Report
             var htmlContent = jsReportService.GetCachedHtml(reportKey);
             if (string.IsNullOrEmpty(htmlContent))
             {
-                logger.LogWarning("⚠️ HTML not cached for key: {Key}", reportKey);
+                logger.LogWarning("?? HTML not cached for key: {Key}", reportKey);
                 return new BadRequestObjectResult(new
                 {
                     success = false,
@@ -26,7 +26,7 @@ namespace JsSampleReport.Utils.Report
                 });
             }
 
-            // ✅ Export from cache
+            // ? Export from cache
             var fileBytes = await jsReportService.ExportReportToFormatAsync(
                 htmlContent,
                 format);
@@ -34,7 +34,7 @@ namespace JsSampleReport.Utils.Report
             var (contentType, _) = ReportUtils.GetContentTypeAndExtension(format);
             var fileName = ReportUtils.GetFileName(reportName, format);
 
-            logger.LogInformation("✅ Export done: {Format} | {File}", format, fileName);
+            logger.LogInformation("? Export done: {Format} | {File}", format, fileName);
 
             return new FileContentResult(fileBytes, contentType)
             {
@@ -42,9 +42,9 @@ namespace JsSampleReport.Utils.Report
             };
         }
 
-        // ══════════════════════════════════════════════════════════════════
+        // ------------------------------------------------------------------
         // Log cache state
-        // ══════════════════════════════════════════════════════════════════
+        // ------------------------------------------------------------------
         public static void LogCacheState(
             string format,
             string reportKey,

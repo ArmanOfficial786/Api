@@ -1,12 +1,12 @@
-﻿//using JsSampleReport.Dtos.ReportDtos;
-//using JsSampleReport.Dtos.RequestDtos;
-//using JsSampleReport.Inteface.ReportInterface;
-//using JsSampleReport.Inteface.ServiceInterface;
-//using JsSampleReport.Utils.Report;
+//using NexgenCosysReport.Dtos.ReportDtos;
+//using NexgenCosysReport.Dtos.RequestDtos;
+//using NexgenCosysReport.Inteface.ReportInterface;
+//using NexgenCosysReport.Inteface.ServiceInterface;
+//using NexgenCosysReport.Utils.Report;
 //using Microsoft.AspNetCore.Mvc;
 //using Microsoft.Extensions.Options;
 
-//namespace JsSampleReport.Controllers
+//namespace NexgenCosysReport.Controllers
 //{
 //    [Route("api/[controller]")]
 //    [ApiController]
@@ -60,10 +60,10 @@
 //                    upperFormat, reportKey,
 //                    _jsReportService.IsHtmlCached(reportKey), _logger);
 
-//                // ── EXPORT PATH — no DB call ──────────────────────────
+//                // -- EXPORT PATH � no DB call --------------------------
 //                if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
 //                {
-//                    _logger.LogInformation("✅ NO DB CALL — serving from cache");
+//                    _logger.LogInformation("? NO DB CALL � serving from cache");
 //                    return await ReportExportHelper.ExportFromCacheAsync(
 //                        reportKey, upperFormat,
 //                        "MemberIdCardReport",
@@ -73,17 +73,17 @@
 //                var webRoot = ReportUtils.GetWebRootPath(
 //                    _webHostEnvironment, _reportSettings, _logger);
 
-//                // ════════════════════════════════════════════════════════
-//                // STAGE 1 — DB queries concurrently
+//                // --------------------------------------------------------
+//                // STAGE 1 � DB queries concurrently
 //                //           Member data + Header data
-//                // ════════════════════════════════════════════════════════
+//                // --------------------------------------------------------
 
 
-//                // ✅ Start both DB calls — no await yet
+//                // ? Start both DB calls � no await yet
 //                var memberTask = _memberIdCardService.GetMemberIdCardData(request);
 //                var headerTask = _memberDetail.GetCommonHeaders();
 
-//                // ✅ Await both DB calls together
+//                // ? Await both DB calls together
 //                await Task.WhenAll(memberTask, headerTask);
 
 //                var memberIdCardData = memberTask.Result;
@@ -95,22 +95,22 @@
 //                if (!memberIdCardData.Any())
 //                    return NotFound(new { success = false, message = "No data found" });
 
-//                // ════════════════════════════════════════════════════════
-//                // STAGE 2 — Read all COMMON images ONCE concurrently
+//                // --------------------------------------------------------
+//                // STAGE 2 � Read all COMMON images ONCE concurrently
 //                //           CompanyLogo + UserSignature + AuthSignature
 //                //           All 3 are shared across all ID cards
-//                // ════════════════════════════════════════════════════════
+//                // --------------------------------------------------------
 
 
-//                // ✅ Get logo path from DB header
+//                // ? Get logo path from DB header
 //                var header = headerData.FirstOrDefault();
 //                var companyLogoPath = header?.CompanyLogo ?? "";
 
-//                // ✅ Start all 3 common image reads concurrently — each read ONCE
+//                // ? Start all 3 common image reads concurrently � each read ONCE
 //                var logoTask = ReportUtils.ReadCommonImageAsBase64Async(
 //                                       webRoot, companyLogoPath, _logger);
 
-//                // ✅ Static for now — swap with header path when comes from DB:
+//                // ? Static for now � swap with header path when comes from DB:
 //                //    header?.UserSignature ?? ""
 //                //    header?.AuthSignature ?? ""
 //                var userSignTask = ReportUtils.ReadCommonImageAsBase64Async(
@@ -118,7 +118,7 @@
 //                var authSignTask = ReportUtils.ReadCommonImageAsBase64Async(
 //                                       webRoot, "AuthSignature.png", _logger);
 
-//                // ✅ Await all 3 together
+//                // ? Await all 3 together
 //                await Task.WhenAll(logoTask, userSignTask, authSignTask);
 
 //                var companyLogoBase64 = logoTask.Result;
@@ -127,17 +127,17 @@
 
 
 
-//                // ════════════════════════════════════════════════════════
-//                // STAGE 3 — Assign common images (zero file I/O)
+//                // --------------------------------------------------------
+//                // STAGE 3 � Assign common images (zero file I/O)
 //                //         + Convert member photos (unique per member)
-//                // ════════════════════════════════════════════════════════
+//                // --------------------------------------------------------
 
 
-//                // ✅ Assign logo to header — string assignment only, no disk read
+//                // ? Assign logo to header � string assignment only, no disk read
 //                if (header != null)
 //                    header.CompanyLogo = companyLogoBase64;
 
-//                // ✅ Assign signatures to every member — string assignment only
+//                // ? Assign signatures to every member � string assignment only
 
 //                foreach (var member in memberIdCardData)
 //                {
@@ -145,16 +145,16 @@
 //                    member.AuthSignature = authSignatureBase64;
 //                }
 
-//                // ✅ Only MemberPhoto is unique per member — needs per-item conversion
+//                // ? Only MemberPhoto is unique per member � needs per-item conversion
 //                await ReportUtils.ConvertUniqueImagesToBase64Async(
 //                    memberIdCardData,
 //                    nameof(MemberIdCardModel.MemberPhoto),
 //                    webRoot, _logger);
 
 
-//                // ════════════════════════════════════════════════════════
-//                // STAGE 4 — Razor render
-//                // ════════════════════════════════════════════════════════
+//                // --------------------------------------------------------
+//                // STAGE 4 � Razor render
+//                // --------------------------------------------------------
 
 //                var reportData = new Dictionary<string, object>
 //                {
@@ -168,9 +168,9 @@
 //                    reportPath: "Views/Report/MemberIdCard.cshtml",
 //                    data: reportData);
 
-//                // ════════════════════════════════════════════════════════
-//                // STAGE 5 — PDF generation
-//                // ════════════════════════════════════════════════════════
+//                // --------------------------------------------------------
+//                // STAGE 5 � PDF generation
+//                // --------------------------------------------------------
 
 //                var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF");
 
@@ -181,7 +181,7 @@
 //                    //    success = true,
 //                    //    pdfData = Convert.ToBase64String(pdfBytes),
 //                    //    reportName = "MemberIdCard Report",
-//                    //    // ✅ Static pagination (temporary)
+//                    //    // ? Static pagination (temporary)
 //                    //    pagination = new
 //                    //    {
 //                    //        currentPage = request.currentPage,
@@ -241,16 +241,16 @@
 
 
 
-using JsSampleReport.Dtos.ReportDtos;
-using JsSampleReport.Dtos.RequestDtos;
-using JsSampleReport.Inteface.ReportInterface;
-using JsSampleReport.Inteface.ServiceInterface;
-using JsSampleReport.Utils.Report;
+using NexgenCosysReport.Dtos.ReportDtos;
+using NexgenCosysReport.Dtos.RequestDtos;
+using NexgenCosysReport.Inteface.ReportInterface;
+using NexgenCosysReport.Inteface.ServiceInterface;
+using NexgenCosysReport.Utils.Report;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using System.Text.Json;
 
-namespace JsSampleReport.Controllers.Member
+namespace NexgenCosysReport.Controllers.Member
 {
     [Route("api/[controller]")]
     [ApiController]
@@ -279,19 +279,19 @@ namespace JsSampleReport.Controllers.Member
             _logger = logger;
         }
 
-        // ══════════════════════════════════════════════════════════════════════════
+        // --------------------------------------------------------------------------
         // POST api/MemberIdCard/MemberIdCard?format=VIEW|PDF|WORD|XLSX|PNG
         //
-        // VIEW   → returns binary PDF blob
+        // VIEW   ? returns binary PDF blob
         //          Content-Type: application/pdf
         //          Content-Disposition: inline
         //          X-Pagination: { currentPage, totalPages, ... }  (JSON header)
-        //          ✅ ~33% smaller than base64 JSON — 48 MB → 36 MB
+        //          ? ~33% smaller than base64 JSON � 48 MB ? 36 MB
         //
-        // EXPORT → returns binary blob
+        // EXPORT ? returns binary blob
         //          Content-Type: application/pdf | docx | xlsx | png
         //          Content-Disposition: attachment; filename="MemberIdCardReport_20260407.pdf"
-        // ══════════════════════════════════════════════════════════════════════════
+        // --------------------------------------------------------------------------
         [HttpPost("MemberIdCard")]
         public async Task<ActionResult> GetMemberIdCardData(
             [FromBody] MemberIdCardRequest request,
@@ -309,10 +309,10 @@ namespace JsSampleReport.Controllers.Member
                     upperFormat, reportKey,
                     _jsReportService.IsHtmlCached(reportKey), _logger);
 
-                // ── EXPORT — cache hit → skip DB entirely ─────────────────────────
+                // -- EXPORT � cache hit ? skip DB entirely -------------------------
                 if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
                 {
-                    _logger.LogInformation("✅ NO DB CALL — serving from cache");
+                    _logger.LogInformation("? NO DB CALL � serving from cache");
                     return await ReportExportHelper.ExportFromCacheAsync(
                         reportKey, upperFormat,
                         "MemberIdCardReport",
@@ -322,7 +322,7 @@ namespace JsSampleReport.Controllers.Member
                 var webRoot = ReportUtils.GetWebRootPath(
                     _webHostEnvironment, _reportSettings, _logger);
 
-                // ── STAGE 1: DB queries — concurrent ──────────────────────────────
+                // -- STAGE 1: DB queries � concurrent ------------------------------
                 var memberTask = _memberIdCardService.GetMemberIdCardData(request);
                 var headerTask = _memberDetail.GetCommonHeaders();
                 await Task.WhenAll(memberTask, headerTask);
@@ -333,7 +333,7 @@ namespace JsSampleReport.Controllers.Member
                 if (!memberIdCardData.Any())
                     return NotFound(new { success = false, message = "No data found" });
 
-                // ── STAGE 2: Common images — read once, concurrent ─────────────────
+                // -- STAGE 2: Common images � read once, concurrent -----------------
                 var header = headerData.FirstOrDefault();
                 var companyLogoPath = header?.CompanyLogo ?? "";
 
@@ -351,13 +351,13 @@ namespace JsSampleReport.Controllers.Member
                     member.AuthSignature = authSignTask.Result;
                 }
 
-                // ── STAGE 3: Per-member unique images ─────────────────────────────
+                // -- STAGE 3: Per-member unique images -----------------------------
                 await ReportUtils.ConvertUniqueImagesToBase64Async(
                     memberIdCardData,
                     nameof(MemberIdCardModel.MemberPhoto),
                     webRoot, _logger);
 
-                // ── STAGE 4: Razor render + cache HTML ────────────────────────────
+                // -- STAGE 4: Razor render + cache HTML ----------------------------
                 var reportData = new Dictionary<string, object>
                 {
                     { "MemberIdCardDataSet", memberIdCardData       },
@@ -370,14 +370,14 @@ namespace JsSampleReport.Controllers.Member
                     reportPath: "Views/Report/MemberIdCard.cshtml",
                     data: reportData);
 
-                // ── STAGE 5: PDF generation ───────────────────────────────────────
+                // -- STAGE 5: PDF generation ---------------------------------------
              
 
-                // ── VIEW — return binary PDF blob ─────────────────────────────────
-                // ✅ No base64 — raw bytes only — ~33% smaller than JSON base64
-                // ✅ Pagination sent in X-Pagination header (tiny JSON, not the body)
-                // ✅ Content-Disposition: inline — browser renders, does not download
-                // Frontend: fetch → stream → Blob → URL.createObjectURL → <iframe>
+                // -- VIEW � return binary PDF blob ---------------------------------
+                // ? No base64 � raw bytes only � ~33% smaller than JSON base64
+                // ? Pagination sent in X-Pagination header (tiny JSON, not the body)
+                // ? Content-Disposition: inline � browser renders, does not download
+                // Frontend: fetch ? stream ? Blob ? URL.createObjectURL ? <iframe>
                 if (upperFormat == "VIEW")
                 {
                     var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
@@ -392,17 +392,17 @@ namespace JsSampleReport.Controllers.Member
                         hasPreviousPage = false,
                     };
 
-                    // ✅ Expose X-Pagination so frontend fetch() can read it
+                    // ? Expose X-Pagination so frontend fetch() can read it
                     Response.Headers.Append(
                         "X-Pagination",
                         JsonSerializer.Serialize(pagination));
 
-                    // ✅ Expose the header to fetch() on the frontend (CORS)
+                    // ? Expose the header to fetch() on the frontend (CORS)
                     Response.Headers.Append(
                         "Access-Control-Expose-Headers",
                         "X-Pagination");
 
-                    // ✅ inline → browser renders PDF (not download prompt)
+                    // ? inline ? browser renders PDF (not download prompt)
                     Response.Headers.Append(
                         "Content-Disposition",
                         "inline; filename=\"MemberIdCardReport.pdf\"");
@@ -410,7 +410,7 @@ namespace JsSampleReport.Controllers.Member
                     return new FileContentResult(pdfBytes, "application/pdf");
                 }
 
-                // ── EXPORT — return binary blob with attachment header ─────────────
+                // -- EXPORT � return binary blob with attachment header -------------
                 return await ReportExportHelper.ExportFromCacheAsync(
                     reportKey, upperFormat,
                     "MemberIdCardReport",

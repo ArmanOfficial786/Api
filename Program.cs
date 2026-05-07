@@ -1,14 +1,14 @@
-﻿using jsreport.AspNetCore;
+using jsreport.AspNetCore;
 using jsreport.Binary;
 using jsreport.Local;
-using JsSampleProject.ServiceHandler;
-using JsSampleReport;
-using JsSampleReport.Dtos.ReportDtos;
-using JsSampleReport.Inteface.ReportInterface;
-using JsSampleReport.Inteface.ServiceInterface;
-using JsSampleReport.Repository;
-using JsSampleReport.Services.CommonService;
-using JsSampleReport.Services.ReportService;
+using NexgenCosysReport.ServiceHandler;
+using NexgenCosysReport;
+using NexgenCosysReport.Dtos.ReportDtos;
+using NexgenCosysReport.Inteface.ReportInterface;
+using NexgenCosysReport.Inteface.ServiceInterface;
+using NexgenCosysReport.Repository;
+using NexgenCosysReport.Services.CommonService;
+using NexgenCosysReport.Services.ReportService;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -17,15 +17,16 @@ builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+
 // jsreport
 builder.Services.AddJsReport(new LocalReporting()
     .UseBinary(JsReportBinary.GetBinary())
     .KillRunningJsReportProcesses()
-    .Configure(cfg => cfg.DoTrustUserCode())  // ← required for custom extensions
+    .Configure(cfg => cfg.DoTrustUserCode())  // ? required for custom extensions
     .AsUtility()
     .Create());
 
-// ✅ CORS — handles null origin + all localhost ports
+// ? CORS � handles null origin + all localhost ports
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
@@ -74,11 +75,11 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// ✅ CORRECT middleware order
-// 1. CORS must be FIRST — handles OPTIONS preflight before any redirect
+// ? CORRECT middleware order
+// 1. CORS must be FIRST � handles OPTIONS preflight before any redirect
 app.UseCors("AllowReactApp");
 
-// 2. Skip HTTPS redirect in development — causes null origin
+// 2. Skip HTTPS redirect in development � causes null origin
 if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();

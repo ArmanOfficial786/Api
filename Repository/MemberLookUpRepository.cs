@@ -1,12 +1,12 @@
-﻿// Repository/MemberLookUpRepository.cs
+// Repository/MemberLookUpRepository.cs
 using Dapper;
-using JsSampleReport.Dtos.RequestDtos.Common;
-using JsSampleReport.Inteface.ServiceInterface;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.Inteface.ServiceInterface;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 
-namespace JsSampleReport.Repository
+namespace NexgenCosysReport.Repository
 {
     public class MemberLookUpRepository : IMemberLookUp
     {
@@ -18,7 +18,7 @@ namespace JsSampleReport.Repository
             _context = context;
         }
 
-        // ── 1. Paginated + filtered list for the grid ─────────────────────────
+        // -- 1. Paginated + filtered list for the grid -------------------------
         public async Task<PagedResult<MemberLookUpDtos>> GetMemberListAsync(
             MemberLookUpRequest request,
             long userId)
@@ -72,7 +72,7 @@ namespace JsSampleReport.Repository
             };
         }
 
-        // ── 2. Single member selected by user clicking "Sel" ──────────────────
+        // -- 2. Single member selected by user clicking "Sel" ------------------
         public async Task<MemberSelectedDto?> GetSelectedMemberAsync(
             long memMemberRegistrationId,
             long userId)
@@ -105,7 +105,7 @@ namespace JsSampleReport.Repository
             return result;
         }
 
-        // ── Helper ────────────────────────────────────────────────────────────
+        // -- Helper ------------------------------------------------------------
         private static string? NullIfEmpty(string? value) =>
             string.IsNullOrWhiteSpace(value) || value.Trim() == "string"
                 ? null

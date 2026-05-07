@@ -1,8 +1,8 @@
-﻿using JsSampleReport.Dtos.RequestDtos;
-using JsSampleReport.Inteface.ServiceInterface;
+using NexgenCosysReport.Dtos.RequestDtos;
+using NexgenCosysReport.Inteface.ServiceInterface;
 using Microsoft.AspNetCore.Mvc;
 
-namespace JsSampleReport.Controllers.Preview
+namespace NexgenCosysReport.Controllers.Preview
 {
     public class HomeController : Controller
     {

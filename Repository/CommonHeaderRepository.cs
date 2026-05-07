@@ -1,12 +1,12 @@
-﻿using Dapper;
-using JsSampleReport.Dtos.ReportDtos;
-using JsSampleReport.Inteface.ServiceInterface;
+using Dapper;
+using NexgenCosysReport.Dtos.ReportDtos;
+using NexgenCosysReport.Inteface.ServiceInterface;
 using Microsoft.CodeAnalysis.Operations;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 
-namespace JsSampleReport.Repository
+namespace NexgenCosysReport.Repository
 {
     public class CommonHeaderRepository : ICommonHeaderRepository
     {
@@ -29,13 +29,13 @@ namespace JsSampleReport.Repository
 
                 if (!string.IsNullOrWhiteSpace(branchId) && branchId != "-1")
                 {
-                    // ✅ Branch-specific → use sp_2_1_GetOfficeProfile with UsmOfficeId filter
+                    // ? Branch-specific ? use sp_2_1_GetOfficeProfile with UsmOfficeId filter
                     spName = "sp_2_1_GetOfficeProfile";
                     parameters.Add("@SqlFilterExp", $" And s.UsmOfficeId={branchId}", DbType.String, size: -1);
                 }
                 else
                 {
-                    // ✅ No branch → use sp_2_1_GetCompanyProfile with empty filter
+                    // ? No branch ? use sp_2_1_GetCompanyProfile with empty filter
                     spName = "sp_2_1_GetCompanyProfile";
                     parameters.Add("@SqlFilterExp", "", DbType.String);
                 }

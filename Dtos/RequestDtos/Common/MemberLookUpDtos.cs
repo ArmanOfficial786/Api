@@ -1,4 +1,4 @@
-﻿namespace JsSampleReport.Dtos.RequestDtos.Common
+namespace NexgenCosysReport.Dtos.RequestDtos.Common
 {
     public class MemberLookUpDtos
     {
@@ -14,7 +14,7 @@
         public string? TemporaryAddress { get; set; }
         public string? MobileNo { get; set; }
 
-        // ✅ Pagination metadata — mapped directly from SP columns
+        // ? Pagination metadata � mapped directly from SP columns
         public int TotalCount { get; set; }
         public int CurrentPage { get; set; }
         public int PageSize { get; set; }

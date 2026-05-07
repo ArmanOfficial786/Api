@@ -1,12 +1,12 @@
-﻿using Dapper;
-using JsSampleReport.Dtos.ReportDtos;
-using JsSampleReport.Dtos.RequestDtos;
-using JsSampleReport.Inteface.ServiceInterface;
+using Dapper;
+using NexgenCosysReport.Dtos.ReportDtos;
+using NexgenCosysReport.Dtos.RequestDtos;
+using NexgenCosysReport.Inteface.ServiceInterface;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
 
-namespace JsSampleReport.Repository
+namespace NexgenCosysReport.Repository
 {
     public class MemberIdCardRepository : IMemberIdCard
     {

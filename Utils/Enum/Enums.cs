@@ -1,10 +1,10 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
-namespace JsSampleReport.Utils.Enum
+namespace NexgenCosysReport.Utils.Enum
 {
     public class Enums
     {
-        // ✅ MemberIdCard OrderBy
+        // ? MemberIdCard OrderBy
     public enum MemberIdCardOrderBy
     {
         [Display(Name = "Member Name")]
@@ -18,7 +18,7 @@ namespace JsSampleReport.Utils.Enum
         RegistrationOn = 5
     }
 
-    // ✅ SavingTypeWiseBalance OrderBy
+    // ? SavingTypeWiseBalance OrderBy
     public enum SavingTypeWiseBalanceOrderBy
     {
         SavingType = 1,
@@ -27,7 +27,7 @@ namespace JsSampleReport.Utils.Enum
         Balance = 4
     }
 
-    // ✅ Add more report enums here as needed
+    // ? Add more report enums here as needed
     // public enum AccountStatementOrderBy { ... }
     }
 }

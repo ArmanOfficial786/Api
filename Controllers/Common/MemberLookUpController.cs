@@ -1,9 +1,9 @@
-﻿// Controllers/MemberLookUpController.cs
-using JsSampleReport.Dtos.RequestDtos.Common;
-using JsSampleReport.Inteface.ServiceInterface;
+// Controllers/MemberLookUpController.cs
+using NexgenCosysReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.Inteface.ServiceInterface;
 using Microsoft.AspNetCore.Mvc;
 
-namespace JsSampleReport.Controllers.Common
+namespace NexgenCosysReport.Controllers.Common
 {
     [Route("api/[controller]")]
     [ApiController]
@@ -21,7 +21,7 @@ namespace JsSampleReport.Controllers.Common
         }
 
         /// <summary>
-        /// Loads the grid — 10 records per page with optional column filters.
+        /// Loads the grid � 10 records per page with optional column filters.
         /// GET /api/MemberLookUp/search?Page=1&MemberName=Ram&Gender=Male
         /// </summary>
         [HttpGet("search")]
@@ -30,7 +30,7 @@ namespace JsSampleReport.Controllers.Common
         {
             try
             {
-                long userId = GetUserId();   // 🔧 replace with your actual claim/session
+                long userId = GetUserId();   // ?? replace with your actual claim/session
                 var result = await _repo.GetMemberListAsync(request, userId);
                 return Ok(result);
             }
@@ -66,7 +66,7 @@ namespace JsSampleReport.Controllers.Common
             }
         }
 
-        // 🔧 Replace this with your actual userId from claims/session
+        // ?? Replace this with your actual userId from claims/session
         private static long GetUserId() => 0;
     }
 }

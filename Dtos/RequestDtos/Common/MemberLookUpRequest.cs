@@ -1,4 +1,4 @@
-﻿namespace JsSampleReport.Dtos.RequestDtos.Common
+namespace NexgenCosysReport.Dtos.RequestDtos.Common
 {
     public class MemberLookUpRequest
     {
@@ -16,7 +16,7 @@
         public string? CenterCode { get; set; }
         // Add any other filter columns you need
 
-        // ✅ Sorting — were missing, caused the errors
+        // ? Sorting � were missing, caused the errors
         public string SortColumn { get; set; } = "MemberId";
         public string SortDirection { get; set; } = "ASC";
     }

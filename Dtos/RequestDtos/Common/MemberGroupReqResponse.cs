@@ -1,4 +1,4 @@
-﻿namespace JsSampleReport.Dtos.RequestDtos.Common
+namespace NexgenCosysReport.Dtos.RequestDtos.Common
 {
     public class MemberGroupReqResponse
     {

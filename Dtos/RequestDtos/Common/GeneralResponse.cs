@@ -1,7 +1,7 @@
-﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc;
 using System.Text.Json.Serialization;
 
-namespace JsSampleReport.Dtos.RequestDtos.Common
+namespace NexgenCosysReport.Dtos.RequestDtos.Common
 {
     public class GeneralResponse<T>
     {
@@ -16,11 +16,11 @@ namespace JsSampleReport.Dtos.RequestDtos.Common
 
     public class Pagination
     {
-        public int? CurrentPage { get; set; }     // ✅ PascalCase
+        public int? CurrentPage { get; set; }     // ? PascalCase
         public int? TotalPages { get; set; }
         public int? PageSize { get; set; }
         public int? TotalRecord { get; set; }
-        public bool? HasNextPage { get; set; }    // ✅ PascalCase
+        public bool? HasNextPage { get; set; }    // ? PascalCase
         public bool? HasPreviousPage { get; set; }
     }
 

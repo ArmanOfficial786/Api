@@ -1,13 +1,13 @@
-﻿using JsSampleReport.Dtos.ReportDtos;
-using JsSampleReport.Dtos.RequestDtos;
-using JsSampleReport.Dtos.RequestDtos.Common;
-using JsSampleReport.Inteface.ReportInterface;
-using JsSampleReport.Inteface.ServiceInterface;
-using JsSampleReport.Utils.Report;
+using NexgenCosysReport.Dtos.ReportDtos;
+using NexgenCosysReport.Dtos.RequestDtos;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.Inteface.ReportInterface;
+using NexgenCosysReport.Inteface.ServiceInterface;
+using NexgenCosysReport.Utils.Report;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
-namespace JsSampleReport.Controllers.MembeAccount
+namespace NexgenCosysReport.Controllers.MembeAccount
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -44,8 +44,6 @@ namespace JsSampleReport.Controllers.MembeAccount
             [FromBody] AccountStatementRequest request,
             [FromQuery] string format = "VIEW")
         {
-           
-
             try
             {
                   var reportName = "AccountStatement";
@@ -67,7 +65,7 @@ namespace JsSampleReport.Controllers.MembeAccount
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.IsHtmlCached(reportKey), _logger);
 
-                // ── NO DB CALL — serving from cache ───────────────────────────────────────
+                // -- NO DB CALL � serving from cache ---------------------------------------
                 if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
                 {
                     return await ReportExportHelper.ExportFromCacheAsync(
@@ -76,7 +74,7 @@ namespace JsSampleReport.Controllers.MembeAccount
                         _jsReportService, _logger);
                 }
 
-                // ── DB: All three calls in parallel ───────────────────
+                // -- DB: All three calls in parallel -------------------
                 var statementTask = _accountStatementService
                                         .GetAccountStatementTypeAsync(request);
 
@@ -136,7 +134,7 @@ namespace JsSampleReport.Controllers.MembeAccount
                     { "SameCompanyName",         request.SameCompanyName }
                 };
 
-                // ── Razor render ──────────────────────────────────────
+                // -- Razor render --------------------------------------
             
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -148,7 +146,7 @@ namespace JsSampleReport.Controllers.MembeAccount
 
                 if (upperFormat == "VIEW")
                 {
-                    // ── jsreport PDF ──────────────────────────────────
+                    // -- jsreport PDF ----------------------------------
                    
                     var pdfBytes = await Task.Run(() =>
                         _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey));

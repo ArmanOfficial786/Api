@@ -1,7 +1,7 @@
-﻿using JsSampleReport.Inteface.ServiceInterface;
+using NexgenCosysReport.Inteface.ServiceInterface;
 using Microsoft.EntityFrameworkCore;
 
-namespace JsSampleReport.Services.CommonService
+namespace NexgenCosysReport.Services.CommonService
 {
     public class DateConverterService : IDateConverterService
     {
@@ -12,11 +12,11 @@ namespace JsSampleReport.Services.CommonService
             _context = context;
         }
 
-        // ════════════════════════════════════════════════════
-        // BS → AD  (mirrors CComCalender.NepaliToEnglish)
+        // ----------------------------------------------------
+        // BS ? AD  (mirrors CComCalender.NepaliToEnglish)
         // Input:  "2081/01/15"  or  "2081-01-15"
         // Output: DateTime (AD)
-        // ════════════════════════════════════════════════════
+        // ----------------------------------------------------
         public async Task<DateTime> NepaliToEnglishAsync(string nepaliDate)
         {
             var fallback = new DateTime(1970, 1, 1);
@@ -24,7 +24,7 @@ namespace JsSampleReport.Services.CommonService
             if (string.IsNullOrEmpty(nepaliDate))
                 return fallback;
 
-            // ✅ support both "2081/01/15" and "2081-01-15"
+            // ? support both "2081/01/15" and "2081-01-15"
             nepaliDate = nepaliDate.Replace('-', '/');
 
             var parts = nepaliDate.Split('/');
@@ -34,28 +34,28 @@ namespace JsSampleReport.Services.CommonService
             int nepMonth = int.Parse(parts[1]);
             int nepDay = int.Parse(parts[2]);
 
-            // ✅ mirrors: GetByNepaliYearAndMonthCode(nepyear, nepmonth)
+            // ? mirrors: GetByNepaliYearAndMonthCode(nepyear, nepmonth)
             var comCalendar = await _context.ComCalendars
                 .Where(e => e.NepaliYear == nepYear && e.MonthCode == nepMonth)
                 .SingleOrDefaultAsync();
 
             if (comCalendar == null) return fallback;
 
-            // ✅ mirrors: stDate.AddSeconds((nepday - 1) * 24 * 60 * 60)
+            // ? mirrors: stDate.AddSeconds((nepday - 1) * 24 * 60 * 60)
             DateTime startDate = comCalendar.EnglishStartDate;
             DateTime finalDate = startDate.AddDays(nepDay - 1);
 
             return finalDate;
         }
 
-        // ════════════════════════════════════════════════════
-        // AD → BS  (mirrors CComCalender.EnglishToNepali)
+        // ----------------------------------------------------
+        // AD ? BS  (mirrors CComCalender.EnglishToNepali)
         // Input:  DateTime (AD)
         // Output: "2081/01/15"
-        // ════════════════════════════════════════════════════
+        // ----------------------------------------------------
         public async Task<string> EnglishToNepaliAsync(DateTime englishDate)
         {
-            // ✅ mirrors: GetByEnglishDate(englishDate)
+            // ? mirrors: GetByEnglishDate(englishDate)
             var comCalendar = await _context.ComCalendars
                 .Where(e => e.EnglishStartDate <= englishDate.Date
                          && e.EnglishEndDate >= englishDate.Date)
@@ -63,7 +63,7 @@ namespace JsSampleReport.Services.CommonService
 
             if (comCalendar == null) return "0000/00/00";
 
-            // ✅ mirrors: offset = englishDate.Subtract(comCalendar.EnglishStartDate)
+            // ? mirrors: offset = englishDate.Subtract(comCalendar.EnglishStartDate)
             int totalDays = (englishDate.Date - comCalendar.EnglishStartDate.Date).Days;
 
             string nYear = comCalendar.NepaliYear.ToString();
@@ -77,11 +77,11 @@ namespace JsSampleReport.Services.CommonService
             return $"{nYear}/{nMonth}/{nDay}";
         }
 
-        // ════════════════════════════════════════════════════
-        // Convenience: BS string → AD string
+        // ----------------------------------------------------
+        // Convenience: BS string ? AD string
         // Input:  "2081/01/15" or "2081-01-15"
         // Output: "2024-04-28"
-        // ════════════════════════════════════════════════════
+        // ----------------------------------------------------
         public async Task<string> BsToAdStringAsync(string nepaliDate)
         {
             var adDate = await NepaliToEnglishAsync(nepaliDate);

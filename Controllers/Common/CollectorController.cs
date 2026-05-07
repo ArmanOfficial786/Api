@@ -1,8 +1,8 @@
-﻿using JsSampleReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace JsSampleReport.Controllers.Common
+namespace NexgenCosysReport.Controllers.Common
 {
     [Route("api/[controller]")]
     [ApiController]
@@ -18,7 +18,7 @@ namespace JsSampleReport.Controllers.Common
         [HttpPost("getCollector")]
         public async Task<ActionResult> GetCollector([FromQuery] long userId)
         {
-            var response = new GeneralResponse<List<CollectorResponse>>(); // ✅ List<> added
+            var response = new GeneralResponse<List<CollectorResponse>>(); // ? List<> added
 
             if (userId <= 0)
             {
@@ -30,7 +30,7 @@ namespace JsSampleReport.Controllers.Common
 
             var collectors = await _context.HurCollectors
                 .Where(ao => ao.IsActive == true)
-                .Join(                                                      // ✅ method syntax stays IQueryable
+                .Join(                                                      // ? method syntax stays IQueryable
                     _context.UsmRelationUserToOffices.Where(re => re.UsmUserId == userId),
                     ao => ao.UsmOfficeId,
                     re => re.UsmOfficeId,
@@ -42,7 +42,7 @@ namespace JsSampleReport.Controllers.Common
                     }
                 )
                 .OrderBy(p => p.CollectorName)
-                .ToListAsync();                                             // ✅ Works without error
+                .ToListAsync();                                             // ? Works without error
 
             response.IsValid = true;
             response.StatusCode = StatusCodes.Status200OK;

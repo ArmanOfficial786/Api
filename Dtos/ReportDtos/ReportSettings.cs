@@ -1,4 +1,4 @@
-﻿namespace JsSampleReport.Dtos.ReportDtos
+namespace NexgenCosysReport.Dtos.ReportDtos
 {
     public class ReportSettings
     {

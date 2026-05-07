@@ -1,7 +1,7 @@
-﻿using JsSampleReport.Dtos.ReportDtos;
-using JsSampleReport.Dtos.RequestDtos;
+using NexgenCosysReport.Dtos.ReportDtos;
+using NexgenCosysReport.Dtos.RequestDtos;
 
-namespace JsSampleReport.Inteface.ServiceInterface
+namespace NexgenCosysReport.Inteface.ServiceInterface
 {
     public interface IMemberDetail
     {

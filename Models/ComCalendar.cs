@@ -1,7 +1,7 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
-namespace JsSampleReport.Models;
+namespace NexgenCosysReport.Models;
 
 public partial class ComCalendar
 {

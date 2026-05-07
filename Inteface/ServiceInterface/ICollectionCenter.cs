@@ -1,6 +1,6 @@
-﻿using JsSampleReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
 
-namespace JsSampleReport.Inteface.ServiceInterface
+namespace NexgenCosysReport.Inteface.ServiceInterface
 {
     public interface ICollectionCenter
     {

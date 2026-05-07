@@ -1,7 +1,7 @@
 ﻿@* 
 
 
-@using JsSampleReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.ReportDtos
 @model Dictionary<string, object>
 
 @if (Model.ContainsKey("HeaderDataSet") && Model["HeaderDataSet"] is IEnumerable<CommonHeader> headers)
@@ -105,7 +105,7 @@
 
 
 @* Views/Shared/_CommonHeader.cshtml *@
-@using JsSampleReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.ReportDtos
 @model Dictionary<string, object>
 
 @if (Model.ContainsKey("HeaderDataSet") && Model["HeaderDataSet"] is IEnumerable<CommonHeader> headers)

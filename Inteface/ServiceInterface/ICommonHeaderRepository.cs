@@ -1,6 +1,6 @@
-﻿using JsSampleReport.Dtos.ReportDtos;
+using NexgenCosysReport.Dtos.ReportDtos;
 
-namespace JsSampleReport.Inteface.ServiceInterface
+namespace NexgenCosysReport.Inteface.ServiceInterface
 {
     public interface ICommonHeaderRepository
     {

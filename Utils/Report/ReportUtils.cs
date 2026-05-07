@@ -1,14 +1,14 @@
-﻿using JsSampleReport.Dtos.ReportDtos;
+using NexgenCosysReport.Dtos.ReportDtos;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-namespace JsSampleReport.Utils.Report
+namespace NexgenCosysReport.Utils.Report
 {
     public static class ReportUtils
     {
-        // ── Deterministic cache key ───────────────────────────────────────────────
+        // -- Deterministic cache key -----------------------------------------------
         public static string GenerateReportKey<TRequest>(
             TRequest request,
             string reportPrefix = "Report")
@@ -20,7 +20,7 @@ namespace JsSampleReport.Utils.Report
             return $"{reportPrefix}_{hash}";
         }
 
-        // ── Resolve wwwroot path ──────────────────────────────────────────────────
+        // -- Resolve wwwroot path --------------------------------------------------
         public static string GetWebRootPath(
             IWebHostEnvironment env,
             IOptions<ReportSettings> reportSettings,
@@ -29,13 +29,13 @@ namespace JsSampleReport.Utils.Report
             var configPath = reportSettings?.Value?.WebRootPath;
             if (!string.IsNullOrWhiteSpace(configPath) && Directory.Exists(configPath))
             {
-                logger.LogInformation("✅ WebRootPath from appsettings: {Path}", configPath);
+                logger.LogInformation("? WebRootPath from appsettings: {Path}", configPath);
                 return configPath;
             }
 
             if (!string.IsNullOrWhiteSpace(env?.WebRootPath) && Directory.Exists(env.WebRootPath))
             {
-                logger.LogInformation("✅ WebRootPath from env: {Path}", env.WebRootPath);
+                logger.LogInformation("? WebRootPath from env: {Path}", env.WebRootPath);
                 return env.WebRootPath;
             }
 
@@ -45,17 +45,17 @@ namespace JsSampleReport.Utils.Report
                 var combined = Path.Combine(contentRoot, "wwwroot");
                 if (Directory.Exists(combined))
                 {
-                    logger.LogInformation("✅ WebRootPath from ContentRoot: {Path}", combined);
+                    logger.LogInformation("? WebRootPath from ContentRoot: {Path}", combined);
                     return combined;
                 }
             }
 
-            logger.LogWarning("⚠️ WebRootPath not resolved. Check ReportSettings:WebRootPath");
+            logger.LogWarning("?? WebRootPath not resolved. Check ReportSettings:WebRootPath");
             return @"C:\inetpub\wwwroot\Images";
         }
 
-        // ── Read + compress shared image (logo, signatures) ───────────────────────
-        // ✅ Returns full data URL: "data:image/jpeg;base64,..."
+        // -- Read + compress shared image (logo, signatures) -----------------------
+        // ? Returns full data URL: "data:image/jpeg;base64,..."
         //    Required by <img src="..."> in Razor HTML for jsreport PDF rendering
         public static async Task<string> ReadCommonImageAsBase64Async(
             string webRootPath,
@@ -75,27 +75,27 @@ namespace JsSampleReport.Utils.Report
 
                 if (!File.Exists(fullPath))
                 {
-                    logger.LogWarning("❌ Image not found: {Path}", fullPath);
+                    logger.LogWarning("? Image not found: {Path}", fullPath);
                     return string.Empty;
                 }
 
                 var bytes = await File.ReadAllBytesAsync(fullPath);
                 var extension = Path.GetExtension(fullPath);
 
-                // ✅ Returns "data:image/jpeg;base64,..." — <img src> ready
+                // ? Returns "data:image/jpeg;base64,..." � <img src> ready
                 return await ImageUtils.CompressImageToBase64WithMimeAsync(
                     bytes, extension, maxWidth, maxHeight, quality);
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "❌ ReadCommonImageAsBase64Async failed: {File}", relativePath);
+                logger.LogError(ex, "? ReadCommonImageAsBase64Async failed: {File}", relativePath);
                 return string.Empty;
             }
         }
 
-        // ── Read + compress unique per-member images (MemberPhoto) ───────────────
-        // ✅ Returns full data URL: "data:image/jpeg;base64,..."
-        //    200×200px at 70% quality → ~10–20KB per photo
+        // -- Read + compress unique per-member images (MemberPhoto) ---------------
+        // ? Returns full data URL: "data:image/jpeg;base64,..."
+        //    200�200px at 70% quality ? ~10�20KB per photo
         public static async Task ConvertUniqueImagesToBase64Async<T>(
             IEnumerable<T> items,
             string propertyName,
@@ -129,19 +129,19 @@ namespace JsSampleReport.Utils.Report
                     var bytes = await File.ReadAllBytesAsync(fullPath);
                     var extension = Path.GetExtension(fullPath);
 
-                    // ✅ Returns "data:image/jpeg;base64,..." — <img src> ready
+                    // ? Returns "data:image/jpeg;base64,..." � <img src> ready
                     var dataUrl = await ImageUtils.CompressImageToBase64WithMimeAsync(
                         bytes, extension, maxWidth, maxHeight, quality);
 
                     prop.SetValue(item, dataUrl);
 
                     logger.LogInformation(
-                        "✅ Compressed member photo: {File} ({Bytes} bytes → data URL)",
+                        "? Compressed member photo: {File} ({Bytes} bytes ? data URL)",
                         Path.GetFileName(fullPath), bytes.Length);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "❌ Member image conversion failed: {Path}", relativePath);
+                    logger.LogError(ex, "? Member image conversion failed: {Path}", relativePath);
                     prop.SetValue(item, string.Empty);
                 }
             });
@@ -149,7 +149,7 @@ namespace JsSampleReport.Utils.Report
             await Task.WhenAll(tasks);
         }
 
-        // ── Content-Type + extension ──────────────────────────────────────────────
+        // -- Content-Type + extension ----------------------------------------------
         public static (string contentType, string extension)
             GetContentTypeAndExtension(string format) => format.ToUpper() switch
             {
@@ -163,7 +163,7 @@ namespace JsSampleReport.Utils.Report
                 _ => ("application/pdf", "pdf"),
             };
 
-        // ── Timestamped download filename ─────────────────────────────────────────
+        // -- Timestamped download filename -----------------------------------------
         public static string GetFileName(string reportName, string format)
         {
             var (_, ext) = GetContentTypeAndExtension(format);

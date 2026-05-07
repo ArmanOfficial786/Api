@@ -1,11 +1,11 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using System.Reflection;
 
-namespace JsSampleReport.Utils.Enum
+namespace NexgenCosysReport.Utils.Enum
 {
     public static class EnumExtensions
     {
-        public static string GetDisplayName(this System.Enum value) // ✅ Use System.Enum, not your Enums class
+        public static string GetDisplayName(this System.Enum value) // ? Use System.Enum, not your Enums class
         {
             var member = value.GetType().GetMember(value.ToString()).FirstOrDefault();
 
@@ -15,11 +15,11 @@ namespace JsSampleReport.Utils.Enum
 
                 if (displayAttr != null && !string.IsNullOrEmpty(displayAttr.Name))
                 {
-                    return displayAttr.Name; // ✅ Return Display attribute name
+                    return displayAttr.Name; // ? Return Display attribute name
                 }
             }
 
-            return value.ToString(); // ✅ Fallback to enum member name
+            return value.ToString(); // ? Fallback to enum member name
         }
     }
 }

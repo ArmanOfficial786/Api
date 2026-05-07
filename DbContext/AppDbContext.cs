@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using JsSampleReport.Models;
+using NexgenCosysReport.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace JsSampleReport;
+namespace NexgenCosysReport;
 
 public partial class AppDbContext : DbContext
 {

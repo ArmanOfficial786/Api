@@ -1,9 +1,9 @@
-﻿
-//using JsSampleReport.Dtos.RequestDtos;
-//using JsSampleReport.Inteface.ServiceInterface;
+
+//using NexgenCosysReport.Dtos.RequestDtos;
+//using NexgenCosysReport.Inteface.ServiceInterface;
 //using Microsoft.EntityFrameworkCore;
 
-//namespace JsSampleReport.Repository
+//namespace NexgenCosysReport.Repository
 //{
 //    public class BranchRepository : IBranch
 //    {
@@ -38,11 +38,11 @@
 
 
 
-using JsSampleReport.Dtos.RequestDtos.Common;
-using JsSampleReport.Inteface.ServiceInterface;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.Inteface.ServiceInterface;
 using Microsoft.EntityFrameworkCore;
 
-namespace JsSampleReport.Repository
+namespace NexgenCosysReport.Repository
 {
     public class BranchRepository : IBranch
     {

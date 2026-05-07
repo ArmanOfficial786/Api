@@ -1,4 +1,4 @@
-﻿namespace JsSampleReport.Inteface.ReportInterface
+namespace NexgenCosysReport.Inteface.ReportInterface
 {
 
     public interface IJsReportService
@@ -11,11 +11,11 @@
         /// <param name="format">Output format (PDF, EXCEL, HTML, PNG)</param>
         /// <returns>Report as byte array</returns>
 
-        // ── HTML Cache ─────────────────────────────────────────────────────
+        // -- HTML Cache -----------------------------------------------------
         bool IsHtmlCached(string reportKey);
         string? GetCachedHtml(string reportKey);
 
-        // ✅ Async only — all controllers use these
+        // ? Async only � all controllers use these
         Task<string> RenderRazorToHtmlAndCacheAsync(string reportKey, string reportPath, object data);
         Task<byte[]> ExportReportToFormatAsync(string htmlContent, string format, string? reportKey = null);
     }

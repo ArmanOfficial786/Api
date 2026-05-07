@@ -1,10 +1,10 @@
-﻿using JsSampleReport.Dtos.RequestDtos.Common;
-using JsSampleReport.Inteface.ServiceInterface;
-using JsSampleReport.Services.CommonService;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.Inteface.ServiceInterface;
+using NexgenCosysReport.Services.CommonService;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
-namespace JsSampleReport.Controllers.Common
+namespace NexgenCosysReport.Controllers.Common
 {
     [Route("api/[controller]")]
     [ApiController]
@@ -19,7 +19,7 @@ namespace JsSampleReport.Controllers.Common
             _orderByService = orderByService;
             _logger = logger;
         }
-        // ✅ Single endpoint — returns ALL report enums at once
+        // ? Single endpoint � returns ALL report enums at once
         [HttpGet("GetAllOrderBy")]
         public async Task<ActionResult<GeneralResponse<AllReportOrderByResponseModel>>> GetAllOrderBy()
         {

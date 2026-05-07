@@ -1,9 +1,9 @@
-﻿using JsSampleReport.Dtos.RequestDtos.Common;
-using JsSampleReport.Inteface.ServiceInterface;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.Inteface.ServiceInterface;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
-namespace JsSampleReport.Controllers.Common
+namespace NexgenCosysReport.Controllers.Common
 {
     [ApiController]
     [Route("api/[controller]")]
