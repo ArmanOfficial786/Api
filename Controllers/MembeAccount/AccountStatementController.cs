@@ -48,8 +48,10 @@ namespace JsSampleReport.Controllers.MembeAccount
 
             try
             {
+                  var reportName = "AccountStatement";
+                var upperFormat = format.ToUpper();
                 var response = new GeneralResponse<ReportResponseDtos>();
-                var reportName = "AccountStatement";
+              
                 if (request == null || !ModelState.IsValid)
                 {
                     response.IsValid = false;
@@ -59,7 +61,7 @@ namespace JsSampleReport.Controllers.MembeAccount
                 }
                     
 
-                var upperFormat = format.ToUpper();
+                
                 var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}"; 
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
@@ -88,7 +90,7 @@ namespace JsSampleReport.Controllers.MembeAccount
                    !request.SameCompanyName &&
                    !string.IsNullOrEmpty(request.BranchSelected) &&
                    request.BranchSelected != "-1" &&
-                   request.BranchSelected.Split(',').Length == 1)
+                   !request.BranchSelected.Contains(','))
                 {
                     branchIdForHeader = request.BranchSelected;
                 }

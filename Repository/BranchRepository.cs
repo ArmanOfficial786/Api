@@ -26,12 +26,7 @@
 //                })
 //                .ToListAsync();
 
-//            // ✅ Prepend "All" as default first option
-//            branchList.Insert(0, new BranchResponse
-//            {
-//                BranchId = -1,
-//                BranchName = "All"
-//            });
+//          
 
 //            return branchList;
 //        }
@@ -60,21 +55,38 @@ namespace JsSampleReport.Repository
 
         public async Task<List<BranchResponse>> GetByUserId(long usmUserId)
         {
-            var branchList = await (
-                from relation in _context.UsmRelationUserToOffices
-                join office in _context.UsmOffices
-                    on relation.UsmOfficeId equals office.UsmOfficeId
-                where relation.UsmUserId == usmUserId
-                   && office.IsActive == true
-                orderby office.OfficeName
-                select new BranchResponse
-                {
-                    BranchId = office.UsmOfficeId,
-                    BranchName = office.OfficeName
-                }
-            ).ToListAsync();
+            //Query according to role
 
-         
+            //var branchList = await (
+            //    from relation in _context.UsmRelationUserToOffices
+            //    join office in _context.UsmOffices
+            //        on relation.UsmOfficeId equals office.UsmOfficeId
+            //    where relation.UsmUserId == usmUserId
+            //       && office.IsActive == true
+            //    orderby office.OfficeName
+            //    select new BranchResponse
+            //    {
+            //        BranchId = office.UsmOfficeId,
+            //        BranchName = office.OfficeName
+            //    }
+            //).ToListAsync();
+
+            //All branch fetch
+            var branchList = await _context.UsmOffices
+                .Where(x => x.IsActive)
+                .OrderBy(x => x.OfficeName)
+                .Select(x => new BranchResponse
+                {
+                    BranchId = x.UsmOfficeId,
+                    BranchName = x.OfficeName
+                })
+                .ToListAsync();
+
+
+
+            return branchList;
+
+
 
             return branchList;
         }

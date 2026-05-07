@@ -38,36 +38,12 @@ namespace JsSampleReport.Repository
                 }
             }
 
-            // ✅ SameCompanyName = true → ignore branch filter (show all branches = main company)
-            if (!request.SameCompanyName)
-            {
-                if (!string.IsNullOrEmpty(request.BranchSelected)
-                    && request.BranchSelected != "-1"
-                    && request.BranchSelected != "string")
-                {
-                    filter += $" AND v.UsmOfficeId IN ({request.BranchSelected})";
-                }
-
-                if (request.BranchId != null && request.BranchId.Any(id => id > 0))
-                {
-                    var branchIds = string.Join(",", request.BranchId.Where(id => id > 0));
-                    filter += $" AND v.UsmOfficeId IN ({branchIds})";
-                }
-            }
-
             if (!string.IsNullOrEmpty(request.BranchSelected) &&
               request.BranchSelected != "-1" &&
               request.BranchSelected != "string")
             {
                 filter += $" AND v.UsmOfficeId IN ({request.BranchSelected})";
             }
-
-            if (request.BranchId != null && request.BranchId.Any(id => id > 0))
-            {
-                var branchIds = string.Join(",", request.BranchId.Where(id => id > 0));
-                filter += $" AND v.UsmOfficeId IN ({branchIds})";
-            }
-            
 
             return filter;
         }
@@ -160,7 +136,7 @@ namespace JsSampleReport.Repository
         }
 
         // ── Main account statement ────────────────────────────────────
-        public async Task<List<AccountStatementModel>>
+        public async Task<List<AccountStatementModelResponse>>
             GetAccountStatementTypeAsync(AccountStatementRequest request)
         {
             var sqlFilterExp = await BuildSqlFilterExp(request);
@@ -175,7 +151,7 @@ namespace JsSampleReport.Repository
             parameters.Add("@SqlFilterExpOrderBy", sqlFilterExpOrderBy);
             parameters.Add("@SqlFilterExpType", sqlFilterExpType);
 
-            var result = await connection.QueryAsync<AccountStatementModel>(
+            var result = await connection.QueryAsync<AccountStatementModelResponse>(
                 "sp_6_56_GetAccountStatementType",
                 parameters,
                 commandType: CommandType.StoredProcedure,
@@ -186,7 +162,7 @@ namespace JsSampleReport.Repository
         }
 
         // ── Cash & Bank balance (opening / closing) ───────────────────
-        public async Task<List<CashBankBalanceModel>>
+        public async Task<List<CashBankBalanceModelResponse>>
             GetCashAndBankBalanceOpeningClosingAsync(AccountStatementRequest request)
         {
             var sqlFilterExpToday = BuildSqlFilterExpToday(request);
@@ -199,7 +175,7 @@ namespace JsSampleReport.Repository
             parameters.Add("@SqlFilterExpToday", sqlFilterExpToday);
             parameters.Add("@SqlFilterExpPrevious", sqlFilterExpPrevious);
 
-            var result = await connection.QueryAsync<CashBankBalanceModel>(
+            var result = await connection.QueryAsync<CashBankBalanceModelResponse>(
                 "sp_6_56_GetCashAndBankBalanceBankOpeningClosing",
                 parameters,
                 commandType: CommandType.StoredProcedure,
@@ -213,5 +189,198 @@ namespace JsSampleReport.Repository
 
 
 
+//using Dapper;
+//using JsSampleReport.Dtos.RequestDtos;
+//using JsSampleReport.Inteface.ServiceInterface;
+//using Microsoft.Data.SqlClient;
+//using Microsoft.EntityFrameworkCore;
+//using System.Data;
 
+//namespace JsSampleReport.Repository
+//{
+//    public class AccountStatementRepository : IAccountStatement
+//    {
+//        private readonly AppDbContext _context;
+//        private readonly IDateConverterService _dateConverter;
+
+//        public AccountStatementRepository(AppDbContext context, IDateConverterService dateConverter)
+//        {
+//            _context = context;
+//            _dateConverter = dateConverter;
+//        }
+
+//        // ── Helper: safely convert a BS date string to AD; returns empty on failure ──
+//        private async Task<string> ToAdAsync(string? bsDate)
+//        {
+//            if (string.IsNullOrEmpty(bsDate) || bsDate == "-1")
+//                return string.Empty;
+
+//            return await _dateConverter.BsToAdStringAsync(bsDate) ?? string.Empty;
+//        }
+
+//        // ── Helper: true when BranchSelected represents a real set of branch IDs ──
+//        private static bool HasBranchFilter(string? branchSelected)
+//            => !string.IsNullOrEmpty(branchSelected)
+//               && branchSelected != "-1"
+//               && branchSelected != "string";
+
+//        // ══════════════════════════════════════════════════════════════════════
+//        // @SqlFilterExp
+//        // Appended inside the SP's WHERE clause (IsActive = 1 + @SqlFilterExp).
+//        // Uses v.VoucherOn (AD date column).
+//        // Branch filter is only applied when SameCompanyName == false.
+//        // ══════════════════════════════════════════════════════════════════════
+//        private async Task<string> BuildSqlFilterExpAsync(AccountStatementRequest request)
+//        {
+//            var filter = string.Empty;
+
+//            // ── Date range (BS → AD conversion) ─────────────────────────────
+//            var fromAd = await ToAdAsync(request.FromDate);
+//            var toAd = await ToAdAsync(request.ToDate);
+
+//            if (!string.IsNullOrEmpty(fromAd) && !string.IsNullOrEmpty(toAd))
+//                filter += $" AND v.VoucherOn BETWEEN '{fromAd}' AND '{toAd}'";
+
+//            // ── Branch filter (only when NOT using same company name) ─────────
+//            // SameCompanyName = true  → company-wide view, no branch filter
+//            // SameCompanyName = false → filter to the selected branch(es)
+//            if (!request.SameCompanyName && HasBranchFilter(request.BranchSelected))
+//                filter += $" AND v.UsmOfficeId IN ({request.BranchSelected})";
+
+//            return filter;
+//        }
+
+//        // ══════════════════════════════════════════════════════════════════════
+//        // @SqlFilterExpOrderBy
+//        // Column names must match the SP's final SELECT aliases.
+//        // ══════════════════════════════════════════════════════════════════════
+//        private static string BuildSqlFilterExpOrderBy(AccountStatementRequest request)
+//        {
+//            if (string.IsNullOrEmpty(request.OrderBy)
+//                || request.OrderBy == "-1"
+//                || request.OrderBy == "string")
+//            {
+//                return " ORDER BY SubLedger";   // default — matches legacy BLL behaviour
+//            }
+
+//            return request.OrderBy switch
+//            {
+//                "Ledger Name" => " ORDER BY SubLedger",
+//                "Debit Amount" => " ORDER BY DebitAmount  DESC",
+//                "Credit Amount" => " ORDER BY CreditAmount DESC",
+//                "Balance" => " ORDER BY Balance      DESC",
+//                _ => " ORDER BY SubLedger"
+//            };
+//        }
+
+//        // ══════════════════════════════════════════════════════════════════════
+//        // @SqlFilterExpType
+//        // SP accepts: Cash | Bank | CashBank | NonCash | anything else = All
+//        // ══════════════════════════════════════════════════════════════════════
+//        private static string BuildSqlFilterExpType(AccountStatementRequest request)
+//        {
+//            return string.IsNullOrEmpty(request.TransactionType)
+//                   || request.TransactionType == "string"
+//                ? "All"
+//                : request.TransactionType;   // SP handles the branching internally
+//        }
+
+//        // ══════════════════════════════════════════════════════════════════════
+//        // @SqlFilterExpToday
+//        // Period filter for the opening/closing SP:
+//        //   v.VoucherOn BETWEEN fromDate AND toDate  (AD dates)
+//        // Branch filter matches the same SameCompanyName logic as the main filter.
+//        // ══════════════════════════════════════════════════════════════════════
+//        private async Task<string> BuildSqlFilterExpTodayAsync(AccountStatementRequest request)
+//        {
+//            var filter = string.Empty;
+
+//            var fromAd = await ToAdAsync(request.FromDate);
+//            var toAd = await ToAdAsync(request.ToDate);
+
+//            if (!string.IsNullOrEmpty(fromAd) && !string.IsNullOrEmpty(toAd))
+//                filter += $" AND v.VoucherOn >= '{fromAd}' AND v.VoucherOn <= '{toAd}'";
+
+//            if (!request.SameCompanyName && HasBranchFilter(request.BranchSelected))
+//                filter += $" AND v.UsmOfficeId IN ({request.BranchSelected})";
+
+//            return filter;
+//        }
+
+//        // ══════════════════════════════════════════════════════════════════════
+//        // @SqlFilterExpPrevious
+//        // All transactions BEFORE fromDate — used for opening balance calculation.
+//        // Branch filter matches the same SameCompanyName logic.
+//        // ══════════════════════════════════════════════════════════════════════
+//        private async Task<string> BuildSqlFilterExpPreviousAsync(AccountStatementRequest request)
+//        {
+//            var filter = string.Empty;
+
+//            var fromAd = await ToAdAsync(request.FromDate);
+
+//            if (!string.IsNullOrEmpty(fromAd))
+//                filter += $" AND v.VoucherOn < '{fromAd}'";
+
+//            if (!request.SameCompanyName && HasBranchFilter(request.BranchSelected))
+//                filter += $" AND v.UsmOfficeId IN ({request.BranchSelected})";
+
+//            return filter;
+//        }
+
+//        // ── Main account statement ────────────────────────────────────────────
+//        public async Task<List<AccountStatementModelResponse>>
+//            GetAccountStatementTypeAsync(AccountStatementRequest request)
+//        {
+//            var sqlFilterExp = await BuildSqlFilterExpAsync(request);
+//            var sqlFilterExpOrderBy = BuildSqlFilterExpOrderBy(request);
+//            var sqlFilterExpType = BuildSqlFilterExpType(request);
+
+//            var connectionString = _context.Database.GetConnectionString();
+//            await using var connection = new SqlConnection(connectionString);
+
+//            var parameters = new DynamicParameters();
+//            parameters.Add("@SqlFilterExp", sqlFilterExp);
+//            parameters.Add("@SqlFilterExpOrderBy", sqlFilterExpOrderBy);
+//            parameters.Add("@SqlFilterExpType", sqlFilterExpType);
+
+//            var result = await connection.QueryAsync<AccountStatementModelResponse>(
+//                "sp_6_56_GetAccountStatementType",
+//                parameters,
+//                commandType: CommandType.StoredProcedure,
+//                commandTimeout: 120
+//            );
+
+//            return result.ToList();
+//        }
+
+//        // ── Cash & Bank balance (opening / closing) ───────────────────────────
+//        public async Task<List<CashBankBalanceModelResponse>>
+//            GetCashAndBankBalanceOpeningClosingAsync(AccountStatementRequest request)
+//        {
+//            // Both date-conversion tasks can run in parallel
+//            var todayTask = BuildSqlFilterExpTodayAsync(request);
+//            var previousTask = BuildSqlFilterExpPreviousAsync(request);
+//            await Task.WhenAll(todayTask, previousTask);
+
+//            var sqlFilterExpToday = await todayTask;
+//            var sqlFilterExpPrevious = await previousTask;
+
+//            var connectionString = _context.Database.GetConnectionString();
+//            await using var connection = new SqlConnection(connectionString);
+
+//            var parameters = new DynamicParameters();
+//            parameters.Add("@SqlFilterExpToday", sqlFilterExpToday);
+//            parameters.Add("@SqlFilterExpPrevious", sqlFilterExpPrevious);
+
+//            var result = await connection.QueryAsync<CashBankBalanceModelResponse>(
+//                "sp_6_56_GetCashAndBankBalanceBankOpeningClosing",
+//                parameters,
+//                commandType: CommandType.StoredProcedure,
+//                commandTimeout: 120
+//            );
+
+//            return result.ToList();
+//        }
+//    }
+//}
 

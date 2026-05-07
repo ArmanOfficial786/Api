@@ -4,11 +4,11 @@
 @{
     Layout = null;
 
-    var dataSet = (Model["AccountStatementDataSet"] as IEnumerable<AccountStatementModel>)
-                  ?.ToList() ?? new List<AccountStatementModel>();
+    var dataSet = (Model["AccountStatementDataSet"] as IEnumerable<AccountStatementModelResponse>)
+                  ?.ToList() ?? new List<AccountStatementModelResponse>();
 
-    var balanceData = (Model["CashBankBalanceDataSet"] as IEnumerable<CashBankBalanceModel>)
-                      ?.ToList() ?? new List<CashBankBalanceModel>();
+    var balanceData = (Model["CashBankBalanceDataSet"] as IEnumerable<CashBankBalanceModelResponse>)
+                      ?.ToList() ?? new List<CashBankBalanceModelResponse>();
 
     var reportType      = Model.ContainsKey("ReportType")      ? Model["ReportType"]?.ToString()      : "Summary";
     var transactionType = Model.ContainsKey("TransactionType") ? Model["TransactionType"]?.ToString() : "All";
@@ -29,7 +29,7 @@
         amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
 
     // Helper: combine SubLedger and SubLedger1 for SubLedger mode display
-    string FormatSubLedgerDisplay(AccountStatementModel row) =>
+    string FormatSubLedgerDisplay(AccountStatementModelResponse row) =>
         string.IsNullOrEmpty(row.SubLedger1) || row.SubLedger1 == "-"
             ? row.SubLedger
             : $"{row.SubLedger} — {row.SubLedger1}";
