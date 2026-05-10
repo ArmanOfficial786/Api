@@ -1,12 +1,12 @@
 // Repository/MemberLookUpRepository.cs
 using Dapper;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
-using NexgenCosysReport.Inteface.ServiceInterface;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using NexgenCosysReport.Inteface.ServiceInterface.Common;
 
-namespace NexgenCosysReport.Repository
+namespace NexgenCosysReport.Repository.Common
 {
     public class MemberLookUpRepository : IMemberLookUp
     {

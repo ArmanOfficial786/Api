@@ -1,6 +1,7 @@
 using NexgenCosysReport.Dtos.RequestDtos;
-using NexgenCosysReport.Inteface.ServiceInterface;
 using Microsoft.AspNetCore.Mvc;
+using NexgenCosysReport.Inteface.ServiceInterface.Member;
+using NexgenCosysReport.Dtos.RequestDtos.Member;
 
 namespace NexgenCosysReport.Controllers.Preview
 {

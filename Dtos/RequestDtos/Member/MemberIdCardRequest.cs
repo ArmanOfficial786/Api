@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace NexgenCosysReport.Dtos.RequestDtos
+namespace NexgenCosysReport.Dtos.RequestDtos.Member
 {
     public class MemberIdCardRequest
     {

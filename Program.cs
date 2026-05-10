@@ -1,15 +1,18 @@
 using jsreport.AspNetCore;
 using jsreport.Binary;
 using jsreport.Local;
-using NexgenCosysReport.ServiceHandler;
 using NexgenCosysReport;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface;
-using NexgenCosysReport.Repository;
 using NexgenCosysReport.Services.CommonService;
 using NexgenCosysReport.Services.ReportService;
 using Microsoft.EntityFrameworkCore;
+using NexgenCosysReport.Repository.Common;
+using NexgenCosysReport.Repository.Member;
+using NexgenCosysReport.Repository.MemberAccount;
+using NexgenCosysReport.Inteface.ServiceInterface.Common;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
+using NexgenCosysReport.Inteface.ServiceInterface.Member;
 
 var builder = WebApplication.CreateBuilder(args);
 

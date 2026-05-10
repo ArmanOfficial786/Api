@@ -43,7 +43,6 @@
 
 
   <ItemGroup>
-    <Folder Include="Controllers\Account\" />
     <Folder Include="DbContext\" />
     <Folder Include="Models\" />
   </ItemGroup>

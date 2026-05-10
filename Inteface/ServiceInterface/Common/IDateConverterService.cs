@@ -1,4 +1,4 @@
-namespace NexgenCosysReport.Inteface.ServiceInterface
+namespace NexgenCosysReport.Inteface.ServiceInterface.Common
 {
     public interface IDateConverterService
     {

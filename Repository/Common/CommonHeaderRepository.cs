@@ -1,12 +1,12 @@
 using Dapper;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Inteface.ServiceInterface;
 using Microsoft.CodeAnalysis.Operations;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using NexgenCosysReport.Inteface.ServiceInterface.Common;
 
-namespace NexgenCosysReport.Repository
+namespace NexgenCosysReport.Repository.Common
 {
     public class CommonHeaderRepository : ICommonHeaderRepository
     {

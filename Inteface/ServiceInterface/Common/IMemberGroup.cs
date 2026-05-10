@@ -1,6 +1,6 @@
 using NexgenCosysReport.Dtos.RequestDtos.Common;
 
-namespace NexgenCosysReport.Inteface.ServiceInterface
+namespace NexgenCosysReport.Inteface.ServiceInterface.Common
 {
     public interface IMemberGroup
     {

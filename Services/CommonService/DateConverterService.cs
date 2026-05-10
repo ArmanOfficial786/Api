@@ -1,5 +1,5 @@
-using NexgenCosysReport.Inteface.ServiceInterface;
 using Microsoft.EntityFrameworkCore;
+using NexgenCosysReport.Inteface.ServiceInterface.Common;
 
 namespace NexgenCosysReport.Services.CommonService
 {

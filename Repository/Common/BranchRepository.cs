@@ -39,10 +39,10 @@
 
 
 using NexgenCosysReport.Dtos.RequestDtos.Common;
-using NexgenCosysReport.Inteface.ServiceInterface;
 using Microsoft.EntityFrameworkCore;
+using NexgenCosysReport.Inteface.ServiceInterface.Common;
 
-namespace NexgenCosysReport.Repository
+namespace NexgenCosysReport.Repository.Common
 {
     public class BranchRepository : IBranch
     {

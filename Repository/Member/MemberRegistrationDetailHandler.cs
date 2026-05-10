@@ -1,13 +1,12 @@
 using Dapper;
-using NexgenCosysReport;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos;
-using NexgenCosysReport.Inteface.ServiceInterface;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using NexgenCosysReport.Dtos.RequestDtos.Member;
+using NexgenCosysReport.Inteface.ServiceInterface.Member;
 
-namespace NexgenCosysReport.ServiceHandler
+namespace NexgenCosysReport.Repository.Member
 {
     public class MemberRegistrationDetailHandler : IMemberDetail
     {

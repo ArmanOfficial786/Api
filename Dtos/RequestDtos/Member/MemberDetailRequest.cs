@@ -1,4 +1,4 @@
-namespace NexgenCosysReport.Dtos.RequestDtos
+namespace NexgenCosysReport.Dtos.RequestDtos.Member
 {
     public class MemberDetailRequest
     {

@@ -1,11 +1,13 @@
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface;
 using NexgenCosysReport.Utils.Report;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
+using NexgenCosysReport.Inteface.ServiceInterface.Common;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
+using NexgenCosysReport.Inteface.ServiceInterface.Member;
 
 namespace NexgenCosysReport.Controllers.MembeAccount
 {
@@ -46,7 +48,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount
         {
             try
             {
-                  var reportName = "AccountStatement";
+                var reportName = "AccountStatement";
                 var upperFormat = format.ToUpper();
                 var response = new GeneralResponse<ReportResponseDtos>();
               

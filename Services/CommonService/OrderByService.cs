@@ -1,5 +1,5 @@
 using NexgenCosysReport.Dtos.RequestDtos.Common;
-using NexgenCosysReport.Inteface.ServiceInterface;
+using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Utils.Enum;
 using static NexgenCosysReport.Utils.Enum.Enums;
 

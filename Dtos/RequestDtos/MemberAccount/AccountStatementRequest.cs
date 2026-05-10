@@ -1,6 +1,6 @@
 using Microsoft.CodeAnalysis.Operations;
 
-namespace NexgenCosysReport.Dtos.RequestDtos
+namespace NexgenCosysReport.Dtos.RequestDtos.MemberAccount
 {
     // -- Request ---------------------------------------------------
     public class AccountStatementRequest

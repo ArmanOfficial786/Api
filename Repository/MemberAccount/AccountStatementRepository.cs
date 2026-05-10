@@ -1,11 +1,12 @@
 using Dapper;
-using NexgenCosysReport.Dtos.RequestDtos;
-using NexgenCosysReport.Inteface.ServiceInterface;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using System.Data;
+using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
+using NexgenCosysReport.Inteface.ServiceInterface.Common;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
 
-namespace NexgenCosysReport.Repository
+namespace NexgenCosysReport.Repository.MemberAccount
 {
     public class AccountStatementRepository : IAccountStatement
     {
