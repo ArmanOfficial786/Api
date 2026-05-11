@@ -20,7 +20,7 @@ namespace NexgenCosysReport.Dtos.ReportDtos
         public double? CustomHeight { get; set; }
         public PageUnit Unit { get; set; } = PageUnit.mm;
         public string MarginTop { get; set; } = "10mm";
-        public string MarginBottom { get; set; } = "10mm";
+        public string MarginBottom { get; set; } = "15mm";
         public string MarginLeft { get; set; } = "10mm";
         public string MarginRight { get; set; } = "10mm";
 

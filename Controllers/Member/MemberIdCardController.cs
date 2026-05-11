@@ -241,14 +241,14 @@
 
 
 
-using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Utils.Report;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
-using System.Text.Json;
+using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Member;
+using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Member;
+using NexgenCosysReport.Utils.Report;
+using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Member
 {
@@ -371,7 +371,7 @@ namespace NexgenCosysReport.Controllers.Member
                     data: reportData);
 
                 // -- STAGE 5: PDF generation ---------------------------------------
-             
+
 
                 // -- VIEW — return binary PDF blob ---------------------------------
                 // ? No base64 — raw bytes only — ~33% smaller than JSON base64

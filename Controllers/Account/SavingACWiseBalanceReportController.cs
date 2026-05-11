@@ -6,8 +6,10 @@ using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Account;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
+using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
+
 
 namespace NexgenCosysReport.Controllers.Account
 {
@@ -119,6 +121,8 @@ namespace NexgenCosysReport.Controllers.Account
                     var pdfBytes = await Task.Run(() =>
                         _jsReportService.ExportReportToFormatAsync(renderRazorpage, "PDF", reportKey, _pageSetting));
 
+                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
+
                     response.IsValid = true;
                     response.StatusCode = 200;
                     response.Message = "Report generated successfully";
@@ -129,10 +133,10 @@ namespace NexgenCosysReport.Controllers.Account
                         Pagination = new Pagination
                         {
                             CurrentPage = 1,
-                            TotalPages = 1,
-                            TotalRecord = 1,
+                            TotalPages = totalPages,
+                            TotalRecord = spData.Count(),
                             PageSize = 1,
-                            HasNextPage = false,
+                            HasNextPage = totalPages > 1,
                             HasPreviousPage = false
                         }
                     };

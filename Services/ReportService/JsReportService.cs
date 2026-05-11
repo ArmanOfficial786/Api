@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.Extensions.Caching.Memory;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Inteface.ReportInterface;
+using PdfSharpCore.Pdf.IO;
 
 namespace NexgenCosysReport.Services.ReportService
 {
@@ -53,6 +54,30 @@ namespace NexgenCosysReport.Services.ReportService
 
         public string? GetCachedHtml(string reportKey)
             => _cache.TryGetValue(reportKey, out string? html) ? html : null;
+
+        // ╔════════════════════════════════════════════════════════════════════╗
+        // ║ PDF PAGE COUNT                                                     ║
+        // ╚════════════════════════════════════════════════════════════════════╝
+
+        /// <summary>
+        /// Count pages in a rendered PDF byte array using PdfSharpCore.
+        /// Called after ExportReportToFormatAsync returns PDF bytes.
+        /// Cost: ~1ms — runs entirely in memory, no file I/O.
+        /// </summary>
+        public static int CountPdfPages(byte[] pdfBytes)
+        {
+            try
+            {
+                using var ms = new MemoryStream(pdfBytes);
+                using var doc = PdfReader.Open(ms, PdfDocumentOpenMode.InformationOnly);
+                return doc.PageCount;
+            }
+            catch
+            {
+                // If PDF is malformed or unreadable, fall back to 1
+                return 1;
+            }
+        }
 
         // ╔════════════════════════════════════════════════════════════════════╗
         // ║ RENDER PATH — Render Razor → HTML → Cache                         ║
@@ -173,9 +198,18 @@ namespace NexgenCosysReport.Services.ReportService
                         MarginBottom = opts.MarginBottom,
                         MarginLeft = opts.MarginLeft,
                         MarginRight = opts.MarginRight,
-                        DisplayHeaderFooter = false,
+                        DisplayHeaderFooter = true,
                         PrintBackground = true,
-                        Landscape = opts.Landscape
+                        Landscape = opts.Landscape,
+                        // ── Footer template with page numbering ──────────────────
+                        FooterTemplate = @"
+                        <div style='font-family: Arial, sans-serif; font-size: 8pt;
+                                width: 100%; text-align: center;
+                                border-top: 1px solid #ccc;
+                                padding: 4px 0; margin: 0;'>
+                               <span class='pageNumber'></span> of <span class='totalPages'></span>
+                         </div>
+                        ",
                     };
 
                     if (opts.ResolvedFormat != null)
