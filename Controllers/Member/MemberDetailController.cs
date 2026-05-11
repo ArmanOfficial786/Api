@@ -196,7 +196,7 @@ namespace NexgenCosysReport.Controllers.Member
                 }
 
                 var webRoot = ReportUtils.GetWebRootPath(
-                    _webHostEnvironment, _reportSettings, _logger);
+                    _webHostEnvironment, _reportSettings);
 
                 // --------------------------------------------------------
                 // STAGE 1 — DB queries concurrently

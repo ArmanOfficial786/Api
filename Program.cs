@@ -13,6 +13,8 @@ using NexgenCosysReport.Repository.MemberAccount;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
 using NexgenCosysReport.Inteface.ServiceInterface.Member;
+using NexgenCosysReport.Inteface.ServiceInterface.Account;
+using NexgenCosysReport.Repository.Account;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -69,6 +71,7 @@ builder.Services.AddScoped<IMemberLookUp, MemberLookUpRepository>();
 builder.Services.AddScoped<ICollectionCenter, CollectionCenterRepository>();
 builder.Services.AddScoped<IMemberGroup, MemberGroupRepository>();
 builder.Services.AddScoped<ICommonHeaderRepository, CommonHeaderRepository>();
+builder.Services.AddScoped<ISavingAcWiseBalance, SavingAcWiseBalanceRepository>();
 
 var app = builder.Build();
 

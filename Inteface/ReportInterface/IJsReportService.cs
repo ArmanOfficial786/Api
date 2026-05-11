@@ -1,3 +1,5 @@
+using NexgenCosysReport.Dtos.ReportDtos;
+
 namespace NexgenCosysReport.Inteface.ReportInterface
 {
 
@@ -17,6 +19,6 @@ namespace NexgenCosysReport.Inteface.ReportInterface
 
         // ? Async only — all controllers use these
         Task<string> RenderRazorToHtmlAndCacheAsync(string reportKey, string reportPath, object data);
-        Task<byte[]> ExportReportToFormatAsync(string htmlContent, string format, string? reportKey = null);
+        Task<byte[]> ExportReportToFormatAsync(string htmlContent, string format, string? reportKey = null, PageSizeSetting? pageSetting = null);
     }
 }

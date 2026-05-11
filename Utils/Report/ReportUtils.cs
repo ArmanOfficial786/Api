@@ -23,19 +23,19 @@ namespace NexgenCosysReport.Utils.Report
         // -- Resolve wwwroot path --------------------------------------------------
         public static string GetWebRootPath(
             IWebHostEnvironment env,
-            IOptions<ReportSettings> reportSettings,
-            ILogger logger)
+            IOptions<ReportSettings> reportSettings
+            )
         {
             var configPath = reportSettings?.Value?.WebRootPath;
             if (!string.IsNullOrWhiteSpace(configPath) && Directory.Exists(configPath))
             {
-                logger.LogInformation("? WebRootPath from appsettings: {Path}", configPath);
+                //logger.LogInformation("? WebRootPath from appsettings: {Path}", configPath);
                 return configPath;
             }
 
             if (!string.IsNullOrWhiteSpace(env?.WebRootPath) && Directory.Exists(env.WebRootPath))
             {
-                logger.LogInformation("? WebRootPath from env: {Path}", env.WebRootPath);
+                //logger.LogInformation("? WebRootPath from env: {Path}", env.WebRootPath);
                 return env.WebRootPath;
             }
 
@@ -45,12 +45,10 @@ namespace NexgenCosysReport.Utils.Report
                 var combined = Path.Combine(contentRoot, "wwwroot");
                 if (Directory.Exists(combined))
                 {
-                    logger.LogInformation("? WebRootPath from ContentRoot: {Path}", combined);
                     return combined;
                 }
             }
 
-            logger.LogWarning("?? WebRootPath not resolved. Check ReportSettings:WebRootPath");
             return @"C:\inetpub\wwwroot\Images";
         }
 
@@ -100,7 +98,6 @@ namespace NexgenCosysReport.Utils.Report
             IEnumerable<T> items,
             string propertyName,
             string webRoot,
-            ILogger logger,
             int maxWidth = 200,
             int maxHeight = 200,
             int quality = 70)
@@ -121,7 +118,6 @@ namespace NexgenCosysReport.Utils.Report
 
                     if (!File.Exists(fullPath))
                     {
-                        logger.LogWarning("Member image not found: {Path}", fullPath);
                         prop.SetValue(item, string.Empty);
                         return;
                     }
@@ -134,15 +130,12 @@ namespace NexgenCosysReport.Utils.Report
                         bytes, extension, maxWidth, maxHeight, quality);
 
                     prop.SetValue(item, dataUrl);
-
-                    logger.LogInformation(
-                        "? Compressed member photo: {File} ({Bytes} bytes ? data URL)",
-                        Path.GetFileName(fullPath), bytes.Length);
                 }
                 catch (Exception ex)
                 {
-                    logger.LogError(ex, "? Member image conversion failed: {Path}", relativePath);
-                    prop.SetValue(item, string.Empty);
+                   
+                    throw new Exception("Member image conversion failed", ex);
+                 
                 }
             });
 

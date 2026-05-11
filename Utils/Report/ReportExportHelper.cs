@@ -1,5 +1,6 @@
-using NexgenCosysReport.Inteface.ReportInterface;
 using Microsoft.AspNetCore.Mvc;
+using NexgenCosysReport.Dtos.ReportDtos;
+using NexgenCosysReport.Inteface.ReportInterface;
 
 namespace NexgenCosysReport.Utils.Report
 {
@@ -13,7 +14,9 @@ namespace NexgenCosysReport.Utils.Report
             string format,
             string reportName,
             IJsReportService jsReportService,
-            ILogger logger)
+            ILogger logger,
+            PageSizeSetting? pageSetting = null
+            )
         {
             var htmlContent = jsReportService.GetCachedHtml(reportKey);
             if (string.IsNullOrEmpty(htmlContent))
@@ -29,7 +32,9 @@ namespace NexgenCosysReport.Utils.Report
             // ? Export from cache
             var fileBytes = await jsReportService.ExportReportToFormatAsync(
                 htmlContent,
-                format);
+                format,
+                reportKey,
+                pageSetting);
 
             var (contentType, _) = ReportUtils.GetContentTypeAndExtension(format);
             var fileName = ReportUtils.GetFileName(reportName, format);

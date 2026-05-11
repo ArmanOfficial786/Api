@@ -1,15 +1,14 @@
 using jsreport.AspNetCore;
 using jsreport.Types;
-using NexgenCosysReport.Inteface.ReportInterface;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Abstractions;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.Razor;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.AspNetCore.Mvc.ViewFeatures;
-using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Caching.Memory;
+using NexgenCosysReport.Dtos.ReportDtos;
+using NexgenCosysReport.Inteface.ReportInterface;
 
 namespace NexgenCosysReport.Services.ReportService
 {
@@ -83,7 +82,7 @@ namespace NexgenCosysReport.Services.ReportService
                 _cache.Set(reportKey, html, new MemoryCacheEntryOptions()
                     .SetSlidingExpiration(TimeSpan.FromMinutes(10))
                     .SetAbsoluteExpiration(TimeSpan.FromMinutes(20)));
-               ;
+                ;
                 return html;
             }
             catch (Exception ex)
@@ -104,7 +103,8 @@ namespace NexgenCosysReport.Services.ReportService
         public async Task<byte[]> ExportReportToFormatAsync(
             string htmlContent,
             string format,
-            string? reportKey = null)
+            string? reportKey = null,
+            PageSizeSetting? pageSetting = null)
         {
             try
             {
@@ -122,7 +122,7 @@ namespace NexgenCosysReport.Services.ReportService
                     }
                 };
 
-                ConfigureJsReportTemplate(renderRequest, upperFormat);
+                ConfigureJsReportTemplate(renderRequest, upperFormat, pageSetting);
                 var result = await _jsReportMVCService.RenderAsync(renderRequest);
 
                 using var ms = new MemoryStream();
@@ -159,23 +159,46 @@ namespace NexgenCosysReport.Services.ReportService
         /// <summary>
         /// Apply format-specific options (margins, page size, etc.) to jsreport request
         /// </summary>
-        private static void ConfigureJsReportTemplate(RenderRequest request, string format)
+        private static void ConfigureJsReportTemplate(RenderRequest request, string format, PageSizeSetting? pageSetting = null)
         {
             switch (format)
             {
                 case "PDF":
                 case "VIEW":
-                    request.Template.Chrome = new Chrome
+                    var opts = pageSetting ?? new PageSizeSetting();
+
+                    var chrome = new Chrome
                     {
-                        MarginTop = "1mm",
-                        MarginBottom = "1mm",
-                        MarginLeft = "5mm",
-                        MarginRight = "5mm",
+                        MarginTop = opts.MarginTop,
+                        MarginBottom = opts.MarginBottom,
+                        MarginLeft = opts.MarginLeft,
+                        MarginRight = opts.MarginRight,
                         DisplayHeaderFooter = false,
                         PrintBackground = true,
-                        Format = "A4",
-                        Landscape = false
+                        Landscape = opts.Landscape
                     };
+
+                    if (opts.ResolvedFormat != null)
+                        chrome.Format = opts.ResolvedFormat;      // named format: A4, A3…
+                    else
+                    {
+                        chrome.Width = opts.ResolvedWidth;       // custom: "380mm"
+                        chrome.Height = opts.ResolvedHeight;      // custom: "210mm"
+                    }
+
+                    request.Template.Chrome = chrome;
+
+                    //request.Template.Chrome = new Chrome
+                    //{
+                    //    MarginTop = "1mm",
+                    //    MarginBottom = "1mm",
+                    //    MarginLeft = "5mm",
+                    //    MarginRight = "5mm",
+                    //    DisplayHeaderFooter = false,
+                    //    PrintBackground = true,
+                    //    Format = "A4",
+                    //    Landscape = false
+                    //};
                     break;
 
                 case "EXCEL":

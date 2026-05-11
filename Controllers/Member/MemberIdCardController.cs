@@ -320,7 +320,7 @@ namespace NexgenCosysReport.Controllers.Member
                 }
 
                 var webRoot = ReportUtils.GetWebRootPath(
-                    _webHostEnvironment, _reportSettings, _logger);
+                    _webHostEnvironment, _reportSettings);
 
                 // -- STAGE 1: DB queries — concurrent ------------------------------
                 var memberTask = _memberIdCardService.GetMemberIdCardData(request);
@@ -355,7 +355,7 @@ namespace NexgenCosysReport.Controllers.Member
                 await ReportUtils.ConvertUniqueImagesToBase64Async(
                     memberIdCardData,
                     nameof(MemberIdCardModel.MemberPhoto),
-                    webRoot, _logger);
+                    webRoot);
 
                 // -- STAGE 4: Razor render + cache HTML ----------------------------
                 var reportData = new Dictionary<string, object>

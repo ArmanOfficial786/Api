@@ -1,0 +1,179 @@
+﻿@model Dictionary<string, object>
+@using NexgenCosysReport.Dtos.RequestDtos.Account
+
+@{
+    Layout = null;
+
+    var dataSet = (Model["SavingAcWiseBalanceDataset"] as IEnumerable<SavingAcWiseBalanceResponse>)
+                      ?.ToList() ?? new List<SavingAcWiseBalanceResponse>();
+    var tillDate    = Model.ContainsKey("TillDate")    ? Model["TillDate"]?.ToString()    : "";
+    var branchName  = Model.ContainsKey("BranchName")  ? Model["BranchName"]?.ToString()  : "";
+    var format      = Model.ContainsKey("Format")      ? Model["Format"]?.ToString()      : "VIEW";
+    var isExcel     = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Saving AC Wise Balance Report</title>
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 9pt;
+            margin: 0;
+            padding: 10px;
+        }
+
+        @@media print {
+            @@page { margin: 0.5cm; }
+            body  { margin: 0; padding: 0; }
+            tr    { page-break-inside: avoid; break-inside: avoid; }
+        }
+
+        /* ── Shared table base ── */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: Arial, sans-serif;
+            font-size: 9pt;
+            table-layout: fixed;
+        }
+
+        .data-table th {
+            border-bottom: 2px solid #000;
+            padding: 4px 6px;
+            white-space: nowrap;
+            vertical-align: bottom;
+            text-align: left;
+            overflow: hidden;
+        }
+
+        .data-table td {
+            padding: 4px 6px;
+            border-bottom: 1px solid #d0d0d0;
+            vertical-align: middle;
+            text-align: left;
+            white-space: normal;        /* ✅ allow text to wrap */
+            word-wrap: break-word;      /* ✅ break long words at column boundary */
+            overflow-wrap: break-word;  /* ✅ modern alias — same effect */
+            overflow: hidden;
+            
+        }
+        .data-table td,
+        .data-table th {
+              overflow: visible;      /* ← change from hidden */
+              text-overflow: clip;    /* ← change from ellipsis */
+        }
+
+        /* ── Meta rows inside single table (PDF only) ── */
+        .meta-title td {
+            text-align: center;
+            font-size: 14pt;
+            font-weight: bold;
+            text-decoration: underline;
+            padding: 8px 6px;
+            border-bottom: none;
+        }
+
+        .meta-row td {
+            padding: 4px 6px;
+            font-size: 9pt;
+            border-bottom: none;
+        }
+
+        .meta-spacer td {
+            height: 6px;
+            border-bottom: none;
+        }
+        thead {
+           display: table-row-group;
+        }
+    </style>
+</head>
+
+<body>
+<div style="width:100%; background:white;">
+
+@* ════════════════════════════════════════════════════════════
+   PDF / VIEW  — everything in ONE single <table>
+   ════════════════════════════════════════════════════════════ *@
+@if (!isExcel)
+{
+    @* Common header stays outside the table (logos, address block, etc.) *@
+    @await Html.PartialAsync("_CommonHeader", Model)
+
+    <table class="data-table">
+        <colgroup>
+            <col style="width:10%;" /> @* Saving Type   *@
+            <col style="width:15%;" /> @* Member Name   *@
+            <col style="width:13%;" /> @* A/C No.       *@
+            <col style="width:6%;"  /> @* Int%          *@
+            <col style="width:10%;" /> @* Int Transfer  *@
+            <col style="width:12%;" /> @* Deposite      *@
+            <col style="width:11%;" /> @* Withdraw      *@
+            <col style="width:10%;" /> @* Balance       *@
+            <col style="width:13%;" /> @* A/C Opened On *@
+        </colgroup>
+
+        <thead>
+            @* ── Report title ── *@
+            <tr class="meta-title">
+                <td colspan="9">Saving Account Wise Balance Report</td>
+            </tr>
+
+            @* ── Branch / Till Date ── *@
+            <tr class="meta-row">
+                <td colspan="5"><strong>Branch Name :</strong> @branchName</td>
+                <td colspan="4" style="text-align:right;"><strong>Till Date :</strong> @tillDate</td>
+            </tr>
+
+            @* ── Generated On ── *@
+            <tr class="meta-row">
+                <td colspan="9"><strong>Report Generated On :</strong> @generatedOn</td>
+            </tr>
+
+            @* ── Spacer ── *@
+            <tr class="meta-spacer"><td colspan="9"></td></tr>
+
+            @* ── Column headers ── *@
+            <tr>
+                <th>Saving Type</th>
+                <th>Member Name</th>
+                <th style="text-align:center">A/C No.</th>
+                <th>Int%</th>
+                <th>Int Transfer</th>
+                <th>Deposite</th>
+                <th>Withdraw</th>
+                <th>Balance</th>
+                <th >A/C Opened On</th>
+            </tr>
+        </thead>
+
+        <tbody>
+            @foreach (var item in dataSet)
+            {
+                <tr>
+                    <td>@item.MemberId</td>
+                    <td>@item.MemberName</td>
+                    <td style="text-align:center">@item.AccountNo</td>
+                    <td>@item.InterestRate</td>
+                    <td>@item.InterestType</td>
+                    <td>@item.Deposit</td>
+                    <td>@item.Withdraw</td>
+                    <td>@item.Balance</td>
+                    <td style="text-align:center">@item.AccountOpenOnBS</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+}
+
+</div>
+</body>
+</html>

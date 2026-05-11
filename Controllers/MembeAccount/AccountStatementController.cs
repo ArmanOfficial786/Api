@@ -59,8 +59,6 @@ namespace NexgenCosysReport.Controllers.MembeAccount
                     response.Message = "Invalid request";
                     return BadRequest(response);
                 }
-                    
-
                 
                 var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}"; 
 
@@ -111,13 +109,13 @@ namespace NexgenCosysReport.Controllers.MembeAccount
                 }
 
                 var webRoot = ReportUtils.GetWebRootPath(
-                    _webHostEnvironment, _reportSettings, _logger);
+                    _webHostEnvironment, _reportSettings);
 
           
                 await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
                     headerData,
                     nameof(CommonHeader.CompanyLogo),
-                    webRoot, _logger));
+                    webRoot));
               
              
 
