@@ -40,6 +40,7 @@
         public decimal Withdraw { get; set; }
         public decimal Balance { get; set; }
         public decimal InterestRate { get; set; }
+        public string? SavingType { get; set; }
 
     }
 }

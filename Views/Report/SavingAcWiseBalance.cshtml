@@ -6,11 +6,21 @@
 
     var dataSet = (Model["SavingAcWiseBalanceDataset"] as IEnumerable<SavingAcWiseBalanceResponse>)
                       ?.ToList() ?? new List<SavingAcWiseBalanceResponse>();
+
     var tillDate    = Model.ContainsKey("TillDate")    ? Model["TillDate"]?.ToString()    : "";
     var branchName  = Model.ContainsKey("BranchName")  ? Model["BranchName"]?.ToString()  : "";
     var format      = Model.ContainsKey("Format")      ? Model["Format"]?.ToString()      : "VIEW";
     var isExcel     = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var grouped = dataSet
+        .GroupBy(x => x.SavingType ?? "—")
+        .OrderBy(g => g.Key)
+        .ToList();
+
+    var totalDeposit  = dataSet.Sum(x => x.Deposit);
+    var totalWithdraw = dataSet.Sum(x => x.Withdraw);
+    var totalBalance  = dataSet.Sum(x => x.Balance);
 }
 
 <!DOCTYPE html>
@@ -34,7 +44,6 @@
             tr    { page-break-inside: avoid; break-inside: avoid; }
         }
 
-        /* ── Shared table base ── */
         .data-table {
             width: 100%;
             border-collapse: collapse;
@@ -44,32 +53,24 @@
         }
 
         .data-table th {
+            border-top: 2px solid #000;
             border-bottom: 2px solid #000;
             padding: 4px 6px;
             white-space: nowrap;
             vertical-align: bottom;
             text-align: left;
-            overflow: hidden;
         }
 
         .data-table td {
             padding: 4px 6px;
             border-bottom: 1px solid #d0d0d0;
-            vertical-align: middle;
+            vertical-align: top;
             text-align: left;
-            white-space: normal;        /* ✅ allow text to wrap */
-            word-wrap: break-word;      /* ✅ break long words at column boundary */
-            overflow-wrap: break-word;  /* ✅ modern alias — same effect */
-            overflow: hidden;
-            
-        }
-        .data-table td,
-        .data-table th {
-              overflow: visible;      /* ← change from hidden */
-              text-overflow: clip;    /* ← change from ellipsis */
+            white-space: normal;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
 
-        /* ── Meta rows inside single table (PDF only) ── */
         .meta-title td {
             text-align: center;
             font-size: 14pt;
@@ -85,95 +86,143 @@
             border-bottom: none;
         }
 
-        .meta-spacer td {
-            height: 6px;
-            border-bottom: none;
+        .meta-spacer td { height: 6px; border-bottom: none; }
+
+        .group-header td {
+            background-color: #c0c0c0;
+            font-weight: bold;
+            font-size: 9pt;
+            padding: 3px 6px;
+            border-top: 1px solid #999;
+            border-bottom: 1px solid #999;
+            color: #00008B;
         }
-        thead {
-           display: table-row-group;
+
+        .group-footer td {
+            border-top: 1px solid #000;
+            border-bottom: 2px solid #000;
+            padding: 3px 6px;
+            font-weight: bold;
+            font-size: 9pt;
+            background-color: #ffffff;
         }
+
+        .grand-total td {
+            border-top: 2px solid #000;
+            padding: 4px 6px;
+            font-weight: bold;
+            font-size: 9pt;
+            background-color: #f0f0f0;
+        }
+
+        thead { display: table-row-group; }
     </style>
 </head>
 
 <body>
 <div style="width:100%; background:white;">
 
-@* ════════════════════════════════════════════════════════════
-   PDF / VIEW  — everything in ONE single <table>
-   ════════════════════════════════════════════════════════════ *@
+@* ══════════════════════════════════════════
+   PDF / VIEW
+   ══════════════════════════════════════════ *@
 @if (!isExcel)
 {
-    @* Common header stays outside the table (logos, address block, etc.) *@
     @await Html.PartialAsync("_CommonHeader", Model)
 
     <table class="data-table">
         <colgroup>
-            <col style="width:10%;" /> @* Saving Type   *@
-            <col style="width:15%;" /> @* Member Name   *@
-            <col style="width:13%;" /> @* A/C No.       *@
-            <col style="width:6%;"  /> @* Int%          *@
-            <col style="width:10%;" /> @* Int Transfer  *@
-            <col style="width:12%;" /> @* Deposite      *@
-            <col style="width:11%;" /> @* Withdraw      *@
-            <col style="width:10%;" /> @* Balance       *@
-            <col style="width:13%;" /> @* A/C Opened On *@
+            <col style="width:10%;" />
+            <col style="width:16%;" />
+            <col style="width:12%;" />
+            <col style="width:5%;"  />
+            <col style="width:10%;" />
+            <col style="width:12%;" />
+            <col style="width:11%;" />
+            <col style="width:11%;" />
+            <col style="width:13%;" />
         </colgroup>
 
         <thead>
-            @* ── Report title ── *@
             <tr class="meta-title">
                 <td colspan="9">Saving Account Wise Balance Report</td>
             </tr>
-
-            @* ── Branch / Till Date ── *@
             <tr class="meta-row">
                 <td colspan="5"><strong>Branch Name :</strong> @branchName</td>
                 <td colspan="4" style="text-align:right;"><strong>Till Date :</strong> @tillDate</td>
             </tr>
-
-            @* ── Generated On ── *@
             <tr class="meta-row">
                 <td colspan="9"><strong>Report Generated On :</strong> @generatedOn</td>
             </tr>
-
-            @* ── Spacer ── *@
             <tr class="meta-spacer"><td colspan="9"></td></tr>
-
-            @* ── Column headers ── *@
             <tr>
                 <th>Saving Type</th>
                 <th>Member Name</th>
-                <th style="text-align:center">A/C No.</th>
+                <th style="text-align:center;">A/C No.</th>
                 <th>Int%</th>
                 <th>Int Transfer</th>
-                <th>Deposite</th>
-                <th>Withdraw</th>
-                <th>Balance</th>
-                <th >A/C Opened On</th>
+                <th style="text-align:right;">Deposit</th>
+                <th style="text-align:right;">Withdraw</th>
+                <th style="text-align:right;">Balance</th>
+                <th style="text-align:center;">A/C Opened On</th>
             </tr>
         </thead>
 
         <tbody>
-            @foreach (var item in dataSet)
+
+            @* ── KEY FIX: declare all C# variables at the TOP of foreach,
+                           BEFORE any HTML is emitted — Razor rule ── *@
+            @foreach (var group in grouped)
             {
-                <tr>
-                    <td>@item.MemberId</td>
-                    <td>@item.MemberName</td>
-                    <td style="text-align:center">@item.AccountNo</td>
-                    <td>@item.InterestRate</td>
-                    <td>@item.InterestType</td>
-                    <td>@item.Deposit</td>
-                    <td>@item.Withdraw</td>
-                    <td>@item.Balance</td>
-                    <td style="text-align:center">@item.AccountOpenOnBS</td>
+                var groupCount    = group.Count();
+                var groupDeposit  = group.Sum(x => x.Deposit);
+                var groupWithdraw = group.Sum(x => x.Withdraw);
+                var groupBalance  = group.Sum(x => x.Balance);
+
+                <tr class="group-header">
+                    <td colspan="9">@group.Key</td>
+                </tr>
+
+                @foreach (var item in group)
+                {
+                    <tr>
+                        <td>@item.MemberId</td>
+                        <td>@item.MemberName</td>
+                        <td style="text-align:center;">@item.AccountNo</td>
+                        <td>@item.InterestRate</td>
+                        <td>@item.InterestType</td>
+                        <td style="text-align:right;">@item.Deposit.ToString("N2")</td>
+                        <td style="text-align:right;">@item.Withdraw.ToString("N2")</td>
+                        <td style="text-align:right;">@item.Balance.ToString("N2")</td>
+                        <td style="text-align:center;">@item.AccountOpenOnBS</td>
+                    </tr>
+                }
+
+                <tr class="group-footer">
+                    <td>@groupCount</td>
+                    <td></td>
+                    <td style="text-align:center;">@group.Key</td>
+                    <td></td>
+                    <td></td>
+                    <td style="text-align:right;">@groupDeposit.ToString("N2")</td>
+                    <td style="text-align:right;">@groupWithdraw.ToString("N2")</td>
+                    <td style="text-align:right;">@groupBalance.ToString("N2")</td>
+                    <td></td>
                 </tr>
             }
+
+            <tr class="grand-total">
+                <td colspan="3"><strong>Grand Total</strong></td>
+                <td></td>
+                <td></td>
+                <td style="text-align:right;"><strong>@totalDeposit.ToString("N2")</strong></td>
+                <td style="text-align:right;"><strong>@totalWithdraw.ToString("N2")</strong></td>
+                <td style="text-align:right;"><strong>@totalBalance.ToString("N2")</strong></td>
+                <td></td>
+            </tr>
+
         </tbody>
     </table>
 }
-
-}
-
 </div>
 </body>
 </html>
