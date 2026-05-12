@@ -202,11 +202,15 @@ namespace NexgenCosysReport.Services.ReportService
                         PrintBackground = true,
                         Landscape = opts.Landscape,
                         // ── Footer template with page numbering ──────────────────
+                        HeaderTemplate = "<span></span>",
                         FooterTemplate = @"
-                        <div style='font-family: Arial, sans-serif; font-size: 8pt;
-                                width: 100%; text-align: center;
+                        <div style='
+                                font-size: 5pt;
+                                width: 100%; 
+                                text-align: center;
                                 border-top: 1px solid #ccc;
-                                padding: 4px 0; margin: 0;'>
+                                line-height: 20px;
+                                padding:0; margin: 0;'>
                                <span class='pageNumber'></span> of <span class='totalPages'></span>
                          </div>
                         ",

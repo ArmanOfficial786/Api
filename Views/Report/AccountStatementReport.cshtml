@@ -16,20 +16,29 @@
     var branchName      = Model.ContainsKey("BranchName")      ? Model["BranchName"]?.ToString()      : "All";
     var fromDate        = Model.ContainsKey("FromDate")        ? Model["FromDate"]?.ToString()        : "";
     var toDate          = Model.ContainsKey("ToDate")          ? Model["ToDate"]?.ToString()          : "";
-    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var format          = Model.ContainsKey("Format")          ? Model["Format"]?.ToString()          : "VIEW";
+    var isExcel         = format == "EXCEL" || format == "XLSX";
 
     var balance     = balanceData.FirstOrDefault();
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
     decimal grandDebit  = dataSet.Sum(x => x.DebitAmount);
     decimal grandCredit = dataSet.Sum(x => x.CreditAmount);
-    var groupedByLedgerHead = dataSet.GroupBy(x => x.LedgerHead) .OrderBy(g => g.Key).ToList();
+
+    var groupedByLedgerHead = dataSet
+        .GroupBy(x => x.LedgerHead)
+        .OrderBy(g => g.Key)
+        .ToList();
 
     string FormatBalance(decimal amount) =>
         amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
 
-    // Helper: combine SubLedger and SubLedger1 for SubLedger mode display
+    // LedgerNo + SubLedger inline: "90   BANK BALANCE"
+    string FormatSubLedgerInline(string ledgerNo, string subLedger) =>
+        string.IsNullOrEmpty(ledgerNo) || ledgerNo == "-"
+            ? subLedger
+            : $"{ledgerNo}\u00A0\u00A0\u00A0{subLedger}";
+
     string FormatSubLedgerDisplay(AccountStatementModelResponse row) =>
         string.IsNullOrEmpty(row.SubLedger1) || row.SubLedger1 == "-"
             ? row.SubLedger
@@ -40,171 +49,223 @@
 <head>
     <meta charset="utf-8" />
     <title>Account Statement Report</title>
-   <style>
-    /* Screen styles */
-    body {
-        font-family: Arial, sans-serif;
-        font-size: 9pt;
-        margin: 0;
-        padding: 20px;
-    }
-    .report-container {
-        max-width: 210mm;
-        margin: 0 auto;
-        background: white;
-    }
-    table {
-        width: 100%;
-        border-collapse: collapse;
-        font-family: Arial, sans-serif;
-    }
-
-    /* ========== PRINT STYLES ========== */
-    @@media print {
-        /* Restore page margins (top, right, bottom, left) */
-        @@page {
-            width: 210mm; 
-            margin: 1cm;
+    <style>
+        /* ── RESET ── */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
         body {
             margin: 0;
             padding: 0;
-            width: 210mm;  
+            font-family: Arial, sans-serif;
+            font-size: 9pt;
+            background: white;
         }
 
-        /* Prevent page breaks inside table rows */
-        tr {
-            page-break-inside: avoid;
-            break-inside: avoid;
-        }
-
-        /* Optional: keep group header rows (Ledger Head) with the next row */
-        tr.ledger-head-row,
-        tr.main-ledger-row {
-            page-break-after: avoid;
-            break-after: avoid;
-        }
-
-        /* Avoid breaking inside a group of sub‑rows */
-        tbody tr.detail-row {
-            page-break-inside: avoid;
-            break-inside: avoid;
-        }
-
-        /* Repeat table headers on every printed page */
-        thead {
-            display: table-header-group;
-        }
-
-        /* Ensure the container does not clip content */
+        /* ── CONTAINER ── */
         .report-container {
-            margin: 0;
-            padding: 0;
             width: 100%;
+            overflow: visible;
         }
-    }
-</style>
+
+        /* ── STOP THEAD REPEATING ── */
+        thead {
+            display: table-row-group;
+        }
+
+        /* ── TABLE BASE ── */
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-family: Arial, sans-serif;
+            font-size: 9pt;
+            table-layout: fixed;
+        }
+
+        .data-table td,
+        .data-table th {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            white-space: normal;
+            vertical-align: middle;
+            background: #FFFFFF;
+        }
+
+        /* ── COLUMN HEADER ROW ── */
+        .data-table th {
+            border-top: 2px solid #000;
+            border-bottom: 1px solid #000;
+            padding: 5px 8px;
+            font-weight: bold;
+        }
+
+        /* ── META ROWS ── */
+        .meta-title td {
+            text-align: center;
+            font-size: 14pt;
+            font-weight: bold;
+            text-decoration: underline;
+            padding: 8px 6px;
+        }
+
+        .meta-row td {
+            padding: 4px 8px;
+            font-size: 9pt;
+        }
+
+        .meta-spacer td {
+            height: 6px;
+        }
+
+        /* ── LEDGER HEAD GROUP HEADER (ASSETS / EXPENSES / INCOME / LIABILITIES) ── */
+        .ledger-head-row td {
+            font-weight: bold;
+            border-top: 1px solid #ccc;
+            border-bottom: 1px solid #ccc; 
+            padding: 5px 8px;
+            background: #FFFFFF;
+        }
+
+        /* ── MAIN LEDGER SUB-HEADER (SubLedger / Detail modes) ── */
+        .main-ledger-row td {
+            font-weight: bold;
+            padding: 3px 8px;
+            background: #FFFFFF;
+             border-bottom: 1px solid #ccc;
+        }
+
+        /* ── DETAIL DATA ROWS ── */
+        .detail-row td {
+            padding: 2px 8px;
+            background: #FFFFFF;
+            border-bottom: 1px solid #ccc;
+        }
+
+        /* ── GROUP SEPARATOR LINE ── */
+        .group-separator td {
+            border-bottom: 1.5px solid #000;
+            padding: 0;
+            height: 0;
+            line-height: 0;
+            font-size: 0;
+            background: #FFFFFF;
+        }
+
+        /* ── GRAND TOTAL ── */
+        .grand-total td {
+            border-top: 2px solid #000;
+            border-bottom: 2px solid #000;
+            font-weight: bold;
+            padding: 5px 8px;
+            background: #FFFFFF;
+        }
+
+        /* ── TEXT ALIGNMENT HELPERS ── */
+        .text-right { text-align: right  !important; }
+        .text-left  { text-align: left   !important; }
+
+        /* ── PRINT ── */
+        @@media print {
+            body { margin: 0; padding: 0; }
+
+            tr {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            tr.ledger-head-row,
+            tr.main-ledger-row {
+                page-break-after: avoid;
+                break-after: avoid;
+            }
+
+            tbody tr.detail-row {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+        }
+    </style>
 </head>
 <body>
 <div class="report-container">
-     <!-- ========== COMMON HEADER (partial – emits multiple <tr> rows) ========== -->
-          @if (!isExcel)
-          {
-               @await Html.PartialAsync("_CommonHeader", Model)
-          }
-    <!--
-        ╔══════════════════════════════════════════════════════════════════╗
-        ║  SINGLE MASTER TABLE – no nested tables, all grouping flat      ║
-        ║  using <tr> rows with appropriate colspan / styling.            ║
-        ╚══════════════════════════════════════════════════════════════════╝
-    -->
 
-    <table data-sheet-name="AccountStatementReport">
+    @* ── COMMON HEADER ── *@
+    @if (!isExcel)
+    {
+        @await Html.PartialAsync("_CommonHeader", Model)
+    }
+
+    @*
+        5 columns:
+        Ledger Head | Sub Ledger (contains LedgerNo inline) | Debit Amount | Credit Amount | Balance
+    *@
+    <table class="data-table" data-sheet-name="AccountStatementReport">
+        <colgroup>
+            <col style="width:18%;" />
+            <col style="width:37%;" />
+            <col style="width:15%;" />
+            <col style="width:15%;" />
+            <col style="width:15%;" />
+        </colgroup>
         <tbody>
 
-           
-
-            <!-- ========== REPORT TITLE ROW ========== -->
-            <tr>
-                <td colspan="6"
-                    style="text-align:center; font-size:14pt; font-weight:bold;
-                           text-decoration:underline; padding:8px;">
-                    Account Statement Report
-                </td>
+            @* ── REPORT TITLE ── *@
+            <tr class="meta-title">
+                <td colspan="5">Account Statement Report</td>
             </tr>
 
-            <!-- ========== META INFORMATION ROWS ========== -->
-            <tr>
-                <td colspan="3" style="padding:4px 8px;">
-                    <strong>Branch Name :</strong> @branchName
-                </td>
-                <td colspan="3" style="padding:4px 8px; text-align:right;">
-                    <strong>From Date :</strong> @fromDate
-                </td>
+            @* ── META INFO ── *@
+            <tr class="meta-row">
+                <td colspan="3"><strong>Branch Name :</strong> @branchName</td>
+                <td colspan="2" class="text-right"><strong>From Date :</strong> @fromDate</td>
             </tr>
-            <tr>
-                <td colspan="3" style="padding:4px 8px;">
-                    <strong>Report Generated On :</strong> @generatedOn
-                </td>
-                <td colspan="3" style="padding:4px 8px; text-align:right;">
-                    <strong>To Date :</strong> @toDate
-                </td>
+            <tr class="meta-row">
+                <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
+                <td colspan="2" class="text-right"><strong>To Date :</strong> @toDate</td>
             </tr>
-            <tr><td colspan="6" style="height:6px;"></td></tr>
+            <tr class="meta-spacer"><td colspan="5"></td></tr>
 
-            <!-- ========== OPENING BALANCE ROWS (flat, inside main table) ========== -->
+            @* ── OPENING BALANCE ── *@
             @if (balance != null)
             {
                 <tr>
-                    <td colspan="2"
-                        style="border:1px solid #000; background:#f0f0f0;
-                               text-align:left; padding:6px; font-weight:bold;">
+                    <td colspan="2" style="border:1px solid #000; background:#f0f0f0; text-align:left; padding:6px; font-weight:bold;">
                         Opening Cash Balance :
                     </td>
-                    <td colspan="4"
-                        style="border:1px solid #000;
-                               text-align:right; padding:6px;">
+                    <td colspan="3" style="border:1px solid #000; text-align:right; padding:6px;">
                         @balance.OpeningCashBalance.ToString("N2")
                     </td>
                 </tr>
                 <tr>
-                    <td colspan="2"
-                        style="border:1px solid #000; background:#f0f0f0;
-                               text-align:left; padding:6px; font-weight:bold;">
+                    <td colspan="2" style="border:1px solid #000; background:#f0f0f0; text-align:left; padding:6px; font-weight:bold;">
                         Opening Bank Balance :
                     </td>
-                    <td colspan="4"
-                        style="border:1px solid #000;
-                               text-align:right; padding:6px;">
+                    <td colspan="3" style="border:1px solid #000; text-align:right; padding:6px;">
                         @balance.OpeningBankBalance.ToString("N2")
                     </td>
                 </tr>
-                <tr><td colspan="6" style="height:6px;"></td></tr>
+                <tr class="meta-spacer"><td colspan="5"></td></tr>
             }
 
-            <!-- ========== COLUMN HEADERS ========== -->
+            @* ── COLUMN HEADERS ── *@
             <tr>
-                <th style="width:15%; border-top:2px solid #000; border-bottom:1px solid #000;
-                           padding:5px 8px; text-align:left;">Ledger Head</th>
-                <th style="width:8%;  border-top:2px solid #000; border-bottom:1px solid #000;
-                           padding:5px 8px; text-align:left;">Ledger No</th>
-                <th style="width:35%; border-top:2px solid #000; border-bottom:1px solid #000;
-                           padding:5px 8px; text-align:left;">Sub Ledger</th>
-                <th style="width:14%; border-top:2px solid #000; border-bottom:1px solid #000;
-                           padding:5px 8px; text-align:right;">Debit Amount</th>
-                <th style="width:14%; border-top:2px solid #000; border-bottom:1px solid #000;
-                           padding:5px 8px; text-align:right;">Credit Amount</th>
-                <th style="width:14%; border-top:2px solid #000; border-bottom:1px solid #000;
-                           padding:5px 8px; text-align:right;">Balance</th>
+                <th class="text-left">Ledger Head</th>
+                <th class="text-left">Sub Ledger</th>
+                <th class="text-right">Debit Amount</th>
+                <th class="text-right">Credit Amount</th>
+                <th class="text-center">Balance</th>
             </tr>
 
-            <!-- ===================== DATA ROWS – GROUPING LOGIC ===================== -->
-
+            @* ══════════════════════════════════════════════
+               SUMMARY MODE
+               LedgerHead group header → MainLedger rows
+               LedgerNo shown inline: "90   BANK BALANCE"
+            ══════════════════════════════════════════════ *@
             @if (reportType == "Summary")
             {
-                // -------- SUMMARY MODE: LedgerHead + MainLedger (summed) --------
-                int rowCounter = 0;
                 foreach (var ledgerGroup in groupedByLedgerHead)
                 {
                     decimal lhDebit   = ledgerGroup.Sum(x => x.DebitAmount);
@@ -216,71 +277,50 @@
                         .OrderBy(g => decimal.TryParse(g.Key.LedgerNo, out var n) ? n : decimal.MaxValue)
                         .ToList();
 
-                    <!-- ========== LedgerHead header row (summary) ========== -->
-                    <tr style="background:#FFFFFF;">
-                        <td colspan="3"
-                            style="font-weight:bold; border-top:1px solid #ccc; padding:5px 8px;">
-                            @ledgerGroup.Key
-                        </td>
-                        <td style="font-weight:bold; text-align:right; padding:5px 8px;">
-                            @lhDebit.ToString("N2")
-                        </td>
-                        <td style="font-weight:bold; text-align:right; padding:5px 8px;">
-                            @lhCredit.ToString("N2")
-                        </td>
-                        <td style="font-weight:bold; text-align:right; padding:5px 8px;">
-                            @FormatBalance(lhBalance)
-                        </td>
+                    @* LedgerHead group header row *@
+                    <tr class="ledger-head-row">
+                        <td colspan="2">@ledgerGroup.Key</td>
+                        <td class="text-right">@lhDebit.ToString("N2")</td>
+                        <td class="text-right">@lhCredit.ToString("N2")</td>
+                        <td class="text-right">@FormatBalance(lhBalance)</td>
                     </tr>
 
-                    @foreach (var mainGroup in mainLedgerGroups)
+                    foreach (var mainGroup in mainLedgerGroups)
                     {
                         decimal mlDebit   = mainGroup.Sum(x => x.DebitAmount);
                         decimal mlCredit  = mainGroup.Sum(x => x.CreditAmount);
                         decimal mlBalance = mainGroup.Sum(x => x.Balance);
 
-                        string bgColor = (rowCounter % 2 == 0) ? "#D1D5DB" : "#FFFFFF";
-                        <!-- ========== MainLedger summary row (indented) ========== -->
-                        <tr style="background:@bgColor;">
+                        @* MainLedger summary row — LedgerNo inline in Sub Ledger cell *@
+                        <tr class="detail-row">
                             <td style="padding:3px 8px;"></td>
-                            <td style="padding:3px 8px;">@mainGroup.Key.LedgerNo</td>
-                            <td style="padding:3px 8px 3px 24px;">@mainGroup.Key.MainLedger</td>
-                            <td style="text-align:right; padding:3px 8px;">@mlDebit.ToString("N2")</td>
-                            <td style="text-align:right; padding:3px 8px;">@mlCredit.ToString("N2")</td>
-                            <td style="text-align:right; padding:3px 8px;">@FormatBalance(mlBalance)</td>
+                            <td style="padding:3px 8px;">
+                                <span style="display:inline-block; min-width:40px;">@mainGroup.Key.LedgerNo</span>
+                                @mainGroup.Key.MainLedger
+                            </td>
+                            <td class="text-right" style="padding:3px 8px;">@mlDebit.ToString("N2")</td>
+                            <td class="text-right" style="padding:3px 8px;">@mlCredit.ToString("N2")</td>
+                            <td class="text-right" style="padding:3px 8px;">@FormatBalance(mlBalance)</td>
                         </tr>
-                        rowCounter++;
                     }
-                       <!-- ========== LedgerHead full-width separator line ========== -->
-                    <tr>
-                        <td colspan="6"
-                            style="border-bottom:1.5px solid #000; padding:0; height:0; line-height:0; font-size:0;"></td>
-                    </tr>
+
+                    <tr class="group-separator"><td colspan="5"></td></tr>
                 }
 
-                <!-- ========== Grand Total row ========== -->
-                <tr style="background:#FFFFFF;">
-                    <td colspan="3"
-                        style="border-top:2px solid #000; border-bottom:2px solid #000;
-                               font-weight:bold; text-align:right; padding:5px 8px;">
-                        Grand Total :
-                    </td>
-                    <td style="border-top:2px solid #000; border-bottom:2px solid #000;
-                               font-weight:bold; text-align:right; padding:5px 8px;">
-                        @grandDebit.ToString("N2")
-                    </td>
-                    <td style="border-top:2px solid #000; border-bottom:2px solid #000;
-                               font-weight:bold; text-align:right; padding:5px 8px;">
-                        @grandCredit.ToString("N2")
-                    </td>
-                    <td style="border-top:2px solid #000; border-bottom:2px solid #000;"></td>
+                <tr class="grand-total">
+                    <td colspan="2" class="text-right">Grand Total :</td>
+                    <td class="text-right">@grandDebit.ToString("N2")</td>
+                    <td class="text-right">@grandCredit.ToString("N2")</td>
+                    <td></td>
                 </tr>
             }
 
+            @* ══════════════════════════════════════════════
+               SUBLEDGER MODE
+               LedgerHead → MainLedger sub-header → SubLedger rows
+            ══════════════════════════════════════════════ *@
             else if (reportType == "SubLedger")
             {
-                // -------- SUBLEDGER MODE: LedgerHead + MainLedger header + SubLedger rows --------
-                int rowCounter = 0;
                 foreach (var ledgerGroup in groupedByLedgerHead)
                 {
                     decimal lhDebit   = ledgerGroup.Sum(x => x.DebitAmount);
@@ -292,87 +332,65 @@
                         .OrderBy(g => decimal.TryParse(g.Key.LedgerNo, out var n) ? n : decimal.MaxValue)
                         .ToList();
 
-                    <!-- ========== LedgerHead header row ========== -->
-                    <tr style="background:#FFFFFF;">
-                        <td colspan="3"
-                            style="font-weight:bold; border-top:1px solid #ccc; padding:5px 8px;">
-                            @ledgerGroup.Key
-                        </td>
-                        <td style="font-weight:bold; text-align:right; padding:5px 8px;">
-                            @lhDebit.ToString("N2")
-                        </td>
-                        <td style="font-weight:bold; text-align:right; padding:5px 8px;">
-                            @lhCredit.ToString("N2")
-                        </td>
-                        <td style="font-weight:bold; text-align:right; padding:5px 8px;">
-                            @FormatBalance(lhBalance)
-                        </td>
+                    @* LedgerHead group header row *@
+                    <tr class="ledger-head-row">
+                        <td colspan="2">@ledgerGroup.Key</td>
+                        <td class="text-right">@lhDebit.ToString("N2")</td>
+                        <td class="text-right">@lhCredit.ToString("N2")</td>
+                        <td class="text-right">@FormatBalance(lhBalance)</td>
                     </tr>
 
-                    @foreach (var mainGroup in mainLedgerGroups)
+                    foreach (var mainGroup in mainLedgerGroups)
                     {
                         decimal mlDebit   = mainGroup.Sum(x => x.DebitAmount);
                         decimal mlCredit  = mainGroup.Sum(x => x.CreditAmount);
                         decimal mlBalance = mainGroup.Sum(x => x.Balance);
 
-                        <!-- ========== MainLedger sub‑header row (shows totals for the MainLedger group) ========== -->
-                        <tr style="background:#F5F5F5; font-weight:bold;">
+                        @* MainLedger sub-header — LedgerNo inline *@
+                        <tr class="main-ledger-row">
                             <td style="padding:3px 8px;"></td>
-                            <td style="padding:3px 8px;">@mainGroup.Key.LedgerNo</td>
-                            <td style="padding:3px 8px 3px 24px;">@mainGroup.Key.MainLedger</td>
-                            <td style="text-align:right; padding:3px 8px;">@mlDebit.ToString("N2")</td>
-                            <td style="text-align:right; padding:3px 8px;">@mlCredit.ToString("N2")</td>
-                            <td style="text-align:right; padding:3px 8px;">@FormatBalance(mlBalance)</td>
+                            <td style="padding:3px 8px;">
+                                <span style="display:inline-block; min-width:40px;">@mainGroup.Key.LedgerNo</span>
+                                @mainGroup.Key.MainLedger
+                            </td>
+                            <td class="text-right" style="padding:3px 8px;">@mlDebit.ToString("N2")</td>
+                            <td class="text-right" style="padding:3px 8px;">@mlCredit.ToString("N2")</td>
+                            <td class="text-right" style="padding:3px 8px;">@FormatBalance(mlBalance)</td>
                         </tr>
 
-                        @foreach (var row in mainGroup)
+                        foreach (var row in mainGroup)
                         {
                             if (string.IsNullOrEmpty(row.SubLedger) || row.SubLedger == "-")
                                 continue;
 
-                            string bgColor = (rowCounter % 2 == 0) ? "#D1D5DB" : "#FFFFFF";
-                            <!-- ========== SubLedger detail row ========== -->
-                            <tr style="background:@bgColor;">
-                                <td style="padding:2px 8px;"></td>
-                                <td style="padding:2px 8px;"></td>
-                                <td style="padding:2px 8px 2px 40px;">@FormatSubLedgerDisplay(row)</td>
-                                <td style="text-align:right; padding:2px 8px;">@row.DebitAmount.ToString("N2")</td>
-                                <td style="text-align:right; padding:2px 8px;">@row.CreditAmount.ToString("N2")</td>
-                                <td style="text-align:right; padding:2px 8px;">@FormatBalance(row.Balance)</td>
+                            @* SubLedger detail row *@
+                            <tr class="detail-row">
+                                <td></td>
+                                <td style="padding:2px 8px 2px 56px;">@FormatSubLedgerDisplay(row)</td>
+                                <td class="text-right">@row.DebitAmount.ToString("N2")</td>
+                                <td class="text-right">@row.CreditAmount.ToString("N2")</td>
+                                <td class="text-right">@FormatBalance(row.Balance)</td>
                             </tr>
-                            rowCounter++;
                         }
                     }
-                       <!-- ========== LedgerHead full-width separator line ========== -->
-                    <tr>
-                        <td colspan="6"
-                            style="border-bottom:1.5px solid #000; padding:0; height:0; line-height:0; font-size:0;"></td>
-                    </tr>
+
+                    <tr class="group-separator"><td colspan="5"></td></tr>
                 }
 
-                <!-- ========== Grand Total row ========== -->
-                <tr style="background:#FFFFFF;">
-                    <td colspan="3"
-                        style="border-top:2px solid #000; border-bottom:2px solid #000;
-                               font-weight:bold; text-align:right; padding:5px 8px;">
-                        Grand Total :
-                    </td>
-                    <td style="border-top:2px solid #000; border-bottom:2px solid #000;
-                               font-weight:bold; text-align:right; padding:5px 8px;">
-                        @grandDebit.ToString("N2")
-                    </td>
-                    <td style="border-top:2px solid #000; border-bottom:2px solid #000;
-                               font-weight:bold; text-align:right; padding:5px 8px;">
-                        @grandCredit.ToString("N2")
-                    </td>
-                    <td style="border-top:2px solid #000; border-bottom:2px solid #000;"></td>
+                <tr class="grand-total">
+                    <td colspan="2" class="text-right">Grand Total :</td>
+                    <td class="text-right">@grandDebit.ToString("N2")</td>
+                    <td class="text-right">@grandCredit.ToString("N2")</td>
+                    <td></td>
                 </tr>
             }
 
+            @* ══════════════════════════════════════════════
+               DETAIL MODE
+               LedgerHead → MainLedger sub-header → every row
+            ══════════════════════════════════════════════ *@
             else if (reportType == "Detail")
             {
-                // -------- DETAIL MODE: LedgerHead + MainLedger header + every individual row --------
-                int rowCounter = 0;
                 foreach (var ledgerGroup in groupedByLedgerHead)
                 {
                     decimal lhDebit   = ledgerGroup.Sum(x => x.DebitAmount);
@@ -384,111 +402,79 @@
                         .OrderBy(g => decimal.TryParse(g.Key.LedgerNo, out var n) ? n : decimal.MaxValue)
                         .ToList();
 
-                    <!-- ========== LedgerHead header row ========== -->
-                    <tr style="background:#FFFFFF;">
-                        <td colspan="3"
-                            style="font-weight:bold; border-top:1px solid #ccc; padding:5px 8px;">
-                            @ledgerGroup.Key
-                        </td>
-                        <td style="font-weight:bold; text-align:right; padding:5px 8px;">
-                            @lhDebit.ToString("N2")
-                        </td>
-                        <td style="font-weight:bold; text-align:right; padding:5px 8px;">
-                            @lhCredit.ToString("N2")
-                        </td>
-                        <td style="font-weight:bold; text-align:right; padding:5px 8px;">
-                            @FormatBalance(lhBalance)
-                        </td>
+                    @* LedgerHead group header row *@
+                    <tr class="ledger-head-row">
+                        <td colspan="2">@ledgerGroup.Key</td>
+                        <td class="text-right">@lhDebit.ToString("N2")</td>
+                        <td class="text-right">@lhCredit.ToString("N2")</td>
+                        <td class="text-right">@FormatBalance(lhBalance)</td>
                     </tr>
 
-                    @foreach (var mainGroup in mainLedgerGroups)
+                    foreach (var mainGroup in mainLedgerGroups)
                     {
                         decimal mlDebit   = mainGroup.Sum(x => x.DebitAmount);
                         decimal mlCredit  = mainGroup.Sum(x => x.CreditAmount);
                         decimal mlBalance = mainGroup.Sum(x => x.Balance);
 
-                        <!-- ========== MainLedger sub‑header row (summarizes the group) ========== -->
-                        <tr style="background:#F5F5F5; font-weight:bold;">
+                        @* MainLedger sub-header — LedgerNo inline *@
+                        <tr class="main-ledger-row">
                             <td style="padding:3px 8px;"></td>
-                            <td style="padding:3px 8px;">@mainGroup.Key.LedgerNo</td>
-                            <td style="padding:3px 8px 3px 24px;">@mainGroup.Key.MainLedger</td>
-                            <td style="text-align:right; padding:3px 8px;">@mlDebit.ToString("N2")</td>
-                            <td style="text-align:right; padding:3px 8px;">@mlCredit.ToString("N2")</td>
-                            <td style="text-align:right; padding:3px 8px;">@FormatBalance(mlBalance)</td>
+                            <td style="padding:3px 8px;">
+                                <span style="display:inline-block; min-width:40px;">@mainGroup.Key.LedgerNo</span>
+                                @mainGroup.Key.MainLedger
+                            </td>
+                            <td class="text-right" style="padding:3px 8px;">@mlDebit.ToString("N2")</td>
+                            <td class="text-right" style="padding:3px 8px;">@mlCredit.ToString("N2")</td>
+                            <td class="text-right" style="padding:3px 8px;">@FormatBalance(mlBalance)</td>
                         </tr>
 
-                        @foreach (var row in mainGroup)
+                        foreach (var row in mainGroup)
                         {
-                            string bgColor = (rowCounter % 2 == 0) ? "#D1D5DB" : "#FFFFFF";
-                            <!-- ========== Individual transaction detail row ========== -->
-                            <tr style="background:@bgColor;">
-                                <td style="padding:2px 8px;"></td>
-                                <td style="padding:2px 8px;"></td>
-                                <td style="padding:2px 8px 2px 40px;">
+                            @* Individual transaction detail row *@
+                            <tr class="detail-row">
+                                <td></td>
+                                <td style="padding:2px 8px 2px 56px;">
                                     @row.SubLedger
                                     @if (!string.IsNullOrEmpty(row.SubLedger1) && row.SubLedger1 != "-")
                                     {
                                         <span style="color:#555;"> — @row.SubLedger1</span>
                                     }
                                 </td>
-                                <td style="text-align:right; padding:2px 8px;">@row.DebitAmount.ToString("N2")</td>
-                                <td style="text-align:right; padding:2px 8px;">@row.CreditAmount.ToString("N2")</td>
-                                <td style="text-align:right; padding:2px 8px;">@FormatBalance(row.Balance)</td>
+                                <td class="text-right">@row.DebitAmount.ToString("N2")</td>
+                                <td class="text-right">@row.CreditAmount.ToString("N2")</td>
+                                <td class="text-right">@FormatBalance(row.Balance)</td>
                             </tr>
-                            rowCounter++;
                         }
                     }
-                       <!-- ========== LedgerHead full-width separator line ========== -->
-                    <tr>
-                        <td colspan="6"
-                            style="border-bottom:1.5px solid #000; padding:0; height:0; line-height:0; font-size:0;"></td>
-                    </tr>
+
+                    <tr class="group-separator"><td colspan="5"></td></tr>
                 }
 
-                <!-- ========== Grand Total row ========== -->
-                <tr style="background:#FFFFFF;">
-                    <td colspan="3"
-                        style="border-top:2px solid #000; border-bottom:2px solid #000;
-                               font-weight:bold; text-align:right; padding:5px 8px;">
-                        Grand Total :
-                    </td>
-                    <td style="border-top:2px solid #000; border-bottom:2px solid #000;
-                               font-weight:bold; text-align:right; padding:5px 8px;">
-                        @grandDebit.ToString("N2")
-                    </td>
-                    <td style="border-top:2px solid #000; border-bottom:2px solid #000;
-                               font-weight:bold; text-align:right; padding:5px 8px;">
-                        @grandCredit.ToString("N2")
-                    </td>
-                    <td style="border-top:2px solid #000; border-bottom:2px solid #000;"></td>
+                <tr class="grand-total">
+                    <td colspan="2" class="text-right">Grand Total :</td>
+                    <td class="text-right">@grandDebit.ToString("N2")</td>
+                    <td class="text-right">@grandCredit.ToString("N2")</td>
+                    <td></td>
                 </tr>
             }
 
-            <!-- ========== CLOSING BALANCE ROWS (flat, inside main table) ========== -->
+            @* ── CLOSING BALANCE ── *@
             @if (balance != null)
             {
-                <tr><td colspan="6" style="height:6px;"></td></tr>
+                <tr class="meta-spacer"><td colspan="5"></td></tr>
                 <tr>
-                    <td colspan="2"
-                        style="border:1px solid #000; background:#f0f0f0;
-                               text-align:right; padding:6px 12px; font-weight:bold;">
+                    <td colspan="2" style="border:1px solid #000; background:#f0f0f0; text-align:left; padding:6px; font-weight:bold;">
                         Closing Cash Balance :
                     </td>
-                    <td colspan="4"
-                        style="border:1px solid #000;
-                               text-align:right; padding:6px 12px;">
+                    <td colspan="3" style="border:1px solid #000; text-align:right; padding:6px;">
                         @balance.ClosingCashBalance.ToString("N2")
                     </td>
                 </tr>
                 <tr>
-                    <td colspan="2"
-                        style="border:1px solid #000; background:#f0f0f0;
-                               text-align:right; padding:6px 12px; font-weight:bold;">
+                    <td colspan="2" style="border:1px solid #000; background:#f0f0f0; text-align:left; padding:6px; font-weight:bold;">
                         Closing Bank Balance :
                     </td>
-                    <td colspan="4"
-                        style="border:1px solid #000;
-                               text-align:right; padding:6px 12px;">
+                    <td colspan="3" style="border:1px solid #000; text-align:right; padding:6px;">
                         @balance.ClosingBankBalance.ToString("N2")
                     </td>
                 </tr>
