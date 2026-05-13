@@ -3,7 +3,7 @@
 //  "profiles": {
 //    "http": {
 //      "commandName": "Project",
-//      "dotnetRunMessages": true,
+//      "dotnetRunmessages": true,
 //      "launchBrowser": true,
 //      "launchUrl": "swagger",
 //      "applicationUrl": "https://localhost:7212",
@@ -13,7 +13,7 @@
 //    },
 //    "https": {
 //      "commandName": "Project",
-//      "dotnetRunMessages": true,
+//      "dotnetRunmessages": true,
 //      "launchBrowser": true,
 //      "launchUrl": "swagger",
 //      "applicationUrl": "http://localhost:5106",
@@ -33,7 +33,7 @@
   "profiles": {
     "http": {
       "commandName": "Project",
-      "dotnetRunMessages": true,
+      "dotnetRunmessages": true,
       "launchBrowser": true,
       "launchUrl": "swagger",
       "applicationUrl": "https://localhost:7212;http://localhost:5106",
@@ -43,7 +43,7 @@
     },
     "Preview": {
       "commandName": "Project",
-      "dotnetRunMessages": true,
+      "dotnetRunmessages": true,
       "launchBrowser": true,
       "launchUrl": "preview/member-report",
       "applicationUrl": "https://localhost:7212;http://localhost:5106",

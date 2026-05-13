@@ -1,35 +1,33 @@
-using Microsoft.AspNetCore.Mvc;
 using System.Text.Json.Serialization;
 
 namespace NexgenCosysReport.Dtos.RequestDtos.Common
 {
     public class GeneralResponse<T>
     {
-        public bool IsValid { get; set; }
-        public Int32 StatusCode { get; set; }
-        public string Message { get; set; } = "";
+        public bool isValid { get; set; }
+        public Int32 statusCode { get; set; }
+        public string message { get; set; } = "";
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public T? Data { get; set; }
-      
+        public T? data { get; set; }
         //public Pagination? Pagination { get; set; }
     }
 
     public class Pagination
     {
-        public int? CurrentPage { get; set; }     // ? PascalCase
-        public int? TotalPages { get; set; }
-        public int? PageSize { get; set; }
-        public int? TotalRecord { get; set; }
-        public bool? HasNextPage { get; set; }    // ? PascalCase
-        public bool? HasPreviousPage { get; set; }
+        public int? currentPage { get; set; }     // ? PascalCase
+        public int? totalPages { get; set; }
+        public int? pageSize { get; set; }
+        public int? totalRecord { get; set; }
+        public bool? hasNextPage { get; set; }    // ? PascalCase
+        public bool? hasPreviousPage { get; set; }
     }
 
     public class ReportResponseDtos
     {
-        public string? PdfData { get; set; }
-        public string? ReportName { get; set; }
+        public string? pdfData { get; set; }
+        public string? reportName { get; set; }
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-        public Pagination? Pagination { get; set; }
+        public Pagination? pagination { get; set; }
 
     }
 

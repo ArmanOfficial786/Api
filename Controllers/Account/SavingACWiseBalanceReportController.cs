@@ -50,9 +50,9 @@ namespace NexgenCosysReport.Controllers.Account
             {
                 if (request == null || !ModelState.IsValid)
                 {
-                    response.IsValid = false;
-                    response.StatusCode = StatusCodes.Status400BadRequest;
-                    response.Message = "Invalid request data.";
+                    response.isValid = false;
+                    response.statusCode = StatusCodes.Status400BadRequest;
+                    response.message = "Invalid request data.";
                     return BadRequest(response);
                 }
 
@@ -85,9 +85,9 @@ namespace NexgenCosysReport.Controllers.Account
 
                 if (!spData.Any())
                 {
-                    response.IsValid = false;
-                    response.StatusCode = 404;
-                    response.Message = "No data found";
+                    response.isValid = false;
+                    response.statusCode = 404;
+                    response.message = "No data found";
                     return NotFound(response);
                 }
 
@@ -123,24 +123,32 @@ namespace NexgenCosysReport.Controllers.Account
 
                     var totalPages = JsReportService.CountPdfPages(pdfBytes);
 
-                    response.IsValid = true;
-                    response.StatusCode = 200;
-                    response.Message = "Report generated successfully";
-                    response.Data = new ReportResponseDtos
-                    {
-                        PdfData = Convert.ToBase64String(pdfBytes),
-                        ReportName = reportName,
-                        Pagination = new Pagination
-                        {
-                            CurrentPage = 1,
-                            TotalPages = totalPages,
-                            TotalRecord = spData.Count(),
-                            PageSize = 1,
-                            HasNextPage = totalPages > 1,
-                            HasPreviousPage = false
-                        }
-                    };
-                    return Ok(response);
+                    Response.Headers.Append("X-isValid", "true");
+                    Response.Headers.Append("X-statusCode", "200");
+                    Response.Headers.Append("X-message", Uri.EscapeDataString("Report generated successfully"));
+                    Response.Headers.Append("X-ReportName", reportName);
+                    Response.Headers.Append("X-TotalPages", totalPages.ToString());
+                    Response.Headers.Append("X-CurrentPage", "1");
+                    return File(pdfBytes, "application/pdf", $"{reportName}.pdf");
+
+                    //response.isValid = true;
+                    //response.statusCode = 200;
+                    //response.message = "Report generated successfully";
+                    //response.Data = new ReportResponseDtos
+                    //{
+                    //    PdfData = Convert.ToBase64String(pdfBytes),
+                    //    ReportName = reportName,
+                    //    Pagination = new Pagination
+                    //    {
+                    //        CurrentPage = 1,
+                    //        TotalPages = totalPages,
+                    //        TotalRecord = spData.Count(),
+                    //        PageSize = 1,
+                    //        HasNextPage = totalPages > 1,
+                    //        HasPreviousPage = false
+                    //    }
+                    //};
+                    //return Ok(response);
                 }
 
 

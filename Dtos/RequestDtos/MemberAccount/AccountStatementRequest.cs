@@ -1,34 +1,32 @@
-using Microsoft.CodeAnalysis.Operations;
-
 namespace NexgenCosysReport.Dtos.RequestDtos.MemberAccount
 {
     // -- Request ---------------------------------------------------
     public class AccountStatementRequest
     {
-       
+
         public string? FromDate { get; set; } = string.Empty;
         public string? ToDate { get; set; } = string.Empty;
         public string? BranchSelected { get; set; }
         public string? BranchName { get; set; }
         public bool SameCompanyName { get; set; }
-        public string? ReportType { get; set; } 
-        public string? TransactionType { get; set; } 
-        public string? OrderBy { get; set; } 
+        public string? ReportType { get; set; }
+        public string? TransactionType { get; set; }
+        public string? OrderBy { get; set; }
     }
 
     public class AccountStatementModelResponse
     {
-        public string? LedgerNo { get; set; }  
-        public string? LedgerHead { get; set; }   
-        public string? MainLedger { get; set; }   
-        public string? SubLedger { get; set; }   
-        public string? SubLedger1 { get; set; }   
+        public string? LedgerNo { get; set; }
+        public string? LedgerHead { get; set; }
+        public string? MainLedger { get; set; }
+        public string? SubLedger { get; set; }
+        public string? SubLedger1 { get; set; }
         public decimal DebitAmount { get; set; }
         public decimal CreditAmount { get; set; }
-        public decimal Balance { get; set; }   
+        public decimal Balance { get; set; }
     }
 
-   
+
     public class CashBankBalanceModelResponse
     {
         public decimal OpeningCashBalance { get; set; }

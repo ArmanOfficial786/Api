@@ -44,11 +44,11 @@
 //            try
 //            {
 //                var response = new GeneralResponse<ReportResponseDtos>();
-//                if (request == null || !ModelState.IsValid)
+//                if (request == null || !ModelState.isValid)
 //                {
-//                    response.IsValid = false;
-//                    response.StatusCode = 400;
-//                    response.Message = "Invalid request";
+//                    response.isValid = false;
+//                    response.statusCode = 400;
+//                    response.message = "Invalid request";
 //                    return BadRequest(response);
 //                }
 //                    //return BadRequest(new { success = false, message = "Invalid request" });
@@ -193,9 +193,9 @@
 //                    //    }
 //                    //});
 
-//                    response.IsValid = true;
-//                    response.StatusCode = 200;
-//                    response.Message = "Success";
+//                    response.isValid = true;
+//                    response.statusCode = 200;
+//                    response.message = "Success";
 //                    response.Data = new ReportResponseDtos
 //                    {
 //                        PdfData = Convert.ToBase64String(pdfBytes),
@@ -222,11 +222,11 @@
 //            catch (Exception ex)
 //            {
 
-//                return StatusCode(500, new
+//                return statusCode(500, new
 //                {
 //                    success = false,
 //                    message = "An error occurred.",
-//                    error = ex.Message
+//                    error = ex.message
 //                });
 //            }
 //        }
@@ -244,9 +244,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.Member;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Member;
+using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Text.Json;
 
@@ -382,21 +384,25 @@ namespace NexgenCosysReport.Controllers.Member
                 {
                     var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
                  htmlContent, "PDF", reportKey);
-                    var pagination = new
+                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
+                    var pagination = new Pagination
                     {
-                        currentPage = request.currentPage,
-                        totalPages = 1,
-                        totalRecord = memberIdCardData.Count,
-                        pageSize = request.pageSize,
-                        hasNextPage = false,
-                        hasPreviousPage = false,
+                        currentPage = 1,
+                        totalPages = totalPages,
+                        totalRecord = memberIdCardData.Count(),
+                        pageSize = 1,
+                        hasNextPage = totalPages > 1,
+                        hasPreviousPage = false
                     };
 
-                    // ? Expose X-Pagination so frontend fetch() can read it
-                    Response.Headers.Append(
-                        "X-Pagination",
-                        JsonSerializer.Serialize(pagination));
 
+                    Response.Headers.Append("X-isValid", "true");
+                    Response.Headers.Append("X-statusCode", "200");
+                    Response.Headers.Append("X-message", Uri.EscapeDataString("Testing Interceptor"));
+
+
+                    Response.Headers.Append("X-Pagination",
+                      JsonSerializer.Serialize(pagination));
                     // ? Expose the header to fetch() on the frontend (CORS)
                     Response.Headers.Append(
                         "Access-Control-Expose-Headers",

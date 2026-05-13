@@ -55,9 +55,9 @@ namespace NexgenCosysReport.Controllers.MembeAccount
 
                 if (request == null || !ModelState.IsValid)
                 {
-                    response.IsValid = false;
-                    response.StatusCode = 400;
-                    response.Message = "Invalid request";
+                    response.isValid = false;
+                    response.statusCode = 400;
+                    response.message = "Invalid request";
                     return BadRequest(response);
                 }
 
@@ -103,9 +103,9 @@ namespace NexgenCosysReport.Controllers.MembeAccount
 
                 if (!statementData.Any())
                 {
-                    response.IsValid = false;
-                    response.StatusCode = 404;
-                    response.Message = "No data found";
+                    response.isValid = false;
+                    response.statusCode = 404;
+                    response.message = "No data found";
                     return NotFound(response);
                 }
 
@@ -152,21 +152,21 @@ namespace NexgenCosysReport.Controllers.MembeAccount
                     var pdfBytes = await Task.Run(() =>
                         _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey));
                     var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    response.IsValid = true;
-                    response.StatusCode = 200;
-                    response.Message = "Report generated successfully";
-                    response.Data = new ReportResponseDtos
+                    response.isValid = true;
+                    response.statusCode = 200;
+                    response.message = "Report generated successfully";
+                    response.data = new ReportResponseDtos
                     {
-                        PdfData = Convert.ToBase64String(pdfBytes),
-                        ReportName = reportName,
-                        Pagination = new Pagination
+                        pdfData = Convert.ToBase64String(pdfBytes),
+                        reportName = reportName,
+                        pagination = new Pagination
                         {
-                            CurrentPage = 1,
-                            TotalPages = totalPages,
-                            TotalRecord = statementData.Count(),
-                            PageSize = 1,
-                            HasNextPage = totalPages > 1,
-                            HasPreviousPage = false
+                            currentPage = 1,
+                            totalPages = totalPages,
+                            totalRecord = statementData.Count(),
+                            pageSize = 1,
+                            hasNextPage = totalPages > 1,
+                            hasPreviousPage = false
                         }
                     };
                     return Ok(response);

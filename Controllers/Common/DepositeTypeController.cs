@@ -1,7 +1,5 @@
-using NexgenCosysReport.Dtos.RequestDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 
 namespace NexgenCosysReport.Controllers.Common
@@ -26,16 +24,16 @@ namespace NexgenCosysReport.Controllers.Common
             var depositeType = await _depositeTypeService.GetAllDepositeType();
             if (depositeType == null)
             {
-                response.IsValid = false;
-                response.StatusCode = StatusCodes.Status404NotFound;
-                response.Message = "No Deposite Type Found";
+                response.isValid = false;
+                response.statusCode = StatusCodes.Status404NotFound;
+                response.message = "No Deposite Type Found";
                 return NotFound(response);
             }
 
-            response.IsValid = true;
-            response.StatusCode = StatusCodes.Status200OK;
-            response.Message = "Success";
-            response.Data = depositeType;
+            response.isValid = true;
+            response.statusCode = StatusCodes.Status200OK;
+            response.message = "Success";
+            response.data = depositeType;
             return Ok(response);
         }
     }
