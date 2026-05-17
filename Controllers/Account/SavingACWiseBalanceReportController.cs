@@ -13,8 +13,9 @@ using NexgenCosysReport.Utils.Report;
 
 namespace NexgenCosysReport.Controllers.Account
 {
-    [Route("api/[controller]")]
     [ApiController]
+    [Route("api/[controller]")]
+
     public class SavingACWiseBalanceReportController : ControllerBase
     {
         private readonly IJsReportService _jsReportService;
@@ -40,7 +41,7 @@ namespace NexgenCosysReport.Controllers.Account
             _reportSettings = reportSettings;
             _logger = logger;
         }
-        [HttpPost("SavingACWiseBalanceReport")]
+        [HttpPost]
         public async Task<ActionResult> SavingAcWiseReport([FromBody] SavingAcWiseBalanceRequest request, [FromQuery] string format = "VIEW")
         {
             var reportName = "SavingACWiseBalanceReport";

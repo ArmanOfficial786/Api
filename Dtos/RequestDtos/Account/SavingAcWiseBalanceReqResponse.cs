@@ -8,7 +8,7 @@
     {
         public string TillDate { get; set; } = string.Empty;
 
-        public long DepositId { get; set; } = -1;
+        public long DepositId { get; set; } //= -1;
 
         public string? BranchSelected { get; set; }
         public string? BranchName { get; set; }
@@ -16,11 +16,11 @@
 
         public string OrderBy { get; set; } = "-1";
 
-        public long CollectorId { get; set; } = -1;
+        public long CollectorId { get; set; } //= -1;
 
-        public long MemberGroupId { get; set; } = -1;
+        public long MemberGroupId { get; set; } //= -1;
 
-        public string CollectionCenterId { get; set; } = "-1";
+        public long CollectionCenterId { get; set; }// = -1;
 
         public bool EnableCollectionCenter { get; set; }
 

@@ -1,26 +1,28 @@
 using jsreport.AspNetCore;
 using jsreport.Binary;
 using jsreport.Local;
+using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Services.CommonService;
-using NexgenCosysReport.Services.ReportService;
-using Microsoft.EntityFrameworkCore;
+using NexgenCosysReport.Inteface.ServiceInterface.Account;
+using NexgenCosysReport.Inteface.ServiceInterface.Common;
+using NexgenCosysReport.Inteface.ServiceInterface.Member;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
+using NexgenCosysReport.Repository.Account;
 using NexgenCosysReport.Repository.Common;
 using NexgenCosysReport.Repository.Member;
 using NexgenCosysReport.Repository.MemberAccount;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
-using NexgenCosysReport.Inteface.ServiceInterface.Member;
-using NexgenCosysReport.Inteface.ServiceInterface.Account;
-using NexgenCosysReport.Repository.Account;
+using NexgenCosysReport.Services.CommonService;
+using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Report;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHttpContextAccessor();
 
 
 // jsreport
@@ -39,7 +41,13 @@ builder.Services.AddCors(options =>
         policy.WithOrigins("http://localhost:3000", "http://localhost:5106")
               .AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials();
+              .AllowCredentials()
+              .WithExposedHeaders(
+                "X-Pagination",
+                "X-Message",
+                "X-IsValid",
+                "X-StatusCode",
+                "Content-Disposition");
     });
 });
 
@@ -60,6 +68,7 @@ Console.WriteLine($"[Startup] WebRootPath = '{settingsCheck?.WebRootPath}'");
 
 // Services
 builder.Services.AddMemoryCache();
+builder.Services.AddScoped<CustomHeaderResponse>();
 builder.Services.AddSingleton<IJsReportService, JsReportService>();
 builder.Services.AddScoped<IMemberDetail, MemberRegistrationDetailHandler>();
 builder.Services.AddScoped<IMemberIdCard, MemberIdCardRepository>();
@@ -72,6 +81,7 @@ builder.Services.AddScoped<ICollectionCenter, CollectionCenterRepository>();
 builder.Services.AddScoped<IMemberGroup, MemberGroupRepository>();
 builder.Services.AddScoped<ICommonHeaderRepository, CommonHeaderRepository>();
 builder.Services.AddScoped<ISavingAcWiseBalance, SavingAcWiseBalanceRepository>();
+builder.Services.AddScoped<IComCalendar, CalendarRepository>();
 
 var app = builder.Build();
 
