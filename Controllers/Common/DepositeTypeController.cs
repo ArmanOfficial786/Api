@@ -18,7 +18,7 @@ namespace NexgenCosysReport.Controllers.Common
         }
 
         [HttpGet("getDepositeType")]
-        public async Task<ActionResult> GetAllDepositeType()
+        public async Task<ActionResult<GeneralResponse<List<DepositTypeResponse>>>> GetAllDepositeType()
         {
             var response = new GeneralResponse<List<DepositTypeResponse>>();
             var depositeType = await _depositeTypeService.GetAllDepositeType();
@@ -32,7 +32,6 @@ namespace NexgenCosysReport.Controllers.Common
 
             response.isValid = true;
             response.statusCode = StatusCodes.Status200OK;
-            response.message = "Success";
             response.data = depositeType;
             return Ok(response);
         }

@@ -34,7 +34,6 @@ namespace NexgenCosysReport.Controllers.Common
                 }
                 response.isValid = true;
                 response.statusCode = 200;
-                response.message = "Success";
                 response.data = result;
 
                 return Ok(response);

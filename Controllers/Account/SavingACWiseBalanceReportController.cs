@@ -57,6 +57,15 @@ namespace NexgenCosysReport.Controllers.Account
                     return BadRequest(response);
                 }
 
+                // ── Normalize filters: 0 or negative → -1 (all) ──────────────────────
+                request.DepositId = request.DepositId <= 0 ? -1 : request.DepositId;
+                request.CollectorId = request.CollectorId <= 0 ? -1 : request.CollectorId;
+                request.MemberGroupId = request.MemberGroupId <= 0 ? -1 : request.MemberGroupId;
+                request.CollectionCenterId = request.CollectionCenterId <= 0 ? -1 : request.CollectionCenterId;
+                if (request.BranchSelected == "0") request.BranchSelected = "-1";
+
+
+
 
                 var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 

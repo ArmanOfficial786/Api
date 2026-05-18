@@ -34,10 +34,9 @@ namespace NexgenCosysReport.Controllers.Common
                     return BadRequest(response);
                 }
 
-                //return Ok(new { success = true, data = branches });
+
                 response.isValid = true;
                 response.statusCode = 200;
-                response.message = "Success";
                 response.data = branches;
                 return Ok(response);
             }

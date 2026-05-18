@@ -15,10 +15,10 @@ namespace NexgenCosysReport.Controllers.Common
             _context = appDbContext;
         }
 
-        [HttpPost("getCollector")]
-        public async Task<ActionResult> GetCollector([FromQuery] long userId)
+        [HttpGet("getCollector")]
+        public async Task<ActionResult<GeneralResponse<List<CollectorResponse>>>> GetCollector([FromQuery] long userId)
         {
-            var response = new GeneralResponse<List<CollectorResponse>>(); // ? List<> added
+            var response = new GeneralResponse<List<CollectorResponse>>();
 
             if (userId <= 0)
             {
@@ -46,7 +46,6 @@ namespace NexgenCosysReport.Controllers.Common
 
             response.isValid = true;
             response.statusCode = StatusCodes.Status200OK;
-            response.message = "Success";
             response.data = collectors;
             return Ok(response);
         }
