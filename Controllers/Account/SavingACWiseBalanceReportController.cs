@@ -9,6 +9,7 @@ using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
+using System.Text.Json;
 
 
 namespace NexgenCosysReport.Controllers.Account
@@ -21,6 +22,7 @@ namespace NexgenCosysReport.Controllers.Account
         private readonly IJsReportService _jsReportService;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly ISavingAcWiseBalance _savingAcWiseBalanceRepository;
+        private readonly CustomHeaderResponse _headerResponse;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly IOptions<ReportSettings> _reportSettings;
         private readonly ILogger<SavingACWiseBalanceReportController> _logger;
@@ -32,7 +34,7 @@ namespace NexgenCosysReport.Controllers.Account
         //private static readonly PageSizeSetting _pageSetting =
         //        PageSizeSetting.A3Landscape;
 
-        public SavingACWiseBalanceReportController(IJsReportService jsReportService, ICommonHeaderRepository commonHeaderRepository, ISavingAcWiseBalance savingAcWiseBalanceRepository, IWebHostEnvironment webHostEnvironment, IOptions<ReportSettings> reportSettings, ILogger<SavingACWiseBalanceReportController> logger)
+        public SavingACWiseBalanceReportController(IJsReportService jsReportService, ICommonHeaderRepository commonHeaderRepository, ISavingAcWiseBalance savingAcWiseBalanceRepository, IWebHostEnvironment webHostEnvironment, IOptions<ReportSettings> reportSettings, ILogger<SavingACWiseBalanceReportController> logger, CustomHeaderResponse headerResponse)
         {
             _jsReportService = jsReportService;
             _commonHeaderRepository = commonHeaderRepository;
@@ -40,6 +42,7 @@ namespace NexgenCosysReport.Controllers.Account
             _webHostEnvironment = webHostEnvironment;
             _reportSettings = reportSettings;
             _logger = logger;
+            _headerResponse = headerResponse;
         }
         [HttpPost]
         public async Task<ActionResult> SavingAcWiseReport([FromBody] SavingAcWiseBalanceRequest request, [FromQuery] string format = "VIEW")
@@ -101,6 +104,17 @@ namespace NexgenCosysReport.Controllers.Account
                     return NotFound(response);
                 }
 
+                if (spData.Count > 0)
+                {
+                    // Multiply to reach target row count (e.g., 1500)
+                    int targetRows = 50000;
+                    int repeatCount = (int)Math.Ceiling((double)targetRows / spData.Count);
+                    spData = Enumerable.Repeat(spData, repeatCount)
+                                       .SelectMany(x => x)
+                                       .Take(targetRows)
+                                       .ToList();
+                }
+
                 var webRoot = ReportUtils.GetWebRootPath(
                      _webHostEnvironment, _reportSettings);
 
@@ -131,37 +145,41 @@ namespace NexgenCosysReport.Controllers.Account
                     var pdfBytes = await Task.Run(() =>
                         _jsReportService.ExportReportToFormatAsync(renderRazorpage, "PDF", reportKey, _pageSetting));
 
+
+                    // Log PDF size
+                    var fileSizeBytes = pdfBytes.Length;
+                    var fileSizeKB = fileSizeBytes / 1024.0;
+                    var fileSizeMB = fileSizeKB / 1024.0;
+
+                    _logger.LogInformation(
+                        "Generated PDF Size: {Bytes} bytes ({KB:F2} KB, {MB:F2} MB)",
+                        fileSizeBytes,
+                        fileSizeKB,
+                        fileSizeMB
+                    );
+
                     var totalPages = JsReportService.CountPdfPages(pdfBytes);
+                    var pagination = new Pagination
+                    {
+                        currentPage = 1,
+                        totalPages = totalPages,
+                        totalRecord = spData.Count(),
+                        pageSize = 1,
+                        hasNextPage = totalPages > 1,
+                        hasPreviousPage = false
+                    };
+                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
+                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
 
-                    Response.Headers.Append("X-isValid", "true");
-                    Response.Headers.Append("X-statusCode", "200");
-                    Response.Headers.Append("X-message", Uri.EscapeDataString("Report generated successfully"));
-                    Response.Headers.Append("X-ReportName", reportName);
-                    Response.Headers.Append("X-TotalPages", totalPages.ToString());
-                    Response.Headers.Append("X-CurrentPage", "1");
-                    return File(pdfBytes, "application/pdf", $"{reportName}.pdf");
+                    Response.Headers.Append(
+                        "Content-Disposition",
+                        "inline; filename=\"MemberIdCardReport.pdf\"");
 
-                    //response.isValid = true;
-                    //response.statusCode = 200;
-                    //response.message = "Report generated successfully";
-                    //response.Data = new ReportResponseDtos
-                    //{
-                    //    PdfData = Convert.ToBase64String(pdfBytes),
-                    //    ReportName = reportName,
-                    //    Pagination = new Pagination
-                    //    {
-                    //        CurrentPage = 1,
-                    //        TotalPages = totalPages,
-                    //        TotalRecord = spData.Count(),
-                    //        PageSize = 1,
-                    //        HasNextPage = totalPages > 1,
-                    //        HasPreviousPage = false
-                    //    }
-                    //};
-                    //return Ok(response);
+                    return new FileContentResult(pdfBytes, "application/pdf");
+
+
+
                 }
-
-
 
                 return await ReportExportHelper.ExportFromCacheAsync(
                     reportKey, upperFormat,

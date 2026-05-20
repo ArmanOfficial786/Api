@@ -1,8 +1,14 @@
+ï»¿using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using ITextCompression = iText.Kernel.Pdf.CompressionConstants;
+using ITextPdfDocument = iText.Kernel.Pdf.PdfDocument;
+using ITextPdfName = iText.Kernel.Pdf.PdfName;
+using ITextPdfReader = iText.Kernel.Pdf.PdfReader;
+using ITextPdfWriter = iText.Kernel.Pdf.PdfWriter;
+using ITextWriterProps = iText.Kernel.Pdf.WriterProperties;
 
 namespace NexgenCosysReport.Utils.Report
 {
@@ -61,7 +67,7 @@ namespace NexgenCosysReport.Utils.Report
             ILogger logger,
             int maxWidth = 400,
             int maxHeight = 200,
-            int quality = 80)
+            int quality = 60)
         {
             try
             {
@@ -80,7 +86,7 @@ namespace NexgenCosysReport.Utils.Report
                 var bytes = await File.ReadAllBytesAsync(fullPath);
                 var extension = Path.GetExtension(fullPath);
 
-                // ? Returns "data:image/jpeg;base64,..." — <img src> ready
+                // ? Returns "data:image/jpeg;base64,..." â€” <img src> ready
                 return await ImageUtils.CompressImageToBase64WithMimeAsync(
                     bytes, extension, maxWidth, maxHeight, quality);
             }
@@ -93,14 +99,14 @@ namespace NexgenCosysReport.Utils.Report
 
         // -- Read + compress unique per-member images (MemberPhoto) ---------------
         // ? Returns full data URL: "data:image/jpeg;base64,..."
-        //    200×200px at 70% quality ? ~10–20KB per photo
+        //    200Ã—200px at 70% quality ? ~10â€“20KB per photo
         public static async Task ConvertUniqueImagesToBase64Async<T>(
             IEnumerable<T> items,
             string propertyName,
             string webRoot,
             int maxWidth = 200,
             int maxHeight = 200,
-            int quality = 70)
+            int quality = 50)
         {
             var prop = typeof(T).GetProperty(propertyName);
             if (prop == null) return;
@@ -125,7 +131,7 @@ namespace NexgenCosysReport.Utils.Report
                     var bytes = await File.ReadAllBytesAsync(fullPath);
                     var extension = Path.GetExtension(fullPath);
 
-                    // ? Returns "data:image/jpeg;base64,..." — <img src> ready
+                    // ? Returns "data:image/jpeg;base64,..." â€” <img src> ready
                     var dataUrl = await ImageUtils.CompressImageToBase64WithMimeAsync(
                         bytes, extension, maxWidth, maxHeight, quality);
 
@@ -133,9 +139,9 @@ namespace NexgenCosysReport.Utils.Report
                 }
                 catch (Exception ex)
                 {
-                   
+
                     throw new Exception("Member image conversion failed", ex);
-                 
+
                 }
             });
 
@@ -162,6 +168,60 @@ namespace NexgenCosysReport.Utils.Report
             var (_, ext) = GetContentTypeAndExtension(format);
             return $"{reportName}_{DateTime.Now:yyyyMMddHHmmss}.{ext}";
         }
+
+        public static byte[] CompressPdf(byte[] inputPdf, ILogger? logger = null)
+        {
+            if (inputPdf is null || inputPdf.Length == 0) return inputPdf ?? [];
+
+            try
+            {
+                var before = inputPdf.Length;
+
+                using var input = new MemoryStream(inputPdf);
+                using var output = new MemoryStream();
+
+                using var reader = new ITextPdfReader(input);
+
+                var writerProps = new ITextWriterProps()
+                    .SetCompressionLevel(ITextCompression.BEST_COMPRESSION)  // zlib level 9 on all streams
+                    .SetFullCompressionMode(true);                            // compressed cross-reference stream
+
+                using var writer = new ITextPdfWriter(output, writerProps);
+                using var doc = new ITextPdfDocument(reader, writer);
+
+                // Strip Chrome's XMP metadata block + document info fields
+                doc.GetCatalog().GetPdfObject().Remove(new ITextPdfName("Metadata"));
+                var info = doc.GetDocumentInfo();
+                info.SetAuthor(string.Empty);
+                info.SetCreator(string.Empty);
+                info.SetKeywords(string.Empty);
+                info.SetProducer(string.Empty);
+                info.SetSubject(string.Empty);
+                info.SetTitle(string.Empty);
+                doc.GetTrailer().GetAsDictionary(ITextPdfName.Info)?.Remove(ITextPdfName.CreationDate);
+                doc.GetTrailer().GetAsDictionary(ITextPdfName.Info)?.Remove(ITextPdfName.ModDate);
+
+
+                doc.Close();
+
+                var result = output.ToArray();
+
+                logger?.LogInformation(
+                    "PDF compressed: {Before:F1} KB â†’ {After:F1} KB (saved {Pct:F1}%)",
+                    before / 1024.0, result.Length / 1024.0,
+                    (1.0 - (double)result.Length / before) * 100);
+
+                // Never return a larger file
+                return result.Length < inputPdf.Length ? result : inputPdf;
+            }
+            catch (Exception ex)
+            {
+                logger?.LogWarning(ex, "PDF compression failed â€” returning original.");
+                return inputPdf;
+            }
+        }
+
+
     }
 }
 

@@ -1,3 +1,4 @@
+using iText.Kernel.Pdf;
 using jsreport.AspNetCore;
 using jsreport.Types;
 using Microsoft.AspNetCore.Mvc;
@@ -9,7 +10,7 @@ using Microsoft.AspNetCore.Mvc.ViewFeatures;
 using Microsoft.Extensions.Caching.Memory;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Inteface.ReportInterface;
-using PdfSharpCore.Pdf.IO;
+using NexgenCosysReport.Utils.Report;
 
 namespace NexgenCosysReport.Services.ReportService
 {
@@ -64,20 +65,37 @@ namespace NexgenCosysReport.Services.ReportService
         /// Called after ExportReportToFormatAsync returns PDF bytes.
         /// Cost: ~1ms — runs entirely in memory, no file I/O.
         /// </summary>
+        //public static int CountPdfPages(byte[] pdfBytes)
+        //{
+        //    try
+        //    {
+        //        using var ms = new MemoryStream(pdfBytes);
+        //        using var doc = PdfReader.Open(ms, PdfDocumentOpenMode.InformationOnly);
+        //        return doc.PageCount;
+        //    }
+        //    catch
+        //    {
+        //        // If PDF is malformed or unreadable, fall back to 1
+        //        return 1;
+        //    }
+        //}
+
+
         public static int CountPdfPages(byte[] pdfBytes)
         {
             try
             {
                 using var ms = new MemoryStream(pdfBytes);
-                using var doc = PdfReader.Open(ms, PdfDocumentOpenMode.InformationOnly);
-                return doc.PageCount;
+                using var reader = new iText.Kernel.Pdf.PdfReader(ms);
+                using var doc = new PdfDocument(reader);
+                return doc.GetNumberOfPages();
             }
             catch
             {
-                // If PDF is malformed or unreadable, fall back to 1
                 return 1;
             }
         }
+
 
         // ╔════════════════════════════════════════════════════════════════════╗
         // ║ RENDER PATH — Render Razor → HTML → Cache                         ║
@@ -134,7 +152,18 @@ namespace NexgenCosysReport.Services.ReportService
             try
             {
                 var upperFormat = format.ToUpper();
-                _logger.LogInformation("📄 Exporting to {Format}...", upperFormat);
+                var isPdf = upperFormat == "PDF" || upperFormat == "VIEW";
+
+                // ✅ Check cache for compressed PDF (if reportKey provided)
+                if (reportKey != null && isPdf)
+                {
+                    var cacheKey = $"{reportKey}_{upperFormat}_compressed";
+                    if (_cache.TryGetValue(cacheKey, out byte[] cachedPdf))
+                    {
+                        _logger.LogInformation("📦 Cache hit – returning compressed PDF for {CacheKey}", cacheKey);
+                        return cachedPdf;
+                    }
+                }
 
                 // ✅ Create jsreport render request
                 var renderRequest = new RenderRequest
@@ -152,10 +181,25 @@ namespace NexgenCosysReport.Services.ReportService
 
                 using var ms = new MemoryStream();
                 await result.Content.CopyToAsync(ms);
-                var bytes = ms.ToArray();
+                var rawBytes = ms.ToArray();
 
-                _logger.LogInformation("✅ Exported {Format}: {Bytes} bytes", upperFormat, bytes.Length);
-                return bytes;
+                // 3️⃣ Compress if PDF, otherwise return raw
+                byte[] finalBytes = isPdf
+                    ? ReportUtils.CompressPdf(rawBytes, _logger)
+                    : rawBytes;
+
+                _logger.LogInformation("✅ Exported {Format}: {Bytes} bytes (compressed)",
+                    upperFormat, finalBytes.Length);
+
+                // 4️⃣ Store compressed PDF in cache (if reportKey provided)
+                if (reportKey != null && isPdf)
+                {
+                    var cacheKey = $"{reportKey}_{upperFormat}_compressed";
+                    _cache.Set(cacheKey, finalBytes, new MemoryCacheEntryOptions()
+                        .SetSlidingExpiration(TimeSpan.FromMinutes(10))
+                        .SetAbsoluteExpiration(TimeSpan.FromMinutes(20)));
+                }
+                return finalBytes;
             }
             catch (Exception ex)
             {
@@ -199,8 +243,9 @@ namespace NexgenCosysReport.Services.ReportService
                         MarginLeft = opts.MarginLeft,
                         MarginRight = opts.MarginRight,
                         DisplayHeaderFooter = true,
-                        PrintBackground = true,
+                        PrintBackground = false,
                         Landscape = opts.Landscape,
+
                         // ── Footer template with page numbering ──────────────────
                         HeaderTemplate = "<span></span>",
                         FooterTemplate = @"
@@ -225,6 +270,8 @@ namespace NexgenCosysReport.Services.ReportService
                     }
 
                     request.Template.Chrome = chrome;
+
+
 
                     //request.Template.Chrome = new Chrome
                     //{

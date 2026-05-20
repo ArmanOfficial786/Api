@@ -1,3 +1,9 @@
 ﻿{
-  "discover": true
+  "jsreport": {
+    "extensions": {
+      "express": {
+        "inputRequestLimit": "200mb"
+      }
+    }
+  }
 }

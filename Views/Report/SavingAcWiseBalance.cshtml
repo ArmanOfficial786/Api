@@ -166,8 +166,9 @@
     <div class="report-container">
 
         @if (!isExcel)
-        {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            {
+                @await Html.PartialAsync("_CommonHeader", Model)
+            }
 
             <table class="data-table">
                 <colgroup>
@@ -258,7 +259,7 @@
                     </tr>
                 </tbody>
             </table>
-        }
+        
     </div>
 </body>
 </html>
