@@ -4,8 +4,32 @@
 @{
     Layout = null;
 
-    var dataSet = (Model["SavingAcWiseBalanceDataset"] as IEnumerable<SavingAcWiseBalanceResponse>)
-                      ?.ToList() ?? new List<SavingAcWiseBalanceResponse>();
+    // var dataSet = (Model["SavingAcWiseBalanceDataset"] as IEnumerable<SavingAcWiseBalanceResponse>)
+    //                   ?.ToList() ?? new List<SavingAcWiseBalanceResponse>();
+
+    // ✅ Safe cast that handles both:
+    //    - Normal render:  List<SavingAcWiseBalanceResponse>  (direct cast works)
+    //    - Chunked render: List<object> where each item IS SavingAcWiseBalanceResponse
+    List<SavingAcWiseBalanceResponse> dataSet;
+
+    var rawDataset = Model["SavingAcWiseBalanceDataset"];
+
+    if (rawDataset is IEnumerable<SavingAcWiseBalanceResponse> typedList)
+    {
+        // ✅ Normal render path — direct typed cast
+        dataSet = typedList.ToList();
+    }
+    else if (rawDataset is System.Collections.IEnumerable untypedList)
+    {
+        // ✅ Chunked render path — each object IS SavingAcWiseBalanceResponse, cast each item
+        dataSet = untypedList
+            .Cast<SavingAcWiseBalanceResponse>()
+            .ToList();
+    }
+    else
+    {
+        dataSet = new List<SavingAcWiseBalanceResponse>();
+    }
 
     var tillDate = Model.ContainsKey("TillDate") ? Model["TillDate"]?.ToString() : "";
     var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "";

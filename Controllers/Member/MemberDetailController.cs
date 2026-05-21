@@ -51,10 +51,10 @@
 //                // ? Debug log from utils
 //                ReportExportHelper.LogCacheState(
 //                    upperFormat, reportKey,
-//                    _jsReportService.IsHtmlCached(reportKey), _logger);
+//                    _jsReportService.TryGetCachedHtml(reportKey), _logger);
 
 //                // -- EXPORT PATH -------------------------------------------
-//                if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
+//                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey))
 //                {
 //                    _logger.LogInformation("? NO DB CALL — serving from server cache");
 //                    return ReportExportHelper.ExportFromCache(
@@ -183,10 +183,10 @@ namespace NexgenCosysReport.Controllers.Member
 
                 ReportExportHelper.LogCacheState(
                     upperFormat, reportKey,
-                    _jsReportService.IsHtmlCached(reportKey), _logger);
+                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
 
                 // -- EXPORT PATH -------------------------------------------
-                if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
+                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
                 {
                     _logger.LogInformation("? NO DB CALL — serving from cache");
                     return await ReportExportHelper.ExportFromCacheAsync(

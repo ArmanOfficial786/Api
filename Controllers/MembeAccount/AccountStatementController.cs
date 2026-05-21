@@ -64,10 +64,11 @@ namespace NexgenCosysReport.Controllers.MembeAccount
                 var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.IsHtmlCached(reportKey), _logger);
+                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+
 
                 // -- NO DB CALL — serving from cache ---------------------------------------
-                if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
+                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
                 {
                     return await ReportExportHelper.ExportFromCacheAsync(
                         reportKey, upperFormat,
