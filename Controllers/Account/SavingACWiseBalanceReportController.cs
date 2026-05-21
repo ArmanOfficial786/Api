@@ -107,7 +107,7 @@ namespace NexgenCosysReport.Controllers.Account
                 if (spData.Count > 0)
                 {
                     // Multiply to reach target row count (e.g., 1500)
-                    int targetRows = 50000;
+                    int targetRows = 30000;
                     int repeatCount = (int)Math.Ceiling((double)targetRows / spData.Count);
                     spData = Enumerable.Repeat(spData, repeatCount)
                                        .SelectMany(x => x)

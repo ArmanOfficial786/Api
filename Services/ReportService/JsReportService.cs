@@ -173,6 +173,10 @@ namespace NexgenCosysReport.Services.ReportService
                         Content = htmlContent,
                         Engine = Engine.None,
                         Recipe = GetRecipe(upperFormat)
+                    },
+                    Options = new RenderOptions
+                    {
+                        Timeout = 600000  // 10 minutes in milliseconds
                     }
                 };
 
@@ -238,10 +242,13 @@ namespace NexgenCosysReport.Services.ReportService
 
                     var chrome = new Chrome
                     {
+
                         MarginTop = opts.MarginTop,
                         MarginBottom = opts.MarginBottom,
                         MarginLeft = opts.MarginLeft,
                         MarginRight = opts.MarginRight,
+                        WaitForJS = false,
+                        WaitForNetworkIddle = true,
                         DisplayHeaderFooter = true,
                         PrintBackground = false,
                         Landscape = opts.Landscape,
