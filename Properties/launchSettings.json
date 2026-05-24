@@ -1,34 +1,4 @@
-﻿//{
-//  "$schema": "https://json.schemastore.org/launchsettings.json",
-//  "profiles": {
-//    "http": {
-//      "commandName": "Project",
-//      "dotnetRunmessages": true,
-//      "launchBrowser": true,
-//      "launchUrl": "swagger",
-//      "applicationUrl": "https://localhost:7212",
-//      "environmentVariables": {
-//        "ASPNETCORE_ENVIRONMENT": "Development"
-//      }
-//    },
-//    "https": {
-//      "commandName": "Project",
-//      "dotnetRunmessages": true,
-//      "launchBrowser": true,
-//      "launchUrl": "swagger",
-//      "applicationUrl": "http://localhost:5106",
-//      "environmentVariables": {
-//        "ASPNETCORE_ENVIRONMENT": "Development"
-//      }
-//    }
-
-//    }
-//  }
-
-
-
-
-{
+﻿{
   "$schema": "https://json.schemastore.org/launchsettings.json",
   "profiles": {
     "http": {
@@ -47,10 +17,10 @@
       "launchBrowser": true,
       "launchUrl": "preview/member-report",
       "applicationUrl": "https://localhost:7212;http://localhost:5106",
-      "hotReloadEnabled": true, //hot reload in razor view
+      "hotReloadEnabled": true,
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "DOTNET_WATCH_RESTART_ON_RUDE_EDIT": "true" //hot reload in razor view
+        "DOTNET_WATCH_RESTART_ON_RUDE_EDIT": "true"
       }
     }
   }

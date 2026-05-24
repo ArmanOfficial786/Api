@@ -141,6 +141,17 @@ using NexgenCosysReport.Utils.Report;
 
 var builder = WebApplication.CreateBuilder(args);
 
+var jsreportAppDir = Path.Combine(builder.Environment.ContentRootPath, "jsreport");
+if (!Directory.Exists(jsreportAppDir))
+    throw new DirectoryNotFoundException(
+        $"[Startup] jsreport folder not found at: {jsreportAppDir}\n" +
+        "Ensure the 'jsreport' folder (with node_modules) exists at the project root.");
+
+Console.WriteLine($"[Startup] jsreport appDirectory ? {jsreportAppDir}");
+
+// Tell the jsreport process where to find extensions and jsreport.config.json
+Environment.SetEnvironmentVariable("appDirectory", jsreportAppDir);
+
 // ? Fix 3: Configure lambda must return cfg
 var jsreportServer = new LocalReporting()
     .UseBinary(JsReportBinary.GetBinary())
@@ -162,6 +173,7 @@ builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
+
 
 // CORS
 builder.Services.AddCors(options =>
@@ -198,7 +210,11 @@ Console.WriteLine($"[Startup] WebRootPath = '{settingsCheck?.WebRootPath}'");
 
 // Services
 builder.Services.AddMemoryCache();
+
 builder.Services.AddScoped<CustomHeaderResponse>();
+builder.Services.AddScoped<IReportFileResponse, ReportFileResponse>();
+builder.Services.AddSingleton<IRazorRenderService, RazorRenderService>();
+builder.Services.AddScoped<IPdfChunkService, PdfChunkService>();
 builder.Services.AddSingleton<IJsReportService, JsReportService>();
 builder.Services.AddScoped<IMemberDetail, MemberRegistrationDetailHandler>();
 builder.Services.AddScoped<IMemberIdCard, MemberIdCardRepository>();

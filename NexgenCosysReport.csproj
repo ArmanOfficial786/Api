@@ -7,6 +7,11 @@
 	<AssemblyName>NexgenCosysReport</AssemblyName>
 	<RootNamespace>NexgenCosysReport</RootNamespace>
 	<NuGetAudit>false</NuGetAudit>
+	<PlatformTarget>x64</PlatformTarget>
+	<ServerGarbageCollection>true</ServerGarbageCollection>
+	<ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+	<UseAppHost>true</UseAppHost>
+	<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
   </PropertyGroup>
 
   <ItemGroup>
@@ -41,6 +46,7 @@
 	<ItemGroup>
 		<None Include="jsreport\**\*.*">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
 		</None>
 	</ItemGroup>
 

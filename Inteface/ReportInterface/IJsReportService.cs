@@ -39,6 +39,53 @@
 
 
 
+//using NexgenCosysReport.Dtos.ReportDtos;
+
+//namespace NexgenCosysReport.Inteface.ReportInterface
+//{
+//    public interface IJsReportService
+//    {
+//        // ── Cache ──────────────────────────────────────────────────────────
+//        bool TryGetCachedHtml(string reportKey, out string? html);
+//        bool TryGetCachedPdf(string reportKey, out byte[]? pdf);
+//        /// <summary>
+//        /// If a chunked PDF was previously generated for this reportKey, returns its file path.
+//        /// </summary>
+//        bool TryGetChunkedPdfPath(string reportKey, out string? pdfPath);
+
+//        // ── Render Razor → HTML → Cache ────────────────────────────────────
+//        Task<string> RenderRazorToHtmlAndCacheAsync(
+//            string reportKey,
+//            string reportPath,
+//            object data,
+//            CancellationToken ct = default);
+
+//        // ── Export cached HTML → any format ────────────────────────────────
+//        Task<byte[]> ExportReportToFormatAsync(
+//            string htmlContent,
+//            string format,
+//            string? reportKey = null,
+//            PageSizeSetting? pageSetting = null,
+//            CancellationToken ct = default);
+
+//        // ── Chunked PDF export for large datasets ──────────────────────────
+//        Task<string> ExportChunkedPdfAsync(
+//            string reportKey,
+//            string reportPath,
+//            IDictionary<string, object> reportData,
+//            string rowsKey,
+//            int chunkSize,
+//            PageSizeSetting? pageSetting = null,
+//            int maxParallelism = 2,
+//            CancellationToken ct = default);
+//    }
+//}
+
+
+
+
+
+
 using NexgenCosysReport.Dtos.ReportDtos;
 
 namespace NexgenCosysReport.Inteface.ReportInterface
@@ -62,17 +109,6 @@ namespace NexgenCosysReport.Inteface.ReportInterface
             string format,
             string? reportKey = null,
             PageSizeSetting? pageSetting = null,
-            CancellationToken ct = default);
-
-        // ── Chunked PDF export for large datasets ──────────────────────────
-        Task<byte[]> ExportChunkedPdfAsync(
-            string reportKey,
-            string reportPath,
-            IDictionary<string, object> reportData,
-            string rowsKey,
-            int chunkSize,
-            PageSizeSetting? pageSetting = null,
-            int maxParallelism = 2,
             CancellationToken ct = default);
     }
 }

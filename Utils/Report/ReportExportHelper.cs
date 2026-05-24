@@ -139,5 +139,42 @@ namespace NexgenCosysReport.Utils.Report
             logger.LogInformation("IS CACHED : {TryGetCachedHtml}", TryGetCachedHtml);
             logger.LogInformation("==========================================");
         }
+
+        // In ReportExportHelper.cs
+        public static ActionResult ExportFromDiskAsync(
+            string pdfPath,
+            string format,
+            string reportName,
+            ILogger logger)
+        {
+            if (!System.IO.File.Exists(pdfPath))
+            {
+                logger.LogError("PDF file not found on disk: {Path}", pdfPath);
+                return new NotFoundObjectResult(new
+                {
+                    success = false,
+                    message = "Report file not found."
+                });
+            }
+
+            var (contentType, _) = ReportUtils.GetContentTypeAndExtension(format);
+            var fileName = ReportUtils.GetFileName(reportName, format);
+
+            logger.LogInformation("✅ Streaming PDF from disk: {File} ({MB:F2} MB)",
+                fileName, new FileInfo(pdfPath).Length / 1024.0 / 1024.0);
+
+            var fs = new FileStream(
+                pdfPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                bufferSize: 81920,
+                options: FileOptions.Asynchronous | FileOptions.SequentialScan);
+
+            return new FileStreamResult(fs, contentType)
+            {
+                FileDownloadName = fileName
+            };
+        }
     }
 }

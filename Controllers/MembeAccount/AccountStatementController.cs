@@ -185,9 +185,9 @@ namespace NexgenCosysReport.Controllers.MembeAccount
 
                 return StatusCode(500, new
                 {
-                    success = false,
-                    message = "An error occurred while processing your request.",
-                    error = ex.Message
+                    message = ex.Message,
+                    inner = ex.InnerException?.Message,
+                    stack = ex.StackTrace
                 });
             }
             ;
