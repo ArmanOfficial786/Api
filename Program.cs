@@ -1,4 +1,4 @@
-//using jsreport.AspNetCore;
+ï»¿//using jsreport.AspNetCore;
 //using jsreport.Binary;
 //using jsreport.Local;
 //using Microsoft.EntityFrameworkCore;
@@ -33,7 +33,7 @@
 //    .AsWebServer()
 //    .Create());
 
-//// ? CORS — handles null origin + all localhost ports
+//// ? CORS â€” handles null origin + all localhost ports
 //builder.Services.AddCors(options =>
 //{
 //    options.AddPolicy("AllowReactApp", policy =>
@@ -93,10 +93,10 @@
 //}
 
 //// ? CORRECT middleware order
-//// 1. CORS must be FIRST — handles OPTIONS preflight before any redirect
+//// 1. CORS must be FIRST â€” handles OPTIONS preflight before any redirect
 //app.UseCors("AllowReactApp");
 
-//// 2. Skip HTTPS redirect in development — causes null origin
+//// 2. Skip HTTPS redirect in development â€” causes null origin
 //if (!app.Environment.IsDevelopment())
 //{
 //    app.UseHttpsRedirection();
@@ -141,16 +141,6 @@ using NexgenCosysReport.Utils.Report;
 
 var builder = WebApplication.CreateBuilder(args);
 
-var jsreportAppDir = Path.Combine(builder.Environment.ContentRootPath, "jsreport");
-if (!Directory.Exists(jsreportAppDir))
-    throw new DirectoryNotFoundException(
-        $"[Startup] jsreport folder not found at: {jsreportAppDir}\n" +
-        "Ensure the 'jsreport' folder (with node_modules) exists at the project root.");
-
-Console.WriteLine($"[Startup] jsreport appDirectory ? {jsreportAppDir}");
-
-// Tell the jsreport process where to find extensions and jsreport.config.json
-Environment.SetEnvironmentVariable("appDirectory", jsreportAppDir);
 
 // ? Fix 3: Configure lambda must return cfg
 var jsreportServer = new LocalReporting()
@@ -159,16 +149,15 @@ var jsreportServer = new LocalReporting()
     .Configure(cfg =>
     {
         cfg.DoTrustUserCode();
-        return cfg; // ? required — Func<Configuration, Configuration>
+        return cfg;
     })
     .AsWebServer()
     .Create();
 
 jsreportServer.StartAsync().GetAwaiter().GetResult();
 
-// ? Fix 1: Only AddJsReport needed — AddJsReportMVC does not exist
+// ? Fix 1: Only AddJsReport needed â€” AddJsReportMVC does not exist
 builder.Services.AddJsReport(jsreportServer);
-
 builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

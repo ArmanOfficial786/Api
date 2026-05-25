@@ -1,6 +1,8 @@
 ﻿{
+  "discover":  true,
   "reportTimeout": 600000,
   "extensions": {
+    "html-embedded-in-docx": {},
     "express": {
       "inputRequestLimit": "200mb"
     },
@@ -17,7 +19,6 @@
           "--max_old_space_size=4096"
         ]
       }
-    },
-    "html-embedded-in-docx": {}
+    }
   }
 }
