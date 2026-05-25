@@ -1,0 +1,289 @@
+﻿@model Dictionary<string, object>
+@using NexgenCosysReport.Dtos.RequestDtos.Account
+
+@{
+    Layout = null;
+
+    // var dataSet = (Model["SavingAcWiseBalanceDataset"] as IEnumerable<SavingAcWiseBalanceResponse>)
+    //                   ?.ToList() ?? new List<SavingAcWiseBalanceResponse>();
+
+    // ✅ Safe cast that handles both:
+    //    - Normal render:  List<SavingAcWiseBalanceResponse>  (direct cast works)
+    //    - Chunked render: List<object> where each item IS SavingAcWiseBalanceResponse
+    List<SavingAcWiseBalanceResponse> dataSet;
+
+    var rawDataset = Model["SavingAcWiseBalanceDataset"];
+
+    if (rawDataset is IEnumerable<SavingAcWiseBalanceResponse> typedList)
+    {
+        // ✅ Normal render path — direct typed cast
+        dataSet = typedList.ToList();
+    }
+    else if (rawDataset is System.Collections.IEnumerable untypedList)
+    {
+        // ✅ Chunked render path — each object IS SavingAcWiseBalanceResponse, cast each item
+        dataSet = untypedList
+            .Cast<SavingAcWiseBalanceResponse>()
+            .ToList();
+    }
+    else
+    {
+        dataSet = new List<SavingAcWiseBalanceResponse>();
+    }
+
+    var tillDate = Model.ContainsKey("TillDate") ? Model["TillDate"]?.ToString() : "";
+    var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "";
+    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var grouped = dataSet
+        .GroupBy(x => x.SavingType ?? "—")
+        .OrderBy(g => g.Key)
+        .ToList();
+
+    var totalDeposit = dataSet.Sum(x => x.Deposit);
+    var totalWithdraw = dataSet.Sum(x => x.Withdraw);
+    var totalBalance = dataSet.Sum(x => x.Balance);
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Saving AC Wise Balance Report</title>
+    <style>
+            /* Reset all margins/paddings – the PDF margins are controlled by jsreport Chrome options */
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            /* Main content container – will automatically flow within jsreport margins */
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+            /* ⛔ STOP THEAD FROM REPEATING ON EVERY PAGE ⛔ */
+            thead {
+                display: table-row-group;
+            }
+            /* Table styling – fixed layout prevents overflow beyond page width */
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table th {
+                    border-top: 2px solid #000;
+                    border-bottom: 2px solid #000;
+                    padding: 4px 6px;
+                    white-space: nowrap;
+                    vertical-align: bottom;
+                    text-align: left;
+                }
+
+                .data-table td {
+                    padding: 4px 6px;
+                    border-bottom: 1px solid #d0d0d0;
+                    vertical-align: top;
+                    text-align: left;
+                    white-space: normal;
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                }
+
+                /* Prevent rows from breaking across pages */
+                .data-table tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+
+            /* Group header and footer rows – avoid breaking inside */
+            .group-header td,
+            .group-footer td,
+            .grand-total td {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+
+            .meta-title td {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+                border-bottom: none;
+            }
+
+            .meta-row td {
+                padding: 4px 6px;
+                font-size: 9pt;
+                border-bottom: none;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+                border-bottom: none;
+            }
+
+            .group-header td {
+                background-color: #c0c0c0;
+                font-weight: bold;
+                font-size: 9pt;
+                padding: 3px 6px;
+                border-top: 1px solid #999;
+                border-bottom: 1px solid #999;
+                color: #00008B;
+            }
+
+            .group-footer td {
+                border-top: 1px solid #000;
+                border-bottom: 2px solid #000;
+                padding: 3px 6px;
+                font-weight: bold;
+                font-size: 9pt;
+                background-color: #ffffff;
+            }
+
+            .grand-total td {
+                border-top: 2px solid #000;
+                padding: 4px 6px;
+                font-weight: bold;
+                font-size: 9pt;
+                background-color: #f0f0f0;
+            }
+
+            /* Ensure numeric columns align right */
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            /* Print adjustments – only for real printing, not needed for PDF generation,
+                       but kept for consistency */
+            @@media print {
+                body {
+                    margin: 0;
+                    padding: 0;
+                }
+            }
+    </style>
+</head>
+
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+            {
+                @await Html.PartialAsync("_CommonHeader", Model)
+            }
+
+            <table class="data-table">
+                <colgroup>
+                    <col style="width:10%;" />
+                    <col style="width:16%;" />
+                    <col style="width:12%;" />
+                    <col style="width:5%;" />
+                    <col style="width:10%;" />
+                    <col style="width:12%;" />
+                    <col style="width:11%;" />
+                    <col style="width:11%;" />
+                    <col style="width:13%;" />
+                </colgroup>
+
+                <thead>
+                    <tr class="meta-title">
+                        <td colspan="9">Saving Account Wise Balance Report</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="5"><strong>Branch Name :</strong> @branchName</td>
+                        <td colspan="4" class="text-right"><strong>Till Date :</strong> @tillDate</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="9"><strong>Report Generated On :</strong> @generatedOn</td>
+                    </tr>
+                    <tr class="meta-spacer"><td colspan="9"></td></tr>
+                    <tr>
+                        <th>Saving Type</th>
+                        <th>Member Name</th>
+                        <th class="text-center">A/C No.</th>
+                        <th>Int%</th>
+                        <th>Int Transfer</th>
+                        <th class="text-right">Deposit</th>
+                        <th class="text-right">Withdraw</th>
+                        <th class="text-right">Balance</th>
+                        <th class="text-center">A/C Opened On</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    @foreach (var group in grouped)
+                    {
+                        var groupCount = group.Count();
+                        var groupDeposit = group.Sum(x => x.Deposit);
+                        var groupWithdraw = group.Sum(x => x.Withdraw);
+                        var groupBalance = group.Sum(x => x.Balance);
+
+                        <tr class="group-header">
+                            <td colspan="9">@group.Key</td>
+                        </tr>
+
+                        @foreach (var item in group)
+                        {
+                            <tr>
+                                <td>@item.MemberId</td>
+                                <td>@item.MemberName</td>
+                                <td class="text-center">@item.AccountNo</td>
+                                <td>@item.InterestRate</td>
+                                <td>@item.InterestType</td>
+                                <td class="text-right">@item.Deposit.ToString("N2")</td>
+                                <td class="text-right">@item.Withdraw.ToString("N2")</td>
+                                <td class="text-right">@item.Balance.ToString("N2")</td>
+                                <td class="text-center">@item.AccountOpenOnBS</td>
+                            </tr>
+                        }
+
+                        <tr class="group-footer">
+                            <td>@groupCount</td>
+                            <td></td>
+                            <td class="text-center">@group.Key</td>
+                            <td></td>
+                            <td></td>
+                            <td class="text-right">@groupDeposit.ToString("N2")</td>
+                            <td class="text-right">@groupWithdraw.ToString("N2")</td>
+                            <td class="text-right">@groupBalance.ToString("N2")</td>
+                            <td></td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total">
+                        <td colspan="3"><strong>Grand Total</strong></td>
+                        <td></td>
+                        <td></td>
+                        <td class="text-right"><strong>@totalDeposit.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalWithdraw.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalBalance.ToString("N2")</strong></td>
+                        <td></td>
+                    </tr>
+                </tbody>
+            </table>
+        
+    </div>
+</body>
+</html>

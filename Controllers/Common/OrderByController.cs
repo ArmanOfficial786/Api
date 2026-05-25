@@ -1,7 +1,5 @@
-using NexgenCosysReport.Dtos.RequestDtos.Common;
-using NexgenCosysReport.Services.CommonService;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 
 namespace NexgenCosysReport.Controllers.Common
@@ -29,15 +27,14 @@ namespace NexgenCosysReport.Controllers.Common
                 var result = _orderByService.GetAllReportOrderBy();
                 if (result == null)
                 {
-                    response.IsValid = false;
-                    response.StatusCode = 404;
-                    response.Message = "No data found";
+                    response.isValid = false;
+                    response.statusCode = 404;
+                    response.message = "No data found";
                     return NotFound(response);
                 }
-                response.IsValid = true;
-                response.StatusCode = 200;
-                response.Message = "Success";
-                response.Data = result;
+                response.isValid = true;
+                response.statusCode = 200;
+                response.data = result;
 
                 return Ok(response);
             }
@@ -46,9 +43,9 @@ namespace NexgenCosysReport.Controllers.Common
                 _logger.LogError(ex, "Error fetching OrderBy list");
                 return StatusCode(500, new GeneralResponse<AllReportOrderByResponseModel>
                 {
-                    IsValid = false,
-                    StatusCode = 500,
-                    Message = ex.Message
+                    isValid = false,
+                    statusCode = 500,
+                    message = ex.Message
                 });
             }
         }

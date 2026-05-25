@@ -1,6 +1,6 @@
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
 
 namespace NexgenCosysReport.Controllers.Common
 {
@@ -15,16 +15,16 @@ namespace NexgenCosysReport.Controllers.Common
             _context = appDbContext;
         }
 
-        [HttpPost("getCollector")]
-        public async Task<ActionResult> GetCollector([FromQuery] long userId)
+        [HttpGet("getCollector")]
+        public async Task<ActionResult<GeneralResponse<List<CollectorResponse>>>> GetCollector([FromQuery] long userId)
         {
-            var response = new GeneralResponse<List<CollectorResponse>>(); // ? List<> added
+            var response = new GeneralResponse<List<CollectorResponse>>();
 
             if (userId <= 0)
             {
-                response.IsValid = false;
-                response.StatusCode = StatusCodes.Status400BadRequest;
-                response.Message = "Invalid UserId";
+                response.isValid = false;
+                response.statusCode = StatusCodes.Status400BadRequest;
+                response.message = "Invalid UserId";
                 return BadRequest(response);
             }
 
@@ -44,10 +44,9 @@ namespace NexgenCosysReport.Controllers.Common
                 .OrderBy(p => p.CollectorName)
                 .ToListAsync();                                             // ? Works without error
 
-            response.IsValid = true;
-            response.StatusCode = StatusCodes.Status200OK;
-            response.Message = "Success";
-            response.Data = collectors;
+            response.isValid = true;
+            response.statusCode = StatusCodes.Status200OK;
+            response.data = collectors;
             return Ok(response);
         }
     }

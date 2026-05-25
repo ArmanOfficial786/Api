@@ -1,6 +1,6 @@
 // Controllers/MemberLookUpController.cs
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using Microsoft.AspNetCore.Mvc;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 
 namespace NexgenCosysReport.Controllers.Common
@@ -37,7 +37,7 @@ namespace NexgenCosysReport.Controllers.Common
             catch (Exception ex)
             {
                 _logger.LogError(ex, "MemberLookUp Search failed");
-                return StatusCode(500, new { message = "An unexpected error occurred." });
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "An unexpected error occurred." });
             }
         }
 
@@ -62,7 +62,7 @@ namespace NexgenCosysReport.Controllers.Common
             catch (Exception ex)
             {
                 _logger.LogError(ex, "MemberLookUp Select failed for id={Id}", memMemberRegistrationId);
-                return StatusCode(500, new { message = "An unexpected error occurred." });
+                return StatusCode(StatusCodes.Status500InternalServerError, new { message = "An unexpected error occurred." });
             }
         }
 

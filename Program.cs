@@ -1,35 +1,48 @@
-using jsreport.AspNetCore;
+ï»¿using jsreport.AspNetCore;
 using jsreport.Binary;
 using jsreport.Local;
+using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Services.CommonService;
-using NexgenCosysReport.Services.ReportService;
-using Microsoft.EntityFrameworkCore;
+using NexgenCosysReport.Inteface.ServiceInterface.Account;
+using NexgenCosysReport.Inteface.ServiceInterface.Common;
+using NexgenCosysReport.Inteface.ServiceInterface.Member;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
+using NexgenCosysReport.Repository.Account;
 using NexgenCosysReport.Repository.Common;
 using NexgenCosysReport.Repository.Member;
 using NexgenCosysReport.Repository.MemberAccount;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
-using NexgenCosysReport.Inteface.ServiceInterface.Member;
+using NexgenCosysReport.Services.CommonService;
+using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Report;
 
 var builder = WebApplication.CreateBuilder(args);
 
+
+// ? Fix 3: Configure lambda must return cfg
+var jsreportServer = new LocalReporting()
+    .UseBinary(JsReportBinary.GetBinary())
+    .KillRunningJsReportProcesses()
+    .Configure(cfg =>
+    {
+        cfg.DoTrustUserCode();
+        return cfg;
+    })
+    .AsWebServer()
+    .Create();
+
+jsreportServer.StartAsync().GetAwaiter().GetResult();
+
+// ? Fix 1: Only AddJsReport needed â€” AddJsReportMVC does not exist
+builder.Services.AddJsReport(jsreportServer);
 builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddHttpContextAccessor();
 
 
-// jsreport
-builder.Services.AddJsReport(new LocalReporting()
-    .UseBinary(JsReportBinary.GetBinary())
-    .KillRunningJsReportProcesses()
-    .Configure(cfg => cfg.DoTrustUserCode())  // ? required for custom extensions
-    .AsUtility()
-    .Create());
-
-// ? CORS — handles null origin + all localhost ports
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
@@ -37,7 +50,13 @@ builder.Services.AddCors(options =>
         policy.WithOrigins("http://localhost:3000", "http://localhost:5106")
               .AllowAnyHeader()
               .AllowAnyMethod()
-              .AllowCredentials();
+              .AllowCredentials()
+              .WithExposedHeaders(
+                "X-Pagination",
+                "X-Message",
+                "X-IsValid",
+                "X-StatusCode",
+                "Content-Disposition");
     });
 });
 
@@ -58,6 +77,11 @@ Console.WriteLine($"[Startup] WebRootPath = '{settingsCheck?.WebRootPath}'");
 
 // Services
 builder.Services.AddMemoryCache();
+
+builder.Services.AddScoped<CustomHeaderResponse>();
+builder.Services.AddScoped<IReportFileResponse, ReportFileResponse>();
+builder.Services.AddSingleton<IRazorRenderService, RazorRenderService>();
+builder.Services.AddScoped<IPdfChunkService, PdfChunkService>();
 builder.Services.AddSingleton<IJsReportService, JsReportService>();
 builder.Services.AddScoped<IMemberDetail, MemberRegistrationDetailHandler>();
 builder.Services.AddScoped<IMemberIdCard, MemberIdCardRepository>();
@@ -69,8 +93,20 @@ builder.Services.AddScoped<IMemberLookUp, MemberLookUpRepository>();
 builder.Services.AddScoped<ICollectionCenter, CollectionCenterRepository>();
 builder.Services.AddScoped<IMemberGroup, MemberGroupRepository>();
 builder.Services.AddScoped<ICommonHeaderRepository, CommonHeaderRepository>();
+builder.Services.AddScoped<ISavingAcWiseBalance, SavingAcWiseBalanceRepository>();
+builder.Services.AddScoped<IComCalendar, CalendarRepository>();
+builder.Services.AddScoped<IDepositeType, DepositeTypeRepository>();
 
 var app = builder.Build();
+
+// ? Fix 2: StopAsync requires CancellationToken
+var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+lifetime.ApplicationStopping.Register(() =>
+{
+    Console.WriteLine("[Shutdown] Stopping jsreport server...");
+    jsreportServer.KillAsync().GetAwaiter().GetResult(); // ? correct method
+    Console.WriteLine("[Shutdown] jsreport server stopped.");
+});
 
 if (app.Environment.IsDevelopment())
 {
@@ -78,17 +114,16 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// ? CORRECT middleware order
-// 1. CORS must be FIRST — handles OPTIONS preflight before any redirect
+// 1. CORS FIRST
 app.UseCors("AllowReactApp");
 
-// 2. Skip HTTPS redirect in development — causes null origin
+// 2. Skip HTTPS in dev
 if (!app.Environment.IsDevelopment())
 {
     app.UseHttpsRedirection();
 }
 
-// 3. Routing and auth after CORS
+// 3. Routing and auth
 app.UseRouting();
 app.UseAuthorization();
 

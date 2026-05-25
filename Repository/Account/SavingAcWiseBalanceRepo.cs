@@ -83,8 +83,8 @@ namespace NexgenCosysReport.Repository.Account
                 filter += $" AND m.SycMemberGroupId = {request.MemberGroupId}";
 
             // Collection center  (comma-separated list)
-            if (!string.IsNullOrWhiteSpace(request.CollectionCenterId) &&
-                request.CollectionCenterId != "-1")
+            if (
+                request.CollectionCenterId != -1)
             {
                 filter += $" AND mg.SycCollectionCenterId IN ({request.CollectionCenterId})";
             }
@@ -135,8 +135,8 @@ namespace NexgenCosysReport.Repository.Account
                 filter += $" AND m.SycMemberGroupId = {request.MemberGroupId}";
 
             // Collection center
-            if (!string.IsNullOrWhiteSpace(request.CollectionCenterId) &&
-                request.CollectionCenterId != "-1")
+            if (
+                request.CollectionCenterId != -1)
             {
                 filter += $" AND mg.SycCollectionCenterId IN ({request.CollectionCenterId})";
             }
@@ -172,7 +172,7 @@ namespace NexgenCosysReport.Repository.Account
             // ---- Status WHERE ----
             string statusClause = request.Status switch
             {
-                "1"=> "WHERE MamAccountStatusId IN (1,4,5) ",
+                "1" => "WHERE MamAccountStatusId IN (1,4,5) ",
                 "2" => "WHERE MamAccountStatusId IN (2) ",
                 "3" => "WHERE Balance > 0 ",
                 "4" => "WHERE MamAccountStatusId IN (4) ",

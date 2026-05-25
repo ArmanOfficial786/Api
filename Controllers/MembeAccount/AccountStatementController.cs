@@ -1,13 +1,14 @@
-using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
-using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Utils.Report;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using NexgenCosysReport.Dtos.ReportDtos;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
+using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
 using NexgenCosysReport.Inteface.ServiceInterface.Member;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
+using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Report;
 
 namespace NexgenCosysReport.Controllers.MembeAccount
 {
@@ -51,24 +52,23 @@ namespace NexgenCosysReport.Controllers.MembeAccount
                 var reportName = "AccountStatement";
                 var upperFormat = format.ToUpper();
                 var response = new GeneralResponse<ReportResponseDtos>();
-              
+
                 if (request == null || !ModelState.IsValid)
                 {
-                    response.IsValid = false;
-                    response.StatusCode = 400;
-                    response.Message = "Invalid request";
+                    response.isValid = false;
+                    response.statusCode = 400;
+                    response.message = "Invalid request";
                     return BadRequest(response);
                 }
-                    
 
-                
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}"; 
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.IsHtmlCached(reportKey), _logger);
+                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+
 
                 // -- NO DB CALL — serving from cache ---------------------------------------
-                if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
+                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
                 {
                     return await ReportExportHelper.ExportFromCacheAsync(
                         reportKey, upperFormat,
@@ -104,22 +104,22 @@ namespace NexgenCosysReport.Controllers.MembeAccount
 
                 if (!statementData.Any())
                 {
-                    response.IsValid = false;
-                    response.StatusCode = 404;
-                    response.Message = "No data found";
+                    response.isValid = false;
+                    response.statusCode = 404;
+                    response.message = "No data found";
                     return NotFound(response);
                 }
 
                 var webRoot = ReportUtils.GetWebRootPath(
-                    _webHostEnvironment, _reportSettings, _logger);
+                    _webHostEnvironment, _reportSettings);
 
-          
+
                 await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
                     headerData,
                     nameof(CommonHeader.CompanyLogo),
-                    webRoot, _logger));
-              
-             
+                    webRoot));
+
+
 
                 var reportData = new Dictionary<string, object>
                 {
@@ -137,43 +137,43 @@ namespace NexgenCosysReport.Controllers.MembeAccount
                 };
 
                 // -- Razor render --------------------------------------
-            
+
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
                         reportKey: reportKey,
                         reportPath: "Views/Report/AccountStatementReport.cshtml",
                         data: reportData));
-              
-              
+
+
 
                 if (upperFormat == "VIEW")
                 {
                     // -- jsreport PDF ----------------------------------
-                   
+
                     var pdfBytes = await Task.Run(() =>
                         _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey));
-                   
-                    response.IsValid = true;
-                    response.StatusCode = 200;
-                    response.Message = "Report generated successfully";
-                    response.Data = new ReportResponseDtos
+                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
+                    response.isValid = true;
+                    response.statusCode = 200;
+                    response.message = "Report generated successfully";
+                    response.data = new ReportResponseDtos
                     {
-                        PdfData = Convert.ToBase64String(pdfBytes),
-                        ReportName = reportName,
-                        Pagination = new Pagination
+                        pdfData = Convert.ToBase64String(pdfBytes),
+                        reportName = reportName,
+                        pagination = new Pagination
                         {
-                            CurrentPage = 1,
-                            TotalPages = 1,
-                            TotalRecord =1,  
-                            PageSize =   1,
-                            HasNextPage = false,
-                            HasPreviousPage = false
+                            currentPage = 1,
+                            totalPages = totalPages,
+                            totalRecord = statementData.Count(),
+                            pageSize = 1,
+                            hasNextPage = totalPages > 1,
+                            hasPreviousPage = false
                         }
                     };
                     return Ok(response);
                 }
 
-           
+
 
                 return await ReportExportHelper.ExportFromCacheAsync(
                     reportKey, upperFormat,
@@ -182,14 +182,15 @@ namespace NexgenCosysReport.Controllers.MembeAccount
             }
             catch (Exception ex)
             {
-             
+
                 return StatusCode(500, new
                 {
-                    success = false,
-                    message = "An error occurred while processing your request.",
-                    error = ex.Message
+                    message = ex.Message,
+                    inner = ex.InnerException?.Message,
+                    stack = ex.StackTrace
                 });
-            };
+            }
+            ;
         }
     }
 }

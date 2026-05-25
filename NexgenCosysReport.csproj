@@ -7,6 +7,11 @@
 	<AssemblyName>NexgenCosysReport</AssemblyName>
 	<RootNamespace>NexgenCosysReport</RootNamespace>
 	<NuGetAudit>false</NuGetAudit>
+	<PlatformTarget>x64</PlatformTarget>
+	<ServerGarbageCollection>true</ServerGarbageCollection>
+	<ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+	<UseAppHost>true</UseAppHost>
+	<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
   </PropertyGroup>
 
   <ItemGroup>
@@ -14,9 +19,12 @@
     <PackageReference Include="DateConverter.Core" Version="2.1.0" />
     <PackageReference Include="DocumentFormat.OpenXml" Version="3.5.1" />
     <PackageReference Include="HtmlToOpenXml.dll" Version="3.3.1" />
+    <PackageReference Include="itext" Version="9.6.0" />
+    <PackageReference Include="itext7.bouncy-castle-adapter" Version="9.6.0" />
     <PackageReference Include="jsreport.AspNetCore" Version="3.8.1" />
-    <PackageReference Include="jsreport.Binary" Version="3.8.1" />
-    <PackageReference Include="jsreport.Local" Version="3.8.1" />
+    <PackageReference Include="jsreport.Binary" Version="4.4.0" />
+    <PackageReference Include="jsreport.Client" Version="3.8.1" />
+    <PackageReference Include="jsreport.Local" Version="3.8.2" />
     <PackageReference Include="jsreport.Types" Version="3.9.4" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2">
@@ -29,6 +37,7 @@
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
     <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="10.0.2" />
+    <PackageReference Include="PdfSharpCore" Version="1.3.67" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.1" />
     <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />

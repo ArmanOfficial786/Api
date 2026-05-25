@@ -1,6 +1,5 @@
-using NexgenCosysReport.Dtos.RequestDtos.Common;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 
 namespace NexgenCosysReport.Controllers.Common
@@ -28,19 +27,17 @@ namespace NexgenCosysReport.Controllers.Common
                 var branches = await _branchService.GetByUserId(usmUserId);
 
                 if (!branches.Any())
-                { 
-                    response.IsValid = false;
-                    response.StatusCode = 400;
-                    response.Message = "No branches found";
-                    response.Data = null;
+                {
+                    response.isValid = false;
+                    response.statusCode = 400;
+                    response.message = "No branches found";
                     return BadRequest(response);
                 }
 
-                //return Ok(new { success = true, data = branches });
-                response.IsValid = true;
-                response.StatusCode = 200;
-                response.Message = "Success";
-                response.Data = branches;
+
+                response.isValid = true;
+                response.statusCode = 200;
+                response.data = branches;
                 return Ok(response);
             }
             catch (Exception ex)
@@ -48,10 +45,10 @@ namespace NexgenCosysReport.Controllers.Common
                 _logger.LogError(ex, "Error fetching branches");
                 return StatusCode(500, new GeneralResponse<string>
                 {
-                    IsValid = false,
-                    StatusCode = 500,
-                    Message = ex.Message,
-                    Data = null
+                    isValid = false,
+                    statusCode = 500,
+                    message = ex.Message,
+
                 });
             }
         }

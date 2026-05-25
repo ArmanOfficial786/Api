@@ -44,11 +44,11 @@
 //            try
 //            {
 //                var response = new GeneralResponse<ReportResponseDtos>();
-//                if (request == null || !ModelState.IsValid)
+//                if (request == null || !ModelState.isValid)
 //                {
-//                    response.IsValid = false;
-//                    response.StatusCode = 400;
-//                    response.Message = "Invalid request";
+//                    response.isValid = false;
+//                    response.statusCode = 400;
+//                    response.message = "Invalid request";
 //                    return BadRequest(response);
 //                }
 //                    //return BadRequest(new { success = false, message = "Invalid request" });
@@ -58,10 +58,10 @@
 
 //                ReportExportHelper.LogCacheState(
 //                    upperFormat, reportKey,
-//                    _jsReportService.IsHtmlCached(reportKey), _logger);
+//                    _jsReportService.TryGetCachedHtml(reportKey), _logger);
 
 //                // -- EXPORT PATH — no DB call --------------------------
-//                if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
+//                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey))
 //                {
 //                    _logger.LogInformation("? NO DB CALL — serving from cache");
 //                    return await ReportExportHelper.ExportFromCacheAsync(
@@ -193,9 +193,9 @@
 //                    //    }
 //                    //});
 
-//                    response.IsValid = true;
-//                    response.StatusCode = 200;
-//                    response.Message = "Success";
+//                    response.isValid = true;
+//                    response.statusCode = 200;
+//                    response.message = "Success";
 //                    response.Data = new ReportResponseDtos
 //                    {
 //                        PdfData = Convert.ToBase64String(pdfBytes),
@@ -222,11 +222,11 @@
 //            catch (Exception ex)
 //            {
 
-//                return StatusCode(500, new
+//                return statusCode(500, new
 //                {
 //                    success = false,
 //                    message = "An error occurred.",
-//                    error = ex.Message
+//                    error = ex.message
 //                });
 //            }
 //        }
@@ -241,14 +241,16 @@
 
 
 
-using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Utils.Report;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
-using System.Text.Json;
+using NexgenCosysReport.Dtos.ReportDtos;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.Member;
+using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Member;
+using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Report;
+using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Member
 {
@@ -261,6 +263,7 @@ namespace NexgenCosysReport.Controllers.Member
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly IOptions<ReportSettings> _reportSettings;
+        private readonly CustomHeaderResponse _headerResponse;
         private readonly ILogger<MemberIdCardController> _logger;
 
         public MemberIdCardController(
@@ -269,7 +272,8 @@ namespace NexgenCosysReport.Controllers.Member
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             IOptions<ReportSettings> reportSettings,
-            ILogger<MemberIdCardController> logger)
+            ILogger<MemberIdCardController> logger,
+            CustomHeaderResponse headerResponse)
         {
             _memberIdCardService = memberIdCardService;
             _memberDetail = memberDetail;
@@ -277,21 +281,9 @@ namespace NexgenCosysReport.Controllers.Member
             _webHostEnvironment = webHostEnvironment;
             _reportSettings = reportSettings;
             _logger = logger;
+            _headerResponse = headerResponse;
         }
 
-        // --------------------------------------------------------------------------
-        // POST api/MemberIdCard/MemberIdCard?format=VIEW|PDF|WORD|XLSX|PNG
-        //
-        // VIEW   ? returns binary PDF blob
-        //          Content-Type: application/pdf
-        //          Content-Disposition: inline
-        //          X-Pagination: { currentPage, totalPages, ... }  (JSON header)
-        //          ? ~33% smaller than base64 JSON — 48 MB ? 36 MB
-        //
-        // EXPORT ? returns binary blob
-        //          Content-Type: application/pdf | docx | xlsx | png
-        //          Content-Disposition: attachment; filename="MemberIdCardReport_20260407.pdf"
-        // --------------------------------------------------------------------------
         [HttpPost("MemberIdCard")]
         public async Task<ActionResult> GetMemberIdCardData(
             [FromBody] MemberIdCardRequest request,
@@ -307,10 +299,10 @@ namespace NexgenCosysReport.Controllers.Member
 
                 ReportExportHelper.LogCacheState(
                     upperFormat, reportKey,
-                    _jsReportService.IsHtmlCached(reportKey), _logger);
+                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
 
                 // -- EXPORT — cache hit ? skip DB entirely -------------------------
-                if (upperFormat != "VIEW" && _jsReportService.IsHtmlCached(reportKey))
+                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
                 {
                     _logger.LogInformation("? NO DB CALL — serving from cache");
                     return await ReportExportHelper.ExportFromCacheAsync(
@@ -320,7 +312,7 @@ namespace NexgenCosysReport.Controllers.Member
                 }
 
                 var webRoot = ReportUtils.GetWebRootPath(
-                    _webHostEnvironment, _reportSettings, _logger);
+                    _webHostEnvironment, _reportSettings);
 
                 // -- STAGE 1: DB queries — concurrent ------------------------------
                 var memberTask = _memberIdCardService.GetMemberIdCardData(request);
@@ -355,7 +347,7 @@ namespace NexgenCosysReport.Controllers.Member
                 await ReportUtils.ConvertUniqueImagesToBase64Async(
                     memberIdCardData,
                     nameof(MemberIdCardModel.MemberPhoto),
-                    webRoot, _logger);
+                    webRoot);
 
                 // -- STAGE 4: Razor render + cache HTML ----------------------------
                 var reportData = new Dictionary<string, object>
@@ -371,38 +363,24 @@ namespace NexgenCosysReport.Controllers.Member
                     data: reportData);
 
                 // -- STAGE 5: PDF generation ---------------------------------------
-             
 
-                // -- VIEW — return binary PDF blob ---------------------------------
-                // ? No base64 — raw bytes only — ~33% smaller than JSON base64
-                // ? Pagination sent in X-Pagination header (tiny JSON, not the body)
-                // ? Content-Disposition: inline — browser renders, does not download
-                // Frontend: fetch ? stream ? Blob ? URL.createObjectURL ? <iframe>
                 if (upperFormat == "VIEW")
                 {
                     var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
                  htmlContent, "PDF", reportKey);
-                    var pagination = new
+                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
+                    var pagination = new Pagination
                     {
-                        currentPage = request.currentPage,
-                        totalPages = 1,
-                        totalRecord = memberIdCardData.Count,
-                        pageSize = request.pageSize,
-                        hasNextPage = false,
-                        hasPreviousPage = false,
+                        currentPage = 1,
+                        totalPages = totalPages,
+                        totalRecord = memberIdCardData.Count(),
+                        pageSize = 1,
+                        hasNextPage = totalPages > 1,
+                        hasPreviousPage = false
                     };
+                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
+                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
 
-                    // ? Expose X-Pagination so frontend fetch() can read it
-                    Response.Headers.Append(
-                        "X-Pagination",
-                        JsonSerializer.Serialize(pagination));
-
-                    // ? Expose the header to fetch() on the frontend (CORS)
-                    Response.Headers.Append(
-                        "Access-Control-Expose-Headers",
-                        "X-Pagination");
-
-                    // ? inline ? browser renders PDF (not download prompt)
                     Response.Headers.Append(
                         "Content-Disposition",
                         "inline; filename=\"MemberIdCardReport.pdf\"");
@@ -418,7 +396,7 @@ namespace NexgenCosysReport.Controllers.Member
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Unhandled error in MemberIdCard");
+                _headerResponse.SetResponseHeaders(false, 500, $"Failed to generate report: {ex.Message}");
                 return StatusCode(500, new
                 {
                     success = false,
