@@ -36,6 +36,7 @@
     var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var showHeader = !Model.TryGetValue("ShowHeader", out var shVal) || (shVal is bool sh && sh);
 
     var grouped = dataSet
         .GroupBy(x => x.SavingType ?? "—")
@@ -190,9 +191,13 @@
     <div class="report-container">
 
         @if (!isExcel)
+        {
+            @* Partial only shown when showHeader is true (first chunk) *@
+            @if (showHeader)
             {
                 @await Html.PartialAsync("_CommonHeader", Model)
             }
+        }
 
             <table class="data-table">
                 <colgroup>
@@ -208,16 +213,19 @@
                 </colgroup>
 
                 <thead>
-                    <tr class="meta-title">
-                        <td colspan="9">Saving Account Wise Balance Report</td>
-                    </tr>
-                    <tr class="meta-row">
-                        <td colspan="5"><strong>Branch Name :</strong> @branchName</td>
-                        <td colspan="4" class="text-right"><strong>Till Date :</strong> @tillDate</td>
-                    </tr>
-                    <tr class="meta-row">
-                        <td colspan="9"><strong>Report Generated On :</strong> @generatedOn</td>
-                    </tr>
+                    @if (showHeader)
+                    {
+                        <tr class="meta-title">
+                            <td colspan="9">Saving Account Wise Balance Report</td>
+                        </tr>
+                        <tr class="meta-row">
+                            <td colspan="5"><strong>Branch Name :</strong> @branchName</td>
+                            <td colspan="4" class="text-right"><strong>Till Date :</strong> @tillDate</td>
+                        </tr>
+                        <tr class="meta-row">
+                            <td colspan="9"><strong>Report Generated On :</strong> @generatedOn</td>
+                        </tr>
+                    }
                     <tr class="meta-spacer"><td colspan="9"></td></tr>
                     <tr>
                         <th>Saving Type</th>

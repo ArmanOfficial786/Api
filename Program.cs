@@ -56,7 +56,14 @@ builder.Services.AddCors(options =>
                 "X-Message",
                 "X-IsValid",
                 "X-StatusCode",
-                "Content-Disposition");
+                "Content-Disposition",
+                // ← Add these progressive headers:
+                "X-Pages-Ready",
+                "X-Is-Complete",
+                "X-Total-Chunks",
+                "X-Completed-Chunks",
+                "X-Size-Bytes"
+                );
     });
 });
 
@@ -83,6 +90,7 @@ builder.Services.AddScoped<IReportFileResponse, ReportFileResponse>();
 builder.Services.AddSingleton<IRazorRenderService, RazorRenderService>();
 builder.Services.AddScoped<IPdfChunkService, PdfChunkService>();
 builder.Services.AddSingleton<IJsReportService, JsReportService>();
+builder.Services.AddSingleton<IProgressivePdfService, ProgressivePdfService>();
 builder.Services.AddScoped<IMemberDetail, MemberRegistrationDetailHandler>();
 builder.Services.AddScoped<IMemberIdCard, MemberIdCardRepository>();
 builder.Services.AddScoped<IAccountStatement, AccountStatementRepository>();
