@@ -91,6 +91,7 @@ builder.Services.AddSingleton<IRazorRenderService, RazorRenderService>();
 builder.Services.AddScoped<IPdfChunkService, PdfChunkService>();
 builder.Services.AddSingleton<IJsReportService, JsReportService>();
 builder.Services.AddSingleton<IProgressivePdfService, ProgressivePdfService>();
+builder.Services.AddHostedService<ProgressiveTempCleanupService>();
 builder.Services.AddScoped<IMemberDetail, MemberRegistrationDetailHandler>();
 builder.Services.AddScoped<IMemberIdCard, MemberIdCardRepository>();
 builder.Services.AddScoped<IAccountStatement, AccountStatementRepository>();

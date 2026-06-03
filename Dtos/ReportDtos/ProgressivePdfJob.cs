@@ -120,123 +120,75 @@
 
 
 //best of all
-
 using System.Collections.Concurrent;
 
 namespace NexgenCosysReport.Dtos.ReportDtos
 {
     /// <summary>
-    /// Tracks the full lifecycle of one progressive-PDF render job.
+    /// Represents a running or completed progressive PDF build job.
     ///
-    /// Three-level pipeline state
-    /// ──────────────────────────
-    ///   PendingChunks  — compressed per-chunk PDFs awaiting level-1 merge.
-    ///   PendingSlabs   — level-1 slab PDFs awaiting level-2 accumulation.
-    ///   BasePdfPath    — the rolling accumulated base; served for snapshots.
+    /// Lifecycle:
+    ///   chunks rendered → compressed → flushed into slabs → slabs accumulated into base.pdf
     ///
-    /// Thread-safety
-    /// ─────────────
-    ///   PendingChunks / PendingSlabs: ConcurrentDictionary (lock-free adds
-    ///     from render tasks; drains from the single flush consumer).
-    ///   FlushLock: SemaphoreSlim(1,1) serialises all writes to base.pdf and
-    ///     the two pending collections.  Snapshot readers hold it only for the
-    ///     few microseconds needed to copy the path lists.
-    ///   Scalar progress fields (PagesReady etc.) written only by the flush
-    ///     consumer (single writer) — no lock needed for reads.
+    /// All dictionaries are ConcurrentDictionary so reads from GetSnapshotAsync
+    /// never need a lock — only FlushLock is needed when writing base.pdf.
     /// </summary>
     public sealed class ProgressivePdfJob : IDisposable
     {
-        // ── Identity ─────────────────────────────────────────────────────────
+        // ── Identity ────────────────────────────────────────────────────────
         public string JobId { get; } = Guid.NewGuid().ToString("N");
 
-        // ── Paths ─────────────────────────────────────────────────────────────
-
-        /// <summary>Scratch directory for all temp files for this job.</summary>
+        // ── File system ─────────────────────────────────────────────────────
         public string TempDir { get; init; } = string.Empty;
-
-        /// <summary>
-        /// First rendered chunk (with report header / column headings).
-        /// Written synchronously in StartAsync — always valid before StartAsync returns.
-        /// Also seeded into BasePdfPath so snapshots are available immediately.
-        /// </summary>
         public string HeaderChunkPath { get; init; } = string.Empty;
-
-        /// <summary>
-        /// The rolling merged PDF.
-        /// Initially a copy of the header chunk.
-        /// Updated atomically (write-then-rename) by level-2 accumulations.
-        /// Snapshots read: BasePdfPath + PendingSlabs + PendingChunks (tail only).
-        /// </summary>
         public string BasePdfPath { get; init; } = string.Empty;
 
-        // ── Progress ─────────────────────────────────────────────────────────
+        /// <summary>Rendered + compressed chunk files awaiting slab flush. Key = chunk index.</summary>
+        public ConcurrentDictionary<int, string> PendingChunks { get; } = new();
 
+        /// <summary>Merged slab files awaiting base accumulation. Key = slab sequence number.</summary>
+        public ConcurrentDictionary<int, string> PendingSlabs { get; } = new();
+
+        // ── Progress ─────────────────────────────────────────────────────────
         public int TotalRows { get; init; }
-        public int TotalChunks { get; init; }
+        public int TotalChunks { get; set; }
         public int EstimatedTotalPages { get; init; }
 
         private int _completedChunks;
-        public int CompletedChunks => _completedChunks;
+        public int CompletedChunks => Volatile.Read(ref _completedChunks);
         public void IncrementCompletedChunks() => Interlocked.Increment(ref _completedChunks);
 
-        /// <summary>Pages in base.pdf after the most recent accumulation.</summary>
         public int PagesReady { get; set; }
         public long CurrentSizeBytes { get; set; }
+        public int AccumulationCount { get; set; }
         public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
 
-        /// <summary>How many level-2 accumulations have been completed.</summary>
-        public int AccumulationCount { get; set; }
-
-        // ── Completion / error ────────────────────────────────────────────────
-
+        // ── Status ───────────────────────────────────────────────────────────
         public bool IsComplete { get; set; }
         public bool HasError { get; set; }
         public string ErrorMessage { get; set; } = string.Empty;
 
-        // ── Pipeline state (concurrency-safe) ────────────────────────────────
-
         /// <summary>
-        /// Level-0 → Level-1 queue.
-        /// Compressed chunk PDFs awaiting the next slab flush.
-        /// Key = global chunk index (1, 2, 3 …).
-        /// Written by render tasks; drained by the flush consumer.
+        /// Set once by GetFinalAsync after compress+stamp completes.
+        /// Null means the final file has not been prepared yet.
+        /// Stays valid until cache eviction (60 min absolute).
         /// </summary>
-        public ConcurrentDictionary<int, string> PendingChunks { get; } = new();
+        public string? FinalPdfPath { get; set; }
 
-        /// <summary>
-        /// Level-1 → Level-2 queue.
-        /// Slab PDFs (each = BatchFlushSize compressed chunks) awaiting
-        /// the next base.pdf accumulation.
-        /// Key = monotonic slab sequence number.
-        /// Written and drained exclusively by the flush consumer (under FlushLock).
-        /// </summary>
-        public ConcurrentDictionary<int, string> PendingSlabs { get; } = new();
-
-        /// <summary>
-        /// Serialises ALL writes to base.pdf and drains of PendingChunks /
-        /// PendingSlabs.  Also held briefly by snapshot readers to copy
-        /// the tail path lists.
-        ///
-        /// Acquiring order: always FlushLock before any file I/O.
-        /// </summary>
+        // ── Synchronisation ──────────────────────────────────────────────────
+        /// <summary>Serialises writes to base.pdf so snapshot reads never see a partial file.</summary>
         public SemaphoreSlim FlushLock { get; } = new(1, 1);
 
-        /// <summary>
-        /// Allows external callers (e.g. DELETE /jobs/{id}) to cancel the
-        /// background render without shutting down the host.
-        /// </summary>
+        /// <summary>Per-job cancel — cancelled by the background service on timeout or error.</summary>
         public CancellationTokenSource CancellationTokenSource { get; } = new();
 
-        // ── IDisposable ───────────────────────────────────────────────────────
-
-        private bool _disposed;
+        // ── Disposal ─────────────────────────────────────────────────────────
+        private int _disposed;
 
         public void Dispose()
         {
-            if (_disposed) return;
-            _disposed = true;
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
             FlushLock.Dispose();
-            CancellationTokenSource.Cancel();
             CancellationTokenSource.Dispose();
         }
     }

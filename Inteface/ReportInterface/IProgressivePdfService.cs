@@ -85,5 +85,8 @@ namespace NexgenCosysReport.Inteface.ReportInterface
 
         Task<(byte[] Bytes, ProgressivePdfJob Job)> GetFinalAsync(
             string jobId, CancellationToken ct);
+
+        // Add this line
+        void CleanupOrphanedFolders(TimeSpan deleteIfOlderThan);
     }
 }

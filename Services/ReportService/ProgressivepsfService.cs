@@ -931,7 +931,6 @@
 
 
 //latest best of all
-//latest best of all
 using iText.Kernel.Colors;
 using iText.Kernel.Font;
 using iText.Kernel.Pdf;
@@ -953,71 +952,25 @@ namespace NexgenCosysReport.Services.ReportService
 {
     public sealed class ProgressivePdfService : IProgressivePdfService, IDisposable
     {
-        // ── Dependencies ────────────────────────────────────────────────────
         private readonly IRazorRenderService _razor;
         private readonly IJsReportMVCService _jsReport;
         private readonly IMemoryCache _cache;
         private readonly ILogger<ProgressivePdfService> _logger;
         private readonly IHostApplicationLifetime _lifetime;
+        private readonly string _tempRoot;
 
-        // ════════════════════════════════════════════════════════════════════
-        //  TUNING  — all in one place for easy adjustment
-        // ════════════════════════════════════════════════════════════════════
-
-        /// <summary>
-        /// Number of compressed chunks merged into one slab (level-1 merge).
-        /// Input per merge = BatchFlushSize × ~1.5 MB ≈ 7.5 MB (CONSTANT).
-        /// Keep at 5; lowering increases flush frequency, raising delays previews.
-        /// </summary>
         private const int BatchFlushSize = 5;
-
-        /// <summary>
-        /// Number of slabs accumulated into base.pdf (level-2 merge).
-        /// Input per merge = SlabAccumulateSize × ~7.5 MB ≈ 30 MB (CONSTANT).
-        /// </summary>
         private const int SlabAccumulateSize = 4;
-
-        /// <summary>
-        /// Compress each chunk immediately after render using ReportUtils.
-        /// Adds ~200–400 ms per chunk but reduces disk I/O by 60–75%.
-        /// Set false only if CPU is the bottleneck (unlikely for text PDFs).
-        /// </summary>
         private const bool CompressChunksAfterRender = true;
-
-        /// <summary>
-        /// Recompress base.pdf every N level-2 accumulations. Set to 1 for always.
-        /// Keeps base.pdf tight for snapshot serving.  0 = never.
-        /// </summary>
-        private const int RecompressBaseEveryN = 1;  // CHANGED: always recompress
-
         private const int RenderTimeoutMs = 600_000;
         private const int RenderRetryAttempts = 3;
         private const int MaxConcurrentJobs = 4;
-
-        /// <summary>
-        /// Maximum threads dedicated to iText merge work.
-        /// Separate from ASP.NET pool to prevent Kestrel starvation.
-        /// </summary>
-        private const int MaxMergeThreads = 4;  // CHANGED: increased from 2
-
-        private static readonly SemaphoreSlim GlobalJobThrottle =
-            new(MaxConcurrentJobs, MaxConcurrentJobs);
-
-        /// <summary>
-        /// Dedicated semaphore for ALL iText merge operations across all jobs.
-        /// Prevents thread-pool starvation (fixes the Kestrel heartbeat warning).
-        /// </summary>
-        private static readonly SemaphoreSlim MergeThrottle =
-            new(MaxMergeThreads, MaxMergeThreads);
-
-        // Updated based on real compressed chunk size from logs (~329 KB)
-        private const long EstimatedCompressedBytesPerChunk = 329 * 1024; // ~329 KB
+        private const int MaxMergeThreads = 4;
+        private static readonly SemaphoreSlim GlobalJobThrottle = new(MaxConcurrentJobs, MaxConcurrentJobs);
+        private static readonly SemaphoreSlim MergeThrottle = new(MaxMergeThreads, MaxMergeThreads);
+        private const long EstimatedCompressedBytesPerChunk = 329 * 1024;
 
         private bool _disposed;
-
-        // ════════════════════════════════════════════════════════════════════
-        //  CONSTRUCTOR
-        // ════════════════════════════════════════════════════════════════════
 
         public ProgressivePdfService(
             IRazorRenderService razor,
@@ -1031,11 +984,15 @@ namespace NexgenCosysReport.Services.ReportService
             _cache = cache;
             _logger = logger;
             _lifetime = lifetime;
+
+            _tempRoot = Path.Combine(Path.GetTempPath(), "nexgen_progressive");
+            Directory.CreateDirectory(_tempRoot);
+            CleanupUnusedFolders(TimeSpan.FromHours(1));
         }
 
-        // ════════════════════════════════════════════════════════════════════
-        //  PUBLIC API
-        // ════════════════════════════════════════════════════════════════════
+        // =====================================================================
+        // PUBLIC API
+        // =====================================================================
 
         public async Task<ProgressivePdfJob> StartAsync(
             string reportPath,
@@ -1046,7 +1003,6 @@ namespace NexgenCosysReport.Services.ReportService
             int chunkSize = 500,
             int maxParallelism = 4)
         {
-            // ── Validation ─────────────────────────────────────────────────
             if (string.IsNullOrWhiteSpace(reportPath))
                 throw new ArgumentException("reportPath is required.", nameof(reportPath));
             if (reportPath.Contains("..", StringComparison.Ordinal))
@@ -1055,20 +1011,17 @@ namespace NexgenCosysReport.Services.ReportService
                 throw new ArgumentOutOfRangeException(nameof(chunkSize), "Must be 1–10 000.");
             if (maxParallelism is <= 0 or > 16)
                 throw new ArgumentOutOfRangeException(nameof(maxParallelism), "Must be 1–16.");
-            if (!reportData.TryGetValue(rowsKey, out var rowsObj) ||
-                rowsObj is not IEnumerable<object> rowsEnum)
+            if (!reportData.TryGetValue(rowsKey, out var rowsObj) || rowsObj is not IEnumerable<object> rowsEnum)
                 throw new ArgumentException($"reportData['{rowsKey}'] must be IEnumerable<object>.");
 
             var allRows = rowsEnum as IList<object> ?? rowsEnum.ToList();
             if (allRows.Count == 0)
                 throw new ArgumentException("Row collection is empty.");
 
-            // ── Disk pre-flight ────────────────────────────────────────────
-            var tempRoot = Path.Combine(Path.GetTempPath(), "nexgen_progressive");
-            Directory.CreateDirectory(tempRoot);
-            EnsureSufficientDiskSpace(tempRoot, allRows.Count, chunkSize);
+            CleanupUnusedFolders(TimeSpan.FromHours(1));
+            EnsureSufficientDiskSpace(_tempRoot, allRows.Count, chunkSize);
 
-            var tempDir = Path.Combine(tempRoot, Guid.NewGuid().ToString("N"));
+            var tempDir = Path.Combine(_tempRoot, Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
 
             var chunks = PartitionRows(allRows, chunkSize);
@@ -1085,30 +1038,19 @@ namespace NexgenCosysReport.Services.ReportService
 
             RegisterCache(job);
 
-            _logger.LogInformation(
-                "🚀 Job {JobId} — {Rows} rows, {Chunks} chunks, " +
-                "parallelism={Par}, chunkFlush={CF}, slabAccum={SA}",
-                job.JobId, allRows.Count, chunks.Count,
-                maxParallelism, BatchFlushSize, SlabAccumulateSize);
+            _logger.LogInformation("🚀 Job {JobId} — {Rows} rows, {Chunks} chunks", job.JobId, allRows.Count, chunks.Count);
 
-            // ── Render first chunk synchronously so caller gets immediate data
-            await RenderChunkWithRetryAsync(
-                chunks[0], reportData, rowsKey, reportPath, pageSetting,
-                job.HeaderChunkPath, ct, showHeader: true)
-                .ConfigureAwait(false);
+            await RenderChunkWithRetryAsync(chunks[0], reportData, rowsKey, reportPath, pageSetting,
+                job.HeaderChunkPath, ct, showHeader: true).ConfigureAwait(false);
 
-            // Seed base.pdf from the (already compressed) header chunk.
             File.Copy(job.HeaderChunkPath, job.BasePdfPath, overwrite: true);
-
             job.IncrementCompletedChunks();
             job.PagesReady = CountPages(job.BasePdfPath);
             job.CurrentSizeBytes = SafeFileLength(job.BasePdfPath);
             job.LastUpdated = DateTime.UtcNow;
 
-            // ── Background rendering pipeline ──────────────────────────────
             var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(
-                _lifetime.ApplicationStopping,
-                job.CancellationTokenSource.Token);
+                _lifetime.ApplicationStopping, job.CancellationTokenSource.Token, ct);
 
             _ = Task.Run(async () =>
             {
@@ -1117,19 +1059,17 @@ namespace NexgenCosysReport.Services.ReportService
                     await GlobalJobThrottle.WaitAsync(linkedCts.Token).ConfigureAwait(false);
                     try
                     {
-                        await ProcessRemainingChunksAsync(
-                            job, chunks, reportData, rowsKey,
-                            reportPath, pageSetting, maxParallelism,
-                            linkedCts.Token)
-                            .ConfigureAwait(false);
+                        await ProcessRemainingChunksAsync(job, chunks, reportData, rowsKey,
+                            reportPath, pageSetting, maxParallelism, linkedCts.Token).ConfigureAwait(false);
                     }
                     finally { GlobalJobThrottle.Release(); }
                 }
-                catch (OperationCanceledException) when (linkedCts.IsCancellationRequested)
+                catch (OperationCanceledException)
                 {
                     job.HasError = true;
-                    job.ErrorMessage = "Cancelled (host shutting down or job cancelled).";
-                    _logger.LogWarning("⚠️  Job {JobId} cancelled", job.JobId);
+                    job.ErrorMessage = "Cancelled (request closed or host stopping).";
+                    _logger.LogWarning("⚠️ Job {JobId} cancelled – cleaning up temp folder", job.JobId);
+                    TryCleanup(job.TempDir, retries: 3);
                 }
                 catch (Exception ex)
                 {
@@ -1146,20 +1086,12 @@ namespace NexgenCosysReport.Services.ReportService
         public ProgressivePdfJob? GetJob(string jobId)
             => _cache.TryGetValue(CacheKey(jobId), out ProgressivePdfJob? job) ? job : null;
 
-        /// <summary>
-        /// Fast snapshot: base.pdf (accumulated slabs) + un-accumulated slab tail
-        /// + un-flushed chunk tail.  Cost = O(≤SlabAccumulateSize + ≤BatchFlushSize).
-        /// </summary>
-        public async Task<(byte[] Bytes, ProgressivePdfJob Job)> GetSnapshotAsync(
-            string jobId, CancellationToken ct)
+        public async Task<(byte[] Bytes, ProgressivePdfJob Job)> GetSnapshotAsync(string jobId, CancellationToken ct)
         {
-            var job = GetJob(jobId)
-                ?? throw new KeyNotFoundException($"Job {jobId} not found or expired.");
-
+            var job = GetJob(jobId) ?? throw new KeyNotFoundException($"Job {jobId} not found or expired.");
             if (!File.Exists(job.BasePdfPath))
                 throw new FileNotFoundException("base.pdf not ready.", job.BasePdfPath);
 
-            // Snapshot: base + any pending slabs + any pending chunks
             List<string> inputs;
             await job.FlushLock.WaitAsync(ct).ConfigureAwait(false);
             try
@@ -1171,59 +1103,94 @@ namespace NexgenCosysReport.Services.ReportService
             var snapPath = Path.Combine(job.TempDir, $"snap_{Guid.NewGuid():N}.pdf");
             try
             {
-                await MergeOnMergeThreadAsync(inputs, snapPath,
-                    CompressionLevel.Speed, stampPageNumbers: true, ct)
-                    .ConfigureAwait(false);
-
+                await MergeOnMergeThreadAsync(inputs, snapPath, CompressionLevel.Speed, true, ct).ConfigureAwait(false);
                 return (await File.ReadAllBytesAsync(snapPath, ct).ConfigureAwait(false), job);
             }
             finally { TryDelete(snapPath); }
         }
 
-        /// <summary>Returns the fully merged, best-compressed final PDF.</summary>
-        public async Task<(byte[] Bytes, ProgressivePdfJob Job)> GetFinalAsync(
-            string jobId, CancellationToken ct)
+        public async Task<(byte[] Bytes, ProgressivePdfJob Job)> GetFinalAsync(string jobId, CancellationToken ct)
         {
-            var job = GetJob(jobId)
-                ?? throw new KeyNotFoundException($"Job {jobId} not found or expired.");
-
+            var job = GetJob(jobId) ?? throw new KeyNotFoundException($"Job {jobId} not found or expired.");
             if (!job.IsComplete)
-                throw new InvalidOperationException(
-                    $"Job {jobId} is not complete ({job.CompletedChunks}/{job.TotalChunks}).");
+                throw new InvalidOperationException($"Job {jobId} is not complete ({job.CompletedChunks}/{job.TotalChunks}).");
             if (job.HasError)
                 throw new InvalidOperationException($"Job {jobId} failed: {job.ErrorMessage}");
 
-            // Ensure everything is flushed into base.pdf before final download.
-            await FlushAllToBaseAsync(job, ct).ConfigureAwait(false);
+            if (string.IsNullOrEmpty(job.FinalPdfPath) || !File.Exists(job.FinalPdfPath))
+                throw new FileNotFoundException("Final PDF not generated yet. Please wait for completion.");
 
-            var finalPath = Path.Combine(job.TempDir, $"final_{Guid.NewGuid():N}.pdf");
-            try
-            {
-                // Re-read base.pdf (now complete) with best compression + page numbers.
-                await MergeOnMergeThreadAsync(
-                    new[] { job.BasePdfPath }, finalPath,
-                    CompressionLevel.Best, stampPageNumbers: true, ct)
-                    .ConfigureAwait(false);
-
-                return (await File.ReadAllBytesAsync(finalPath, ct).ConfigureAwait(false), job);
-            }
-            finally { TryDelete(finalPath); }
+            byte[] bytes = await File.ReadAllBytesAsync(job.FinalPdfPath, ct).ConfigureAwait(false);
+            return (bytes, job);
         }
 
-        // ════════════════════════════════════════════════════════════════════
-        //  CORE BACKGROUND PIPELINE
-        //
-        //  Stage A — Render producer (parallelism=maxParallelism):
-        //    Renders chunks concurrently; compresses each; signals channel.
-        //
-        //  Stage B — Slab flush consumer (single reader):
-        //    Waits for BatchFlushSize signals; merges chunks → slab_NNNNN.pdf.
-        //    Merge input: always BatchFlushSize × ~329 KB = CONSTANT.
-        //
-        //  Stage C — Base accumulation (inside slab flush):
-        //    Every SlabAccumulateSize slabs, merges slabs → base.pdf.
-        //    Merge input: always SlabAccumulateSize × ~1.6 MB = CONSTANT.
-        // ════════════════════════════════════════════════════════════════════
+        public void CleanupOrphanedFolders(TimeSpan deleteIfOlderThan)
+            => CleanupUnusedFolders(deleteIfOlderThan);
+
+        // =====================================================================
+        // CLEANUP LOGIC
+        // =====================================================================
+
+        private void CleanupUnusedFolders(TimeSpan olderThan)
+        {
+            if (!Directory.Exists(_tempRoot)) return;
+
+            var now = DateTime.UtcNow;
+            foreach (var dir in Directory.GetDirectories(_tempRoot))
+            {
+                var dirInfo = new DirectoryInfo(dir);
+                if (now - dirInfo.CreationTimeUtc > olderThan && !IsJobActive(dir))
+                {
+                    TryCleanup(dir, retries: 3);
+                    _logger.LogInformation("🧹 Deleted old/unused folder: {Dir}", dir);
+                }
+            }
+        }
+
+        private bool IsJobActive(string folderPath)
+        {
+            var folderName = Path.GetFileName(folderPath);
+            return _cache.TryGetValue(CacheKey(folderName), out _);
+        }
+
+        private static void TryCleanup(string dir, int retries = 3)
+        {
+            for (int i = 0; i < retries; i++)
+            {
+                try
+                {
+                    if (Directory.Exists(dir))
+                    {
+                        foreach (var file in Directory.GetFiles(dir, "*", SearchOption.AllDirectories))
+                            File.SetAttributes(file, FileAttributes.Normal);
+                        Directory.Delete(dir, recursive: true);
+                        return;
+                    }
+                }
+                catch (UnauthorizedAccessException) when (i < retries - 1) { Thread.Sleep(1000); }
+                catch (DirectoryNotFoundException) { return; }
+                catch (IOException) when (i < retries - 1) { Thread.Sleep(500); }
+                catch { return; }
+            }
+        }
+
+        private static void TryDelete(string? path, int retries = 3)
+        {
+            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+            for (int i = 0; i < retries; i++)
+            {
+                try { File.Delete(path); return; }
+                catch (UnauthorizedAccessException) when (i < retries - 1) { Thread.Sleep(500); }
+                catch (IOException) when (i < retries - 1) { Thread.Sleep(500); }
+                catch { return; }
+            }
+        }
+
+        // =====================================================================
+        // CORE PROGRESSIVE LOGIC
+        // =====================================================================
+
+        private enum CompressionLevel { Speed, Best }
 
         private async Task ProcessRemainingChunksAsync(
             ProgressivePdfJob job,
@@ -1237,24 +1204,20 @@ namespace NexgenCosysReport.Services.ReportService
         {
             var sw = Stopwatch.StartNew();
             using var renderThrottle = new SemaphoreSlim(maxParallelism, maxParallelism);
-
-            // Unbounded channel: many render writers → single flush reader.
             var channel = Channel.CreateUnbounded<int>(new UnboundedChannelOptions
             {
                 SingleReader = true,
                 AllowSynchronousContinuations = false
             });
 
-            int slabSeq = 0; // monotonic slab sequence number
-            int accumulCount = 0; // slabs since last level-2 accumulation
+            int slabSeq = 0;
+            int accumulCount = 0;
 
-            // ── Stage A: render producer ────────────────────────────────────
             var renderProducer = Task.Run(async () =>
             {
                 try
                 {
                     var tasks = new List<Task>(allChunks.Count - 1);
-
                     for (int i = 1; i < allChunks.Count; i++)
                     {
                         ct.ThrowIfCancellationRequested();
@@ -1262,44 +1225,30 @@ namespace NexgenCosysReport.Services.ReportService
                         var chunk = allChunks[i];
 
                         await renderThrottle.WaitAsync(ct).ConfigureAwait(false);
-
                         tasks.Add(Task.Run(async () =>
                         {
                             try
                             {
                                 var path = Path.Combine(job.TempDir, $"chunk_{idx:D5}.pdf");
-
-                                await RenderChunkWithRetryAsync(
-                                    chunk, reportData, rowsKey, reportPath,
-                                    pageSetting, path, ct, showHeader: false)
-                                    .ConfigureAwait(false);
+                                await RenderChunkWithRetryAsync(chunk, reportData, rowsKey, reportPath,
+                                    pageSetting, path, ct, showHeader: false).ConfigureAwait(false);
 
                                 job.PendingChunks[idx] = path;
                                 job.IncrementCompletedChunks();
                                 job.LastUpdated = DateTime.UtcNow;
-
                                 await channel.Writer.WriteAsync(idx, ct).ConfigureAwait(false);
-                            }
-                            catch (OperationCanceledException) { throw; }
-                            catch (Exception ex)
-                            {
-                                _logger.LogError(ex, "❌ Job {JobId} chunk {Idx} failed", job.JobId, idx);
-                                throw;
                             }
                             finally { renderThrottle.Release(); }
                         }, ct));
                     }
-
                     await Task.WhenAll(tasks).ConfigureAwait(false);
                 }
                 finally { channel.Writer.TryComplete(); }
             }, ct);
 
-            // ── Stage B: slab flush consumer ───────────────────────────────
             var flushConsumer = Task.Run(async () =>
             {
                 int pendingSinceFlush = 0;
-
                 await foreach (var _ in channel.Reader.ReadAllAsync(ct))
                 {
                     pendingSinceFlush++;
@@ -1310,37 +1259,25 @@ namespace NexgenCosysReport.Services.ReportService
                         await job.FlushLock.WaitAsync(ct).ConfigureAwait(false);
                         try
                         {
-                            // Drain pending chunks → slab
-                            var slabPath = await FlushChunksToSlabAsync(
-                                job, ++slabSeq, ct)
-                                .ConfigureAwait(false);
-
+                            var slabPath = await FlushChunksToSlabAsync(job, ++slabSeq, ct).ConfigureAwait(false);
                             if (slabPath != null)
                             {
                                 job.PendingSlabs[slabSeq] = slabPath;
                                 accumulCount++;
                             }
 
-                            // Accumulate slabs → base.pdf
-                            bool shouldAccumulate =
-                                accumulCount >= SlabAccumulateSize || isLast;
-
+                            bool shouldAccumulate = accumulCount >= SlabAccumulateSize || isLast;
                             if (shouldAccumulate && !job.PendingSlabs.IsEmpty)
                             {
-                                // CHANGED: always recompress (RecompressBaseEveryN = 1)
-                                await AccumulateSlabsToBaseAsync(job, recompress: true, ct)
-                                    .ConfigureAwait(false);
-
+                                await AccumulateSlabsToBaseAsync(job, true, ct).ConfigureAwait(false);
                                 accumulCount = 0;
                             }
                         }
                         finally { job.FlushLock.Release(); }
-
                         pendingSinceFlush = 0;
                     }
                 }
 
-                // Drain any remainder after channel closes.
                 if (!job.PendingChunks.IsEmpty || !job.PendingSlabs.IsEmpty)
                 {
                     await job.FlushLock.WaitAsync(ct).ConfigureAwait(false);
@@ -1348,54 +1285,33 @@ namespace NexgenCosysReport.Services.ReportService
                     {
                         if (!job.PendingChunks.IsEmpty)
                         {
-                            var slabPath = await FlushChunksToSlabAsync(job, ++slabSeq, ct)
-                                .ConfigureAwait(false);
-                            if (slabPath != null)
-                                job.PendingSlabs[slabSeq] = slabPath;
+                            var slabPath = await FlushChunksToSlabAsync(job, ++slabSeq, ct).ConfigureAwait(false);
+                            if (slabPath != null) job.PendingSlabs[slabSeq] = slabPath;
                         }
-
                         if (!job.PendingSlabs.IsEmpty)
-                        {
-                            await AccumulateSlabsToBaseAsync(job, recompress: true, ct)
-                                .ConfigureAwait(false);
-                        }
+                            await AccumulateSlabsToBaseAsync(job, true, ct).ConfigureAwait(false);
                     }
                     finally { job.FlushLock.Release(); }
                 }
             }, ct);
 
-            try
-            {
-                await Task.WhenAll(renderProducer, flushConsumer).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                job.HasError = true;
-                job.ErrorMessage = ex.Message;
-                _logger.LogError(ex, "❌ Job {JobId} aggregate failure", job.JobId);
-                return;
-            }
+            await Task.WhenAll(renderProducer, flushConsumer).ConfigureAwait(false);
 
             job.PagesReady = CountPages(job.BasePdfPath);
             job.CurrentSizeBytes = SafeFileLength(job.BasePdfPath);
             job.IsComplete = true;
 
-            _logger.LogInformation(
-                "✅ Job {JobId} complete — {Pages} pp, {MB:F2} MB in {S:F1}s",
-                job.JobId, job.PagesReady,
-                job.CurrentSizeBytes / 1024.0 / 1024.0,
-                sw.Elapsed.TotalSeconds);
+            // Generate final PDF (once) – compressed and stamped
+            var finalPath = Path.Combine(job.TempDir, "final.pdf");
+            await MergeOnMergeThreadAsync(new[] { job.BasePdfPath }, finalPath, CompressionLevel.Best, true, ct).ConfigureAwait(false);
+            job.FinalPdfPath = finalPath;
+            job.CurrentSizeBytes = SafeFileLength(finalPath);
+
+            _logger.LogInformation("✅ Job {JobId} complete — {Pages} pp, {MB:F2} MB in {S:F1}s",
+                job.JobId, job.PagesReady, job.CurrentSizeBytes / 1024.0 / 1024.0, sw.Elapsed.TotalSeconds);
         }
 
-        // ════════════════════════════════════════════════════════════════════
-        //  LEVEL-1 FLUSH: pending chunks → slab_NNNNN.pdf
-        //  Input is ALWAYS ≤BatchFlushSize × ~329 KB regardless of batch#.
-        // ════════════════════════════════════════════════════════════════════
-
-        private async Task<string?> FlushChunksToSlabAsync(
-            ProgressivePdfJob job,
-            int slabSeq,
-            CancellationToken ct)
+        private async Task<string?> FlushChunksToSlabAsync(ProgressivePdfJob job, int slabSeq, CancellationToken ct)
         {
             var toFlush = new List<(int idx, string path)>();
             foreach (var kv in job.PendingChunks.OrderBy(x => x.Key))
@@ -1406,39 +1322,16 @@ namespace NexgenCosysReport.Services.ReportService
 
             if (toFlush.Count == 0) return null;
 
-            var sw = Stopwatch.StartNew();
             var slabPath = Path.Combine(job.TempDir, $"slab_{slabSeq:D5}.pdf");
             var inputs = toFlush.Select(t => t.path).ToList();
-
-            // CHANGED: use Best compression for slabs to keep them small
-            await MergeOnMergeThreadAsync(
-                inputs, slabPath,
-                CompressionLevel.Best,   // previously Speed
-                stampPageNumbers: false,
-                ct)
-                .ConfigureAwait(false);
-
-            // Slab is written — delete chunk files (disk reclaimed immediately).
+            await MergeOnMergeThreadAsync(inputs, slabPath, CompressionLevel.Best, false, ct).ConfigureAwait(false);
             foreach (var (_, p) in toFlush) TryDelete(p);
-
-            _logger.LogInformation(
-                "🗂  Job {JobId} slab {Seq}: {N} chunks → {MB:F2} MB in {Ms} ms",
-                job.JobId, slabSeq, toFlush.Count,
-                SafeFileLength(slabPath) / 1024.0 / 1024.0,
-                sw.ElapsedMilliseconds);
-
+            _logger.LogInformation("🗂 Job {JobId} slab {Seq}: {N} chunks → {MB:F2} MB",
+                job.JobId, slabSeq, toFlush.Count, SafeFileLength(slabPath) / 1024.0 / 1024.0);
             return slabPath;
         }
 
-        // ════════════════════════════════════════════════════════════════════
-        //  LEVEL-2 ACCUMULATE: pending slabs → base.pdf
-        //  Input is ALWAYS ≤SlabAccumulateSize × ~1.6 MB regardless of batch#.
-        // ════════════════════════════════════════════════════════════════════
-
-        private async Task AccumulateSlabsToBaseAsync(
-            ProgressivePdfJob job,
-            bool recompress,
-            CancellationToken ct)
+        private async Task AccumulateSlabsToBaseAsync(ProgressivePdfJob job, bool recompress, CancellationToken ct)
         {
             var toAccum = new List<(int seq, string path)>();
             foreach (var kv in job.PendingSlabs.OrderBy(x => x.Key))
@@ -1449,72 +1342,41 @@ namespace NexgenCosysReport.Services.ReportService
 
             if (toAccum.Count == 0) return;
 
-            var sw = Stopwatch.StartNew();
             var tmpBase = job.BasePdfPath + ".accumulating";
-
-            // Merge: existing base + new slabs → tmpBase
-            var inputs = new List<string>(toAccum.Count + 1) { job.BasePdfPath };
+            var inputs = new List<string> { job.BasePdfPath };
             inputs.AddRange(toAccum.Select(t => t.path));
-
             var level = recompress ? CompressionLevel.Best : CompressionLevel.Speed;
-
-            await MergeOnMergeThreadAsync(inputs, tmpBase, level,
-                stampPageNumbers: false, ct)
-                .ConfigureAwait(false);
-
-            // Atomically replace base.pdf.
+            await MergeOnMergeThreadAsync(inputs, tmpBase, level, false, ct).ConfigureAwait(false);
             File.Move(tmpBase, job.BasePdfPath, overwrite: true);
-
-            // Delete slab files — baked into base.pdf.
             foreach (var (_, p) in toAccum) TryDelete(p);
-
             job.AccumulationCount++;
             job.PagesReady = CountPages(job.BasePdfPath);
             job.CurrentSizeBytes = SafeFileLength(job.BasePdfPath);
             job.LastUpdated = DateTime.UtcNow;
-
-            _logger.LogInformation(
-                "📦 Job {JobId} accumulated {N} slabs → base.pdf " +
-                "({Pages} pp, {MB:F2} MB, recompress={R}) in {Ms} ms",
-                job.JobId, toAccum.Count,
-                job.PagesReady,
-                job.CurrentSizeBytes / 1024.0 / 1024.0,
-                recompress,
-                sw.ElapsedMilliseconds);
+            _logger.LogInformation("📦 Job {JobId} accumulated {N} slabs → base.pdf ({Pages} pp, {MB:F2} MB)",
+                job.JobId, toAccum.Count, job.PagesReady, job.CurrentSizeBytes / 1024.0 / 1024.0);
         }
-
-        // ════════════════════════════════════════════════════════════════════
-        //  FLUSH EVERYTHING → base.pdf  (called by GetFinalAsync)
-        // ════════════════════════════════════════════════════════════════════
 
         private async Task FlushAllToBaseAsync(ProgressivePdfJob job, CancellationToken ct)
         {
             await job.FlushLock.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                // Remaining chunks → slab
                 if (!job.PendingChunks.IsEmpty)
                 {
-                    int slabSeq = (job.PendingSlabs.IsEmpty ? 0
-                        : job.PendingSlabs.Keys.Max()) + 1;
-
-                    var slabPath = await FlushChunksToSlabAsync(job, slabSeq, ct)
-                        .ConfigureAwait(false);
-                    if (slabPath != null)
-                        job.PendingSlabs[slabSeq] = slabPath;
+                    int slabSeq = (job.PendingSlabs.IsEmpty ? 0 : job.PendingSlabs.Keys.Max()) + 1;
+                    var slabPath = await FlushChunksToSlabAsync(job, slabSeq, ct).ConfigureAwait(false);
+                    if (slabPath != null) job.PendingSlabs[slabSeq] = slabPath;
                 }
-
-                // Remaining slabs → base
                 if (!job.PendingSlabs.IsEmpty)
-                    await AccumulateSlabsToBaseAsync(job, recompress: true, ct)
-                        .ConfigureAwait(false);
+                    await AccumulateSlabsToBaseAsync(job, true, ct).ConfigureAwait(false);
             }
             finally { job.FlushLock.Release(); }
         }
 
-        // ════════════════════════════════════════════════════════════════════
-        //  RENDERING  (jsreport → compressed chunk file)
-        // ════════════════════════════════════════════════════════════════════
+        // =====================================================================
+        // RENDERING (jsreport)
+        // =====================================================================
 
         private async Task RenderChunkWithRetryAsync(
             IList<object> chunkRows,
@@ -1529,13 +1391,10 @@ namespace NexgenCosysReport.Services.ReportService
             Exception? last = null;
             for (int attempt = 1; attempt <= RenderRetryAttempts; attempt++)
             {
-                ct.ThrowIfCancellationRequested();
                 try
                 {
-                    await RenderChunkToFileAsync(
-                        chunkRows, reportData, rowsKey,
-                        reportPath, pageSetting, outputPath, ct, showHeader)
-                        .ConfigureAwait(false);
+                    await RenderChunkToFileAsync(chunkRows, reportData, rowsKey, reportPath,
+                        pageSetting, outputPath, ct, showHeader).ConfigureAwait(false);
                     return;
                 }
                 catch (OperationCanceledException) { throw; }
@@ -1543,14 +1402,10 @@ namespace NexgenCosysReport.Services.ReportService
                 {
                     last = ex;
                     var delay = TimeSpan.FromMilliseconds(500 * Math.Pow(2, attempt - 1));
-                    _logger.LogWarning(ex,
-                        "⚠️  Render attempt {A}/{Max} failed — retry in {Ms} ms",
-                        attempt, RenderRetryAttempts, delay.TotalMilliseconds);
                     await Task.Delay(delay, ct).ConfigureAwait(false);
                 }
             }
-            throw new InvalidOperationException(
-                $"Render failed after {RenderRetryAttempts} attempts.", last);
+            throw new InvalidOperationException($"Render failed after {RenderRetryAttempts} attempts.", last);
         }
 
         private async Task RenderChunkToFileAsync(
@@ -1569,11 +1424,9 @@ namespace NexgenCosysReport.Services.ReportService
                 ["ShowHeader"] = showHeader
             };
 
-            var html = await _razor.RenderToStringAsync(reportPath, chunkData)
-                .ConfigureAwait(false);
-
+            var html = await _razor.RenderToStringAsync(reportPath, chunkData).ConfigureAwait(false);
             using var renderCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            renderCts.CancelAfter(TimeSpan.FromMilliseconds(RenderTimeoutMs));
+            renderCts.CancelAfter(RenderTimeoutMs);
 
             var request = new RenderRequest
             {
@@ -1588,52 +1441,23 @@ namespace NexgenCosysReport.Services.ReportService
             JsReportTemplateHelper.ConfigureTemplate(request, "PDF", pageSetting, suppressFooter: true);
 
             var result = await _jsReport.RenderAsync(request).ConfigureAwait(false);
-
-            // ── Stream → memory → compress → disk (atomic) ────────────────
             using var ms = new MemoryStream(capacity: 1024 * 1024);
             await result.Content.CopyToAsync(ms, renderCts.Token).ConfigureAwait(false);
-            var rawBytes = ms.TryGetBuffer(out var buf) ? buf.Array! : ms.ToArray();
+            byte[] rawBytes = ms.TryGetBuffer(out var buf) ? buf.Array! : ms.ToArray();
 
-            byte[] finalBytes;
-            if (CompressChunksAfterRender)
-            {
-                // ReportUtils.CompressPdf: zlib-9 + full xref streams + XMP strip.
-                // Reduces ~9–10 MB chunk → ~1.5–2 MB. Critical for constant merge cost.
-                finalBytes = await Task.Run(
-                    () => ReportUtils.CompressPdf(rawBytes, _logger), ct)
-                    .ConfigureAwait(false);
-            }
-            else
-            {
-                finalBytes = rawBytes;
-            }
+            byte[] finalBytes = CompressChunksAfterRender
+                ? await Task.Run(() => ReportUtils.CompressPdf(rawBytes, _logger), ct).ConfigureAwait(false)
+                : rawBytes;
 
-            // Atomic write: tmp → rename.
             var tmp = outputPath + ".tmp";
             await File.WriteAllBytesAsync(tmp, finalBytes, ct).ConfigureAwait(false);
             File.Move(tmp, outputPath, overwrite: true);
-
-            _logger.LogDebug(
-                "✏️  Chunk {Path}: {Raw:F1} KB → {Compressed:F1} KB ({Pct:F0}% reduction)",
-                Path.GetFileName(outputPath),
-                rawBytes.Length / 1024.0,
-                finalBytes.Length / 1024.0,
-                CompressChunksAfterRender && finalBytes.Length < rawBytes.Length
-                    ? (1.0 - (double)finalBytes.Length / rawBytes.Length) * 100 : 0);
         }
 
-        // ════════════════════════════════════════════════════════════════════
-        //  iText MERGE ENGINE
-        //  — all iText operations run here, throttled by MergeThrottle
-        //    to prevent ASP.NET thread-pool starvation (Kestrel heartbeat fix)
-        // ════════════════════════════════════════════════════════════════════
+        // =====================================================================
+        // iText MERGE ENGINE
+        // =====================================================================
 
-        private enum CompressionLevel { Speed, Best }
-
-        /// <summary>
-        /// Acquires MergeThrottle, then runs iText merge on a thread-pool
-        /// thread dedicated to CPU/disk work (not Kestrel I/O threads).
-        /// </summary>
         private async Task MergeOnMergeThreadAsync(
             IReadOnlyList<string> inputPaths,
             string outputPath,
@@ -1642,110 +1466,46 @@ namespace NexgenCosysReport.Services.ReportService
             CancellationToken ct)
         {
             if (inputPaths.Count == 0)
-                throw new ArgumentException("No inputs to merge.", nameof(inputPaths));
+                throw new ArgumentException("No inputs.", nameof(inputPaths));
 
-            var sw = Stopwatch.StartNew();
-
-            // Throttle: max MaxMergeThreads concurrent iText jobs across all jobs.
             await MergeThrottle.WaitAsync(ct).ConfigureAwait(false);
             try
             {
                 var unstampedPath = stampPageNumbers ? outputPath + ".unstamped" : outputPath;
-
-                // Task.Run with LongRunning hint prevents thread-pool saturation.
                 await Task.Factory.StartNew(() =>
                 {
-                    using var outFs = new FileStream(unstampedPath, FileMode.Create,
-                        FileAccess.Write, FileShare.None, 131_072);
+                    using var outFs = new FileStream(unstampedPath, FileMode.Create, FileAccess.Write, FileShare.None, 131072);
                     using var writer = new PdfWriter(outFs, BuildWriterProperties(level));
                     using var outDoc = new PdfDocument(writer);
-                    outDoc.GetWriter().SetSmartMode(true); // dedup fonts/images
-
-                    var mergerProps = new PdfMergerProperties().SetCloseSrcDocuments(true);
-                    var merger = new PdfMerger(outDoc, mergerProps);
-
+                    outDoc.GetWriter().SetSmartMode(true);
+                    var merger = new PdfMerger(outDoc, new PdfMergerProperties().SetCloseSrcDocuments(true));
                     foreach (var path in inputPaths)
                     {
-                        ct.ThrowIfCancellationRequested();
                         if (!File.Exists(path)) continue;
-
                         using var reader = new PdfReader(path);
                         reader.SetUnethicalReading(true);
                         using var inDoc = new PdfDocument(reader);
                         merger.Merge(inDoc, 1, inDoc.GetNumberOfPages());
                     }
-
-                }, ct, TaskCreationOptions.LongRunning, TaskScheduler.Default)
-                .ConfigureAwait(false);
+                }, ct, TaskCreationOptions.LongRunning, TaskScheduler.Default).ConfigureAwait(false);
 
                 if (stampPageNumbers)
                 {
-                    await Task.Factory.StartNew(
-                        () => StampPageNumbers(unstampedPath, outputPath),
-                        ct, TaskCreationOptions.LongRunning, TaskScheduler.Default)
-                        .ConfigureAwait(false);
-
+                    await Task.Factory.StartNew(() => StampPageNumbers(unstampedPath, outputPath),
+                        ct, TaskCreationOptions.LongRunning, TaskScheduler.Default).ConfigureAwait(false);
                     TryDelete(unstampedPath);
                 }
             }
             finally { MergeThrottle.Release(); }
-
-            _logger.LogDebug(
-                "🧩 Merge {N} → {Out} ({MB:F2} MB) in {Ms} ms",
-                inputPaths.Count, Path.GetFileName(outputPath),
-                SafeFileLength(outputPath) / 1024.0 / 1024.0,
-                sw.ElapsedMilliseconds);
         }
 
         private static WriterProperties BuildWriterProperties(CompressionLevel level)
         {
             var wp = new WriterProperties();
-            // CHANGED: always enable FullCompressionMode for size reduction
             wp.SetFullCompressionMode(true);
-            if (level == CompressionLevel.Best)
-            {
-                wp.SetCompressionLevel(CompressionConstants.BEST_COMPRESSION);
-            }
-            else
-            {
-                wp.SetCompressionLevel(CompressionConstants.BEST_SPEED);
-            }
+            wp.SetCompressionLevel(level == CompressionLevel.Best ? CompressionConstants.BEST_COMPRESSION : CompressionConstants.BEST_SPEED);
             return wp;
         }
-
-        // ════════════════════════════════════════════════════════════════════
-        //  SNAPSHOT INPUT LIST BUILDER
-        // ════════════════════════════════════════════════════════════════════
-
-        /// <summary>
-        /// Builds the ordered input list for a snapshot:
-        ///   base.pdf + pending slabs + pending chunks
-        /// Called under FlushLock.
-        /// </summary>
-        private static List<string> BuildSnapshotInputList(ProgressivePdfJob job)
-        {
-            var list = new List<string> { job.BasePdfPath };
-
-            list.AddRange(
-                job.PendingSlabs
-                   .OrderBy(kv => kv.Key)
-                   .Select(kv => kv.Value)
-                   .Where(File.Exists));
-
-            list.AddRange(
-                job.PendingChunks
-                   .OrderBy(kv => kv.Key)
-                   .Select(kv => kv.Value)
-                   .Where(File.Exists));
-
-            return list;
-        }
-
-        // ═════════════════════════════════════════
-
-        // ════════════════════════════════════════════════════════════════════
-        //  PAGE-NUMBER STAMPING
-        // ════════════════════════════════════════════════════════════════════
 
         private static void StampPageNumbers(string sourcePath, string outputPath)
         {
@@ -1754,32 +1514,23 @@ namespace NexgenCosysReport.Services.ReportService
             using var pdfDoc = new PdfDocument(reader, writer);
             using var layout = new Document(pdfDoc);
             layout.SetMargins(0, 0, 0, 0);
-
             int total = pdfDoc.GetNumberOfPages();
             var font = PdfFontFactory.CreateFont();
-
             for (int i = 1; i <= total; i++)
             {
                 var size = pdfDoc.GetPage(i).GetPageSizeWithRotation();
-                layout.ShowTextAligned(
-                    new Paragraph($"{i} of {total}")
-                        .SetFont(font).SetFontSize(10)
-                        .SetFontColor(ColorConstants.BLACK)
-                        .SetMargin(0).SetPadding(0),
-                    size.GetWidth() / 2f, 20f, i,
-                    TextAlignment.CENTER, VerticalAlignment.BOTTOM, 0f);
+                layout.ShowTextAligned(new Paragraph($"{i} of {total}").SetFont(font).SetFontSize(10).SetFontColor(ColorConstants.BLACK),
+                    size.GetWidth() / 2f, 20f, i, TextAlignment.CENTER, VerticalAlignment.BOTTOM, 0f);
             }
         }
 
-        // ════════════════════════════════════════════════════════════════════
-        //  UTILITIES
-        // ════════════════════════════════════════════════════════════════════
+        // =====================================================================
+        // UTILITIES
+        // =====================================================================
 
         private static List<IList<object>> PartitionRows(IList<object> source, int chunkSize)
         {
-            var result = new List<IList<object>>(
-                (source.Count + chunkSize - 1) / chunkSize);
-
+            var result = new List<IList<object>>((source.Count + chunkSize - 1) / chunkSize);
             for (int i = 0; i < source.Count; i += chunkSize)
             {
                 int count = Math.Min(chunkSize, source.Count - i);
@@ -1793,12 +1544,7 @@ namespace NexgenCosysReport.Services.ReportService
         private static int CountPages(string? path)
         {
             if (string.IsNullOrEmpty(path) || !File.Exists(path)) return 0;
-            try
-            {
-                using var r = new PdfReader(path);
-                using var d = new PdfDocument(r);
-                return d.GetNumberOfPages();
-            }
+            try { using var r = new PdfReader(path); using var d = new PdfDocument(r); return d.GetNumberOfPages(); }
             catch { return 0; }
         }
 
@@ -1813,18 +1559,21 @@ namespace NexgenCosysReport.Services.ReportService
             try
             {
                 int chunks = (int)Math.Ceiling((double)totalRows / chunkSize);
-                long required = EstimatedCompressedBytesPerChunk * chunks * 4; // 4× safety
+                long required = EstimatedCompressedBytesPerChunk * chunks * 4;
                 var drive = new DriveInfo(Path.GetPathRoot(directory)!);
                 if (drive.AvailableFreeSpace < required)
-                    throw new IOException(
-                        $"Insufficient disk space: need ~{required / 1024 / 1024} MB, " +
-                        $"have {drive.AvailableFreeSpace / 1024 / 1024} MB.");
+                    throw new IOException($"Insufficient disk space: need ~{required / 1024 / 1024} MB, have {drive.AvailableFreeSpace / 1024 / 1024} MB.");
             }
             catch (IOException) { throw; }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "⚠️  Disk space check failed — proceeding");
-            }
+            catch (Exception ex) { _logger.LogWarning(ex, "⚠️ Disk space check failed – proceeding"); }
+        }
+
+        private static List<string> BuildSnapshotInputList(ProgressivePdfJob job)
+        {
+            var list = new List<string> { job.BasePdfPath };
+            list.AddRange(job.PendingSlabs.OrderBy(kv => kv.Key).Select(kv => kv.Value).Where(File.Exists));
+            list.AddRange(job.PendingChunks.OrderBy(kv => kv.Key).Select(kv => kv.Value).Where(File.Exists));
+            return list;
         }
 
         private void RegisterCache(ProgressivePdfJob job)
@@ -1846,27 +1595,11 @@ namespace NexgenCosysReport.Services.ReportService
 
         private static string CacheKey(string id) => $"progressive_pdf_{id}";
 
-        private static void TryDelete(string? path)
-        {
-            try { if (!string.IsNullOrEmpty(path) && File.Exists(path)) File.Delete(path); }
-            catch { /* best-effort */ }
-        }
-
-        private static void TryCleanup(string dir)
-        {
-            try { if (Directory.Exists(dir)) Directory.Delete(dir, recursive: true); }
-            catch { /* best-effort */ }
-        }
-
-        // ════════════════════════════════════════════════════════════════════
-        //  DISPOSAL
-        // ════════════════════════════════════════════════════════════════════
-
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
-            // MergeThrottle is static (process-lifetime) — not disposed here.
+            // Static semaphores are intentionally not disposed here (process lifetime)
         }
     }
 }
