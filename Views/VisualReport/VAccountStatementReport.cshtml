@@ -1,0 +1,599 @@
+﻿@model Dictionary<string, object>
+@using NexgenCosysReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.RequestDtos
+@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount
+@{
+    Layout = null;
+
+    var dataSet = (Model["AccountStatementDataSet"] as IEnumerable<AccountStatementModelResponse>)
+                  ?.ToList() ?? new List<AccountStatementModelResponse>();
+
+    var balanceData = (Model["CashBankBalanceDataSet"] as IEnumerable<CashBankBalanceModelResponse>)
+                      ?.ToList() ?? new List<CashBankBalanceModelResponse>();
+
+    var reportType = Model.ContainsKey("ReportType") ? Model["ReportType"]?.ToString() : "SubLedger";
+    var transactionType = Model.ContainsKey("TransactionType") ? Model["TransactionType"]?.ToString() : "All";
+    var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "All";
+    var fromDate = Model.ContainsKey("FromDate") ? Model["FromDate"]?.ToString() : "";
+    var toDate = Model.ContainsKey("ToDate") ? Model["ToDate"]?.ToString() : "";
+    var orderBy = Model.ContainsKey("OrderBy") ? Model["OrderBy"]?.ToString() : "";
+    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var balance = balanceData.FirstOrDefault();
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
+
+    List<string> chartLabels = new List<string>();
+    List<decimal> chartDebits = new List<decimal>();
+    List<decimal> chartCredits = new List<decimal>();
+    List<decimal> chartBalances = new List<decimal>();
+
+    if (reportType == "Summary")
+    {
+        var groups = dataSet.GroupBy(x => x.LedgerHead).OrderBy(g => g.Key);
+        chartLabels = groups.Select(g => g.Key).ToList();
+        chartDebits = groups.Select(g => g.Sum(x => x.DebitAmount)).ToList();
+        chartCredits = groups.Select(g => g.Sum(x => x.CreditAmount)).ToList();
+        chartBalances = groups.Select(g => g.Sum(x => x.Balance)).ToList();
+    }
+    else if (reportType == "SubLedger")
+    {
+        var groups = dataSet
+            .GroupBy(x => string.IsNullOrEmpty(x.MainLedger) ? x.SubLedger : x.MainLedger)
+            .OrderBy(g => g.Key);
+        chartLabels = groups.Select(g => g.Key).ToList();
+        chartDebits = groups.Select(g => g.Sum(x => x.DebitAmount)).ToList();
+        chartCredits = groups.Select(g => g.Sum(x => x.CreditAmount)).ToList();
+        chartBalances = groups.Select(g => g.Sum(x => x.Balance)).ToList();
+    }
+    else
+    {
+        var groups = dataSet
+            .GroupBy(x => string.IsNullOrEmpty(x.SubLedger1) || x.SubLedger1 == "-"
+                            ? x.SubLedger
+                            : $"{x.SubLedger} — {x.SubLedger1}")
+            .OrderBy(g => g.Key);
+        chartLabels = groups.Select(g => g.Key).ToList();
+        chartDebits = groups.Select(g => g.Sum(x => x.DebitAmount)).ToList();
+        chartCredits = groups.Select(g => g.Sum(x => x.CreditAmount)).ToList();
+        chartBalances = groups.Select(g => g.Sum(x => x.Balance)).ToList();
+    }
+
+    string ToJsonString(IEnumerable<string> items) =>
+        "[" + string.Join(",", items.Select(i => $"\"{i.Replace("\"", "\\\"").Replace("'", "\\'")}\"")) + "]";
+    string ToJsonNumber(IEnumerable<decimal> items) =>
+        "[" + string.Join(",", items.Select(i => i.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))) + "]";
+    string FormatFull(decimal value) => value.ToString("N2");
+
+    decimal grandDebit = chartDebits.Sum();
+    decimal grandCredit = chartCredits.Sum();
+    decimal netBalance = grandDebit - grandCredit;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Account Statement – Visual Report (@reportType)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        /* ── Reset ──────────────────────────────────────── */
+        *, *::before, *::after {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        }
+
+        html, body {
+        width: 100%;
+        min-height: 100vh;
+        background: #EEF2F7;
+        font-family: 'Segoe UI', system-ui, sans-serif;
+        }
+
+        /* ── Outer wrapper – TRUE 100% viewport width ────── */
+        .report-wrap {
+        width: 100%;
+        background: #fff;
+        padding: 24px 28px 48px;
+        }
+
+        /* ── Section heading ──────────────────────────────── */
+        .section-heading {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border-left: 5px solid #1C7A9C;
+        padding-left: 12px;
+        margin-top: 28px;
+        }
+
+        .section-heading span {
+        font-size: 17px;
+        font-weight: 700;
+        color: #0B2B40;
+        }
+
+        /* ── Chart card – full width ──────────────────────── */
+        .chart-card {
+        width: 100%;
+        background: #fff;
+        border: 1.5px solid #E2E8EF;
+        border-radius: 14px;
+        box-shadow: 0 2px 10px rgba(0,0,0,.05);
+        padding: 16px;
+        margin-top: 12px;
+        }
+
+        .chart-sizer {
+        position: relative;
+        width: 100%;
+        }
+
+        .chart-sizer canvas {
+        display: block;
+        width: 100% !important;
+        }
+
+        /* ── Summary pills – 2-col full width ────────────── */
+        .pill-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-top: 20px;
+        }
+
+        .pill {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border-radius: 12px;
+        font-weight: 600;
+        padding: 12px 20px;
+        font-size: 14px;
+        box-shadow: 0 2px 6px rgba(0,0,0,.06);
+        }
+
+        /* ── Balance pills – 4-col full width ────────────── */
+        .balance-row {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+        margin-top: 12px;
+        }
+
+        .balance-pill {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        padding: 12px 8px;
+        border-radius: 14px;
+        text-align: center;
+        }
+
+        .balance-pill .bp-label {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .6px;
+        color: #8896A3;
+        }
+
+        .balance-pill .bp-value {
+        font-size: 15px;
+        font-weight: 800;
+        }
+
+        /* ── Donut row – 2-col full width ─────────────────── */
+        .donut-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+        margin-top: 16px;
+        width: 100%;
+        }
+
+        .donut-card {
+        background: #fff;
+        border: 1.5px solid #E9ECEF;
+        border-radius: 18px;
+        box-shadow: 0 4px 16px rgba(11,43,64,.07);
+        padding: 22px 24px 18px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        }
+
+        .donut-canvas-wrap {
+        position: relative;
+        width: min(260px, 100%);
+        aspect-ratio: 1;
+        }
+
+        .donut-canvas-wrap canvas {
+        width: 100% !important;
+        height: 100% !important;
+        }
+
+        .donut-centre {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%,-50%);
+        text-align: center;
+        pointer-events: none;
+        }
+
+        .donut-legend-box {
+        width: 100%;
+        background: #F8FAFC;
+        border-radius: 12px;
+        padding: 10px 12px;
+        border: 1px solid #EEF2F7;
+        margin-top: 18px;
+        }
+
+        .legend-header {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        color: #8896A3;
+        padding-bottom: 8px;
+        border-bottom: 1px solid #E9ECEF;
+        margin-bottom: 6px;
+        }
+
+        .legend-scroll {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        max-height: 220px;
+        overflow-y: auto;
+        }
+
+        .lv-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 5px 6px;
+        border-radius: 7px;
+        }
+
+        .lv-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        }
+
+        .lv-name {
+        flex: 1;
+        font-size: 12px;
+        font-weight: 500;
+        color: #374151;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        }
+
+        .lv-amount {
+        font-size: 12px;
+        font-weight: 700;
+        white-space: nowrap;
+        }
+
+        .lv-pct {
+        font-size: 11px;
+        font-weight: 600;
+        padding: 2px 7px;
+        border-radius: 20px;
+        white-space: nowrap;
+        }
+
+        /* ── Misc ─────────────────────────────────────────── */
+        .divider {
+        width: 100%;
+        height: 1px;
+        background: #000;
+        margin-top: 28px;
+        }
+
+        .footer-note {
+        text-align: center;
+        font-size: 11px;
+        color: #9CA8B3;
+        margin-top: 28px;
+        }
+
+        .filter-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        font-size: 13px;
+        color: #5A6A78;
+        margin-top: 14px;
+        }
+
+        .fb-row {
+        display: flex;
+        width: 100%;
+        justify-content: space-between;
+        }
+    </style>
+</head>
+<body>
+    <div class="report-wrap">
+
+        @await Html.PartialAsync("_CommonHeader", Model)
+
+        <!-- Title -->
+        <div style="display:flex;justify-content:center;margin-top:4px;">
+            <p style="font-size:20px;font-weight:600;color:#000;">Account Statement</p>
+        </div>
+
+        <!-- Filter bar -->
+        <div class="filter-bar">
+            <span><strong>🏢 Branch</strong>&nbsp;@branchName</span>
+            <div class="fb-row">
+                <span><strong>📅 Period</strong>&nbsp;@fromDate → @toDate</span>
+                <span><strong>📌 Report Type</strong>&nbsp;@reportType</span>
+            </div>
+            <div class="fb-row">
+                <span><strong>🔄 Transaction</strong>&nbsp;@transactionType</span>
+                <span><strong>🕒 Generated</strong>&nbsp;@generatedOn</span>
+            </div>
+        </div>
+        <div style="width:100%;border-top:1.5px solid #000;margin-top:8px;"></div>
+
+        <!-- Debit / Credit summary pills -->
+        <div class="pill-row">
+            <div class="pill" style="border:1.5px solid #F4BFBD;background:#FEF7F7;color:#C0392B;">
+                💸 <strong>TOTAL DEBIT</strong>&nbsp;&nbsp;@FormatFull(grandDebit)
+            </div>
+            <div class="pill" style="border:1.5px solid #AEDFC3;background:#F2FBF6;color:#1A7A3F;">
+                💰 <strong>TOTAL CREDIT</strong>&nbsp;&nbsp;@FormatFull(grandCredit)
+            </div>
+        </div>
+
+        <!-- Opening / Closing Cash & Bank -->
+        @if (balance != null)
+        {
+            <div class="balance-row">
+                <div class="balance-pill" style="background:#F0F7FC;border:1.5px solid #BFD9EC;">
+                    <span class="bp-label">💰 Opening Cash</span>
+                    <span class="bp-value" style="color:#1C5D7A;">@FormatFull(balance.OpeningCashBalance)</span>
+                </div>
+                <div class="balance-pill" style="background:#F0F7FC;border:1.5px solid #BFD9EC;">
+                    <span class="bp-label">🏦 Opening Bank</span>
+                    <span class="bp-value" style="color:#1C5D7A;">@FormatFull(balance.OpeningBankBalance)</span>
+                </div>
+                <div class="balance-pill" style="background:#F2FBF6;border:1.5px solid #AEDFC3;">
+                    <span class="bp-label">📉 Closing Cash</span>
+                    <span class="bp-value" style="color:#1A7A3F;">@FormatFull(balance.ClosingCashBalance)</span>
+                </div>
+                <div class="balance-pill" style="background:#F2FBF6;border:1.5px solid #AEDFC3;">
+                    <span class="bp-label">📈 Closing Bank</span>
+                    <span class="bp-value" style="color:#1A7A3F;">@FormatFull(balance.ClosingBankBalance)</span>
+                </div>
+            </div>
+        }
+
+        @if (!isExcel)
+        {
+            <!-- CHART 1: Debit & Credit grouped bar -->
+            <div class="section-heading" style="margin-top:24px;">
+                <span>📊 Debit &amp; Credit by @(reportType == "Summary" ? "Ledger Head" : (reportType == "SubLedger" ? "Main Ledger" : "Transaction"))</span>
+            </div>
+            <div class="chart-card">
+                <div class="chart-sizer" id="mainSizer"><canvas id="mainChart"></canvas></div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- Donut charts -->
+            <div class="section-heading">
+                <span>⚖️ Debit vs Credit Distribution</span>
+            </div>
+            <div class="donut-row">
+                <div class="donut-card">
+                    <div style="font-size:15px;font-weight:700;align-self:flex-start;color:#C0392B;margin-bottom:16px;">💸 Debit Share</div>
+                    <div class="donut-canvas-wrap">
+                        <canvas id="debitPieChart"></canvas>
+                        <div class="donut-centre" id="debitCentreLabel"></div>
+                    </div>
+                    <div class="donut-legend-box">
+                        <div class="legend-header">📋 Breakdown by Head</div>
+                        <div class="legend-scroll" id="debitLegend"></div>
+                    </div>
+                </div>
+                <div class="donut-card">
+                    <div style="font-size:15px;font-weight:700;align-self:flex-start;color:#1A7A3F;margin-bottom:16px;">💰 Credit Share</div>
+                    <div class="donut-canvas-wrap">
+                        <canvas id="creditPieChart"></canvas>
+                        <div class="donut-centre" id="creditCentreLabel"></div>
+                    </div>
+                    <div class="donut-legend-box">
+                        <div class="legend-header">📋 Breakdown by Head</div>
+                        <div class="legend-scroll" id="creditLegend"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- CHART 2: Net Balance -->
+            <div class="section-heading">
+                <span>📉 Net Balance by Group</span>
+            </div>
+            <div class="chart-card">
+                <div class="chart-sizer" id="balSizer"><canvas id="balanceChart"></canvas></div>
+            </div>
+
+            <div class="divider"></div>
+
+            <!-- CHART 3: Stacked bar -->
+            <div class="section-heading">
+                <span>📚 Stacked Debit &amp; Credit</span>
+            </div>
+            <div class="chart-card">
+                <div class="chart-sizer" id="stackedSizer"><canvas id="stackedChart"></canvas></div>
+            </div>
+
+            <p class="footer-note">Generated on @generatedOn — Amounts in local currency</p>
+
+            <script>
+                const labels   = @Html.Raw(ToJsonString(chartLabels));
+                const debits   = @Html.Raw(ToJsonNumber(chartDebits));
+                const credits  = @Html.Raw(ToJsonNumber(chartCredits));
+                const balances = @Html.Raw(ToJsonNumber(chartBalances));
+
+                const fmt = v => {
+                const a = Math.abs(v);
+                return a >= 1e9 ? (v/1e9).toFixed(1)+'B' :
+                a >= 1e6 ? (v/1e6).toFixed(1)+'M' :
+                a >= 1e3 ? (v/1e3).toFixed(1)+'K' :
+                v.toFixed(0);
+                };
+                const fullFmt = v =>
+                Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+
+                const semantic = {
+                assets:'#2C7DA0',expenses:'#E67E22',income:'#28A745',liabilities:'#9B59B6',
+                equity:'#F4A261',revenue:'#20C997',capital:'#E74C3C',bank:'#457B9D',
+                cash:'#1E8449',tax:'#C0392B',payable:'#8E44AD',receivable:'#2980B9',
+                provision:'#D35400',reserve:'#16A085',loan:'#7D3C98',investment:'#117A65',
+                depreciation:'#884EA0',prepaid:'#1A5276',accrued:'#6E2F1A',profit:'#1D8348'
+                };
+                const fallback = ['#1C5D7A','#E67E22','#28A745','#9B59B6','#F4A261',
+                '#20C997','#E74C3C','#457B9D','#C0392B','#16A085'];
+                const labelColors = labels.map(l => {
+                const k = (l||'').toLowerCase();
+                for (const [kw,col] of Object.entries(semantic)) if (k.includes(kw)) return col;
+                let h = 0;
+                for (let i = 0; i < l.length; i++) h = (h*31+l.charCodeAt(i))>>>0;
+                return fallback[h % fallback.length];
+                });
+
+                function setHeight(id, min) {
+                document.getElementById(id).style.height =
+                Math.max(min, labels.length*38+80)+'px';
+                }
+
+                // Chart 1 – grouped horizontal bar
+                setHeight('mainSizer', 400);
+                new Chart(document.getElementById('mainChart'), {
+                type:'bar',
+                data:{ labels, datasets:[
+                { label:'Debit',  data:debits,  backgroundColor:labelColors.map(c=>c+'D9'), borderRadius:6 },
+                { label:'Credit', data:credits, backgroundColor:labelColors.map(c=>c+'88'), borderRadius:6 }
+                ]},
+                options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+                plugins:{ legend:{ display:true, position:'top' },
+                tooltip:{ callbacks:{ label:ctx=>`${ctx.dataset.label}: ${fullFmt(ctx.raw)}` }}},
+                scales:{ x:{ ticks:{ callback:v=>fmt(v) }}}
+                }
+                });
+
+                // Donuts
+                const topN      = Math.min(labels.length,10);
+                const topLabels = labels.slice(0,topN);
+                const topColors = topLabels.map((_,i)=>labelColors[i]);
+                const topDebits  = debits.slice(0,topN).map(Number);
+                const topCredits = credits.slice(0,topN).map(Number);
+
+                const slicePctPlugin = {
+                id:'slicePct',
+                afterDraw(chart){
+                const {ctx:c,data} = chart;
+                const ds   = data.datasets[0];
+                const meta = chart.getDatasetMeta(0);
+                const tot  = ds.data.reduce((a,b)=>+a+ +b,0);
+                if(!tot) return;
+                meta.data.forEach((arc,i)=>{
+                const val = +ds.data[i];
+                const pct = (val/tot)*100;
+                if(pct<3) return;
+                const mid = (arc.startAngle+arc.endAngle)/2;
+                const r   = (arc.innerRadius+arc.outerRadius)/2;
+                c.save();
+                c.shadowColor='rgba(0,0,0,0.6)'; c.shadowBlur=4;
+                c.font=`bold ${pct>10?13:11}px 'Segoe UI',sans-serif`;
+                c.fillStyle='#fff'; c.textAlign='center'; c.textBaseline='middle';
+                c.fillText(pct.toFixed(1)+'%', arc.x+Math.cos(mid)*r, arc.y+Math.sin(mid)*r);
+                c.restore();
+                });
+                }
+                };
+
+                function buildLegend(arr, total, cols){
+                return arr.map((val,i)=>{
+                const pct = total>0?((val/total)*100).toFixed(1):'0.0';
+                const col = cols[i], nm = topLabels[i];
+                return `<div class="lv-row">
+                <span class="lv-dot" style="background:${col}"></span>
+                <span class="lv-name" title="${nm}">${nm}</span>
+                <span class="lv-amount" style="color:${col}">${fullFmt(val)}</span>
+                <span class="lv-pct" style="color:${col};background:${col}1A;border:1px solid ${col}44">${pct}%</span>
+                </div>`;
+                }).join('');
+                }
+
+                function makeDonut(canvasId, dataArr, centreId, legendId, colours){
+                const total = dataArr.reduce((a,b)=>+a+ +b,0);
+                const el = document.getElementById(canvasId);
+                if(!el) return;
+                new Chart(el,{
+                type:'doughnut',
+                data:{ labels:topLabels, datasets:[{ data:dataArr, backgroundColor:colours, borderWidth:3, borderColor:'#fff', hoverOffset:10 }]},
+                options:{ responsive:true, maintainAspectRatio:true, cutout:'60%',
+                layout:{ padding:6 }, animation:{ animateRotate:true, duration:700 },
+                plugins:{ legend:{ display:false },
+                tooltip:{ callbacks:{ label:ctx=>{
+                const v=+ctx.raw, p=total>0?((v/total)*100).toFixed(1):'0.0';
+                return `  ${ctx.label}: ${fullFmt(v)}  (${p}%)`;
+                }}}}
+                },
+                plugins:[slicePctPlugin]
+                });
+                const cEl = document.getElementById(centreId);
+                if(cEl) cEl.innerHTML=`<div style="font-size:10px;font-weight:700;color:#8896A3">TOTAL</div><div style="font-size:22px;font-weight:900;color:#0B2B40">${fmt(total)}</div>`;
+                const lEl = document.getElementById(legendId);
+                if(lEl) lEl.innerHTML = buildLegend(dataArr, total, colours);
+                }
+
+                makeDonut('debitPieChart',  topDebits,  'debitCentreLabel',  'debitLegend',  topColors);
+                makeDonut('creditPieChart', topCredits, 'creditCentreLabel', 'creditLegend', topColors);
+
+                // Chart 2 – Net Balance
+                setHeight('balSizer', 300);
+                new Chart(document.getElementById('balanceChart'),{
+                type:'bar',
+                data:{ labels, datasets:[{ label:'Net Balance', data:balances,
+                backgroundColor:balances.map((v,i)=>v>=0?labelColors[i]+'CC':'#E76F51CC'), borderRadius:6 }]},
+                options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+                plugins:{ tooltip:{ callbacks:{ label:ctx=>`Balance: ${fullFmt(ctx.raw)}` }}},
+                scales:{ x:{ ticks:{ callback:v=>fmt(v) }}}
+                }
+                });
+
+                // Chart 3 – Stacked bar
+                setHeight('stackedSizer', 300);
+                new Chart(document.getElementById('stackedChart'),{
+                type:'bar',
+                data:{ labels, datasets:[
+                { label:'Debit',  data:debits,  backgroundColor:labelColors.map(c=>c+'D9'), borderRadius:4 },
+                { label:'Credit', data:credits, backgroundColor:labelColors.map(c=>c+'77'), borderRadius:4 }
+                ]},
+                options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+                plugins:{ legend:{ display:true, position:'top' },
+                tooltip:{ callbacks:{ label:ctx=>`${ctx.dataset.label}: ${fullFmt(ctx.raw)}` }}},
+                scales:{ x:{ stacked:true, ticks:{ callback:v=>fmt(v) }}, y:{ stacked:true }}
+                }
+                });
+            </script>
+        }
+
+    </div>
+</body>
+</html>
