@@ -16,7 +16,6 @@
     var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "All";
     var fromDate = Model.ContainsKey("FromDate") ? Model["FromDate"]?.ToString() : "";
     var toDate = Model.ContainsKey("ToDate") ? Model["ToDate"]?.ToString() : "";
-    var orderBy = Model.ContainsKey("OrderBy") ? Model["OrderBy"]?.ToString() : "";
     var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
 
@@ -60,158 +59,194 @@
     }
 
     string ToJsonString(IEnumerable<string> items) =>
-        "[" + string.Join(",", items.Select(i => $"\"{i.Replace("\"", "\\\"").Replace("'", "\\'")}\"")) + "]";
+        "[" + string.Join(",", items.Select(i => $"\"{i.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("'", "\\'")}\"")) + "]";
     string ToJsonNumber(IEnumerable<decimal> items) =>
         "[" + string.Join(",", items.Select(i => i.ToString("F2", System.Globalization.CultureInfo.InvariantCulture))) + "]";
     string FormatFull(decimal value) => value.ToString("N2");
 
+    // Server-side: max label character length to pre-compute Y-axis left margin
+    int maxLabelLen = chartLabels.Any() ? chartLabels.Max(l => (l ?? "").Length) : 10;
+    int rowCount = chartLabels.Count;
+
     decimal grandDebit = chartDebits.Sum();
     decimal grandCredit = chartCredits.Sum();
-    decimal netBalance = grandDebit - grandCredit;
 }
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>Account Statement – Visual Report (@reportType)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Account Statement – @reportType</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <style>
-        /* ── Reset ──────────────────────────────────────── */
+        /* ═══════════════════════════════════════════════
+        RESET — zero all margin/padding everywhere
+        ═══════════════════════════════════════════════ */
         *, *::before, *::after {
         margin: 0;
         padding: 0;
         box-sizing: border-box;
         }
 
-        html, body {
+        html {
         width: 100%;
-        min-height: 100vh;
+        }
+
+        body {
+        width: 100%;
         background: #EEF2F7;
         font-family: 'Segoe UI', system-ui, sans-serif;
+        font-size: 13px;
+        /* NO flex/justify — let content flow naturally top-to-bottom */
         }
 
-        /* ── Outer wrapper – TRUE 100% viewport width ────── */
-        .report-wrap {
+        /* ═══════════════════════════════════════════════
+        OUTER WRAPPER
+        - 100% width, no max-width cap
+        - Only horizontal padding; no vertical padding
+        except a small top/bottom breathing room
+        ═══════════════════════════════════════════════ */
+        .rw {
         width: 100%;
         background: #fff;
-        padding: 24px 28px 48px;
+        padding: 20px 24px 32px;
         }
 
-        /* ── Section heading ──────────────────────────────── */
-        .section-heading {
+        /* ═══════════════════════════════════════════════
+        SECTION WRAPPER
+        - display:block so height is determined purely
+        by its children (no extra space)
+        - margin-top only at the top of each section
+        - overflow:visible so nothing is clipped
+        ═══════════════════════════════════════════════ */
+        .sec {
+        display: block;
+        width: 100%;
+        margin-top: 20px;
+        }
+
+        /* Section heading — tight, no bottom margin beyond 8px */
+        .sec-head {
         display: flex;
         align-items: center;
-        gap: 10px;
-        border-left: 5px solid #1C7A9C;
-        padding-left: 12px;
-        margin-top: 28px;
-        }
-
-        .section-heading span {
-        font-size: 17px;
+        border-left: 4px solid #1C7A9C;
+        padding-left: 10px;
+        margin-bottom: 8px;
+        font-size: 15px;
         font-weight: 700;
         color: #0B2B40;
+        line-height: 1.2;
         }
 
-        /* ── Chart card – full width ──────────────────────── */
-        .chart-card {
+        /* ═══════════════════════════════════════════════
+        CHART CARD
+        - width:100%, height is SET BY JS to exactly
+        fit all rows — no more, no less
+        - position:relative so canvas is positioned
+        inside it correctly
+        - overflow:hidden clips canvas exactly to card
+        ═══════════════════════════════════════════════ */
+        .cc {
         width: 100%;
         background: #fff;
-        border: 1.5px solid #E2E8EF;
-        border-radius: 14px;
-        box-shadow: 0 2px 10px rgba(0,0,0,.05);
-        padding: 16px;
-        margin-top: 12px;
-        }
-
-        .chart-sizer {
+        border: 1.5px solid #DDE3EA;
+        border-radius: 10px;
+        box-shadow: 0 1px 6px rgba(0,0,0,.05);
+        /* height injected by JS */
         position: relative;
-        width: 100%;
+        overflow: hidden;
         }
 
-        .chart-sizer canvas {
-        display: block;
+        /* Canvas fills card exactly */
+        .cc canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
         width: 100% !important;
+        height: 100% !important;
         }
 
-        /* ── Summary pills – 2-col full width ────────────── */
+        /* ═══════════════════════════════════════════════
+        PILL / BALANCE ROWS
+        ═══════════════════════════════════════════════ */
         .pill-row {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 12px;
-        margin-top: 20px;
+        gap: 10px;
+        margin-top: 14px;
         }
 
         .pill {
         display: flex;
         align-items: center;
-        gap: 10px;
-        border-radius: 12px;
+        gap: 8px;
+        border-radius: 10px;
         font-weight: 600;
-        padding: 12px 20px;
-        font-size: 14px;
-        box-shadow: 0 2px 6px rgba(0,0,0,.06);
+        padding: 10px 16px;
+        font-size: 13px;
         }
 
-        /* ── Balance pills – 4-col full width ────────────── */
-        .balance-row {
+        .bal-row {
         display: grid;
         grid-template-columns: repeat(4, 1fr);
-        gap: 12px;
-        margin-top: 12px;
+        gap: 10px;
+        margin-top: 10px;
         }
 
-        .balance-pill {
+        .bal-pill {
         display: flex;
         flex-direction: column;
         align-items: center;
-        justify-content: center;
-        gap: 4px;
-        padding: 12px 8px;
-        border-radius: 14px;
+        gap: 3px;
+        padding: 10px 6px;
+        border-radius: 12px;
         text-align: center;
         }
 
-        .balance-pill .bp-label {
-        font-size: 10px;
+        .bal-lbl {
+        font-size: 9px;
         font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: .6px;
+        letter-spacing: .5px;
         color: #8896A3;
         }
 
-        .balance-pill .bp-value {
-        font-size: 15px;
+        .bal-val {
+        font-size: 14px;
         font-weight: 800;
         }
 
-        /* ── Donut row – 2-col full width ─────────────────── */
+        /* ═══════════════════════════════════════════════
+        DONUT ROW — 2 equal columns, NO fixed height
+        height grows with content automatically
+        ═══════════════════════════════════════════════ */
         .donut-row {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 20px;
-        margin-top: 16px;
+        gap: 16px;
         width: 100%;
+        /* NO height, NO overflow:hidden — grows naturally */
         }
 
         .donut-card {
         background: #fff;
         border: 1.5px solid #E9ECEF;
-        border-radius: 18px;
-        box-shadow: 0 4px 16px rgba(11,43,64,.07);
-        padding: 22px 24px 18px;
+        border-radius: 16px;
+        box-shadow: 0 3px 12px rgba(11,43,64,.06);
+        padding: 18px 20px 16px;
         display: flex;
         flex-direction: column;
         align-items: center;
         }
 
-        .donut-canvas-wrap {
+        .donut-wrap {
         position: relative;
-        width: min(260px, 100%);
-        aspect-ratio: 1;
+        /* Responsive: fills column width up to 240px */
+        width: min(240px, 100%);
+        aspect-ratio: 1 / 1;
         }
 
-        .donut-canvas-wrap canvas {
+        .donut-wrap canvas {
         width: 100% !important;
         height: 100% !important;
         }
@@ -220,56 +255,57 @@
         position: absolute;
         top: 50%;
         left: 50%;
-        transform: translate(-50%,-50%);
+        transform: translate(-50%, -50%);
         text-align: center;
         pointer-events: none;
+        width: 80px;
         }
 
-        .donut-legend-box {
+        .d-leg-box {
         width: 100%;
         background: #F8FAFC;
-        border-radius: 12px;
-        padding: 10px 12px;
+        border-radius: 10px;
+        padding: 8px 10px;
         border: 1px solid #EEF2F7;
-        margin-top: 18px;
+        margin-top: 14px;
         }
 
-        .legend-header {
-        font-size: 10px;
+        .d-leg-hdr {
+        font-size: 9px;
         font-weight: 700;
         text-transform: uppercase;
         color: #8896A3;
-        padding-bottom: 8px;
+        padding-bottom: 6px;
         border-bottom: 1px solid #E9ECEF;
-        margin-bottom: 6px;
+        margin-bottom: 5px;
         }
 
-        .legend-scroll {
+        .d-leg-scroll {
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        max-height: 220px;
+        gap: 3px;
+        max-height: 200px;
         overflow-y: auto;
         }
 
-        .lv-row {
+        .lv {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 5px 6px;
-        border-radius: 7px;
+        gap: 6px;
+        padding: 4px 5px;
+        border-radius: 6px;
         }
 
-        .lv-dot {
-        width: 12px;
-        height: 12px;
+        .lvd {
+        width: 10px;
+        height: 10px;
         border-radius: 50%;
         flex-shrink: 0;
         }
 
-        .lv-name {
+        .lvn {
         flex: 1;
-        font-size: 12px;
+        font-size: 11px;
         font-weight: 500;
         color: #374151;
         overflow: hidden;
@@ -277,76 +313,83 @@
         white-space: nowrap;
         }
 
-        .lv-amount {
-        font-size: 12px;
+        .lva {
+        font-size: 11px;
         font-weight: 700;
         white-space: nowrap;
         }
 
-        .lv-pct {
-        font-size: 11px;
+        .lvp {
+        font-size: 10px;
         font-weight: 600;
-        padding: 2px 7px;
-        border-radius: 20px;
+        padding: 1px 6px;
+        border-radius: 16px;
         white-space: nowrap;
         }
 
-        /* ── Misc ─────────────────────────────────────────── */
-        .divider {
+        /* ═══════════════════════════════════════════════
+        DIVIDER — zero margin above, fixed below
+        ═══════════════════════════════════════════════ */
+        .div {
         width: 100%;
-        height: 1px;
-        background: #000;
-        margin-top: 28px;
+        height: 1.5px;
+        background: #111;
+        margin-top: 20px;
         }
 
-        .footer-note {
-        text-align: center;
-        font-size: 11px;
-        color: #9CA8B3;
-        margin-top: 28px;
-        }
-
-        .filter-bar {
+        /* Filter bar */
+        .fb {
         display: flex;
         flex-wrap: wrap;
-        gap: 10px;
-        font-size: 13px;
+        gap: 8px;
+        font-size: 12px;
         color: #5A6A78;
-        margin-top: 14px;
+        margin-top: 12px;
         }
 
-        .fb-row {
+        .fbr {
         display: flex;
         width: 100%;
         justify-content: space-between;
         }
+
+        /* Footer */
+        .footer {
+        text-align: center;
+        font-size: 10px;
+        color: #9CA8B3;
+        margin-top: 20px;
+        }
     </style>
 </head>
 <body>
-    <div class="report-wrap">
+    <div class="rw">
 
         @await Html.PartialAsync("_CommonHeader", Model)
 
         <!-- Title -->
-        <div style="display:flex;justify-content:center;margin-top:4px;">
-            <p style="font-size:20px;font-weight:600;color:#000;">Account Statement</p>
+        <div style="text-align:center;margin-top:6px;">
+            <span style="font-size:18px;font-weight:700;color:#000;">Account Statement</span>
         </div>
 
         <!-- Filter bar -->
-        <div class="filter-bar">
+        <div class="fb">
             <span><strong>🏢 Branch</strong>&nbsp;@branchName</span>
-            <div class="fb-row">
+            <div class="fbr">
                 <span><strong>📅 Period</strong>&nbsp;@fromDate → @toDate</span>
                 <span><strong>📌 Report Type</strong>&nbsp;@reportType</span>
             </div>
-            <div class="fb-row">
+            <div class="fbr">
                 <span><strong>🔄 Transaction</strong>&nbsp;@transactionType</span>
                 <span><strong>🕒 Generated</strong>&nbsp;@generatedOn</span>
             </div>
         </div>
-        <div style="width:100%;border-top:1.5px solid #000;margin-top:8px;"></div>
+        <div style="width:100%;height:1px;background:#000;margin-top:6px;"></div>
 
-        <!-- Debit / Credit summary pills -->
+        <!-- Gray divider above summary pills -->
+        <div style="width:100%;height:1px;border:1.5px solid #D1D5DB;background:#FEF7F7;"></div>
+
+        <!-- Summary pills -->
         <div class="pill-row">
             <div class="pill" style="border:1.5px solid #F4BFBD;background:#FEF7F7;color:#C0392B;">
                 💸 <strong>TOTAL DEBIT</strong>&nbsp;&nbsp;@FormatFull(grandDebit)
@@ -356,169 +399,291 @@
             </div>
         </div>
 
-        <!-- Opening / Closing Cash & Bank -->
+        <!-- Balance pills -->
         @if (balance != null)
         {
-            <div class="balance-row">
-                <div class="balance-pill" style="background:#F0F7FC;border:1.5px solid #BFD9EC;">
-                    <span class="bp-label">💰 Opening Cash</span>
-                    <span class="bp-value" style="color:#1C5D7A;">@FormatFull(balance.OpeningCashBalance)</span>
+            <div class="bal-row">
+                <div class="bal-pill" style="background:#F0F7FC;border:1.5px solid #BFD9EC;">
+                    <span class="bal-lbl">💰 Opening Cash</span>
+                    <span class="bal-val" style="color:#1C5D7A;">@FormatFull(balance.OpeningCashBalance)</span>
                 </div>
-                <div class="balance-pill" style="background:#F0F7FC;border:1.5px solid #BFD9EC;">
-                    <span class="bp-label">🏦 Opening Bank</span>
-                    <span class="bp-value" style="color:#1C5D7A;">@FormatFull(balance.OpeningBankBalance)</span>
+                <div class="bal-pill" style="background:#F0F7FC;border:1.5px solid #BFD9EC;">
+                    <span class="bal-lbl">🏦 Opening Bank</span>
+                    <span class="bal-val" style="color:#1C5D7A;">@FormatFull(balance.OpeningBankBalance)</span>
                 </div>
-                <div class="balance-pill" style="background:#F2FBF6;border:1.5px solid #AEDFC3;">
-                    <span class="bp-label">📉 Closing Cash</span>
-                    <span class="bp-value" style="color:#1A7A3F;">@FormatFull(balance.ClosingCashBalance)</span>
+                <div class="bal-pill" style="background:#F2FBF6;border:1.5px solid #AEDFC3;">
+                    <span class="bal-lbl">📉 Closing Cash</span>
+                    <span class="bal-val" style="color:#1A7A3F;">@FormatFull(balance.ClosingCashBalance)</span>
                 </div>
-                <div class="balance-pill" style="background:#F2FBF6;border:1.5px solid #AEDFC3;">
-                    <span class="bp-label">📈 Closing Bank</span>
-                    <span class="bp-value" style="color:#1A7A3F;">@FormatFull(balance.ClosingBankBalance)</span>
+                <div class="bal-pill" style="background:#F2FBF6;border:1.5px solid #AEDFC3;">
+                    <span class="bal-lbl">📈 Closing Bank</span>
+                    <span class="bal-val" style="color:#1A7A3F;">@FormatFull(balance.ClosingBankBalance)</span>
                 </div>
             </div>
         }
 
         @if (!isExcel)
         {
-            <!-- CHART 1: Debit & Credit grouped bar -->
-            <div class="section-heading" style="margin-top:24px;">
-                <span>📊 Debit &amp; Credit by @(reportType == "Summary" ? "Ledger Head" : (reportType == "SubLedger" ? "Main Ledger" : "Transaction"))</span>
-            </div>
-            <div class="chart-card">
-                <div class="chart-sizer" id="mainSizer"><canvas id="mainChart"></canvas></div>
+            @* ══════════════════════════════════════════════
+           JS DATA — injected once, used by all charts
+        ══════════════════════════════════════════════ *@
+            <script id="chartData" type="application/json">
+                {
+                "labels":   @Html.Raw(ToJsonString(chartLabels)),
+                "debits":   @Html.Raw(ToJsonNumber(chartDebits)),
+                "credits":  @Html.Raw(ToJsonNumber(chartCredits)),
+                "balances": @Html.Raw(ToJsonNumber(chartBalances)),
+                "maxLen":   @maxLabelLen,
+                "rowCount": @rowCount,
+                "reportType": "@reportType"
+                }
+            </script>
+
+            @* ══ SECTION 1: Grouped bar ══ *@
+            <div class="sec">
+                <div class="sec-head">
+                    📊 Debit &amp; Credit by
+                    @(reportType == "Summary" ? "Ledger Head" : reportType == "SubLedger" ? "Main Ledger" : "Transaction")
+                </div>
+                <div class="cc" id="cc1"><canvas id="ch1"></canvas></div>
             </div>
 
-            <div class="divider"></div>
+            <div class="div"></div>
 
-            <!-- Donut charts -->
-            <div class="section-heading">
-                <span>⚖️ Debit vs Credit Distribution</span>
-            </div>
-            <div class="donut-row">
-                <div class="donut-card">
-                    <div style="font-size:15px;font-weight:700;align-self:flex-start;color:#C0392B;margin-bottom:16px;">💸 Debit Share</div>
-                    <div class="donut-canvas-wrap">
-                        <canvas id="debitPieChart"></canvas>
-                        <div class="donut-centre" id="debitCentreLabel"></div>
+            @* ══ SECTION 2: Donut distribution ══ *@
+            <div class="sec">
+                <div class="sec-head">⚖️ Debit vs Credit Distribution</div>
+                <div class="donut-row">
+                    <div class="donut-card">
+                        <div style="font-size:13px;font-weight:700;align-self:flex-start;color:#C0392B;margin-bottom:12px;">💸 Debit Share</div>
+                        <div class="donut-wrap">
+                            <canvas id="dPie"></canvas>
+                            <div class="donut-centre" id="dCtr"></div>
+                        </div>
+                        <div class="d-leg-box">
+                            <div class="d-leg-hdr">📋 Breakdown by Head</div>
+                            <div class="d-leg-scroll" id="dLeg"></div>
+                        </div>
                     </div>
-                    <div class="donut-legend-box">
-                        <div class="legend-header">📋 Breakdown by Head</div>
-                        <div class="legend-scroll" id="debitLegend"></div>
+                    <div class="donut-card">
+                        <div style="font-size:13px;font-weight:700;align-self:flex-start;color:#1A7A3F;margin-bottom:12px;">💰 Credit Share</div>
+                        <div class="donut-wrap">
+                            <canvas id="cPie"></canvas>
+                            <div class="donut-centre" id="cCtr"></div>
+                        </div>
+                        <div class="d-leg-box">
+                            <div class="d-leg-hdr">📋 Breakdown by Head</div>
+                            <div class="d-leg-scroll" id="cLeg"></div>
+                        </div>
                     </div>
                 </div>
-                <div class="donut-card">
-                    <div style="font-size:15px;font-weight:700;align-self:flex-start;color:#1A7A3F;margin-bottom:16px;">💰 Credit Share</div>
-                    <div class="donut-canvas-wrap">
-                        <canvas id="creditPieChart"></canvas>
-                        <div class="donut-centre" id="creditCentreLabel"></div>
-                    </div>
-                    <div class="donut-legend-box">
-                        <div class="legend-header">📋 Breakdown by Head</div>
-                        <div class="legend-scroll" id="creditLegend"></div>
-                    </div>
-                </div>
             </div>
 
-            <div class="divider"></div>
+            <div class="div"></div>
 
-            <!-- CHART 2: Net Balance -->
-            <div class="section-heading">
-                <span>📉 Net Balance by Group</span>
-            </div>
-            <div class="chart-card">
-                <div class="chart-sizer" id="balSizer"><canvas id="balanceChart"></canvas></div>
+            @* ══ SECTION 3: Net Balance ══ *@
+            <div class="sec">
+                <div class="sec-head">📉 Net Balance by Group</div>
+                <div class="cc" id="cc2"><canvas id="ch2"></canvas></div>
             </div>
 
-            <div class="divider"></div>
+            <div class="div"></div>
 
-            <!-- CHART 3: Stacked bar -->
-            <div class="section-heading">
-                <span>📚 Stacked Debit &amp; Credit</span>
-            </div>
-            <div class="chart-card">
-                <div class="chart-sizer" id="stackedSizer"><canvas id="stackedChart"></canvas></div>
+            @* ══ SECTION 4: Stacked bar ══ *@
+            <div class="sec">
+                <div class="sec-head">📚 Stacked Debit &amp; Credit</div>
+                <div class="cc" id="cc3"><canvas id="ch3"></canvas></div>
             </div>
 
-            <p class="footer-note">Generated on @generatedOn — Amounts in local currency</p>
+            <p class="footer">Generated on @generatedOn — Amounts in local currency</p>
 
             <script>
-                const labels   = @Html.Raw(ToJsonString(chartLabels));
-                const debits   = @Html.Raw(ToJsonNumber(chartDebits));
-                const credits  = @Html.Raw(ToJsonNumber(chartCredits));
-                const balances = @Html.Raw(ToJsonNumber(chartBalances));
+                (function () {
+                /* ── Parse injected data ── */
+                const raw      = JSON.parse(document.getElementById('chartData').textContent);
+                const labels   = raw.labels;
+                const debits   = raw.debits.map(Number);
+                const credits  = raw.credits.map(Number);
+                const balances = raw.balances.map(Number);
+                const n        = labels.length;
+                const maxLen   = raw.maxLen;
 
+                /* ── Number formatters ── */
                 const fmt = v => {
                 const a = Math.abs(v);
-                return a >= 1e9 ? (v/1e9).toFixed(1)+'B' :
-                a >= 1e6 ? (v/1e6).toFixed(1)+'M' :
-                a >= 1e3 ? (v/1e3).toFixed(1)+'K' :
-                v.toFixed(0);
+                if (a >= 1e9) return (v/1e9).toFixed(1)+'B';
+                if (a >= 1e6) return (v/1e6).toFixed(1)+'M';
+                if (a >= 1e3) return (v/1e3).toFixed(1)+'K';
+                return v.toFixed(0);
                 };
-                const fullFmt = v =>
+                const full = v =>
                 Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
 
+                /* ── Colour palette ── */
                 const semantic = {
-                assets:'#2C7DA0',expenses:'#E67E22',income:'#28A745',liabilities:'#9B59B6',
-                equity:'#F4A261',revenue:'#20C997',capital:'#E74C3C',bank:'#457B9D',
-                cash:'#1E8449',tax:'#C0392B',payable:'#8E44AD',receivable:'#2980B9',
-                provision:'#D35400',reserve:'#16A085',loan:'#7D3C98',investment:'#117A65',
-                depreciation:'#884EA0',prepaid:'#1A5276',accrued:'#6E2F1A',profit:'#1D8348'
+                assets:'#2C7DA0', expenses:'#E67E22', income:'#28A745', liabilities:'#9B59B6',
+                equity:'#F4A261', revenue:'#20C997', capital:'#E74C3C', bank:'#457B9D',
+                cash:'#1E8449',   tax:'#C0392B',     payable:'#8E44AD', receivable:'#2980B9',
+                provision:'#D35400', reserve:'#16A085', loan:'#7D3C98', investment:'#117A65',
+                depreciation:'#884EA0', prepaid:'#1A5276', accrued:'#6E2F1A', profit:'#1D8348'
                 };
                 const fallback = ['#1C5D7A','#E67E22','#28A745','#9B59B6','#F4A261',
                 '#20C997','#E74C3C','#457B9D','#C0392B','#16A085'];
-                const labelColors = labels.map(l => {
+                const colours = labels.map(l => {
                 const k = (l||'').toLowerCase();
-                for (const [kw,col] of Object.entries(semantic)) if (k.includes(kw)) return col;
+                for (const [kw,c] of Object.entries(semantic)) if (k.includes(kw)) return c;
                 let h = 0;
                 for (let i = 0; i < l.length; i++) h = (h*31+l.charCodeAt(i))>>>0;
                 return fallback[h % fallback.length];
                 });
 
-                function setHeight(id, min) {
-                document.getElementById(id).style.height =
-                Math.max(min, labels.length*38+80)+'px';
+                /* ══════════════════════════════════════════════════
+                HEIGHT CALCULATION
+                ─────────────────────────────────────────────────
+                Problem in old PDF: charts had a fixed or under-
+                estimated height, so bars crushed together and
+                the canvas rendered outside its card, overlapping
+                the next section heading.
+
+                Fix: compute EXACT pixel height based on:
+                - number of rows  (n)
+                - row height (ROW_H) — pixels each bar group needs
+                - legend / axis overhead (OVERHEAD)
+
+                For grouped bar: each label = 2 bars, needs more
+                vertical space per row than single bar.
+                ══════════════════════════════════════════════════ */
+                const OVERHEAD = 50; // top + bottom axis overhead in px
+
+                // ROW_H: px per label for grouped chart (2 datasets)
+                // Smaller when many rows so the page stays manageable.
+                // But NEVER below 16px — below that bars are invisible.
+                function rowH(count, datasets) {
+                const base = datasets === 2 ? 28 : 20;
+                if (count > 100) return Math.max(16, base - 8);
+                if (count > 60)  return Math.max(18, base - 5);
+                if (count > 30)  return Math.max(20, base - 2);
+                return base;
                 }
 
-                // Chart 1 – grouped horizontal bar
-                setHeight('mainSizer', 400);
-                new Chart(document.getElementById('mainChart'), {
-                type:'bar',
-                data:{ labels, datasets:[
-                { label:'Debit',  data:debits,  backgroundColor:labelColors.map(c=>c+'D9'), borderRadius:6 },
-                { label:'Credit', data:credits, backgroundColor:labelColors.map(c=>c+'88'), borderRadius:6 }
-                ]},
-                options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
-                plugins:{ legend:{ display:true, position:'top' },
-                tooltip:{ callbacks:{ label:ctx=>`${ctx.dataset.label}: ${fullFmt(ctx.raw)}` }}},
-                scales:{ x:{ ticks:{ callback:v=>fmt(v) }}}
+                function cardHeight(count, datasets) {
+                return Math.max(200, count * rowH(count, datasets) + OVERHEAD);
                 }
+
+                /* ── Set card heights (before chart init so canvas
+                already has correct pixel dimensions) ── */
+                document.getElementById('cc1').style.height = cardHeight(n, 2) + 'px';
+                document.getElementById('cc2').style.height = cardHeight(n, 1) + 'px';
+                document.getElementById('cc3').style.height = cardHeight(n, 2) + 'px';
+
+                /* ══════════════════════════════════════════════════
+                Y-AXIS LEFT PADDING
+                ─────────────────────────────────────────────────
+                Chart.js reserves a fixed left area for Y-axis
+                labels. When labels are long (e.g. "INTEREST
+                EXPENSES — Recurring Saving 3 Months mat") the
+                text gets clipped or wrapped onto the bars.
+
+                Fix: set afterFit callback to force the Y-axis
+                width based on the longest label character count.
+                ~6.5px per character is a reliable estimate for
+                the default font size.
+                ══════════════════════════════════════════════════ */
+                const yAxisWidth = Math.min(400, Math.max(100, maxLen * 6.5));
+
+                /* ── Font size scales with row density ── */
+                const tickFontSize = n > 100 ? 8 : n > 60 ? 9 : n > 30 ? 10 : 11;
+
+                /* ── Shared options factory for horizontal bar charts ── */
+                function hBarOpts(tipCb, stacked) {
+                return {
+                indexAxis: 'y',
+                responsive: false,       // We set explicit px size; Chart.js must NOT override it
+                maintainAspectRatio: false,
+                layout: { padding: { top: 6, bottom: 6, left: 0, right: 12 } },
+                plugins: {
+                legend: { display: true, position: 'top',
+                labels: { boxWidth: 12, font: { size: 11 } } },
+                tooltip: { callbacks: { label: tipCb } }
+                },
+                scales: {
+                x: {
+                stacked: !!stacked,
+                ticks: { callback: v => fmt(v), font: { size: 10 } },
+                grid: { color: '#E9ECEF' }
+                },
+                y: {
+                stacked: !!stacked,
+                ticks: {
+                font: { size: tickFontSize },
+                autoSkip: false,   // NEVER skip labels
+                maxRotation: 0,
+                padding: 4
+                },
+                grid: { color: '#F3F4F6' },
+                afterFit(axis) {
+                // Force the left area to be exactly wide enough for labels
+                axis.width = yAxisWidth;
+                }
+                }
+                }
+                };
+                }
+
+                /* ── Helper: set canvas pixel size to match its card ── */
+                function sizeCanvas(canvasId, cardId) {
+                const card   = document.getElementById(cardId);
+                const canvas = document.getElementById(canvasId);
+                canvas.width  = card.clientWidth;
+                canvas.height = card.clientHeight;
+                }
+
+                /* ════════════════════════════════════════
+                CHART 1 — Grouped horizontal bar
+                ════════════════════════════════════════ */
+                sizeCanvas('ch1', 'cc1');
+                new Chart(document.getElementById('ch1'), {
+                type: 'bar',
+                data: {
+                labels,
+                datasets: [
+                { label:'Debit',  data:debits,
+                backgroundColor:colours.map(c=>c+'D9'), borderRadius:3,
+                barPercentage:0.82, categoryPercentage:0.88 },
+                { label:'Credit', data:credits,
+                backgroundColor:colours.map(c=>c+'88'), borderRadius:3,
+                barPercentage:0.82, categoryPercentage:0.88 }
+                ]
+                },
+                options: hBarOpts(ctx => `${ctx.dataset.label}: ${full(ctx.raw)}`, false)
                 });
 
-                // Donuts
-                const topN      = Math.min(labels.length,10);
-                const topLabels = labels.slice(0,topN);
-                const topColors = topLabels.map((_,i)=>labelColors[i]);
-                const topDebits  = debits.slice(0,topN).map(Number);
-                const topCredits = credits.slice(0,topN).map(Number);
+                /* ════════════════════════════════════════
+                DONUT CHARTS — top 10 only
+                ════════════════════════════════════════ */
+                const topN   = Math.min(n, 10);
+                const tLbls  = labels.slice(0, topN);
+                const tCols  = tLbls.map((_, i) => colours[i]);
+                const tDeb   = debits.slice(0,  topN);
+                const tCred  = credits.slice(0, topN);
 
-                const slicePctPlugin = {
-                id:'slicePct',
-                afterDraw(chart){
-                const {ctx:c,data} = chart;
+                /* Plugin: draw % text on each pie slice */
+                const pctPlugin = {
+                id: 'pct',
+                afterDraw(chart) {
+                const { ctx: c, data } = chart;
                 const ds   = data.datasets[0];
                 const meta = chart.getDatasetMeta(0);
-                const tot  = ds.data.reduce((a,b)=>+a+ +b,0);
-                if(!tot) return;
-                meta.data.forEach((arc,i)=>{
-                const val = +ds.data[i];
-                const pct = (val/tot)*100;
-                if(pct<3) return;
+                const tot  = ds.data.reduce((a,b)=>+a+ +b, 0);
+                if (!tot) return;
+                meta.data.forEach((arc, i) => {
+                const pct = (+ds.data[i]/tot)*100;
+                if (pct < 3) return;
                 const mid = (arc.startAngle+arc.endAngle)/2;
                 const r   = (arc.innerRadius+arc.outerRadius)/2;
                 c.save();
-                c.shadowColor='rgba(0,0,0,0.6)'; c.shadowBlur=4;
-                c.font=`bold ${pct>10?13:11}px 'Segoe UI',sans-serif`;
+                c.shadowColor='rgba(0,0,0,.45)'; c.shadowBlur=3;
+                c.font = `bold ${pct>10?12:10}px 'Segoe UI',sans-serif`;
                 c.fillStyle='#fff'; c.textAlign='center'; c.textBaseline='middle';
                 c.fillText(pct.toFixed(1)+'%', arc.x+Math.cos(mid)*r, arc.y+Math.sin(mid)*r);
                 c.restore();
@@ -526,71 +691,98 @@
                 }
                 };
 
-                function buildLegend(arr, total, cols){
+                function donutLegendHtml(arr, total, cols) {
                 return arr.map((val,i)=>{
                 const pct = total>0?((val/total)*100).toFixed(1):'0.0';
-                const col = cols[i], nm = topLabels[i];
-                return `<div class="lv-row">
-                <span class="lv-dot" style="background:${col}"></span>
-                <span class="lv-name" title="${nm}">${nm}</span>
-                <span class="lv-amount" style="color:${col}">${fullFmt(val)}</span>
-                <span class="lv-pct" style="color:${col};background:${col}1A;border:1px solid ${col}44">${pct}%</span>
+                const c = cols[i], nm = tLbls[i];
+                return `<div class="lv">
+                <span class="lvd" style="background:${c}"></span>
+                <span class="lvn" title="${nm}">${nm}</span>
+                <span class="lva" style="color:${c}">${full(val)}</span>
+                <span class="lvp" style="color:${c};background:${c}1A;border:1px solid ${c}44">${pct}%</span>
                 </div>`;
                 }).join('');
                 }
 
-                function makeDonut(canvasId, dataArr, centreId, legendId, colours){
-                const total = dataArr.reduce((a,b)=>+a+ +b,0);
-                const el = document.getElementById(canvasId);
-                if(!el) return;
-                new Chart(el,{
-                type:'doughnut',
-                data:{ labels:topLabels, datasets:[{ data:dataArr, backgroundColor:colours, borderWidth:3, borderColor:'#fff', hoverOffset:10 }]},
-                options:{ responsive:true, maintainAspectRatio:true, cutout:'60%',
-                layout:{ padding:6 }, animation:{ animateRotate:true, duration:700 },
-                plugins:{ legend:{ display:false },
-                tooltip:{ callbacks:{ label:ctx=>{
-                const v=+ctx.raw, p=total>0?((v/total)*100).toFixed(1):'0.0';
-                return `  ${ctx.label}: ${fullFmt(v)}  (${p}%)`;
-                }}}}
+                function makeDonut(cId, arr, ctrId, legId, cols) {
+                const tot = arr.reduce((a,b)=>+a+ +b, 0);
+                new Chart(document.getElementById(cId), {
+                type: 'doughnut',
+                data: {
+                labels: tLbls,
+                datasets:[{ data:arr, backgroundColor:cols,
+                borderWidth:2, borderColor:'#fff', hoverOffset:8 }]
                 },
-                plugins:[slicePctPlugin]
+                options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                cutout: '58%',
+                layout: { padding: 4 },
+                animation: { animateRotate:true, duration:600 },
+                plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => {
+                const v = +ctx.raw;
+                const p = tot>0?((v/tot)*100).toFixed(1):'0.0';
+                return `  ${ctx.label}: ${full(v)}  (${p}%)`;
+                }}}
+                }
+                },
+                plugins: [pctPlugin]
                 });
-                const cEl = document.getElementById(centreId);
-                if(cEl) cEl.innerHTML=`<div style="font-size:10px;font-weight:700;color:#8896A3">TOTAL</div><div style="font-size:22px;font-weight:900;color:#0B2B40">${fmt(total)}</div>`;
-                const lEl = document.getElementById(legendId);
-                if(lEl) lEl.innerHTML = buildLegend(dataArr, total, colours);
+                const cEl = document.getElementById(ctrId);
+                if (cEl) cEl.innerHTML =
+                `<div style="font-size:9px;font-weight:700;color:#8896A3;line-height:1.3">TOTAL</div>
+                <div style="font-size:18px;font-weight:900;color:#0B2B40;line-height:1.2">${fmt(tot)}</div>`;
+                const lEl = document.getElementById(legId);
+                if (lEl) lEl.innerHTML = donutLegendHtml(arr, tot, cols);
                 }
 
-                makeDonut('debitPieChart',  topDebits,  'debitCentreLabel',  'debitLegend',  topColors);
-                makeDonut('creditPieChart', topCredits, 'creditCentreLabel', 'creditLegend', topColors);
+                makeDonut('dPie', tDeb,  'dCtr', 'dLeg', tCols);
+                makeDonut('cPie', tCred, 'cCtr', 'cLeg', tCols);
 
-                // Chart 2 – Net Balance
-                setHeight('balSizer', 300);
-                new Chart(document.getElementById('balanceChart'),{
-                type:'bar',
-                data:{ labels, datasets:[{ label:'Net Balance', data:balances,
-                backgroundColor:balances.map((v,i)=>v>=0?labelColors[i]+'CC':'#E76F51CC'), borderRadius:6 }]},
-                options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
-                plugins:{ tooltip:{ callbacks:{ label:ctx=>`Balance: ${fullFmt(ctx.raw)}` }}},
-                scales:{ x:{ ticks:{ callback:v=>fmt(v) }}}
-                }
+                /* ════════════════════════════════════════
+                CHART 2 — Net Balance bar
+                ════════════════════════════════════════ */
+                sizeCanvas('ch2', 'cc2');
+                new Chart(document.getElementById('ch2'), {
+                type: 'bar',
+                data: {
+                labels,
+                datasets: [{
+                label: 'Net Balance',
+                data: balances,
+                backgroundColor: balances.map((v,i) => +v>=0 ? colours[i]+'CC' : '#E76F51CC'),
+                borderRadius: 3,
+                barPercentage: 0.7,
+                categoryPercentage: 0.88
+                }]
+                },
+                options: hBarOpts(ctx => `Balance: ${full(ctx.raw)}`, false)
                 });
 
-                // Chart 3 – Stacked bar
-                setHeight('stackedSizer', 300);
-                new Chart(document.getElementById('stackedChart'),{
-                type:'bar',
-                data:{ labels, datasets:[
-                { label:'Debit',  data:debits,  backgroundColor:labelColors.map(c=>c+'D9'), borderRadius:4 },
-                { label:'Credit', data:credits, backgroundColor:labelColors.map(c=>c+'77'), borderRadius:4 }
-                ]},
-                options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
-                plugins:{ legend:{ display:true, position:'top' },
-                tooltip:{ callbacks:{ label:ctx=>`${ctx.dataset.label}: ${fullFmt(ctx.raw)}` }}},
-                scales:{ x:{ stacked:true, ticks:{ callback:v=>fmt(v) }}, y:{ stacked:true }}
-                }
+                /* ════════════════════════════════════════
+                CHART 3 — Stacked bar
+                ════════════════════════════════════════ */
+                sizeCanvas('ch3', 'cc3');
+                const sOpts = hBarOpts(ctx => `${ctx.dataset.label}: ${full(ctx.raw)}`, true);
+                new Chart(document.getElementById('ch3'), {
+                type: 'bar',
+                data: {
+                labels,
+                datasets: [
+                { label:'Debit',  data:debits,
+                backgroundColor:colours.map(c=>c+'D9'), borderRadius:3,
+                barPercentage:0.82, categoryPercentage:0.88 },
+                { label:'Credit', data:credits,
+                backgroundColor:colours.map(c=>c+'77'), borderRadius:3,
+                barPercentage:0.82, categoryPercentage:0.88 }
+                ]
+                },
+                options: sOpts
                 });
+
+                })();
             </script>
         }
 
