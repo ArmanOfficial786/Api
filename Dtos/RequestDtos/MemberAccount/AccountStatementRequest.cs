@@ -12,6 +12,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.MemberAccount
         public string? ReportType { get; set; }
         public string? TransactionType { get; set; }
         public string? OrderBy { get; set; }
+        public bool VisualReport { get; set; } = false;
     }
 
     public class AccountStatementModelResponse

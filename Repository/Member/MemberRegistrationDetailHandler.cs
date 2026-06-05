@@ -1,29 +1,33 @@
 using Dapper;
-using NexgenCosysReport.Dtos.ReportDtos;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using System.Data;
+using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Member;
+using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Member;
+using System.Data;
 
 namespace NexgenCosysReport.Repository.Member
 {
     public class MemberRegistrationDetailHandler : IMemberDetail
     {
         private readonly AppDbContext _context;
+        private readonly IDateConverterService _dateConverter;
         private readonly ILogger<MemberRegistrationDetailHandler> _logger;
 
         public MemberRegistrationDetailHandler(
             AppDbContext context,
-            ILogger<MemberRegistrationDetailHandler> logger)
+            ILogger<MemberRegistrationDetailHandler> logger,
+            IDateConverterService dateConverter)
         {
             _context = context;
             _logger = logger;
+            _dateConverter = dateConverter;
         }
 
         public async Task<List<MemberRegistrationDetail>> GetMemberRegistrationDetail(MemberDetailRequest request)
         {
-            var sqlFilterExp = BuildSqlFilter(request);
+            var sqlFilterExp = await BuildSqlFilter(request);
             var connectionString = _context.Database.GetConnectionString();
 
             using (var connection = new SqlConnection(connectionString))
@@ -40,25 +44,25 @@ namespace NexgenCosysReport.Repository.Member
             }
         }
 
-        public async Task<List<CommonHeader>> GetCommonHeaders()
-        {
-            var connectionString = _context.Database.GetConnectionString();
-            using (var connection = new SqlConnection(connectionString))
-            {
-                var parameters = new DynamicParameters();
-                parameters.Add("@SqlFilterExp", string.Empty, DbType.String);
+        //public async Task<List<CommonHeader>> GetCommonHeaders()
+        //{
+        //    var connectionString = _context.Database.GetConnectionString();
+        //    using (var connection = new SqlConnection(connectionString))
+        //    {
+        //        var parameters = new DynamicParameters();
+        //        parameters.Add("@SqlFilterExp", string.Empty, DbType.String);
 
-                var results = connection.Query<CommonHeader>(
-                    "sp_2_1_GetCompanyProfile",
-                    parameters,
-                    commandType: CommandType.StoredProcedure
-                ).ToList();
+        //        var results = connection.Query<CommonHeader>(
+        //            "sp_2_1_GetCompanyProfile",
+        //            parameters,
+        //            commandType: CommandType.StoredProcedure
+        //        ).ToList();
 
-                return results;
-            }
-        }
+        //        return results;
+        //    }
+        //}
 
-        private string BuildSqlFilter(MemberDetailRequest request)
+        private async Task<string> BuildSqlFilter(MemberDetailRequest request)
         {
             var sqlFilterExp = string.Empty;
 
@@ -74,7 +78,12 @@ namespace NexgenCosysReport.Repository.Member
 
             if (!string.IsNullOrEmpty(request.fromDate) && !string.IsNullOrEmpty(request.toDate))
             {
-                sqlFilterExp += $" And MR.RegistrationOn between '{request.fromDate}' And '{request.toDate}'";
+                //sqlFilterExp += $" And MR.RegistrationOn between '{request.fromDate}' And '{request.toDate}'";
+                string fromDateAd = await _dateConverter.BsToAdStringAsync(request.fromDate);
+                string toDateAd = await _dateConverter.BsToAdStringAsync(request.toDate);
+
+                if (!string.IsNullOrEmpty(fromDateAd) && !string.IsNullOrEmpty(toDateAd))
+                    sqlFilterExp += $" And MR.RegistrationOn BETWEEN '{fromDateAd}' AND '{toDateAd}'";
             }
 
             if (!string.IsNullOrEmpty(sqlFilterExp))

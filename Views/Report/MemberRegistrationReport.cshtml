@@ -1,0 +1,251 @@
+﻿@* Views/Report/MemberRegistrationReport.cshtml *@
+@model Dictionary<string, object>
+@using NexgenCosysReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.RequestDtos
+@{
+    Layout = null;
+
+    var dataSet = (Model["StudentDataSet"] as IEnumerable<dynamic>)?.ToList()
+                  ?? new List<dynamic>();
+
+    var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "All";
+    var fromDate = Model.ContainsKey("FromDate") ? Model["FromDate"]?.ToString() : "";
+    var toDate = Model.ContainsKey("ToDate") ? Model["ToDate"]?.ToString() : "";
+    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    int totalRecords = Model.ContainsKey("TotalRecords")
+                       ? Convert.ToInt32(Model["TotalRecords"])
+                       : dataSet.Count;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Member Registration Report</title>
+    <style>
+            /* ── RESET ── */
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            /* ── CONTAINER ── */
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            /* ── STOP THEAD REPEATING ── */
+            thead {
+                display: table-row-group;
+            }
+
+            /* ── TABLE BASE ── */
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                /* ALL td/th: white bg, NO borders by default
+                       (AccountStatement pattern — side borders never appear) */
+                .data-table td,
+                .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    white-space: normal;
+                    vertical-align: middle;
+                    background: #FFFFFF;
+                    border-top: none;
+                    border-bottom: none;
+                    border-left: none;
+                    border-right: none;
+                }
+
+            /* ── REPORT TITLE ── */
+            .meta-title td {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            /* ── META INFO ROWS ── */
+            .meta-row td {
+                padding: 4px 8px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            /* ── COLUMN HEADER ROW ──
+                       Thick top + thin bottom, NO side borders — identical to AccountStatement */
+            .data-table th {
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                border-left: none;
+                border-right: none;
+                padding: 5px 8px;
+                font-weight: bold;
+            }
+
+            /* ── DATA ROWS — bottom rule only ── */
+            .detail-row td {
+                padding: 5px 8px;
+                background: #FFFFFF;
+                border-top: none;
+                border-bottom: 1px solid #ccc;
+                border-left: none;
+                border-right: none;
+                vertical-align: top;
+            }
+
+            /* ── GRAND TOTAL ── */
+            .grand-total td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                border-left: none;
+                border-right: none;
+                font-weight: bold;
+                padding: 5px 8px;
+                background: #FFFFFF;
+            }
+
+            /* ── FOOTER ── */
+            .footer-row td {
+                text-align: center;
+                font-size: 8.5pt;
+                color: #666;
+                padding: 6px 8px;
+            }
+
+            /* ── TEXT ALIGNMENT HELPERS ── */
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+
+            /* ── PRINT ── */
+            @@media print {
+                body {
+                    margin: 0;
+                    padding: 0;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        @* ── SINGLE TABLE — data-sheet-name always present so Excel → 1 sheet ── *@
+        <table class="data-table" data-sheet-name="MemberRegistrationReport">
+            <colgroup>
+                <col style="width:  5%;" />   @* S.N.        *@
+                <col style="width: 12%;" />   @* Member ID   *@
+                <col style="width: 15%;" />   @* Full Name   *@
+                <col style="width: 20%;" />   @* Email       *@
+                <col style="width: 12%;" />   @* Mobile No.  *@
+                <col style="width: 15%;" />   @* Address     *@
+                <col style="width: 10%;" />   @* Nationality *@
+                <col style="width: 11%;" />   @* Occupation  *@
+            </colgroup>
+            <tbody>
+
+                @* ── REPORT TITLE ── *@
+                <tr class="meta-title">
+                    <td colspan="8">Member Registration Report</td>
+                </tr>
+
+                @* ── META ROW 1: Branch Name | From Date ── *@
+                <tr class="meta-row">
+                    <td colspan="5"><strong>Branch Name :</strong> @branchName</td>
+                    <td colspan="3" class="text-right"><strong>From Date :</strong> @fromDate</td>
+                </tr>
+
+                @* ── META ROW 2: Generated On | To Date ── *@
+                <tr class="meta-row">
+                    <td colspan="5"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="3" class="text-right"><strong>To Date :</strong> @toDate</td>
+                </tr>
+
+                @* ── SPACER ── *@
+                <tr class="meta-spacer"><td colspan="8"></td></tr>
+
+                @* ── COLUMN HEADERS ── *@
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th class="text-left">Member ID</th>
+                    <th class="text-left">Full Name</th>
+                    <th class="text-left">Email</th>
+                    <th class="text-left">Mobile No.</th>
+                    <th class="text-left">Address</th>
+                    <th class="text-left">Nationality</th>
+                    <th class="text-left">Occupation</th>
+                </tr>
+
+                @* ── DATA ROWS ── *@
+                @{
+                    int sn = 0;
+                }
+                @foreach (var row in dataSet)
+                {
+                    sn++;
+                    <tr class="detail-row">
+                        <td class="text-center">@sn</td>
+                        <td>@row.MemberId</td>
+                        <td>@row.Name</td>
+                        <td>@row.EmailId</td>
+                        <td>@row.MobileNo</td>
+                        <td>@row.PermanentAddress</td>
+                        <td>@row.Nationality</td>
+                        <td>@row.Occupation</td>
+                    </tr>
+                }
+
+                @* ── GRAND TOTAL ── *@
+                <tr class="grand-total">
+                    <td colspan="2">Total Records :</td>
+                    <td colspan="6">@totalRecords</td>
+                </tr>
+
+                @* ── SPACER ── *@
+                <tr class="meta-spacer"><td colspan="8"></td></tr>
+
+            </tbody>
+        </table>
+
+    </div>
+</body>
+</html>

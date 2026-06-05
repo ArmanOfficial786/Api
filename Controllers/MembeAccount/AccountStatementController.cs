@@ -142,7 +142,9 @@ namespace NexgenCosysReport.Controllers.MembeAccount
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
                         reportKey: reportKey,
                         //reportPath: "Views/Report/AccountStatementReport.cshtml",
-                        reportPath: "Views/VisualReport/VAccountStatementReport.cshtml",
+                        //reportPath: "Views/VisualReport/VAccountStatementReport.cshtml",
+                        reportPath: request.VisualReport ? "Views/VisualReport/VAccountStatementReport.cshtml" : "Views/Report/AccountStatementReport.cshtml",
+
                         data: reportData));
 
 

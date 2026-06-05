@@ -5,8 +5,8 @@ namespace NexgenCosysReport.Inteface.ReportInterface
 {
     public interface IReportFileResponse
     {
-        FileContentResult BuildPdfResponse(byte[] pdfBytes, int totalRecords);
-        FileStreamResult BuildPdfStreamResponse(string pdfPath, int totalRecords);
+        FileContentResult BuildPdfResponse(byte[] pdfBytes, int? totalRecords = null);
+        FileStreamResult BuildPdfStreamResponse(string pdfPath, int? totalRecords = null);
 
         static int CountPdfPagesFromFile(string pdfPath) =>
             ReportFileResponse.CountPdfPagesFromFile(pdfPath);

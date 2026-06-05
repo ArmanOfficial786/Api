@@ -247,6 +247,7 @@ using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.Member;
 using NexgenCosysReport.Inteface.ReportInterface;
+using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Member;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
@@ -260,6 +261,7 @@ namespace NexgenCosysReport.Controllers.Member
     {
         private readonly IMemberIdCard _memberIdCardService;
         private readonly IMemberDetail _memberDetail;
+        private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly IOptions<ReportSettings> _reportSettings;
@@ -316,7 +318,7 @@ namespace NexgenCosysReport.Controllers.Member
 
                 // -- STAGE 1: DB queries — concurrent ------------------------------
                 var memberTask = _memberIdCardService.GetMemberIdCardData(request);
-                var headerTask = _memberDetail.GetCommonHeaders();
+                var headerTask = _commonHeaderRepository.GetCommonHeaders();
                 await Task.WhenAll(memberTask, headerTask);
 
                 var memberIdCardData = memberTask.Result;

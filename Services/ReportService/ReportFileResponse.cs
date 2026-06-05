@@ -36,7 +36,7 @@ namespace NexgenCosysReport.Services.ReportService
         /// Builds a FileContentResult from in-memory PDF bytes.
         /// Used for small datasets whose PDF fits in cache.
         /// </summary>
-        public FileContentResult BuildPdfResponse(byte[] pdfBytes, int totalRecords)
+        public FileContentResult BuildPdfResponse(byte[] pdfBytes, int? totalRecords = null)
         {
             var totalPages = JsReportService.CountPdfPages(pdfBytes);
 
@@ -54,7 +54,7 @@ namespace NexgenCosysReport.Services.ReportService
         /// Builds a FileStreamResult streamed directly from disk.
         /// Used for large chunked PDFs that must not be loaded into memory.
         /// </summary>
-        public FileStreamResult BuildPdfStreamResponse(string pdfPath, int totalRecords)
+        public FileStreamResult BuildPdfStreamResponse(string pdfPath, int? totalRecords = null)
         {
             var totalPages = CountPdfPagesFromFile(pdfPath);
 
@@ -101,13 +101,13 @@ namespace NexgenCosysReport.Services.ReportService
         // PRIVATE
         // ═══════════════════════════════════════════════════════════════════
 
-        private void AppendPaginationHeaders(int totalPages, int totalRecords)
+        private void AppendPaginationHeaders(int totalPages, int? totalRecords)
         {
             var pagination = new Pagination
             {
                 currentPage = 1,
                 totalPages = totalPages,
-                totalRecord = totalRecords,
+                totalRecord = totalRecords ?? 0,
                 pageSize = 1,
                 hasNextPage = totalPages > 1,
                 hasPreviousPage = false
