@@ -5,14 +5,16 @@
 @{
     Layout = null;
 
-    var dataSet = (Model["StudentDataSet"] as IEnumerable<dynamic>)?.ToList()
-                  ?? new List<dynamic>();
+    var dataSet = (Model["StudentDataSet"] as IEnumerable<MemberRegistrationDetail>)?.ToList()
+                  ?? new List<MemberRegistrationDetail>();
 
-    var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "All";
-    var fromDate = Model.ContainsKey("FromDate") ? Model["FromDate"]?.ToString() : "";
-    var toDate = Model.ContainsKey("ToDate") ? Model["ToDate"]?.ToString() : "";
-    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var branchName  = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "All";
+    var fromDate    = Model.ContainsKey("FromDate")   ? Model["FromDate"]?.ToString()   : "";
+    var toDate      = Model.ContainsKey("ToDate")     ? Model["ToDate"]?.ToString()     : "";
+    var format      = Model.ContainsKey("Format")     ? Model["Format"]?.ToString()     : "VIEW";
+    var isExcel     = format == "EXCEL" || format == "XLSX";
+    var isPdf       = format == "PDF";
+    var isView      = format == "VIEW";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
     int totalRecords = Model.ContainsKey("TotalRecords")
@@ -25,227 +27,352 @@
     <meta charset="utf-8" />
     <title>Member Registration Report</title>
     <style>
-            /* ── RESET ── */
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
-            body {
-                margin: 0;
-                padding: 0;
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-            }
+        body {
+            margin-top: 25px;
+            font-family: Arial, sans-serif;
+            font-size: 7pt;
+            background: @(isView ? "#e8e8e8" : "#fff");
+        }
 
-            /* ── CONTAINER ── */
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
+        .text-right  { text-align: right  !important; }
+        .text-center { text-align: center !important; }
+        .text-left   { text-align: left   !important; }
 
-            /* ── STOP THEAD REPEATING ── */
-            thead {
-                display: table-row-group;
-            }
+        .meta-title td {
+            text-align: center;
+            font-size: 13pt;
+            font-weight: bold;
+            text-decoration: underline;
+            padding: 6px 4px 4px;
+        }
+        .meta-row td    { padding: 3px 4px; font-size: 7.5pt; }
+        .meta-spacer td { height: 5px; }
 
-            /* ── TABLE BASE ── */
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
+        .data-table {
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        .data-table td,
+        .data-table th {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            word-break: break-word;
+            white-space: normal;
+            vertical-align: middle;
+            background: #fff;
+            padding: 3px 4px;
+            border: none;
+            font-size: 7pt;
+            line-height: 1.3;
+        }
+        .data-table th {
+            border-top: 1.5px solid #000;
+            border-bottom: 1px solid #000;
+            font-weight: bold;
+            background: #f2f2f2;
+            font-size: 6.8pt;
+            white-space: nowrap;
+        }
+        .detail-row td { border-bottom: 1px solid #e0e0e0; }
+        .grand-total td {
+            border-top: 1.5px solid #000;
+            border-bottom: 1.5px solid #000;
+            font-weight: bold;
+            background: #fff;
+        }
 
-                /* ALL td/th: white bg, NO borders by default
-                       (AccountStatement pattern — side borders never appear) */
-                .data-table td,
-                .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    white-space: normal;
-                    vertical-align: middle;
-                    background: #FFFFFF;
-                    border-top: none;
-                    border-bottom: none;
-                    border-left: none;
-                    border-right: none;
-                }
+        @if (isPdf)
+        {
+            @:col.c-sn    { width: 2.2%;  }
+            @:col.c-mid   { width: 5.2%;  }
+            @:col.c-name  { width: 7.0%;  }
+            @:col.c-dob   { width: 4.8%;  }
+            @:col.c-sex   { width: 2.8%;  }
+            @:col.c-caste { width: 3.8%;  }
+            @:col.c-reli  { width: 3.8%;  }
+            @:col.c-email { width: 9.0%;  }
+            @:col.c-mob   { width: 5.5%;  }
+            @:col.c-phone { width: 5.0%;  }
+            @:col.c-nat   { width: 4.0%;  }
+            @:col.c-occ   { width: 4.8%;  }
+            @:col.c-cit   { width: 5.5%;  }
+            @:col.c-pass  { width: 4.5%;  }
+            @:col.c-gf    { width: 5.5%;  }
+            @:col.c-fa    { width: 5.0%;  }
+            @:col.c-mo    { width: 5.0%;  }
+            @:col.c-zone  { width: 3.8%;  }
+            @:col.c-dist  { width: 4.2%;  }
+            @:col.c-vdc   { width: 3.8%;  }
+            @:col.c-padd  { width: 5.8%;  }
+            @:col.c-reg   { width: 4.2%;  }
+        }
+        else
+        {
+            @:col.c-sn    { width:  50px; }
+            @:col.c-mid   { width:  90px; }
+            @:col.c-name  { width: 140px; }
+            @:col.c-dob   { width:  90px; }
+            @:col.c-sex   { width:  50px; }
+            @:col.c-caste { width:  80px; }
+            @:col.c-reli  { width:  80px; }
+            @:col.c-email { width: 160px; }
+            @:col.c-mob   { width: 100px; }
+            @:col.c-phone { width: 100px; }
+            @:col.c-nat   { width:  90px; }
+            @:col.c-occ   { width: 110px; }
+            @:col.c-cit   { width: 110px; }
+            @:col.c-pass  { width: 100px; }
+            @:col.c-gf    { width: 130px; }
+            @:col.c-fa    { width: 110px; }
+            @:col.c-mo    { width: 110px; }
+            @:col.c-zone  { width:  80px; }
+            @:col.c-dist  { width:  90px; }
+            @:col.c-vdc   { width:  80px; }
+            @:col.c-padd  { width: 140px; }
+            @:col.c-reg   { width: 100px; }
+        }
 
-            /* ── REPORT TITLE ── */
-            .meta-title td {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
+        @* PDF page — must match PageSizeSetting in controller (594x420mm landscape) *@
+        @@page { size: 594mm 420mm landscape; margin: 10mm; }
+        thead  { display: table-header-group; }
+        @@media print {
+            body { margin: 0; background: #fff; }
+            tr   { page-break-inside: avoid; break-inside: avoid; }
+        }
 
-            /* ── META INFO ROWS ── */
-            .meta-row td {
-                padding: 4px 8px;
-                font-size: 9pt;
-            }
+        .view-outer {
+            background: #e8e8e8;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .report-card {
+            background: #fff;
+            margin: 16px 16px 0 16px;
+            border: 1px solid #ccc;
+            border-bottom: none;
+            overflow: hidden;
+        }
+        .table-scroll-wrap {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
 
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            /* ── COLUMN HEADER ROW ──
-                       Thick top + thin bottom, NO side borders — identical to AccountStatement */
-            .data-table th {
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                border-left: none;
-                border-right: none;
-                padding: 5px 8px;
-                font-weight: bold;
-            }
-
-            /* ── DATA ROWS — bottom rule only ── */
-            .detail-row td {
-                padding: 5px 8px;
-                background: #FFFFFF;
-                border-top: none;
-                border-bottom: 1px solid #ccc;
-                border-left: none;
-                border-right: none;
-                vertical-align: top;
-            }
-
-            /* ── GRAND TOTAL ── */
-            .grand-total td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                border-left: none;
-                border-right: none;
-                font-weight: bold;
-                padding: 5px 8px;
-                background: #FFFFFF;
-            }
-
-            /* ── FOOTER ── */
-            .footer-row td {
-                text-align: center;
-                font-size: 8.5pt;
-                color: #666;
-                padding: 6px 8px;
-            }
-
-            /* ── TEXT ALIGNMENT HELPERS ── */
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .text-left {
-                text-align: left !important;
-            }
-
-            /* ── PRINT ── */
-            @@media print {
-                body {
-                    margin: 0;
-                    padding: 0;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
+        .pagination-bar {
+            margin: 0 16px 16px 16px;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-top: 1px solid #999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 7px 12px;
+            font-size: 9pt;
+            font-weight: bold;
+            user-select: none;
+            flex-shrink: 0;
+        }
+        .pagination-bar.hidden { display: none; }
     </style>
 </head>
 <body>
-    <div class="report-container">
-        @if (!isExcel)
+<div class="@(isView ? "view-outer" : "")">
+<div class="@(isView ? "report-card" : "")">
+@if (!isExcel)
+{
+    @await Html.PartialAsync("_CommonHeader", Model)
+}
+<div class="@(isView ? "table-scroll-wrap" : "")">
+<table class="data-table"
+       id="reportTable"
+       style="width:@(isView ? "2090px" : "100%")"
+       @(isExcel ? Html.Raw("data-sheet-name=\"MemberRegistrationReport\"") : Html.Raw(""))>
+    <colgroup>
+        <col class="c-sn"  /><col class="c-mid"  /><col class="c-name" />
+        <col class="c-dob" /><col class="c-sex"  /><col class="c-caste"/>
+        <col class="c-reli"/><col class="c-email"/><col class="c-mob"  />
+        <col class="c-phone"/><col class="c-nat" /><col class="c-occ"  />
+        <col class="c-cit" /><col class="c-pass" /><col class="c-gf"   />
+        <col class="c-fa"  /><col class="c-mo"   /><col class="c-zone" />
+        <col class="c-dist"/><col class="c-vdc"  /><col class="c-padd" />
+        <col class="c-reg" />
+    </colgroup>
+    <thead>
+        <tr class="meta-title">
+            <td colspan="22">Member Registration Report</td>
+        </tr>
+        <tr class="meta-row">
+            <td colspan="13"><strong>Branch Name :</strong> @branchName</td>
+            <td colspan="9" class="text-right"><strong>From Date :</strong> @fromDate</td>
+        </tr>
+        <tr class="meta-row">
+            <td colspan="13"><strong>Report Generated On :</strong> @generatedOn</td>
+            <td colspan="9" class="text-right"><strong>To Date :</strong> @toDate</td>
+        </tr>
+        <tr class="meta-spacer"><td colspan="22"></td></tr>
+        <tr>
+            <th class="text-center">S.N.</th>
+            <th>Member ID</th><th>Full Name</th><th>DOB</th>
+            <th>Sex</th><th>Caste</th><th>Religion</th><th>Email</th>
+            <th>Mobile</th><th>Phone</th><th>Nationality</th><th>Occupation</th>
+            <th>Citizenship No</th><th>Passport No</th>
+            <th>Grandfather</th><th>Father</th><th>Mother</th>
+            <th>Zone</th><th>District</th><th>VDC</th>
+            <th>Perm. Address</th><th>Reg. Date</th>
+        </tr>
+    </thead>
+    <tbody>
+        @{ int sn = 0; }
+        @foreach (MemberRegistrationDetail row in dataSet)
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            sn++;
+            <tr class="detail-row">
+                <td class="text-center">@sn</td>
+                <td>@row.MemberId</td><td>@row.Name</td><td>@row.DateOfBirth</td>
+                <td>@row.Sex</td><td>@row.Caste</td><td>@row.Religion</td>
+                <td>@row.EmailId</td><td>@row.MobileNo</td><td>@row.PhoneNo</td>
+                <td>@row.Nationality</td><td>@row.Occupation</td>
+                <td>@row.CitizenshipNo</td><td>@row.PassportNo</td>
+                <td>@row.GrandFatherName</td><td>@row.FatherName</td><td>@row.MotherName</td>
+                <td>@row.Zone</td><td>@row.District</td><td>@row.VDC</td>
+                <td>@row.PermanentAddress</td><td>@row.RegistrationDate</td>
+            </tr>
+        }
+    </tbody>
+</table>
+</div>
+</div>
+<div class="pagination-bar @(isView ? "" : "hidden")" id="paginationBar">
+    Page <span id="spanCurrent"> 1 </span> of <span id="spanTotal"> 1</span>
+</div>
+</div>
+@if (isView)
+{
+    <script>
+    (function () {
+        // -------------------------------------------------------------------
+        // PDF page dimensions (must match @@page rule + controller PageSetting)
+        // 594mm x 420mm landscape, 10mm margins all sides.
+        // Chromium renders at 96dpi: 1mm = 3.7795px
+        // -------------------------------------------------------------------
+        var MM_TO_PX      = 3.7795;
+        var PAGE_H_MM     = 420;
+        var MARGIN_MM     = 10;
+        // jsReport footer template height (~8mm for the "X of Y" line)
+        var FOOTER_MM     = 8;
+
+        // Usable content height per page in px (same budget Chromium uses)
+        var pageHeightPx  = (PAGE_H_MM - MARGIN_MM * 2 - FOOTER_MM) * MM_TO_PX;
+
+        // -------------------------------------------------------------------
+        // Measure the thead height (header block — only on first page in PDF
+        // because thead repeats but its actual rendered height is the same).
+        // We measure it from the live DOM.
+        // -------------------------------------------------------------------
+        var table      = document.getElementById('reportTable');
+        var thead      = table ? table.querySelector('thead') : null;
+        var theadH     = thead ? thead.getBoundingClientRect().height : 0;
+
+        // -------------------------------------------------------------------
+        // Collect all data rows and measure each one's rendered height.
+        // getBoundingClientRect gives the true height after wrapping/padding.
+        // -------------------------------------------------------------------
+        var allRows   = Array.from(document.querySelectorAll('tr.detail-row'));
+        var grandTotalRow = document.getElementById('grandTotalRow');
+        var totalRows = allRows.length;
+
+        // Measure grand-total row height (shown only on last page)
+        var grandTotalH = grandTotalRow ? grandTotalRow.getBoundingClientRect().height : 0;
+
+        // Measure each data row height (rows may wrap differently)
+        var rowHeights = allRows.map(function (r) {
+            return r.getBoundingClientRect().height;
+        });
+
+        // -------------------------------------------------------------------
+        // Build page-break index array dynamically.
+        // pageBreaks[i] = index of first row on page i  (0-based)
+        // Mirrors exactly what Chromium does:
+        //   Page 1 budget = pageHeightPx - theadH  (header takes space)
+        //   Page N budget = pageHeightPx            (only col-header repeats,
+        //                                            which is already in theadH
+        //                                            but meta rows don't repeat)
+        //
+        // Because <thead> contains meta rows + col-header and
+        // display:table-header-group repeats ALL of thead on every page,
+        // every page has the same theadH deducted.
+        // -------------------------------------------------------------------
+        var pageBreaks  = [0];   // page 0 starts at row index 0
+        var usedOnPage  = theadH; // already consumed by thead on this page
+
+        for (var i = 0; i < totalRows; i++) {
+            var rh = rowHeights[i];
+
+            // Would adding this row (+ grand-total if last row) overflow?
+            var extra = (i === totalRows - 1) ? grandTotalH : 0;
+
+            if (usedOnPage + rh + extra > pageHeightPx && i > pageBreaks[pageBreaks.length - 1]) {
+                // Start a new page at this row
+                pageBreaks.push(i);
+                usedOnPage = theadH + rh; // new page starts with thead + this row
+            } else {
+                usedOnPage += rh;
+            }
         }
 
-        @* ── SINGLE TABLE — data-sheet-name always present so Excel → 1 sheet ── *@
-        <table class="data-table" data-sheet-name="MemberRegistrationReport">
-            <colgroup>
-                <col style="width:  5%;" />   @* S.N.        *@
-                <col style="width: 12%;" />   @* Member ID   *@
-                <col style="width: 15%;" />   @* Full Name   *@
-                <col style="width: 20%;" />   @* Email       *@
-                <col style="width: 12%;" />   @* Mobile No.  *@
-                <col style="width: 15%;" />   @* Address     *@
-                <col style="width: 10%;" />   @* Nationality *@
-                <col style="width: 11%;" />   @* Occupation  *@
-            </colgroup>
-            <tbody>
+        var totalPages     = pageBreaks.length;
+        window.totalPages  = totalPages;
+        window.currentPage = 1;
 
-                @* ── REPORT TITLE ── *@
-                <tr class="meta-title">
-                    <td colspan="8">Member Registration Report</td>
-                </tr>
+        var spanCurrent   = document.getElementById('spanCurrent');
+        var spanTotal     = document.getElementById('spanTotal');
+        var paginationBar = document.getElementById('paginationBar');
+        var scrollWrap    = document.querySelector('.table-scroll-wrap');
 
-                @* ── META ROW 1: Branch Name | From Date ── *@
-                <tr class="meta-row">
-                    <td colspan="5"><strong>Branch Name :</strong> @branchName</td>
-                    <td colspan="3" class="text-right"><strong>From Date :</strong> @fromDate</td>
-                </tr>
+        spanTotal.textContent = totalPages;
 
-                @* ── META ROW 2: Generated On | To Date ── *@
-                <tr class="meta-row">
-                    <td colspan="5"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="3" class="text-right"><strong>To Date :</strong> @toDate</td>
-                </tr>
+        if (totalRows === 0) {
+            if (paginationBar) paginationBar.style.display = 'none';
+            return;
+        }
 
-                @* ── SPACER ── *@
-                <tr class="meta-spacer"><td colspan="8"></td></tr>
+        // -------------------------------------------------------------------
+        // Show a specific page: hide all rows outside [startIdx, endIdx)
+        // -------------------------------------------------------------------
+        function showPage(page) {
+            page = Math.max(1, Math.min(page, totalPages));
+            window.currentPage = page;
 
-                @* ── COLUMN HEADERS ── *@
-                <tr>
-                    <th class="text-center">S.N.</th>
-                    <th class="text-left">Member ID</th>
-                    <th class="text-left">Full Name</th>
-                    <th class="text-left">Email</th>
-                    <th class="text-left">Mobile No.</th>
-                    <th class="text-left">Address</th>
-                    <th class="text-left">Nationality</th>
-                    <th class="text-left">Occupation</th>
-                </tr>
+            var startIdx = pageBreaks[page - 1];
+            var endIdx   = (page < totalPages) ? pageBreaks[page] : totalRows;
 
-                @* ── DATA ROWS ── *@
-                @{
-                    int sn = 0;
-                }
-                @foreach (var row in dataSet)
-                {
-                    sn++;
-                    <tr class="detail-row">
-                        <td class="text-center">@sn</td>
-                        <td>@row.MemberId</td>
-                        <td>@row.Name</td>
-                        <td>@row.EmailId</td>
-                        <td>@row.MobileNo</td>
-                        <td>@row.PermanentAddress</td>
-                        <td>@row.Nationality</td>
-                        <td>@row.Occupation</td>
-                    </tr>
-                }
+            allRows.forEach(function (row, idx) {
+                row.style.display = (idx >= startIdx && idx < endIdx) ? '' : 'none';
+            });
 
-                @* ── GRAND TOTAL ── *@
-                <tr class="grand-total">
-                    <td colspan="2">Total Records :</td>
-                    <td colspan="6">@totalRecords</td>
-                </tr>
+            // Grand-total only on last page
+            if (grandTotalRow) {
+                grandTotalRow.style.display = (page === totalPages) ? '' : 'none';
+            }
 
-                @* ── SPACER ── *@
-                <tr class="meta-spacer"><td colspan="8"></td></tr>
+            spanCurrent.textContent = page;
+            if (scrollWrap) scrollWrap.scrollLeft = 0;
+        }
 
-            </tbody>
-        </table>
+        window.goPage = function (page) { showPage(page); };
 
-    </div>
+        // Keyboard: left/right arrows or PageUp/PageDown
+        document.addEventListener('keydown', function (e) {
+            if      (e.key === 'ArrowRight' || e.key === 'PageDown') goPage(window.currentPage + 1);
+            else if (e.key === 'ArrowLeft'  || e.key === 'PageUp')   goPage(window.currentPage - 1);
+        });
+
+        showPage(1);
+    })();
+    </script>
+}
 </body>
 </html>
