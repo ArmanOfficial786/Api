@@ -30,7 +30,7 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            margin-top: 25px;
+            margin-top: 22px;
             font-family: Arial, sans-serif;
             font-size: 7pt;
             background: @(isView ? "#e8e8e8" : "#fff");
@@ -246,7 +246,7 @@
 </div>
 </div>
 <div class="pagination-bar @(isView ? "" : "hidden")" id="paginationBar">
-    Page <span id="spanCurrent"> 1 </span> of <span id="spanTotal"> 1</span>
+    Page <span id="spanCurrent">1</span> of <span id="spanTotal">1</span>
 </div>
 </div>
 @if (isView)
@@ -369,6 +369,51 @@
             if      (e.key === 'ArrowRight' || e.key === 'PageDown') goPage(window.currentPage + 1);
             else if (e.key === 'ArrowLeft'  || e.key === 'PageUp')   goPage(window.currentPage - 1);
         });
+
+        // Mouse drag-to-scroll on the table wrapper
+        // Click and hold, then drag left/right to scroll the table
+        (function () {
+            var el = scrollWrap;
+            if (!el) return;
+
+            var isDragging  = false;
+            var startX      = 0;
+            var startScroll = 0;
+
+            el.style.cursor = 'grab';
+
+            el.addEventListener('mousedown', function (e) {
+                // Ignore right-click
+                if (e.button !== 0) return;
+                isDragging  = true;
+                startX      = e.clientX;
+                startScroll = el.scrollLeft;
+                el.style.cursor    = 'grabbing';
+                el.style.userSelect = 'none';
+                e.preventDefault();
+            });
+
+            document.addEventListener('mousemove', function (e) {
+                if (!isDragging) return;
+                var dx = e.clientX - startX;
+                el.scrollLeft = startScroll - dx;
+            });
+
+            document.addEventListener('mouseup', function () {
+                if (!isDragging) return;
+                isDragging = false;
+                el.style.cursor    = 'grab';
+                el.style.userSelect = '';
+            });
+
+            // Cancel drag if mouse leaves the window
+            document.addEventListener('mouseleave', function () {
+                if (!isDragging) return;
+                isDragging = false;
+                el.style.cursor    = 'grab';
+                el.style.userSelect = '';
+            });
+        })();
 
         showPage(1);
     })();
