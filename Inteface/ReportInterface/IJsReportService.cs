@@ -110,5 +110,7 @@ namespace NexgenCosysReport.Inteface.ReportInterface
             string? reportKey = null,
             PageSizeSetting? pageSetting = null,
             CancellationToken ct = default);
+
+
     }
 }

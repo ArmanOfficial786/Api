@@ -197,10 +197,6 @@ namespace NexgenCosysReport.Controllers.Member
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly IOptions<ReportSettings> _reportSettings;
 
-        // PDF page: 594mm × 420mm landscape (A2), 10mm margins.
-        // 574mm usable width fits all 22 columns at 7pt with the % widths
-        // defined in the .cshtml.  Adjust to Custom(420,297,...) for A3
-        // if A2 is too large for your printer/viewer.
         private static readonly PageSizeSetting PageSetting =
             PageSizeSetting.Custom(594, 420, PageUnit.mm, landscape: true);
 
@@ -240,13 +236,12 @@ namespace NexgenCosysReport.Controllers.Member
                 }
 
                 var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, "MemberReport") + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, "MemberRegistrationReport") + $"_{upperFormat}";
 
                 ReportExportHelper.LogCacheState(
                     upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
 
-                // ?? STAGE 1: cache hit (non-VIEW) ?????????????????????????????
                 if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
                 {
                     _logger.LogInformation("? NO DB CALL — serving from cache");
@@ -254,10 +249,8 @@ namespace NexgenCosysReport.Controllers.Member
                         reportKey, upperFormat, "MemberDetailReport",
                         _jsReportService, _logger, PageSetting, ct);
                 }
-
                 var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
 
-                // ?? STAGE 2: concurrent DB queries ????????????????????????????
                 var memberTask = _memberDetail.GetMemberRegistrationDetail(request);
                 var headerTask = _commonHeaderRepository.GetCommonHeaders();
                 await Task.WhenAll(memberTask, headerTask);
@@ -268,7 +261,7 @@ namespace NexgenCosysReport.Controllers.Member
                 if (!allMemberData.Any())
                     return NotFound(new { success = false, message = "No data found" });
 
-                // ?? STAGE 3: company logo ?????????????????????????????????????
+
                 var header = headerData.FirstOrDefault();
                 var companyLogoPath = header?.CompanyLogo ?? "";
                 var companyLogoBase64 = await ReportUtils.ReadCommonImageAsBase64Async(
@@ -276,7 +269,7 @@ namespace NexgenCosysReport.Controllers.Member
                 if (header != null)
                     header.CompanyLogo = companyLogoBase64;
 
-                // ?? STAGE 4: Razor ? HTML ?????????????????????????????????????
+
                 var reportData = new Dictionary<string, object>
                 {
                     { "StudentDataSet", allMemberData       },
@@ -285,26 +278,19 @@ namespace NexgenCosysReport.Controllers.Member
                     { "Format",         upperFormat         },
                     { "FromDate",       request.fromDate    },
                     { "ToDate",         request.toDate      },
-                    // { "BranchName", branchName },  // uncomment when available
+                    { "BranchName",     "All"               },
                 };
 
                 var htmlContent = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
                     reportKey: reportKey,
-                    reportPath: "Views/Report/MemberRegistrationReport.cshtml",
+                    reportPath: request.VisualReport ? "Views/VisualReport/VMemberRegistrationReport.cshtml" : "Views/Report/MemberRegistrationReport.cshtml",
                     data: reportData);
 
-                // ?? STAGE 5: respond by format ????????????????????????????????
-
-                // VIEW ? return raw HTML; JS inside it inserts page-break rows
                 if (upperFormat == "VIEW")
                 {
-                    _logger.LogInformation("?? Serving VIEW HTML with JS pagination");
                     return Content(htmlContent, "text/html");
                 }
 
-                // PDF ? jsReport renders all 22 cols on A2 landscape
-                //       Chromium @@page rule handles physical page breaks;
-                //       @@media print hides the view-only .page-break-row separators
                 if (upperFormat == "PDF")
                 {
                     var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
@@ -312,7 +298,6 @@ namespace NexgenCosysReport.Controllers.Member
                     return _reportFileResponse.BuildPdfResponse(pdfBytes);
                 }
 
-                // EXCEL / XLSX ? single sheet (meta rows inside data table)
                 return await ReportExportHelper.ExportFromCacheAsync(
                     reportKey, upperFormat, "MemberDetailReport",
                     _jsReportService, _logger, PageSetting, ct);
