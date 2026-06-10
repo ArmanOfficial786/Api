@@ -5,6 +5,7 @@ using Microsoft.Extensions.Caching.Memory;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Utils.Report;
+using System.Text;
 
 namespace NexgenCosysReport.Services.ReportService
 {
@@ -99,8 +100,6 @@ namespace NexgenCosysReport.Services.ReportService
             var fmt = format.ToUpperInvariant();
             var isPdf = fmt is "PDF" or "VIEW";
 
-
-
             // Cache hit
             if (isPdf && reportKey != null &&
                 TryGetCachedPdf(reportKey, out var cached) && cached != null)
@@ -120,6 +119,44 @@ namespace NexgenCosysReport.Services.ReportService
 
             return finalBytes;
         }
+
+        public async Task<string> ExportReportToRawHtmlAsync(
+        string htmlContent,
+        string? reportKey = null,
+        CancellationToken ct = default)
+        {
+            // Use a separate key so we don't collide with the Razor HTML cache
+            var viewCacheKey = reportKey != null ? $"{reportKey}_VIEW_RAW" : null;
+
+            if (viewCacheKey != null && TryGetCachedHtml(viewCacheKey, out var cachedHtml) && cachedHtml != null)
+            {
+                _logger.LogInformation("📦 HTML cache hit — {Key}", viewCacheKey);
+                return cachedHtml;
+            }
+
+            var request = new RenderRequest
+            {
+                Template = new Template
+                {
+                    Content = htmlContent,
+                    Engine = Engine.None,
+                    Recipe = Recipe.Html,
+                    Helpers = null
+                },
+                Options = new RenderOptions { Timeout = RenderTimeoutMs }
+            };
+
+            var result = await _jsReportClient.RenderAsync(request, ct);
+            using var ms = new MemoryStream();
+            await result.Content.CopyToAsync(ms, ct);
+            var finalHtml = Encoding.UTF8.GetString(ms.ToArray());
+
+            if (viewCacheKey != null)
+                CacheHtml(viewCacheKey, finalHtml);
+
+            return finalHtml;
+        }
+
 
         // ═══════════════════════════════════════════════════════════════════
         // PRIVATE

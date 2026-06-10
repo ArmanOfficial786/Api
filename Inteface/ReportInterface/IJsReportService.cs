@@ -110,6 +110,10 @@ namespace NexgenCosysReport.Inteface.ReportInterface
             string? reportKey = null,
             PageSizeSetting? pageSetting = null,
             CancellationToken ct = default);
+        Task<string> ExportReportToRawHtmlAsync(
+            string htmlContent,
+            string? reportKey = null,
+            CancellationToken ct = default);
 
 
     }

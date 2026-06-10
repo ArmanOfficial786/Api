@@ -56,6 +56,11 @@ namespace NexgenCosysReport.Services.ReportService
                     }
                     request.Template.Chrome = chrome;
                     break;
+                case "HTML":
+
+                    // intentional no-op
+                    break;
+
 
                 case "EXCEL":
                 case "XLSX":
