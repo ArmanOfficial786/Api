@@ -275,7 +275,8 @@ namespace NexgenCosysReport.Controllers.Member
             IWebHostEnvironment webHostEnvironment,
             IOptions<ReportSettings> reportSettings,
             ILogger<MemberIdCardController> logger,
-            CustomHeaderResponse headerResponse)
+            CustomHeaderResponse headerResponse,
+            ICommonHeaderRepository commonHeaderRepository)
         {
             _memberIdCardService = memberIdCardService;
             _memberDetail = memberDetail;
@@ -284,6 +285,7 @@ namespace NexgenCosysReport.Controllers.Member
             _reportSettings = reportSettings;
             _logger = logger;
             _headerResponse = headerResponse;
+            _commonHeaderRepository = commonHeaderRepository;
         }
 
         [HttpPost("MemberIdCard")]
