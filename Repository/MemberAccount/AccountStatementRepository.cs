@@ -1,10 +1,10 @@
 using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using System.Data;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
+using System.Data;
 
 namespace NexgenCosysReport.Repository.MemberAccount
 {
@@ -62,12 +62,12 @@ namespace NexgenCosysReport.Repository.MemberAccount
                 return " ORDER BY SubLedger";  // default — matches legacy BLL
             }
 
-            return request.OrderBy switch
+            return request.OrderBy.Trim().ToLower() switch
             {
-                "Ledger Name" => " ORDER BY SubLedger",
-                "Debit Amount" => " ORDER BY DebitAmount  DESC",
-                "Credit Amount" => " ORDER BY CreditAmount DESC",
-                "Balance" => " ORDER BY Balance       DESC",
+                "ledgername" => " ORDER BY SubLedger",
+                "debitamount" => " ORDER BY DebitAmount  DESC",
+                "crediamount" => " ORDER BY CreditAmount DESC",
+                "balance" => " ORDER BY Balance DESC",
                 _ => " ORDER BY SubLedger"
             };
         }

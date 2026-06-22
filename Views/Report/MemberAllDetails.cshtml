@@ -1,0 +1,733 @@
+﻿@* Views/Report/MemberAllDetailReport.cshtml *@
+@model Dictionary<string, object>
+@using NexgenCosysReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.RequestDtos.Member
+@{
+    Layout = null;
+
+    var dataSet = (Model["MemberAllDetailDataSet"] as IEnumerable<MemberAllDetailSpResponse>)?.ToList()
+                  ?? new List<MemberAllDetailSpResponse>();
+
+    var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "All";
+    var fromDate = Model.ContainsKey("FromDate") ? Model["FromDate"]?.ToString() : "";
+    var toDate = Model.ContainsKey("ToDate") ? Model["ToDate"]?.ToString() : "";
+    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
+
+    var isView = format == "VIEW";
+    var isExcel = format is "EXCEL" or "XLSX";
+
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    int totalRecords = Model.ContainsKey("TotalRecords")
+                       ? Convert.ToInt32(Model["TotalRecords"])
+                       : dataSet.Count;
+
+    Func<byte[]?, string> toImgSrc = (bytes) =>
+    {
+        if (bytes == null || bytes.Length == 0) return "";
+        return "data:image/jpeg;base64," + Convert.ToBase64String(bytes);
+    };
+
+    // ── Selected columns from the request. Null/empty => show all. ───────
+    var selectedColumns = Model.ContainsKey("SelectedColumns")
+        ? (Model["SelectedColumns"] as IEnumerable<string>)?.ToList()
+        : null;
+    bool showAllColumns = selectedColumns == null || selectedColumns.Count == 0;
+
+    // ── Single source of truth for every optional column. ────────────────
+    // Key      = identifier used by SelectedColumns / frontend checkboxes
+    // Header   = column header text
+    // CssClass = matching col.c-xxx class for width
+    // Render   = how to render the cell for a given row
+    var allColumns = new List<(string Key, string Header, string CssClass, Func<MemberAllDetailSpResponse, object?> Render)>
+    {
+        ("MemberId",                  "Member ID",              "c-mid",     r => r.MemberId),
+        ("FullName",                  "Full Name",              "c-name",    r => r.FullName),
+        ("FirstName",                 "First Name",             "c-fname",   r => r.FirstName),
+        ("MiddleName",                "Middle Name",            "c-mname",   r => r.MiddleName),
+        ("LastName",                  "Last Name",              "c-lname",   r => r.LastName),
+        ("MemberType",                "Member Type",            "c-mtype",   r => r.MemberType),
+        ("BirthOnBS",                 "DOB (BS)",               "c-dob",     r => r.BirthOnBS),
+        ("PermanentAddress",          "Perm. Address",          "c-paddr",   r => r.PermanentAddress),
+        ("TemporaryAddress",          "Temp. Address",          "c-taddr",   r => r.TemporaryAddress),
+        ("PhoneNo",                   "Phone",                  "c-phone",   r => r.PhoneNo),
+        ("MobileNo",                  "Mobile",                 "c-mob",     r => r.MobileNo),
+        ("EmailAddress",              "Email",                  "c-email",   r => r.EmailAddress),
+        ("Nationality",               "Nationality",            "c-nat",     r => r.Nationality),
+        ("CitizenshipNo",             "Citizenship No",         "c-cit",     r => r.CitizenshipNo),
+        ("PassportNo",                "Passport No",            "c-pass",    r => r.PassportNo),
+        ("Occupation",                "Occupation",             "c-occ",     r => r.Occupation),
+        ("Religion",                  "Religion",                "c-reli",    r => r.Religion),
+        ("MaritalStatus",             "Marital Status",          "c-marital", r => r.MaritalStatus),
+        ("GrandFatherMotherName",     "Grandfather/Mother",      "c-gfmo",    r => r.GrandFatherMotherName),
+        ("FatherName",                "Father",                  "c-father",  r => r.FatherName),
+        ("MotherName",                "Mother",                  "c-mother",  r => r.MotherName),
+        ("SpouseName",                "Spouse",                  "c-spouse",  r => r.SpouseName),
+        ("Caste",                     "Caste",                   "c-caste",   r => r.Caste),
+        ("Gender",                    "Gender",                  "c-gender",  r => r.Gender),
+        ("Vdc",                       "VDC",                     "c-vdc",     r => r.Vdc),
+        ("RegistrationOnBS",          "Reg. Date (BS)",          "c-reg",     r => r.RegistrationOnBS),
+        ("Status",                    "Status",                  "c-status",  r => r.Status),
+        ("MemberGroup",               "Member Group",            "c-mgroup",  r => r.MemberGroup),
+        ("CitizenShipIssuedOnBs",     "Cit. Issued On (BS)",     "c-citiss",  r => r.CitizenShipIssuedOnBs),
+        ("CitizenShipIssuedDistrict", "Cit. Issued District",    "c-citdist", r => r.CitizenShipIssuedDistrict),
+        ("ElectricityNo",             "Electricity No",          "c-elec",    r => r.ElectricityNo),
+        ("WaterSupplyNo",             "Water Supply No",         "c-water",   r => r.WaterSupplyNo),
+        ("Education",                 "Education",               "c-edu",     r => r.Education),
+        ("IncomeRange",               "Income Range",             "c-income",  r => r.IncomeRange),
+        ("StateVDC",                  "State VDC",                "c-svdc",    r => r.StateVDC),
+        ("MemberYearlyPaymentTillDateOnBs", "Yearly Paymt Till (BS)", "c-paytill", r => r.MemberYearlyPaymentTillDateOnBs),
+        ("NameInNepali",              "Name (Nepali)",            "c-namenp",  r => r.NameInNepali),
+        ("AddressInNepali",           "Address (Nepali)",         "c-addrnp",  r => r.AddressInNepali),
+    };
+
+    var columns = showAllColumns
+        ? allColumns
+        : allColumns.Where(c => selectedColumns!.Contains(c.Key, StringComparer.OrdinalIgnoreCase)).ToList();
+
+    // S.N. and Photo are always shown; colspans below track the dynamic total.
+    int totalVisibleCols = columns.Count + 2; // +2 for S.N. and Photo
+    int leftMetaSpan = (int)Math.Ceiling(totalVisibleCols * 0.55);
+    int rightMetaSpan = totalVisibleCols - leftMetaSpan;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Member All Detail Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 7pt;
+                background: @(isView ? "#d0d0d0" : "#fff");
+                @(isView ? "" : "margin-top: 25px;")
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                font-family: Arial, sans-serif;
+                font-size: 7pt;
+            }
+
+                .data-table td,
+                .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    word-break: break-word;
+                    white-space: normal;
+                    vertical-align: middle;
+                    background: #fff;
+                    padding: 3px 4px;
+                    border: none;
+                    font-size: 7pt;
+                    line-height: 1.3;
+                }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .meta-title td {
+                text-align: center;
+                font-size: 13pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 6px 4px 4px;
+            }
+
+            .meta-row td {
+                padding: 3px 4px;
+                font-size: 7.5pt;
+            }
+
+            .meta-spacer td {
+                height: 5px;
+            }
+
+            .data-table th {
+                border-top: 1.5px solid #000;
+                border-bottom: 1px solid #000;
+                font-weight: bold;
+                background: #f2f2f2;
+                font-size: 6.8pt;
+                white-space: nowrap;
+                padding: 4px;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #e0e0e0;
+            }
+
+            .grand-total td {
+                border-top: 1.5px solid #000;
+                border-bottom: 1.5px solid #000;
+                font-weight: bold;
+                background: #fff;
+            }
+
+            .member-photo {
+                width: 28px;
+                height: 32px;
+                object-fit: cover;
+                display: block;
+            }
+
+            /* ── column widths ───────────────────────────────────────────
+                           table-layout:fixed distributes width proportionally across
+                           whatever <col> elements are actually rendered, so explicit
+                           percentages no longer need to sum to 100 when columns are
+                           hidden — the browser re-spreads remaining width automatically. */
+            col.c-sn {
+                width: 1.20%;
+            }
+
+            col.c-photo {
+                width: 2.20%;
+            }
+
+            col.c-mid {
+                width: 3.10%;
+            }
+
+            col.c-name {
+                width: 4.20%;
+            }
+
+            col.c-fname {
+                width: 3.30%;
+            }
+
+            col.c-mname {
+                width: 2.80%;
+            }
+
+            col.c-lname {
+                width: 3.10%;
+            }
+
+            col.c-mtype {
+                width: 2.90%;
+            }
+
+            col.c-dob {
+                width: 2.90%;
+            }
+
+            col.c-paddr {
+                width: 4.20%;
+            }
+
+            col.c-taddr {
+                width: 4.20%;
+            }
+
+            col.c-phone {
+                width: 2.90%;
+            }
+
+            col.c-mob {
+                width: 3.10%;
+            }
+
+            col.c-email {
+                width: 4.50%;
+            }
+
+            col.c-nat {
+                width: 2.50%;
+            }
+
+            col.c-cit {
+                width: 3.30%;
+            }
+
+            col.c-pass {
+                width: 2.90%;
+            }
+
+            col.c-occ {
+                width: 2.90%;
+            }
+
+            col.c-reli {
+                width: 2.40%;
+            }
+
+            col.c-marital {
+                width: 2.60%;
+            }
+
+            col.c-gfmo {
+                width: 3.30%;
+            }
+
+            col.c-father {
+                width: 2.90%;
+            }
+
+            col.c-mother {
+                width: 2.90%;
+            }
+
+            col.c-spouse {
+                width: 2.90%;
+            }
+
+            col.c-caste {
+                width: 2.40%;
+            }
+
+            col.c-gender {
+                width: 2.00%;
+            }
+
+            col.c-vdc {
+                width: 2.40%;
+            }
+
+            col.c-reg {
+                width: 2.60%;
+            }
+
+            col.c-status {
+                width: 2.20%;
+            }
+
+            col.c-mgroup {
+                width: 3.10%;
+            }
+
+            col.c-citiss {
+                width: 2.60%;
+            }
+
+            col.c-citdist {
+                width: 3.10%;
+            }
+
+            col.c-elec {
+                width: 2.40%;
+            }
+
+            col.c-water {
+                width: 2.40%;
+            }
+
+            col.c-edu {
+                width: 2.60%;
+            }
+
+            col.c-income {
+                width: 3.30%;
+            }
+
+            col.c-svdc {
+                width: 2.40%;
+            }
+
+            col.c-paytill {
+                width: 2.90%;
+            }
+
+            col.c-namenp {
+                width: 3.30%;
+            }
+
+            col.c-addrnp {
+                width: 4.20%;
+            }
+
+            @@media print {
+                body {
+                    margin: 0;
+                    background: #fff;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+
+            /* ── VIEW chrome ─────────────────────────────────────────────── */
+            .view-outer {
+                background: #d0d0d0;
+                padding: 2px 16px 20px 16px;
+                min-height: 100vh;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                cursor: grab;
+            }
+
+                .view-outer:active {
+                    cursor: grabbing;
+                }
+
+            .view-page {
+                background: #fff;
+                margin: 0 auto 24px auto;
+                box-shadow: 0 2px 8px rgba(0,0,0,.18);
+                width: 3600px;
+                overflow: hidden;
+            }
+
+            .view-page-footer {
+                background: #fff;
+                border-top: 1px solid #ccc;
+                text-align: center;
+                font-size: 9pt;
+                font-weight: bold;
+                padding: 6px 0;
+                width: 3600px;
+            }
+
+            .common-header-wrap {
+                width: 3600px;
+                overflow: hidden;
+            }
+
+            #sourceWrap {
+                opacity: 0;
+                pointer-events: none;
+                width: 3600px;
+            }
+
+            #commonHeaderSource {
+                visibility: hidden;
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 3600px;
+                pointer-events: none;
+            }
+    </style>
+</head>
+<body>
+
+    @* Common header — rendered for VIEW and PDF, skipped for Excel *@
+    @if (!isExcel)
+    {
+        <div id="commonHeaderSource">
+            @await Html.PartialAsync("_CommonHeader", Model)
+        </div>
+    }
+
+    @if (isView)
+    {
+        <div id="sourceWrap">
+            <table class="data-table" id="mainTable">
+                <colgroup>
+                    <col class="c-sn" />
+                    <col class="c-photo" />
+                    @foreach (var col in columns)
+                    {
+                        <col class="@col.CssClass" />
+                    }
+                </colgroup>
+                <thead>
+                    <tr id="colHeaderRow">
+                        <th class="text-center">S.N.</th>
+                        <th>Photo</th>
+                        @foreach (var col in columns)
+                        {
+                            <th>@col.Header</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="meta-title" id="metaTitle">
+                        <td colspan="@totalVisibleCols">Member All Detail Report</td>
+                    </tr>
+                    <tr class="meta-row" id="metaRow1">
+                        <td colspan="@leftMetaSpan"><strong>Branch Name :</strong> @branchName</td>
+                        <td colspan="@rightMetaSpan" class="text-right"><strong>From Date :</strong> @fromDate</td>
+                    </tr>
+                    <tr class="meta-row" id="metaRow2">
+                        <td colspan="@leftMetaSpan"><strong>Report Generated On :</strong> @generatedOn</td>
+                        <td colspan="@rightMetaSpan" class="text-right"><strong>To Date :</strong> @toDate</td>
+                    </tr>
+                    <tr class="meta-spacer" id="metaSpacer"><td colspan="@totalVisibleCols"></td></tr>
+
+                    @{
+                        int snV = 0;
+                    }
+                    @foreach (var row in dataSet)
+                    {
+                        snV++;
+                        <tr class="detail-row">
+                            <td class="text-center">@snV</td>
+                            <td class="text-center">
+                                @{
+                                    var imgSrcV = toImgSrc(row.MemberImage);
+                                }
+                                @if (!string.IsNullOrEmpty(imgSrcV))
+                                {
+                                    <img class="member-photo" src="@imgSrcV" />
+                                }
+                            </td>
+                            @foreach (var col in columns)
+                            {
+                                <td>@col.Render(row)</td>
+                            }
+                        </tr>
+                    }
+
+                    <tr class="grand-total" id="grandTotalRow">
+                        <td colspan="2">Total Records :</td>
+                        <td colspan="@(totalVisibleCols - 2)">@totalRecords</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="view-outer" id="viewOuter"></div>
+    }
+
+    @if (!isView)
+    {
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+        <table class="data-table" id="mainTable"
+            @(isExcel ? Html.Raw("data-sheet-name=\"MemberAllDetailReport\"") : Html.Raw(""))>
+            <colgroup>
+                <col class="c-sn" />
+                <col class="c-photo" />
+                @foreach (var col in columns)
+                {
+                    <col class="@col.CssClass" />
+                }
+            </colgroup>
+            <thead>
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Photo</th>
+                    @foreach (var col in columns)
+                    {
+                        <th>@col.Header</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                <tr class="meta-title"><td colspan="@totalVisibleCols">Member All Detail Report</td></tr>
+                <tr class="meta-row">
+                    <td colspan="@leftMetaSpan"><strong>Branch Name :</strong> @branchName</td>
+                    <td colspan="@rightMetaSpan" class="text-right"><strong>From Date :</strong> @fromDate</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="@leftMetaSpan"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="@rightMetaSpan" class="text-right"><strong>To Date :</strong> @toDate</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="@totalVisibleCols"></td></tr>
+
+                @{
+                    int snP = 0;
+                }
+                @foreach (var row in dataSet)
+                {
+                    snP++;
+                    <tr class="detail-row">
+                        <td class="text-center">@snP</td>
+                        <td class="text-center">
+                            @if (!isExcel)
+                            {
+                                var imgSrcP = toImgSrc(row.MemberImage);
+                                if (!string.IsNullOrEmpty(imgSrcP))
+                                {
+                                    <img class="member-photo" src="@imgSrcP" />
+                                }
+                            }
+                        </td>
+                        @foreach (var col in columns)
+                        {
+                            <td>@col.Render(row)</td>
+                        }
+                    </tr>
+                }
+
+                <tr class="grand-total">
+                    <td colspan="2">Total Records :</td>
+                    <td colspan="@(totalVisibleCols - 2)">@totalRecords</td>
+                </tr>
+            </tbody>
+        </table>
+    }
+
+    @if (isView)
+    {
+        <script>
+                (function () {
+                    'use strict';
+
+                    var MAX_RETRIES = 5;
+                    var RETRY_DELAY = 80;
+                    var retryCount  = 0;
+                    var PAGE_W      = 3600;
+                    var PAGE_CONT_H = 1480;
+
+                    function buildPages() {
+                        var tbl          = document.getElementById('mainTable');
+                        var colHdrRow    = document.getElementById('colHeaderRow');
+                        var metaTitle    = document.getElementById('metaTitle');
+                        var metaRow1     = document.getElementById('metaRow1');
+                        var metaRow2     = document.getElementById('metaRow2');
+                        var metaSpacer   = document.getElementById('metaSpacer');
+                        var grandTotalEl = document.getElementById('grandTotalRow');
+
+                        if (!tbl || !colHdrRow) {
+                            if (retryCount++ < MAX_RETRIES)
+                                setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+                            return;
+                        }
+
+                        var colHdrH = colHdrRow.getBoundingClientRect().height;
+                        var metaH   = metaTitle.getBoundingClientRect().height
+                                    + metaRow1.getBoundingClientRect().height
+                                    + metaRow2.getBoundingClientRect().height
+                                    + metaSpacer.getBoundingClientRect().height;
+                        var gtH    = grandTotalEl ? grandTotalEl.getBoundingClientRect().height : 0;
+                        var gtHtml = grandTotalEl ? grandTotalEl.outerHTML : '';
+
+                        var detailRows = tbl.querySelectorAll('tr.detail-row');
+                        var rowData    = Array.from(detailRows).map(function (r) {
+                            return { html: r.outerHTML, h: r.getBoundingClientRect().height };
+                        });
+
+                        var allZero = rowData.length > 0 &&
+                                      rowData.every(function (r) { return r.h === 0; });
+                        if (allZero) {
+                            if (retryCount++ < MAX_RETRIES)
+                                setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+                            return;
+                        }
+
+                        var pages = [], cur = [], used = metaH + colHdrH;
+                        for (var i = 0; i < rowData.length; i++) {
+                            var rh    = rowData[i].h || 14;
+                            var extra = (i === rowData.length - 1) ? gtH : 0;
+                            if (used + rh + extra > PAGE_CONT_H && cur.length > 0) {
+                                pages.push(cur);
+                                cur  = [];
+                                used = colHdrH;
+                            }
+                            cur.push(i);
+                            used += rh;
+                        }
+                        if (cur.length > 0) pages.push(cur);
+
+                        var totalPages = pages.length || 1;
+
+                        var colgroupHtml  = tbl.querySelector('colgroup').outerHTML;
+                        var colHdrHtml    = colHdrRow.outerHTML;
+                        var metaHtml      = metaTitle.outerHTML
+                                          + metaRow1.outerHTML
+                                          + metaRow2.outerHTML
+                                          + metaSpacer.outerHTML;
+
+                        var commonHdrEl   = document.getElementById('commonHeaderSource');
+                        var commonHdrHtml = commonHdrEl ? commonHdrEl.innerHTML : '';
+
+                        var sourceWrap = document.getElementById('sourceWrap');
+                        if (sourceWrap)  sourceWrap.parentNode.removeChild(sourceWrap);
+                        if (commonHdrEl) commonHdrEl.parentNode.removeChild(commonHdrEl);
+
+                        var viewOuter = document.getElementById('viewOuter');
+
+                        var fragment = document.createDocumentFragment();
+
+                        for (var p = 0; p < totalPages; p++) {
+                            var card = document.createElement('div');
+                            card.className = 'view-page';
+                            card.setAttribute('data-page', String(p + 1));
+
+                            var html = '';
+                            if (p === 0) {
+                                html += '<div class="common-header-wrap">' + commonHdrHtml + '</div>';
+                            }
+
+                            html += '<table class="data-table" style="width:' + PAGE_W + 'px;">'
+                                  + colgroupHtml
+                                  + '<thead>' + colHdrHtml + '</thead>'
+                                  + '<tbody>';
+
+                            if (p === 0) html += metaHtml;
+
+                            for (var r = 0; r < pages[p].length; r++) {
+                                html += rowData[pages[p][r]].html;
+                            }
+
+                            if (p === totalPages - 1) html += gtHtml;
+
+                            html += '</tbody></table>'
+                                  + '<div class="view-page-footer">Page '
+                                  + (p + 1) + ' of ' + totalPages + '</div>';
+
+                            card.innerHTML = html;
+                            fragment.appendChild(card);
+                        }
+
+                        viewOuter.appendChild(fragment);
+
+                        (function (el) {
+                            var drag = false, sx = 0, ss = 0;
+                            el.addEventListener('mousedown', function (e) {
+                                if (e.button !== 0) return;
+                                drag = true; sx = e.clientX; ss = el.scrollLeft;
+                                el.style.userSelect = 'none';
+                                e.preventDefault();
+                            });
+                            document.addEventListener('mousemove', function (e) {
+                                if (drag) el.scrollLeft = ss - (e.clientX - sx);
+                            });
+                            document.addEventListener('mouseup', function () {
+                                drag = false; el.style.userSelect = '';
+                            });
+                        })(viewOuter);
+
+                        window.scrollToPage = function (pageNumber) {
+                            var target = document.querySelector(
+                                '.view-page[data-page="' + pageNumber + '"]'
+                            );
+                            if (!target) return;
+                            window.scrollTo({ top: target.offsetTop, behavior: 'smooth' });
+                        };
+
+                        if (window.parent && window.parent !== window) {
+                            window.parent.postMessage(
+                                { type: 'REPORT_PAGES_READY', totalPages: totalPages },
+                                '*'
+                            );
+                        }
+
+                    } // end buildPages
+
+                    requestAnimationFrame(function () {
+                        requestAnimationFrame(buildPages);
+                    });
+
+                }());
+        </script>
+    }
+</body>
+</html>

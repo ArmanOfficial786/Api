@@ -1,11 +1,10 @@
 using Dapper;
-using NexgenCosysReport.Dtos.ReportDtos;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using System.Data;
 using NexgenCosysReport.Dtos.RequestDtos.Member;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Member;
+using System.Data;
 
 namespace NexgenCosysReport.Repository.Member
 {
@@ -78,36 +77,50 @@ namespace NexgenCosysReport.Repository.Member
             return sqlFilterExp;
         }
         // ================= ORDER BY BUILDER =================
+        //private static string BuildOrderBy(string? orderBy)
+        //{
+        //    //if (string.IsNullOrWhiteSpace(orderBy) || orderBy == "-1")
+        //    //    return $`ORDER BY MR.{ orderBy} ASC`;
+        //    //        " ORDER BY MR.RegistrationOn ASC";
+
+        //    //switch (orderBy.Trim().ToLower())
+        //    //{
+
+        //    //    case "membername":
+        //    //        return " ORDER BY Name ASC";
+
+        //    //    case "sex":
+        //    //        return " ORDER BY Sex ASC"; //alias of Geneder
+
+        //    //    case "memberid":
+        //    //        return " ORDER BY MR.MemberId ASC";
+
+        //    //    case "birthonbs":
+        //    //        return " ORDER BY MR.BirthOnBS ASC";
+
+        //    //    case "registrationon":
+        //    //        return " ORDER BY MR.RegistrationOn ASC";
+
+        //    //    default:
+        //    //        return " ORDER BY MR.RegistrationOn ASC";
+        //    //}
+
+
+
+
+        //}
+
         private static string BuildOrderBy(string? orderBy)
         {
-            if (string.IsNullOrWhiteSpace(orderBy) || orderBy == "-1")
-                return " ORDER BY MR.RegistrationOn ASC";
-
-            switch (orderBy.Trim().ToLower())
+            return orderBy?.Trim().ToLower() switch
             {
-                case "1":
-                case "name":
-                case "membername":
-                    return " ORDER BY Name ASC";
-
-                case "2":
-                case "sex":
-                    return " ORDER BY Sex ASC"; //alias of Geneder
-                case "3":
-                case "memberid":
-                    return " ORDER BY MR.MemberId ASC";
-                case "4":
-                case "birthonbs":
-                    return " ORDER BY MR.BirthOnBS ASC";
-
-                case "5":
-                case "registrationon":
-                    return " ORDER BY MR.RegistrationOn ASC";
-
-                default:
-                    return " ORDER BY MR.RegistrationOn ASC";
-            }
-
+                "MemberId" => " ORDER BY MR.MemberId ASC",
+                "membername" => " ORDER BY Name ASC",
+                "sex" => " ORDER BY Sex ASC",
+                "birthonbs" => " ORDER BY MR.BirthOnBS ASC",
+                "registrationon" => " ORDER BY MR.RegistrationOn ASC",
+                _ => " ORDER BY MR.RegistrationOn ASC",
+            };
         }
     }
 }

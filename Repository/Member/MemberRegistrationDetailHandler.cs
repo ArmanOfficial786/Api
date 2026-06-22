@@ -87,10 +87,20 @@ namespace NexgenCosysReport.Repository.Member
 
             if (!string.IsNullOrEmpty(sqlFilterExp))
             {
-                sqlFilterExp += " ORDER BY RegistrationOn Asc";
+                sqlFilterExp += BuildOrderBy(request.orderby);
+
             }
 
             return sqlFilterExp;
+        }
+        private static string BuildOrderBy(string? orderBy)
+        {
+            return orderBy?.Trim().ToLower() switch
+            {
+                "Memberid" => " ORDER BY MR.MemberId ASC",
+                "membername" => " ORDER BY Name ASC",
+                _ => " ORDER BY MR.RegistrationOn ASC",
+            };
         }
     }
 }
