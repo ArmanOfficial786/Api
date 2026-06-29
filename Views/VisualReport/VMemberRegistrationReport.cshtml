@@ -1,4 +1,4 @@
-﻿@* Views/Report/MemberRegistrationReport.cshtml *@
+﻿@* Views/Report/MemberAllDetailReport.cshtml - Visual Report *@
 @model Dictionary<string, object>
 @using NexgenCosysReport.Dtos.ReportDtos
 @using NexgenCosysReport.Dtos.RequestDtos.Member
@@ -6,48 +6,96 @@
 @{
     Layout = null;
 
-    var dataSet = (Model["StudentDataSet"] as IEnumerable<MemberRegistrationDetail>)?.ToList()
-                  ?? new List<MemberRegistrationDetail>();
+    var dataSet = (Model["MemberAllDetailDataSet"] as IEnumerable<MemberAllDetailSpResponse>)?.ToList()
+                  ?? new List<MemberAllDetailSpResponse>();
 
     var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "All";
     var fromDate = Model.ContainsKey("FromDate") ? Model["FromDate"]?.ToString() : "";
     var toDate = Model.ContainsKey("ToDate") ? Model["ToDate"]?.ToString() : "";
-    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var isPdf = format == "PDF";
-    var isView = format == "VIEW";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
     int totalRecords = Model.ContainsKey("TotalRecords")
                        ? Convert.ToInt32(Model["TotalRecords"])
                        : dataSet.Count;
 
-    // --- Chart data aggregation (only for VIEW) ---
-    var genderGroups = dataSet
-        .Where(r => !string.IsNullOrEmpty(r.Sex))
-        .GroupBy(r => r.Sex.Trim().ToUpperInvariant())
-        .Select(g => new { Label = g.Key, Count = g.Count() })
-        .ToList();
+    // ── Selected columns ──────────────────────────────────────────────────
+    var selectedColumns = Model.ContainsKey("SelectedColumns")
+        ? (Model["SelectedColumns"] as IEnumerable<string>)?.ToList()
+        : null;
+    bool showAllColumns = selectedColumns == null || selectedColumns.Count == 0;
 
-    var districtGroups = dataSet
-        .Where(r => !string.IsNullOrEmpty(r.District))
-        .GroupBy(r => r.District.Trim())
+    var allColumns = new List<(string Key, string Header, string CssClass, Func<MemberAllDetailSpResponse, object?> Render)>
+    {
+        ("MemberId",                  "Member ID",               "c-mid",     r => r.MemberId),
+        ("FullName",                  "Full Name",               "c-name",    r => r.FullName),
+        ("MemberType",                "Member Type",             "c-mtype",   r => r.MemberType),
+        ("BirthOnBS",                 "DOB (BS)",                "c-dob",     r => r.BirthOnBS),
+        ("PermanentAddress",          "Perm. Address",           "c-paddr",   r => r.PermanentAddress),
+        ("TemporaryAddress",          "Temp. Address",           "c-taddr",   r => r.TemporaryAddress),
+        ("PhoneNo",                   "Phone",                   "c-phone",   r => r.PhoneNo),
+        ("MobileNo",                  "Mobile",                  "c-mob",     r => r.MobileNo),
+        ("EmailAddress",              "Email",                   "c-email",   r => r.EmailAddress),
+        ("Nationality",               "Nationality",             "c-nat",     r => r.Nationality),
+        ("CitizenshipNo",             "Citizenship No",          "c-cit",     r => r.CitizenshipNo),
+        ("PassportNo",                "Passport No",             "c-pass",    r => r.PassportNo),
+        ("Occupation",                "Occupation",              "c-occ",     r => r.Occupation),
+        ("Religion",                  "Religion",                "c-reli",    r => r.Religion),
+        ("MaritalStatus",             "Marital Status",          "c-marital", r => r.MaritalStatus),
+        ("GrandFatherMotherName",     "Grandfather/Mother",      "c-gfmo",    r => r.GrandFatherMotherName),
+        ("FatherName",                "Father",                  "c-father",  r => r.FatherName),
+        ("MotherName",                "Mother",                  "c-mother",  r => r.MotherName),
+        ("SpouseName",                "Spouse",                  "c-spouse",  r => r.SpouseName),
+        ("Caste",                     "Caste",                   "c-caste",   r => r.Caste),
+        ("Gender",                    "Gender",                  "c-gender",  r => r.Gender),
+        ("Vdc",                       "VDC",                     "c-vdc",     r => r.Vdc),
+        ("RegistrationOnBS",          "Reg. Date (BS)",          "c-reg",     r => r.RegistrationOnBS),
+        ("Status",                    "Status",                  "c-status",  r => r.Status),
+        ("MemberGroup",               "Member Group",            "c-mgroup",  r => r.MemberGroup),
+        ("CitizenShipIssuedOnBs",     "Cit. Issued On (BS)",     "c-citiss",  r => r.CitizenShipIssuedOnBs),
+        ("CitizenShipIssuedDistrict", "Cit. Issued District",    "c-citdist", r => r.CitizenShipIssuedDistrict),
+        ("ElectricityNo",             "Electricity No",          "c-elec",    r => r.ElectricityNo),
+        ("WaterSupplyNo",             "Water Supply No",         "c-water",   r => r.WaterSupplyNo),
+        ("Education",                 "Education",               "c-edu",     r => r.Education),
+        ("IncomeRange",               "Income Range",            "c-income",  r => r.IncomeRange),
+        ("StateVDC",                  "State VDC",               "c-svdc",    r => r.StateVDC),
+        ("MemberYearlyPaymentTillDateOnBs", "Yearly Paymt Till (BS)", "c-paytill", r => r.MemberYearlyPaymentTillDateOnBs),
+        ("NameInNepali",              "Name (Nepali)",            "c-namenp",  r => r.NameInNepali),
+        ("AddressInNepali",           "Address (Nepali)",         "c-addrnp",  r => r.AddressInNepali),
+    };
+
+    var columns = showAllColumns
+        ? allColumns
+        : allColumns.Where(c => selectedColumns!.Contains(c.Key, StringComparer.OrdinalIgnoreCase)).ToList();
+
+    int totalVisibleCols = columns.Count + 2; // S.N. + Photo
+
+    // ── Chart data ─────────────────────────────────────────────────────────
+    var memberTypeGroups = dataSet
+        .Where(r => !string.IsNullOrEmpty(r.MemberType))
+        .GroupBy(r => r.MemberType.Trim())
         .Select(g => new { Label = g.Key, Count = g.Count() })
         .OrderByDescending(x => x.Count)
-        .Take(10)
         .ToList();
 
-    var genderLabelsJson = JsonConvert.SerializeObject(genderGroups.Select(x => x.Label));
-    var genderCountsJson = JsonConvert.SerializeObject(genderGroups.Select(x => x.Count));
-    var districtLabelsJson = JsonConvert.SerializeObject(districtGroups.Select(x => x.Label));
-    var districtCountsJson = JsonConvert.SerializeObject(districtGroups.Select(x => x.Count));
+    var statusGroups = dataSet
+        .Where(r => !string.IsNullOrEmpty(r.Status))
+        .GroupBy(r => r.Status.Trim())
+        .Select(g => new { Label = g.Key, Count = g.Count() })
+        .OrderByDescending(x => x.Count)
+        .ToList();
+
+    var memberTypeLabelsJson = JsonConvert.SerializeObject(memberTypeGroups.Select(x => x.Label));
+    var memberTypeCountsJson = JsonConvert.SerializeObject(memberTypeGroups.Select(x => x.Count));
+    var statusLabelsJson = JsonConvert.SerializeObject(statusGroups.Select(x => x.Label));
+    var statusCountsJson = JsonConvert.SerializeObject(statusGroups.Select(x => x.Count));
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Member Registration Report</title>
+    <title>Member All Detail Report</title>
     <style>
+            /* ── Reset & base ───────────────────────────────────────────────── */
             * {
                 margin: 0;
                 padding: 0;
@@ -55,25 +103,28 @@
             }
 
             body {
-                margin-top: 35px;
                 font-family: Arial, sans-serif;
                 font-size: 7pt;
-                background: #fff !important;
+                background: #d0d0d0;
+                padding: 16px;
             }
 
-            .text-right {
-                text-align: right !important;
+            .report-container {
+                max-width: 100%;
+                background: #fff;
+                padding: 16px;
+                border-radius: 6px;
+                box-shadow: 0 2px 12px rgba(0,0,0,0.1);
             }
 
-            .text-center {
-                text-align: center !important;
+            /* ── Sub-header ──────────────────────────────────────────────────── */
+            .report-subheader {
+                width: 100%;
+                padding: 4px 6px 0 6px;
+                background: #fff;
             }
 
-            .text-left {
-                text-align: left !important;
-            }
-
-            .meta-title td {
+            .subheader-title {
                 text-align: center;
                 font-size: 13pt;
                 font-weight: bold;
@@ -81,33 +132,22 @@
                 padding: 6px 4px 4px;
             }
 
-            .meta-row td {
-                padding: 3px 4px;
-                font-size: 7.5pt;
-            }
-
-            .meta-spacer td {
-                height: 5px;
-            }
-
-            .view-outer {
-                background: #fff;
-                min-height: 100vh;
+            .subheader-meta {
                 display: flex;
-                flex-direction: column;
+                justify-content: space-between;
+                font-size: 7.5pt;
+                padding: 2px 4px;
             }
 
-            .report-card {
-                background: #fff;
-                margin: 16px 16px 0 16px;
-                border: 1px solid #ccc;
-                border-bottom: none;
-                overflow: hidden;
+            .subheader-spacer {
+                height: 10px;
             }
 
-            /* ---- Chart layout ---- */
+            /* ── Charts ──────────────────────────────────────────────────────── */
             .chart-stack {
-                padding: 16px;
+                padding: 16px 0;
+                border-bottom: 1px solid #ccc;
+                margin-bottom: 16px;
             }
 
             .chart-block {
@@ -118,6 +158,8 @@
                 .chart-block h4 {
                     margin: 0 0 8px;
                     font-size: 10pt;
+                    font-weight: 600;
+                    color: #333;
                 }
 
             canvas {
@@ -132,9 +174,208 @@
                 font-size: 10pt;
             }
 
-            /* ---- Pagination bar (exactly as in original table report) ---- */
+            /* ── Data table ──────────────────────────────────────────────────── */
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                font-size: 7pt;
+                margin-top: 8px;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    word-break: break-word;
+                    white-space: normal;
+                    vertical-align: middle;
+                    background: #fff;
+                    padding: 3px 4px;
+                    border: none;
+                    font-size: 7pt;
+                    line-height: 1.3;
+                }
+
+                .data-table th {
+                    border-top: 1.5px solid #000;
+                    border-bottom: 1px solid #000;
+                    font-weight: bold;
+                    background: #f2f2f2;
+                    font-size: 6.8pt;
+                    white-space: nowrap;
+                    padding: 4px;
+                }
+
+            .detail-row td {
+                border-bottom: 1px solid #e0e0e0;
+            }
+
+            .grand-total td {
+                border-top: 1.5px solid #000;
+                border-bottom: 1.5px solid #000;
+                font-weight: bold;
+                background: #fff;
+            }
+
+            .member-photo {
+                width: 28px;
+                height: 32px;
+                object-fit: cover;
+                display: block;
+            }
+
+            /* Column widths (same as original) */
+            col.c-sn {
+                width: 1.20%;
+            }
+
+            col.c-photo {
+                width: 2.20%;
+            }
+
+            col.c-mid {
+                width: 3.10%;
+            }
+
+            col.c-name {
+                width: 4.20%;
+            }
+
+            col.c-mtype {
+                width: 2.90%;
+            }
+
+            col.c-dob {
+                width: 2.90%;
+            }
+
+            col.c-paddr {
+                width: 4.20%;
+            }
+
+            col.c-taddr {
+                width: 4.20%;
+            }
+
+            col.c-phone {
+                width: 2.90%;
+            }
+
+            col.c-mob {
+                width: 3.10%;
+            }
+
+            col.c-email {
+                width: 4.50%;
+            }
+
+            col.c-nat {
+                width: 2.50%;
+            }
+
+            col.c-cit {
+                width: 3.30%;
+            }
+
+            col.c-pass {
+                width: 2.90%;
+            }
+
+            col.c-occ {
+                width: 2.90%;
+            }
+
+            col.c-reli {
+                width: 2.40%;
+            }
+
+            col.c-marital {
+                width: 2.60%;
+            }
+
+            col.c-gfmo {
+                width: 3.30%;
+            }
+
+            col.c-father {
+                width: 2.90%;
+            }
+
+            col.c-mother {
+                width: 2.90%;
+            }
+
+            col.c-spouse {
+                width: 2.90%;
+            }
+
+            col.c-caste {
+                width: 2.40%;
+            }
+
+            col.c-gender {
+                width: 2.00%;
+            }
+
+            col.c-vdc {
+                width: 2.40%;
+            }
+
+            col.c-reg {
+                width: 2.60%;
+            }
+
+            col.c-status {
+                width: 2.20%;
+            }
+
+            col.c-mgroup {
+                width: 3.10%;
+            }
+
+            col.c-citiss {
+                width: 2.60%;
+            }
+
+            col.c-citdist {
+                width: 3.10%;
+            }
+
+            col.c-elec {
+                width: 2.40%;
+            }
+
+            col.c-water {
+                width: 2.40%;
+            }
+
+            col.c-edu {
+                width: 2.60%;
+            }
+
+            col.c-income {
+                width: 3.30%;
+            }
+
+            col.c-svdc {
+                width: 2.40%;
+            }
+
+            col.c-paytill {
+                width: 2.90%;
+            }
+
+            col.c-namenp {
+                width: 3.30%;
+            }
+
+            col.c-addrnp {
+                width: 4.20%;
+            }
+
+            /* ── Pagination bar (static) ───────────────────────────────────── */
             .pagination-bar {
-                margin: 0 16px 16px 16px;
+                margin-top: 12px;
                 background: #fff;
                 border: 1px solid #ccc;
                 border-top: 1px solid #999;
@@ -145,42 +386,97 @@
                 font-size: 9pt;
                 font-weight: bold;
                 user-select: none;
-                flex-shrink: 0;
             }
-
-                .pagination-bar.hidden {
-                    display: none;
-                }
     </style>
+
+    @* Load Chart.js and datalabels plugin *@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
 <body>
-    <div class="view-outer">
-        @if (!isExcel)
-        {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
-        <div class="report-card">
+    <div class="report-container">
 
-            <div class="chart-stack">
-                <div class="chart-block">
-                    <h4>Top Territories (Districts) – Colour indicates performance</h4>
-                    <canvas id="districtChart"></canvas>
-                </div>
-                <div class="chart-block">
-                    <h4>Gender Distribution with Percentage</h4>
-                    <canvas id="genderChart"></canvas>
-                </div>
+        @* ── Sub-header ────────────────────────────────────────────────── *@
+        <div class="report-subheader">
+            <div class="subheader-title">Member All Detail Report</div>
+            <div class="subheader-meta">
+                <span><strong>Branch Name :</strong> @branchName</span>
+                <span><strong>From Date :</strong> @fromDate</span>
+            </div>
+            <div class="subheader-meta">
+                <span><strong>Report Generated On :</strong> @generatedOn</span>
+                <span><strong>To Date :</strong> @toDate</span>
+            </div>
+            <div class="subheader-spacer"></div>
+        </div>
+
+        @* ── Charts ─────────────────────────────────────────────────────── *@
+        <div class="chart-stack">
+            <div class="chart-block">
+                <h4>Member Type Distribution</h4>
+                <canvas id="memberTypeChart"></canvas>
+            </div>
+            <div class="chart-block">
+                <h4>Member Status – Colour indicates frequency</h4>
+                <canvas id="statusChart"></canvas>
             </div>
         </div>
 
-        <!-- Pagination bar – static “Page 1 of 1” (no pagination logic needed) -->
-        <div class="pagination-bar" id="paginationBar">
-            Page <span id="spanCurrent">1</span> of <span id="spanTotal">1</span>
+        @* ── Data table ────────────────────────────────────────────────── *@
+        <table class="data-table">
+            <colgroup>
+                <col class="c-sn" />
+                <col class="c-photo" />
+                @foreach (var col in columns)
+                {
+                    <col class="@col.CssClass" />
+                }
+            </colgroup>
+            <thead>
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Photo</th>
+                    @foreach (var col in columns)
+                    {
+                        <th>@col.Header</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @{
+                    int sn = 0;
+                }
+                @foreach (var row in dataSet)
+                {
+                    sn++;
+                    <tr class="detail-row">
+                        <td class="text-center">@sn</td>
+                        <td class="text-center">
+                            @if (!string.IsNullOrEmpty(row.MemberImage))
+                            {
+                                <img class="member-photo" src="@row.MemberImage" />
+                            }
+                        </td>
+                        @foreach (var col in columns)
+                        {
+                            <td>@col.Render(row)</td>
+                        }
+                    </tr>
+                }
+                <tr class="grand-total">
+                    <td colspan="2">Total Records :</td>
+                    <td colspan="@(totalVisibleCols - 2)">@totalRecords</td>
+                </tr>
+            </tbody>
+        </table>
+
+        @* ── Static pagination bar ─────────────────────────────────────── *@
+        <div class="pagination-bar">
+            Page 1 of 1
         </div>
     </div>
 
+    @* ── JavaScript to render charts ──────────────────────────────────── *@
     <script>
         document.addEventListener('DOMContentLoaded', function () {
         if (typeof Chart === 'undefined') {
@@ -191,30 +487,75 @@
         Chart.register(ChartDataLabels);
         }
 
-        // ----- Custom plugin to draw total in center of doughnut -----
+        // ── Plugin to draw total in the center of doughnut ──────────
         const centerTextPlugin = {
         id: 'centerText',
-        afterDraw(chart) {
-        const { ctx, chartArea: { left, top, width, height } } = chart;
-        const total = chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+        afterDraw: function(chart) {
+        var ctx = chart.ctx;
+        var total = chart.data.datasets[0].data.reduce(function(a, b) { return a + b; }, 0);
         ctx.save();
         ctx.font = 'bold 18px Arial';
         ctx.fillStyle = '#ffffff';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('Total: ' + total, left + width / 2, top + height / 2);
+        ctx.fillText('Total: ' + total, chart.width/2, chart.height/2);
         ctx.restore();
         }
         };
 
-        // ====== 1. District Bar Chart (horizontal) ======
-        var districtData = @Html.Raw(districtCountsJson);
-        var districtLabels = @Html.Raw(districtLabelsJson);
+        // ── Member Type Donut Chart ──────────────────────────────────
+        var memberTypeData = @Html.Raw(memberTypeCountsJson);
+        var memberTypeLabels = @Html.Raw(memberTypeLabelsJson);
 
-        if (districtData.length > 0) {
-        var minVal = Math.min.apply(null, districtData);
-        var maxVal = Math.max.apply(null, districtData);
+        if (memberTypeData.length > 0) {
+        var palette = ['#4e73df', '#1cc88a', '#f6c23e', '#e74a3b', '#858796', '#36b9cc', '#fd7e14'];
+        var colors = memberTypeData.map(function(_, i) { return palette[i % palette.length]; });
 
+        new Chart(document.getElementById('memberTypeChart'), {
+        type: 'doughnut',
+        data: {
+        labels: memberTypeLabels,
+        datasets: [{
+        data: memberTypeData,
+        backgroundColor: colors,
+        borderWidth: 2
+        }]
+        },
+        options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+        legend: {
+        position: 'bottom',
+        labels: { font: { size: 10 }, usePointStyle: true }
+        },
+        datalabels: {
+        color: '#fff',
+        font: { weight: 'bold', size: 12 },
+        formatter: function(value, ctx) {
+        var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
+        if (total === 0) return '0%';
+        return ((value / total) * 100).toFixed(1) + '%';
+        },
+        anchor: 'center',
+        align: 'center',
+        offset: 0
+        }
+        }
+        },
+        plugins: [centerTextPlugin]
+        });
+        } else {
+        document.getElementById('memberTypeChart').parentElement.innerHTML = '<div class="no-data-msg">No member type data available.</div>';
+        }
+
+        // ── Status Horizontal Bar Chart with gradient ────────────────
+        var statusData = @Html.Raw(statusCountsJson);
+        var statusLabels = @Html.Raw(statusLabelsJson);
+
+        if (statusData.length > 0) {
+        var minVal = Math.min.apply(null, statusData);
+        var maxVal = Math.max.apply(null, statusData);
         function valueToColor(value, min, max) {
         var diff = max - min;
         if (diff === 0) diff = 1;
@@ -222,22 +563,17 @@
         var hue = 120 * ratio;
         return 'hsl(' + hue + ', 70%, 45%)';
         }
+        var bgColors = statusData.map(function(v) { return valueToColor(v, minVal, maxVal); });
+        var borderColors = bgColors.map(function(c) { return c.replace('45%', '35%'); });
 
-        var backgroundColors = districtData.map(function (v) {
-        return valueToColor(v, minVal, maxVal);
-        });
-        var borderColors = backgroundColors.map(function (c) {
-        return c.replace('45%', '35%');
-        });
-
-        new Chart(document.getElementById('districtChart'), {
+        new Chart(document.getElementById('statusChart'), {
         type: 'bar',
         data: {
-        labels: districtLabels,
+        labels: statusLabels,
         datasets: [{
         label: 'Members',
-        data: districtData,
-        backgroundColor: backgroundColors,
+        data: statusData,
+        backgroundColor: bgColors,
         borderColor: borderColors,
         borderWidth: 1,
         borderRadius: 3
@@ -255,59 +591,14 @@
         legend: { display: false },
         tooltip: {
         callbacks: {
-        label: function (ctx) { return ctx.parsed.x + ' members'; }
+        label: function(ctx) { return ctx.parsed.x + ' members'; }
         }
         }
         }
         }
         });
         } else {
-        document.getElementById('districtChart').parentElement.innerHTML = '<div class="no-data-msg">No district data available.</div>';
-        }
-
-        // ====== 2. Gender Donut Chart with percentage labels and center total ======
-        var genderData = @Html.Raw(genderCountsJson);
-        var genderLabels = @Html.Raw(genderLabelsJson);
-
-        if (genderData.length > 0) {
-        var palette = ['#4e73df', '#1cc88a', '#f6c23e', '#e74a3b', '#858796'];
-        var colors = genderData.map(function(_, i) { return palette[i % palette.length]; });
-
-        new Chart(document.getElementById('genderChart'), {
-        type: 'doughnut',
-        data: {
-        labels: genderLabels,
-        datasets: [{
-        data: genderData,
-        backgroundColor: colors,
-        borderWidth: 2
-        }]
-        },
-        options: {
-        responsive: true,
-        plugins: {
-        legend: {
-        position: 'bottom',
-        labels: { font: { size: 10 }, usePointStyle: true }
-        },
-        datalabels: {
-        color: '#fff',
-        font: { weight: 'bold', size: 12 },
-        formatter: function (value, ctx) {
-        var total = ctx.dataset.data.reduce(function (a, b) { return a + b; }, 0);
-        if (total === 0) return '0%';
-        return ((value / total) * 100).toFixed(1) + '%';
-        },
-        anchor: 'center',
-        align: 'center',
-        offset: 0
-        }
-        }
-        },
-        plugins: [centerTextPlugin]
-        });
-        } else {
-        document.getElementById('genderChart').parentElement.innerHTML = '<div class="no-data-msg">No gender data available.</div>';
+        document.getElementById('statusChart').parentElement.innerHTML = '<div class="no-data-msg">No status data available.</div>';
         }
         });
     </script>

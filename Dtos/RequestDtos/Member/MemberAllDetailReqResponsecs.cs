@@ -59,6 +59,6 @@
         public string? MemberYearlyPaymentTillDateOnBs { get; set; }
         public string? NameInNepali { get; set; }
         public string? AddressInNepali { get; set; }
-        public byte[]? MemberImage { get; set; }
+        public string? MemberImage { get; set; }
     }
 }

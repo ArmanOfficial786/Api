@@ -22,11 +22,7 @@
                        ? Convert.ToInt32(Model["TotalRecords"])
                        : dataSet.Count;
 
-    Func<byte[]?, string> toImgSrc = (bytes) =>
-    {
-        if (bytes == null || bytes.Length == 0) return "";
-        return "data:image/jpeg;base64," + Convert.ToBase64String(bytes);
-    };
+  
 
     // ── Selected columns from the request. Null/empty => show all. ───────
     var selectedColumns = Model.ContainsKey("SelectedColumns")
@@ -34,29 +30,23 @@
         : null;
     bool showAllColumns = selectedColumns == null || selectedColumns.Count == 0;
 
-    // ── Single source of truth for every optional column. ────────────────
-    // Key      = identifier used by SelectedColumns / frontend checkboxes
-    // Header   = column header text
-    // CssClass = matching col.c-xxx class for width
-    // Render   = how to render the cell for a given row
+    // ── Single source of truth for every optional column ─────────────────
+    // FirstName, MiddleName, LastName intentionally excluded
     var allColumns = new List<(string Key, string Header, string CssClass, Func<MemberAllDetailSpResponse, object?> Render)>
     {
-        ("MemberId",                  "Member ID",              "c-mid",     r => r.MemberId),
-        ("FullName",                  "Full Name",              "c-name",    r => r.FullName),
-        ("FirstName",                 "First Name",             "c-fname",   r => r.FirstName),
-        ("MiddleName",                "Middle Name",            "c-mname",   r => r.MiddleName),
-        ("LastName",                  "Last Name",              "c-lname",   r => r.LastName),
-        ("MemberType",                "Member Type",            "c-mtype",   r => r.MemberType),
-        ("BirthOnBS",                 "DOB (BS)",               "c-dob",     r => r.BirthOnBS),
-        ("PermanentAddress",          "Perm. Address",          "c-paddr",   r => r.PermanentAddress),
-        ("TemporaryAddress",          "Temp. Address",          "c-taddr",   r => r.TemporaryAddress),
-        ("PhoneNo",                   "Phone",                  "c-phone",   r => r.PhoneNo),
-        ("MobileNo",                  "Mobile",                 "c-mob",     r => r.MobileNo),
-        ("EmailAddress",              "Email",                  "c-email",   r => r.EmailAddress),
-        ("Nationality",               "Nationality",            "c-nat",     r => r.Nationality),
-        ("CitizenshipNo",             "Citizenship No",         "c-cit",     r => r.CitizenshipNo),
-        ("PassportNo",                "Passport No",            "c-pass",    r => r.PassportNo),
-        ("Occupation",                "Occupation",             "c-occ",     r => r.Occupation),
+        ("MemberId",                  "Member ID",               "c-mid",     r => r.MemberId),
+        ("FullName",                  "Full Name",               "c-name",    r => r.FullName),
+        ("MemberType",                "Member Type",             "c-mtype",   r => r.MemberType),
+        ("BirthOnBS",                 "DOB (BS)",                "c-dob",     r => r.BirthOnBS),
+        ("PermanentAddress",          "Perm. Address",           "c-paddr",   r => r.PermanentAddress),
+        ("TemporaryAddress",          "Temp. Address",           "c-taddr",   r => r.TemporaryAddress),
+        ("PhoneNo",                   "Phone",                   "c-phone",   r => r.PhoneNo),
+        ("MobileNo",                  "Mobile",                  "c-mob",     r => r.MobileNo),
+        ("EmailAddress",              "Email",                   "c-email",   r => r.EmailAddress),
+        ("Nationality",               "Nationality",             "c-nat",     r => r.Nationality),
+        ("CitizenshipNo",             "Citizenship No",          "c-cit",     r => r.CitizenshipNo),
+        ("PassportNo",                "Passport No",             "c-pass",    r => r.PassportNo),
+        ("Occupation",                "Occupation",              "c-occ",     r => r.Occupation),
         ("Religion",                  "Religion",                "c-reli",    r => r.Religion),
         ("MaritalStatus",             "Marital Status",          "c-marital", r => r.MaritalStatus),
         ("GrandFatherMotherName",     "Grandfather/Mother",      "c-gfmo",    r => r.GrandFatherMotherName),
@@ -74,8 +64,8 @@
         ("ElectricityNo",             "Electricity No",          "c-elec",    r => r.ElectricityNo),
         ("WaterSupplyNo",             "Water Supply No",         "c-water",   r => r.WaterSupplyNo),
         ("Education",                 "Education",               "c-edu",     r => r.Education),
-        ("IncomeRange",               "Income Range",             "c-income",  r => r.IncomeRange),
-        ("StateVDC",                  "State VDC",                "c-svdc",    r => r.StateVDC),
+        ("IncomeRange",               "Income Range",            "c-income",  r => r.IncomeRange),
+        ("StateVDC",                  "State VDC",               "c-svdc",    r => r.StateVDC),
         ("MemberYearlyPaymentTillDateOnBs", "Yearly Paymt Till (BS)", "c-paytill", r => r.MemberYearlyPaymentTillDateOnBs),
         ("NameInNepali",              "Name (Nepali)",            "c-namenp",  r => r.NameInNepali),
         ("AddressInNepali",           "Address (Nepali)",         "c-addrnp",  r => r.AddressInNepali),
@@ -85,10 +75,8 @@
         ? allColumns
         : allColumns.Where(c => selectedColumns!.Contains(c.Key, StringComparer.OrdinalIgnoreCase)).ToList();
 
-    // S.N. and Photo are always shown; colspans below track the dynamic total.
+    // S.N. and Photo are always shown
     int totalVisibleCols = columns.Count + 2; // +2 for S.N. and Photo
-    int leftMetaSpan = (int)Math.Ceiling(totalVisibleCols * 0.55);
-    int rightMetaSpan = totalVisibleCols - leftMetaSpan;
 }
 <!DOCTYPE html>
 <html>
@@ -121,6 +109,33 @@
                 text-align: left !important;
             }
 
+            /* ── Sub-header (title + meta) – sits ABOVE the table header ─────── */
+            .report-subheader {
+                width: 100%;
+                padding: 4px 6px 0 6px;
+                background: #fff;
+            }
+
+            .subheader-title {
+                text-align: center;
+                font-size: 13pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 6px 4px 4px;
+            }
+
+            .subheader-meta {
+                display: flex;
+                justify-content: space-between;
+                font-size: 7.5pt;
+                padding: 2px 4px;
+            }
+
+            .subheader-spacer {
+                height: 5px;
+            }
+
+            /* ── Data table ──────────────────────────────────────────────────── */
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
@@ -145,23 +160,6 @@
 
             thead {
                 display: table-row-group;
-            }
-
-            .meta-title td {
-                text-align: center;
-                font-size: 13pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 6px 4px 4px;
-            }
-
-            .meta-row td {
-                padding: 3px 4px;
-                font-size: 7.5pt;
-            }
-
-            .meta-spacer td {
-                height: 5px;
             }
 
             .data-table th {
@@ -192,11 +190,7 @@
                 display: block;
             }
 
-            /* ── column widths ───────────────────────────────────────────
-                           table-layout:fixed distributes width proportionally across
-                           whatever <col> elements are actually rendered, so explicit
-                           percentages no longer need to sum to 100 when columns are
-                           hidden — the browser re-spreads remaining width automatically. */
+            /* ── Column widths ───────────────────────────────────────────────── */
             col.c-sn {
                 width: 1.20%;
             }
@@ -211,18 +205,6 @@
 
             col.c-name {
                 width: 4.20%;
-            }
-
-            col.c-fname {
-                width: 3.30%;
-            }
-
-            col.c-mname {
-                width: 2.80%;
-            }
-
-            col.c-lname {
-                width: 3.10%;
             }
 
             col.c-mtype {
@@ -369,7 +351,7 @@
                 }
             }
 
-            /* ── VIEW chrome ─────────────────────────────────────────────── */
+            /* ── VIEW chrome ─────────────────────────────────────────────────── */
             .view-outer {
                 background: #d0d0d0;
                 padding: 2px 16px 20px 16px;
@@ -383,12 +365,27 @@
                     cursor: grabbing;
                 }
 
+            /* PAGE_W = 3600px; PAGE_H computed from PageSetting:
+                       Custom(594mm, 420mm, landscape) → 594/25.4*96 ≈ 2245px tall
+                       But we use the same 3600 wide as before, so height is 420mm → 1587px
+                       (420 / 25.4 * 96 = 1587.4) */
             .view-page {
                 background: #fff;
                 margin: 0 auto 24px auto;
                 box-shadow: 0 2px 8px rgba(0,0,0,.18);
                 width: 3600px;
+                height: 1587px; /* ← fixed page height (420 mm @@ 96 dpi) */
                 overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            /* The content area inside each page (everything except footer) */
+            .view-page-content {
+                flex: 1;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
             }
 
             .view-page-footer {
@@ -398,11 +395,23 @@
                 font-size: 9pt;
                 font-weight: bold;
                 padding: 6px 0;
-                width: 3600px;
+                flex-shrink: 0;
             }
 
             .common-header-wrap {
                 width: 3600px;
+                overflow: hidden;
+                flex-shrink: 0;
+            }
+
+            /* The sub-header inside a page card */
+            .page-subheader {
+                flex-shrink: 0;
+            }
+
+            /* The table wrapper that fills remaining space */
+            .page-table-wrap {
+                flex: 1;
                 overflow: hidden;
             }
 
@@ -410,6 +419,9 @@
                 opacity: 0;
                 pointer-events: none;
                 width: 3600px;
+                position: absolute;
+                top: 0;
+                left: 0;
             }
 
             #commonHeaderSource {
@@ -432,9 +444,28 @@
         </div>
     }
 
+    @* ── Shared colgroup + header HTML (reused on every page card) ─────── *@
+    @{
+        // Build colgroup/thead strings for JS consumption via hidden template
+    }
+
     @if (isView)
     {
         <div id="sourceWrap">
+            @* Hidden sub-header template – JS will clone this into each page *@
+            <div id="subheaderTemplate" class="report-subheader">
+                <div class="subheader-title">Member All Detail Report</div>
+                <div class="subheader-meta">
+                    <span><strong>Branch Name :</strong> @branchName</span>
+                    <span><strong>From Date :</strong> @fromDate</span>
+                </div>
+                <div class="subheader-meta">
+                    <span><strong>Report Generated On :</strong> @generatedOn</span>
+                    <span><strong>To Date :</strong> @toDate</span>
+                </div>
+                <div class="subheader-spacer"></div>
+            </div>
+
             <table class="data-table" id="mainTable">
                 <colgroup>
                     <col class="c-sn" />
@@ -455,19 +486,6 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <tr class="meta-title" id="metaTitle">
-                        <td colspan="@totalVisibleCols">Member All Detail Report</td>
-                    </tr>
-                    <tr class="meta-row" id="metaRow1">
-                        <td colspan="@leftMetaSpan"><strong>Branch Name :</strong> @branchName</td>
-                        <td colspan="@rightMetaSpan" class="text-right"><strong>From Date :</strong> @fromDate</td>
-                    </tr>
-                    <tr class="meta-row" id="metaRow2">
-                        <td colspan="@leftMetaSpan"><strong>Report Generated On :</strong> @generatedOn</td>
-                        <td colspan="@rightMetaSpan" class="text-right"><strong>To Date :</strong> @toDate</td>
-                    </tr>
-                    <tr class="meta-spacer" id="metaSpacer"><td colspan="@totalVisibleCols"></td></tr>
-
                     @{
                         int snV = 0;
                     }
@@ -477,12 +495,9 @@
                         <tr class="detail-row">
                             <td class="text-center">@snV</td>
                             <td class="text-center">
-                                @{
-                                    var imgSrcV = toImgSrc(row.MemberImage);
-                                }
-                                @if (!string.IsNullOrEmpty(imgSrcV))
+                                @if (!string.IsNullOrEmpty(row.MemberImage))
                                 {
-                                    <img class="member-photo" src="@imgSrcV" />
+                                    <img class="member-photo" src="@row.MemberImage" />
                                 }
                             </td>
                             @foreach (var col in columns)
@@ -509,6 +524,28 @@
         {
             @await Html.PartialAsync("_CommonHeader", Model)
         }
+
+        @* Sub-header above table for PDF / Excel *@
+        @if (!isExcel)
+        {
+            <div class="report-subheader">
+                <div class="subheader-title">Member All Detail Report</div>
+                <div class="subheader-meta">
+                    <span><strong>Branch Name :</strong> @branchName</span>
+                    <span><strong>From Date :</strong> @fromDate</span>
+                </div>
+                <div class="subheader-meta">
+                    <span><strong>Report Generated On :</strong> @generatedOn</span>
+                    <span><strong>To Date :</strong> @toDate</span>
+                </div>
+                <div class="subheader-spacer"></div>
+            </div>
+        }
+        @if (isExcel)
+        {
+            @* Excel: keep meta rows inside table for proper sheet rendering *@
+        }
+
         <table class="data-table" id="mainTable"
             @(isExcel ? Html.Raw("data-sheet-name=\"MemberAllDetailReport\"") : Html.Raw(""))>
             <colgroup>
@@ -519,28 +556,44 @@
                     <col class="@col.CssClass" />
                 }
             </colgroup>
-            <thead>
-                <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Photo</th>
-                    @foreach (var col in columns)
-                    {
-                        <th>@col.Header</th>
-                    }
-                </tr>
-            </thead>
+            @if (isExcel)
+            {
+                // Excel: put meta inside the table
+                <thead>
+                    <tr class="meta-title"><td colspan="@totalVisibleCols">Member All Detail Report</td></tr>
+                    <tr class="meta-row">
+                        <td colspan="@((int)Math.Ceiling(totalVisibleCols * 0.55))"><strong>Branch Name :</strong> @branchName</td>
+                        <td colspan="@(totalVisibleCols - (int)Math.Ceiling(totalVisibleCols * 0.55))" class="text-right"><strong>From Date :</strong> @fromDate</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="@((int)Math.Ceiling(totalVisibleCols * 0.55))"><strong>Report Generated On :</strong> @generatedOn</td>
+                        <td colspan="@(totalVisibleCols - (int)Math.Ceiling(totalVisibleCols * 0.55))" class="text-right"><strong>To Date :</strong> @toDate</td>
+                    </tr>
+                    <tr><td colspan="@totalVisibleCols"></td></tr>
+                    <tr>
+                        <th class="text-center">S.N.</th>
+                        <th>Photo</th>
+                        @foreach (var col in columns)
+                        {
+                            <th>@col.Header</th>
+                        }
+                    </tr>
+                </thead>
+            }
+            else
+            {
+                <thead>
+                    <tr>
+                        <th class="text-center">S.N.</th>
+                        <th>Photo</th>
+                        @foreach (var col in columns)
+                        {
+                            <th>@col.Header</th>
+                        }
+                    </tr>
+                </thead>
+            }
             <tbody>
-                <tr class="meta-title"><td colspan="@totalVisibleCols">Member All Detail Report</td></tr>
-                <tr class="meta-row">
-                    <td colspan="@leftMetaSpan"><strong>Branch Name :</strong> @branchName</td>
-                    <td colspan="@rightMetaSpan" class="text-right"><strong>From Date :</strong> @fromDate</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="@leftMetaSpan"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="@rightMetaSpan" class="text-right"><strong>To Date :</strong> @toDate</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="@totalVisibleCols"></td></tr>
-
                 @{
                     int snP = 0;
                 }
@@ -552,10 +605,9 @@
                         <td class="text-center">
                             @if (!isExcel)
                             {
-                                var imgSrcP = toImgSrc(row.MemberImage);
-                                if (!string.IsNullOrEmpty(imgSrcP))
+                                @if (!string.IsNullOrEmpty(row.MemberImage))
                                 {
-                                    <img class="member-photo" src="@imgSrcP" />
+                                    <img class="member-photo" src="@row.MemberImage" />
                                 }
                             }
                         </td>
@@ -580,115 +632,144 @@
                 (function () {
                     'use strict';
 
-                    var MAX_RETRIES = 5;
-                    var RETRY_DELAY = 80;
-                    var retryCount  = 0;
-                    var PAGE_W      = 3600;
-                    var PAGE_CONT_H = 1480;
+                    var MAX_RETRIES  = 5;
+                    var RETRY_DELAY  = 80;
+                    var retryCount   = 0;
+                    var PAGE_W       = 3600;
+                    // Fixed page height: 420 mm @@ 96 dpi = 1587 px
+                    // Footer height ~28px; common-header ~60px (measured via JS below)
+                    var PAGE_H       = 1587;
+                    var FOOTER_H     = 28;    // .view-page-footer padding + font
 
                     function buildPages() {
                         var tbl          = document.getElementById('mainTable');
                         var colHdrRow    = document.getElementById('colHeaderRow');
-                        var metaTitle    = document.getElementById('metaTitle');
-                        var metaRow1     = document.getElementById('metaRow1');
-                        var metaRow2     = document.getElementById('metaRow2');
-                        var metaSpacer   = document.getElementById('metaSpacer');
                         var grandTotalEl = document.getElementById('grandTotalRow');
+                        var subHdrTpl    = document.getElementById('subheaderTemplate');
 
-                        if (!tbl || !colHdrRow) {
+                        if (!tbl || !colHdrRow || !subHdrTpl) {
                             if (retryCount++ < MAX_RETRIES)
                                 setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
                             return;
                         }
 
-                        var colHdrH = colHdrRow.getBoundingClientRect().height;
-                        var metaH   = metaTitle.getBoundingClientRect().height
-                                    + metaRow1.getBoundingClientRect().height
-                                    + metaRow2.getBoundingClientRect().height
-                                    + metaSpacer.getBoundingClientRect().height;
-                        var gtH    = grandTotalEl ? grandTotalEl.getBoundingClientRect().height : 0;
-                        var gtHtml = grandTotalEl ? grandTotalEl.outerHTML : '';
+                        // Measure heights from the hidden source
+                        var colHdrH  = colHdrRow.getBoundingClientRect().height;
+                        var subHdrH  = subHdrTpl.getBoundingClientRect().height;
+                        var gtH      = grandTotalEl ? grandTotalEl.getBoundingClientRect().height : 0;
+                        var gtHtml   = grandTotalEl ? grandTotalEl.outerHTML : '';
+
+                        // Measure common header (rendered inside sourceWrap via commonHeaderSource)
+                        var commonHdrEl   = document.getElementById('commonHeaderSource');
+                        var commonHdrHtml = commonHdrEl ? commonHdrEl.innerHTML : '';
+                        var commonHdrH    = commonHdrEl ? commonHdrEl.getBoundingClientRect().height : 0;
 
                         var detailRows = tbl.querySelectorAll('tr.detail-row');
                         var rowData    = Array.from(detailRows).map(function (r) {
                             return { html: r.outerHTML, h: r.getBoundingClientRect().height };
                         });
 
-                        var allZero = rowData.length > 0 &&
-                                      rowData.every(function (r) { return r.h === 0; });
+                        // Retry if rows exist but haven't been laid out yet
+                        var allZero = rowData.length > 0 && rowData.every(function (r) { return r.h === 0; });
                         if (allZero) {
                             if (retryCount++ < MAX_RETRIES)
                                 setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
                             return;
                         }
 
-                        var pages = [], cur = [], used = metaH + colHdrH;
+                        var colgroupHtml = tbl.querySelector('colgroup').outerHTML;
+                        var colHdrHtml   = colHdrRow.outerHTML;
+                        var subHdrHtml   = subHdrTpl.outerHTML;
+
+                        // Content height available per page:
+                        //   Page 1: PAGE_H - FOOTER_H - commonHdrH - subHdrH - colHdrH
+                        //   Page N: PAGE_H - FOOTER_H - colHdrH  (no common-header / sub-header repeat)
+                        var availP1 = PAGE_H - FOOTER_H - commonHdrH - subHdrH - colHdrH;
+                        var availPN = PAGE_H - FOOTER_H - colHdrH;
+
+                        // ── Paginate rows ────────────────────────────────────────
+                        var pages = [], cur = [], usedH = 0;
+                        var isFirstPage = true;
+
                         for (var i = 0; i < rowData.length; i++) {
                             var rh    = rowData[i].h || 14;
+                            var avail = isFirstPage ? availP1 : availPN;
                             var extra = (i === rowData.length - 1) ? gtH : 0;
-                            if (used + rh + extra > PAGE_CONT_H && cur.length > 0) {
+
+                            if (cur.length > 0 && usedH + rh + extra > avail) {
                                 pages.push(cur);
                                 cur  = [];
-                                used = colHdrH;
+                                usedH = 0;
+                                isFirstPage = false;
                             }
                             cur.push(i);
-                            used += rh;
+                            usedH += rh;
                         }
-                        if (cur.length > 0) pages.push(cur);
+                        // Always push at least one page (handles empty dataset)
+                        pages.push(cur);
 
-                        var totalPages = pages.length || 1;
+                        var totalPages = pages.length;
 
-                        var colgroupHtml  = tbl.querySelector('colgroup').outerHTML;
-                        var colHdrHtml    = colHdrRow.outerHTML;
-                        var metaHtml      = metaTitle.outerHTML
-                                          + metaRow1.outerHTML
-                                          + metaRow2.outerHTML
-                                          + metaSpacer.outerHTML;
-
-                        var commonHdrEl   = document.getElementById('commonHeaderSource');
-                        var commonHdrHtml = commonHdrEl ? commonHdrEl.innerHTML : '';
-
+                        // ── Remove source DOM ────────────────────────────────────
                         var sourceWrap = document.getElementById('sourceWrap');
                         if (sourceWrap)  sourceWrap.parentNode.removeChild(sourceWrap);
                         if (commonHdrEl) commonHdrEl.parentNode.removeChild(commonHdrEl);
 
                         var viewOuter = document.getElementById('viewOuter');
-
-                        var fragment = document.createDocumentFragment();
+                        var fragment  = document.createDocumentFragment();
 
                         for (var p = 0; p < totalPages; p++) {
                             var card = document.createElement('div');
                             card.className = 'view-page';
                             card.setAttribute('data-page', String(p + 1));
 
-                            var html = '';
+                            // ── Content wrapper ──────────────────────────────────
+                            var contentHtml = '<div class="view-page-content">';
+
+                            // Common header on page 1 only
+                            if (p === 0 && commonHdrHtml) {
+                                contentHtml += '<div class="common-header-wrap">' + commonHdrHtml + '</div>';
+                            }
+
+                            // Sub-header (title + meta) on page 1 only
                             if (p === 0) {
-                                html += '<div class="common-header-wrap">' + commonHdrHtml + '</div>';
+                                contentHtml += '<div class="page-subheader">' + subHdrHtml + '</div>';
                             }
 
-                            html += '<table class="data-table" style="width:' + PAGE_W + 'px;">'
-                                  + colgroupHtml
-                                  + '<thead>' + colHdrHtml + '</thead>'
-                                  + '<tbody>';
+                            // Table
+                            contentHtml += '<div class="page-table-wrap">'
+                                         + '<table class="data-table" style="width:' + PAGE_W + 'px;">'
+                                         + colgroupHtml
+                                         + '<thead>' + colHdrHtml + '</thead>'
+                                         + '<tbody>';
 
-                            if (p === 0) html += metaHtml;
-
-                            for (var r = 0; r < pages[p].length; r++) {
-                                html += rowData[pages[p][r]].html;
+                            var pageRows = pages[p];
+                            for (var r = 0; r < pageRows.length; r++) {
+                                contentHtml += rowData[pageRows[r]].html;
                             }
 
-                            if (p === totalPages - 1) html += gtHtml;
+                            // Grand total on last page
+                            if (p === totalPages - 1 && gtHtml) {
+                                contentHtml += gtHtml;
+                            }
 
-                            html += '</tbody></table>'
-                                  + '<div class="view-page-footer">Page '
-                                  + (p + 1) + ' of ' + totalPages + '</div>';
+                            contentHtml += '</tbody></table>'
+                                         + '</div>';  // .page-table-wrap
 
-                            card.innerHTML = html;
+                            contentHtml += '</div>';  // .view-page-content
+
+                            // Footer
+                            contentHtml += '<div class="view-page-footer">Page '
+                                         + (p + 1) + ' of ' + totalPages
+                                         + '</div>';
+
+                            card.innerHTML = contentHtml;
                             fragment.appendChild(card);
                         }
 
                         viewOuter.appendChild(fragment);
 
+                        // ── Drag-to-scroll ───────────────────────────────────────
                         (function (el) {
                             var drag = false, sx = 0, ss = 0;
                             el.addEventListener('mousedown', function (e) {
@@ -705,6 +786,7 @@
                             });
                         })(viewOuter);
 
+                        // ── Scroll-to-page helper ────────────────────────────────
                         window.scrollToPage = function (pageNumber) {
                             var target = document.querySelector(
                                 '.view-page[data-page="' + pageNumber + '"]'
@@ -713,6 +795,7 @@
                             window.scrollTo({ top: target.offsetTop, behavior: 'smooth' });
                         };
 
+                        // ── Notify parent iframe ─────────────────────────────────
                         if (window.parent && window.parent !== window) {
                             window.parent.postMessage(
                                 { type: 'REPORT_PAGES_READY', totalPages: totalPages },

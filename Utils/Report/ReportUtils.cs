@@ -221,7 +221,81 @@ namespace NexgenCosysReport.Utils.Report
             }
         }
 
+        // -- Read + attach per-member photo (file-based, by MemberId convention) ---
+        public static async Task AttachMemberPhotosAsync<T>(
+            IEnumerable<T> items,
+            string idPropertyName,
+            string imagePropertyName,
+            string webRoot,
+            ILogger? logger = null,
+            int maxWidth = 200,
+            int maxHeight = 200,
+            int quality = 50)
+        {
+            var idProp = typeof(T).GetProperty(idPropertyName);
+            var imageProp = typeof(T).GetProperty(imagePropertyName);
 
+            if (idProp == null || imageProp == null) return;
+
+            var photoDir = webRoot;
+
+            if (!Directory.Exists(photoDir))
+            {
+                logger?.LogWarning("? Member photo directory not found: {Dir}", photoDir);
+                return;
+            }
+
+            // Read + compress the placeholder once, reuse it for every member without a photo
+            string? fallbackDataUrl = null;
+            var fallbackPath = Path.Combine(photoDir, "PhotoNotAvailable.jpg");
+            if (File.Exists(fallbackPath))
+            {
+                try
+                {
+                    var fallbackBytes = await File.ReadAllBytesAsync(fallbackPath);
+                    fallbackDataUrl = await ImageUtils.CompressImageToBase64WithMimeAsync(
+                        fallbackBytes, Path.GetExtension(fallbackPath), maxWidth, maxHeight, quality);
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogWarning(ex, "? Could not load fallback member photo: {Path}", fallbackPath);
+                }
+            }
+
+            var tasks = items.Select(async item =>
+            {
+                var memberId = idProp.GetValue(item) as string;
+                if (string.IsNullOrWhiteSpace(memberId))
+                {
+                    imageProp.SetValue(item, string.Empty);
+                    return;
+                }
+
+                try
+                {
+                    var photoPath = Path.Combine(photoDir, $"{memberId}_MemberPhoto.jpg");
+
+                    if (File.Exists(photoPath))
+                    {
+                        var bytes = await File.ReadAllBytesAsync(photoPath);
+                        var dataUrl = await ImageUtils.CompressImageToBase64WithMimeAsync(
+                            bytes, Path.GetExtension(photoPath), maxWidth, maxHeight, quality);
+                        imageProp.SetValue(item, dataUrl);
+                    }
+                    else
+                    {
+                        imageProp.SetValue(item, fallbackDataUrl ?? string.Empty);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    logger?.LogWarning(ex, "? Member photo conversion failed for MemberId {MemberId}", memberId);
+                    imageProp.SetValue(item, fallbackDataUrl ?? string.Empty);
+                }
+            });
+
+            await Task.WhenAll(tasks);
+        }
     }
 }
 

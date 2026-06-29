@@ -93,6 +93,15 @@ namespace NexgenCosysReport.Controllers.Member
                     headerData,
                     nameof(CommonHeader.CompanyLogo),
                     webRoot));
+
+                await ReportUtils.AttachMemberPhotosAsync(
+                    allMemberData,
+                    idPropertyName: nameof(MemberAllDetailSpResponse.MemberId),
+                    imagePropertyName: nameof(MemberAllDetailSpResponse.MemberImage),
+                    webRoot: webRoot,
+                    logger: _logger);
+
+
                 var reportData = new Dictionary<string, object>
                 {
                     { "MemberAllDetailDataSet", allMemberData       },
@@ -106,7 +115,8 @@ namespace NexgenCosysReport.Controllers.Member
 
                 var htmlContent = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
                    reportKey: reportKey,
-                   reportPath: "Views/Report/MemberAllDetails.cshtml",
+                   //reportPath: "Views/Report/MemberAllDetails.cshtml",
+                   reportPath: request.visualReport ? "Views/VisualReport/VMemeberAllDetailReport.cshtml" : "Views/Report/MemberAllDetails.cshtml",
                    data: reportData);
 
                 if (upperFormat == "VIEW")

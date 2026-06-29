@@ -1,0 +1,862 @@
+﻿@* Views/VisualReport/VMemberAllDetailReport.cshtml *@
+@model Dictionary<string, object>
+@using NexgenCosysReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.RequestDtos.Member
+@using Newtonsoft.Json
+@{
+    Layout = null;
+
+    var dataSet = (Model["MemberAllDetailDataSet"] as IEnumerable<MemberAllDetailSpResponse>)?.ToList()
+                  ?? new List<MemberAllDetailSpResponse>();
+
+    var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "All";
+    var fromDate = Model.ContainsKey("FromDate") ? Model["FromDate"]?.ToString() : "";
+    var toDate = Model.ContainsKey("ToDate") ? Model["ToDate"]?.ToString() : "";
+    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
+
+    var isView = format == "VIEW";
+    var isPdf = format == "PDF";
+
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    int totalRecords = Model.ContainsKey("TotalRecords")
+                       ? Convert.ToInt32(Model["TotalRecords"])
+                       : dataSet.Count;
+
+    // ── Server-side aggregations (6 groups) ───────────────────────────────
+    // 1. Member Type
+    var memberTypeGroups = dataSet
+        .Where(r => !string.IsNullOrEmpty(r.MemberType))
+        .GroupBy(r => r.MemberType!.Trim())
+        .Select(g => new { Label = g.Key, Count = g.Count() })
+        .OrderByDescending(x => x.Count).ToList();
+
+    // 2. Status
+    var statusGroups = dataSet
+        .Where(r => !string.IsNullOrEmpty(r.Status))
+        .GroupBy(r => r.Status!.Trim())
+        .Select(g => new { Label = g.Key, Count = g.Count() })
+        .OrderByDescending(x => x.Count).ToList();
+
+    // 3. Gender
+    var genderGroups = dataSet
+        .Where(r => !string.IsNullOrEmpty(r.Gender))
+        .GroupBy(r => r.Gender!.Trim())
+        .Select(g => new { Label = g.Key, Count = g.Count() })
+        .OrderByDescending(x => x.Count).ToList();
+
+    // 4. Religion
+    var religionGroups = dataSet
+        .Where(r => !string.IsNullOrEmpty(r.Religion))
+        .GroupBy(r => r.Religion!.Trim())
+        .Select(g => new { Label = g.Key, Count = g.Count() })
+        .OrderByDescending(x => x.Count).ToList();
+
+    // 5. Occupation
+    var occupationGroups = dataSet
+        .Where(r => !string.IsNullOrEmpty(r.Occupation))
+        .GroupBy(r => r.Occupation!.Trim())
+        .Select(g => new { Label = g.Key, Count = g.Count() })
+        .OrderByDescending(x => x.Count).ToList();
+
+    // 6. Member Group
+    var memberGroupGroups = dataSet
+        .Where(r => !string.IsNullOrEmpty(r.MemberGroup))
+        .GroupBy(r => r.MemberGroup!.Trim())
+        .Select(g => new { Label = g.Key, Count = g.Count() })
+        .OrderByDescending(x => x.Count).ToList();
+
+    // ── JSON for JS ───────────────────────────────────────────────────────
+    var memberTypeLabelsJson = JsonConvert.SerializeObject(memberTypeGroups.Select(x => x.Label));
+    var memberTypeCountsJson = JsonConvert.SerializeObject(memberTypeGroups.Select(x => x.Count));
+    var statusLabelsJson = JsonConvert.SerializeObject(statusGroups.Select(x => x.Label));
+    var statusCountsJson = JsonConvert.SerializeObject(statusGroups.Select(x => x.Count));
+    var genderLabelsJson = JsonConvert.SerializeObject(genderGroups.Select(x => x.Label));
+    var genderCountsJson = JsonConvert.SerializeObject(genderGroups.Select(x => x.Count));
+    var religionLabelsJson = JsonConvert.SerializeObject(religionGroups.Select(x => x.Label));
+    var religionCountsJson = JsonConvert.SerializeObject(religionGroups.Select(x => x.Count));
+    var occupationLabelsJson = JsonConvert.SerializeObject(occupationGroups.Select(x => x.Label));
+    var occupationCountsJson = JsonConvert.SerializeObject(occupationGroups.Select(x => x.Count));
+    var memberGroupLabelsJson = JsonConvert.SerializeObject(memberGroupGroups.Select(x => x.Label));
+    var memberGroupCountsJson = JsonConvert.SerializeObject(memberGroupGroups.Select(x => x.Count));
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Member All Detail – Visual Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <style>
+        /* ── Reset & base ─────────────────────────────────────────────── */
+        * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        }
+
+        body {
+        font-family: Arial, sans-serif;
+        font-size: 7pt;
+        background: @(isView ? "#d0d0d0" : "#fff");
+        @(isView ? "" : "margin-top: 25px;")
+        }
+
+        /* ── Sub-header (IDENTICAL to MemberAllDetails) ──────────────── */
+        .report-subheader {
+        width: 100%;
+        padding: 4px 6px 0 6px;
+        background: #fff;
+        }
+
+        .subheader-title {
+        text-align: center;
+        font-size: 13pt;
+        font-weight: bold;
+        text-decoration: underline;
+        padding: 6px 4px 4px;
+        }
+
+        .subheader-meta {
+        display: flex;
+        justify-content: space-between;
+        font-size: 7.5pt;
+        padding: 2px 4px;
+        }
+
+        .subheader-spacer {
+        height: 5px;
+        }
+
+        /* ── KPI strip ────────────────────────────────────────────────── */
+        .kpi-strip {
+        display: flex;
+        gap: 10px;
+        padding: 10px 12px;
+        background: #fff;
+        border-bottom: 1px solid #e0e0e0;
+        }
+
+        .kpi-card {
+        flex: 1;
+        background: #f4f6fb;
+        border-left: 4px solid #4e73df;
+        padding: 8px 14px;
+        border-radius: 3px;
+        }
+
+        .kpi-card.green {
+        border-color: #1cc88a;
+        }
+
+        .kpi-card.yellow {
+        border-color: #f6c23e;
+        }
+
+        .kpi-card.red {
+        border-color: #e74a3b;
+        }
+
+        .kpi-card.teal {
+        border-color: #36b9cc;
+        }
+
+        .kpi-card.purple {
+        border-color: #6f42c1;
+        }
+
+        .kpi-label {
+        font-size: 6.5pt;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 2px;
+        }
+
+        .kpi-value {
+        font-size: 15pt;
+        font-weight: bold;
+        color: #333;
+        line-height: 1.1;
+        }
+
+        /* ── Charts grid ──────────────────────────────────────────────── */
+        .charts-section {
+        background: #fff;
+        padding: 14px 12px 10px;
+        }
+
+        .charts-row {
+        display: flex;
+        gap: 14px;
+        margin-bottom: 14px;
+        }
+
+        .chart-card {
+        flex: 1;
+        border: 1px solid #e4e6ef;
+        border-radius: 4px;
+        padding: 10px 12px 8px;
+        background: #fff;
+        min-width: 0;
+        }
+
+        .chart-card-title {
+        font-size: 8pt;
+        font-weight: bold;
+        color: #444;
+        margin-bottom: 6px;
+        padding-bottom: 4px;
+        border-bottom: 2px solid #4e73df;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        }
+
+        .chart-card-title.green {
+        border-color: #1cc88a;
+        }
+
+        .chart-card-title.yellow {
+        border-color: #f6c23e;
+        }
+
+        .chart-card-title.red {
+        border-color: #e74a3b;
+        }
+
+        .chart-card-title.teal {
+        border-color: #36b9cc;
+        }
+
+        .chart-card-title.purple {
+        border-color: #6f42c1;
+        }
+
+        .chart-canvas-wrap {
+        position: relative;
+        width: 100%;
+        height: 220px;
+        }
+
+        .chart-canvas-wrap canvas {
+        display: block;
+        }
+
+        .no-data-msg {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #bbb;
+        font-size: 8pt;
+        }
+
+        @@media print {
+        body {
+        margin: 0;
+        background: #fff;
+        }
+        }
+
+        /* ── VIEW chrome (identical dimensions to MemberAllDetails) ───── */
+        .view-outer {
+        background: #d0d0d0;
+        padding: 2px 16px 20px 16px;
+        min-height: 100vh;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        cursor: grab;
+        }
+
+        .view-outer:active {
+        cursor: grabbing;
+        }
+
+        .view-page {
+        background: #fff;
+        margin: 0 auto 24px auto;
+        box-shadow: 0 2px 8px rgba(0,0,0,.18);
+        width: 3600px;
+        height: 1587px; /* 420 mm @@ 96 dpi */
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        }
+
+        .view-page-content {
+        flex: 1;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        }
+
+        .view-page-footer {
+        background: #fff;
+        border-top: 1px solid #ccc;
+        text-align: center;
+        font-size: 9pt;
+        font-weight: bold;
+        padding: 6px 0;
+        flex-shrink: 0;
+        }
+
+        .common-header-wrap {
+        width: 3600px;
+        overflow: hidden;
+        flex-shrink: 0;
+        }
+
+        .page-subheader {
+        flex-shrink: 0;
+        }
+
+        .page-kpi {
+        flex-shrink: 0;
+        }
+
+        .page-charts {
+        flex: 1;
+        overflow: hidden;
+        }
+
+        /* Hidden source elements */
+        #sourceWrap {
+        opacity: 0;
+        pointer-events: none;
+        width: 3600px;
+        position: absolute;
+        top: 0;
+        left: 0;
+        }
+
+        #commonHeaderSource {
+        visibility: hidden;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 3600px;
+        pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    @* ── Common header (same as MemberAllDetails) ──────────────────────── *@
+    <div id="commonHeaderSource">
+        @await Html.PartialAsync("_CommonHeader", Model)
+    </div>
+
+    @* ════════════════════════════════════════════════════════════════════
+       VIEW branch
+    ════════════════════════════════════════════════════════════════════ *@
+    @if (isView)
+    {
+        <div id="sourceWrap">
+
+            @* Sub-header template – IDENTICAL markup to MemberAllDetails *@
+            <div id="subheaderTemplate" class="report-subheader">
+                <div class="subheader-title">Member All Detail Report</div>
+                <div class="subheader-meta">
+                    <span><strong>Branch Name :</strong> @branchName</span>
+                    <span><strong>From Date :</strong> @fromDate</span>
+                </div>
+                <div class="subheader-meta">
+                    <span><strong>Report Generated On :</strong> @generatedOn</span>
+                    <span><strong>To Date :</strong> @toDate</span>
+                </div>
+                <div class="subheader-spacer"></div>
+            </div>
+
+            @* KPI strip template *@
+            <div id="kpiTemplate" class="kpi-strip">
+                <div class="kpi-card">
+                    <div class="kpi-label">Total Members</div>
+                    <div class="kpi-value">@totalRecords</div>
+                </div>
+                <div class="kpi-card green">
+                    <div class="kpi-label">Member Types</div>
+                    <div class="kpi-value">@memberTypeGroups.Count</div>
+                </div>
+                <div class="kpi-card yellow">
+                    <div class="kpi-label">Status Groups</div>
+                    <div class="kpi-value">@statusGroups.Count</div>
+                </div>
+                <div class="kpi-card red">
+                    <div class="kpi-label">Genders</div>
+                    <div class="kpi-value">@genderGroups.Count</div>
+                </div>
+                <div class="kpi-card teal">
+                    <div class="kpi-label">Religions</div>
+                    <div class="kpi-value">@religionGroups.Count</div>
+                </div>
+                <div class="kpi-card purple">
+                    <div class="kpi-label">Occupations</div>
+                    <div class="kpi-value">@occupationGroups.Count</div>
+                </div>
+            </div>
+
+            @* Charts template – 2 rows x 3 cards *@
+            <div id="chartsTemplate" class="charts-section">
+                @* Row 1: Member Type (donut) | Status (donut) | Member Group (donut) *@
+                <div class="charts-row">
+                    <div class="chart-card">
+                        <div class="chart-card-title">Member Type Distribution</div>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="chartMemberType"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-card-title green">Member Status Distribution</div>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="chartStatus"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-card-title purple">Member Group Distribution</div>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="chartMemberGroup"></canvas>
+                        </div>
+                    </div>
+                </div>
+                @* Row 2: Gender (donut) | Religion (horizontal bar) | Occupation (horizontal bar) *@
+                <div class="charts-row" style="margin-bottom:0;">
+                    <div class="chart-card">
+                        <div class="chart-card-title yellow">Gender Breakdown</div>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="chartGender"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-card-title red">Religion Distribution</div>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="chartReligion"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-card-title teal">Occupation Distribution</div>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="chartOccupation"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>@* end #sourceWrap *@
+
+        <div class="view-outer" id="viewOuter"></div>
+    }
+
+    @* ════════════════════════════════════════════════════════════════════
+       PDF branch (non-VIEW)
+    ════════════════════════════════════════════════════════════════════ *@
+    @if (!isView)
+    {
+        @await Html.PartialAsync("_CommonHeader", Model)
+
+        @* Sub-header – IDENTICAL to MemberAllDetails *@
+        <div class="report-subheader">
+            <div class="subheader-title">Member All Detail Report</div>
+            <div class="subheader-meta">
+                <span><strong>Branch Name :</strong> @branchName</span>
+                <span><strong>From Date :</strong> @fromDate</span>
+            </div>
+            <div class="subheader-meta">
+                <span><strong>Report Generated On :</strong> @generatedOn</span>
+                <span><strong>To Date :</strong> @toDate</span>
+            </div>
+            <div class="subheader-spacer"></div>
+        </div>
+
+        @* KPI strip *@
+        <div class="kpi-strip">
+            <div class="kpi-card">
+                <div class="kpi-label">Total Members</div>
+                <div class="kpi-value">@totalRecords</div>
+            </div>
+            <div class="kpi-card green">
+                <div class="kpi-label">Member Types</div>
+                <div class="kpi-value">@memberTypeGroups.Count</div>
+            </div>
+            <div class="kpi-card yellow">
+                <div class="kpi-label">Status Groups</div>
+                <div class="kpi-value">@statusGroups.Count</div>
+            </div>
+            <div class="kpi-card red">
+                <div class="kpi-label">Genders</div>
+                <div class="kpi-value">@genderGroups.Count</div>
+            </div>
+            <div class="kpi-card teal">
+                <div class="kpi-label">Religions</div>
+                <div class="kpi-value">@religionGroups.Count</div>
+            </div>
+            <div class="kpi-card purple">
+                <div class="kpi-label">Occupations</div>
+                <div class="kpi-value">@occupationGroups.Count</div>
+            </div>
+        </div>
+
+        @* Charts – 2 rows x 3 cards *@
+        <div class="charts-section">
+            <div class="charts-row">
+                <div class="chart-card">
+                    <div class="chart-card-title">Member Type Distribution</div>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartMemberType"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-card-title green">Member Status Distribution</div>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartStatus"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-card-title purple">Member Group Distribution</div>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartMemberGroup"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="charts-row" style="margin-bottom:0;">
+                <div class="chart-card">
+                    <div class="chart-card-title yellow">Gender Breakdown</div>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartGender"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-card-title red">Religion Distribution</div>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartReligion"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-card-title teal">Occupation Distribution</div>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartOccupation"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* ════════════════════════════════════════════════════════════════════
+       Shared chart data + rendering
+       (runs for both VIEW hidden-source and PDF)
+    ════════════════════════════════════════════════════════════════════ *@
+    <script>
+        (function () {
+        'use strict';
+
+        // ── Data from server ──────────────────────────────────────────
+        var DATA = {
+        memberType:  { labels: @Html.Raw(memberTypeLabelsJson),  counts: @Html.Raw(memberTypeCountsJson)  },
+        status:      { labels: @Html.Raw(statusLabelsJson),      counts: @Html.Raw(statusCountsJson)      },
+        gender:      { labels: @Html.Raw(genderLabelsJson),      counts: @Html.Raw(genderCountsJson)      },
+        religion:    { labels: @Html.Raw(religionLabelsJson),    counts: @Html.Raw(religionCountsJson)    },
+        occupation:  { labels: @Html.Raw(occupationLabelsJson),  counts: @Html.Raw(occupationCountsJson)  },
+        memberGroup: { labels: @Html.Raw(memberGroupLabelsJson), counts: @Html.Raw(memberGroupCountsJson) }
+        };
+
+        var PALETTE = [
+        '#4e73df','#1cc88a','#f6c23e','#e74a3b',
+        '#36b9cc','#6f42c1','#fd7e14','#20c997',
+        '#e83e8c','#17a2b8','#ffc107','#6610f2'
+        ];
+
+        function colors(n) {
+        return Array.from({ length: n }, function (_, i) { return PALETTE[i % PALETTE.length]; });
+        }
+
+        // ── Plugins ───────────────────────────────────────────────────
+        // Center-total text for doughnut charts
+        var centerTotalPlugin = {
+        id: 'centerTotal',
+        afterDraw: function (chart) {
+        if (chart.config.type !== 'doughnut') return;
+        var total = chart.data.datasets[0].data.reduce(function (a, b) { return a + b; }, 0);
+        var cx = chart.ctx;
+        var w  = chart.chartArea.left + (chart.chartArea.right  - chart.chartArea.left) / 2;
+        var h  = chart.chartArea.top  + (chart.chartArea.bottom - chart.chartArea.top)  / 2;
+        cx.save();
+        cx.font         = 'bold 13px Arial';
+        cx.fillStyle    = '#444';
+        cx.textAlign    = 'center';
+        cx.textBaseline = 'middle';
+        cx.fillText(total, w, h);
+        cx.restore();
+        }
+        };
+
+        // ── Chart factories ───────────────────────────────────────────
+        // Doughnut
+        function makeDoughnut(canvasId, data) {
+        var el = document.getElementById(canvasId);
+        if (!el) return;
+        if (!data.counts.length) {
+        el.parentElement.innerHTML = '<div class="no-data-msg">No data</div>';
+        return;
+        }
+        var existing = Chart.getChart(el);
+        if (existing) existing.destroy();
+
+        new Chart(el, {
+        type: 'doughnut',
+        data: {
+        labels: data.labels,
+        datasets: [{
+        data: data.counts,
+        backgroundColor: colors(data.counts.length),
+        borderWidth: 2,
+        hoverOffset: 6
+        }]
+        },
+        options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '58%',
+        plugins: {
+        legend: {
+        position: 'bottom',
+        labels: { font: { size: 9 }, usePointStyle: true, padding: 8 }
+        },
+        datalabels: {
+        color: '#fff',
+        font: { weight: 'bold', size: 9 },
+        formatter: function (value, ctx) {
+        var total = ctx.dataset.data.reduce(function (a, b) { return a + b; }, 0);
+        if (!total) return '';
+        var pct = ((value / total) * 100).toFixed(1);
+        return pct + '%';
+        },
+        anchor: 'center',
+        align: 'center'
+        },
+        tooltip: {
+        callbacks: {
+        label: function (ctx) {
+        var total = ctx.dataset.data.reduce(function (a, b) { return a + b; }, 0);
+        var pct   = total ? ((ctx.parsed / total) * 100).toFixed(1) : '0.0';
+        return ' ' + ctx.label + ': ' + ctx.parsed + ' (' + pct + '%)';
+        }
+        }
+        }
+        }
+        },
+        plugins: [centerTotalPlugin]
+        });
+        }
+
+        // Horizontal bar (for Religion and Occupation which can have many labels)
+        function makeHBar(canvasId, data) {
+        var el = document.getElementById(canvasId);
+        if (!el) return;
+        if (!data.counts.length) {
+        el.parentElement.innerHTML = '<div class="no-data-msg">No data</div>';
+        return;
+        }
+        var existing = Chart.getChart(el);
+        if (existing) existing.destroy();
+
+        // Frequency-based colour gradient (red = low, green = high)
+        var minV = Math.min.apply(null, data.counts);
+        var maxV = Math.max.apply(null, data.counts);
+        var diff = maxV - minV || 1;
+        var bgColors = data.counts.map(function (v) {
+        var ratio = (v - minV) / diff;
+        return 'hsl(' + Math.round(120 * ratio) + ',65%,45%)';
+        });
+
+        new Chart(el, {
+        type: 'bar',
+        data: {
+        labels: data.labels,
+        datasets: [{
+        label: 'Members',
+        data: data.counts,
+        backgroundColor: bgColors,
+        borderColor: bgColors.map(function (c) { return c.replace('45%', '35%'); }),
+        borderWidth: 1,
+        borderRadius: 3
+        }]
+        },
+        options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+        x: {
+        beginAtZero: true,
+        ticks: { font: { size: 8 } },
+        title: { display: true, text: 'Members', font: { size: 8 } }
+        },
+        y: {
+        ticks: { font: { size: 8 } }
+        }
+        },
+        plugins: {
+        legend: { display: false },
+        datalabels: {
+        anchor: 'end',
+        align: 'end',
+        color: '#333',
+        font: { size: 8 },
+        formatter: function (v) { return v; }
+        },
+        tooltip: {
+        callbacks: {
+        label: function (ctx) { return ' ' + ctx.parsed.x + ' members'; }
+        }
+        }
+        }
+        }
+        });
+        }
+
+        // ── Render all charts (given a root context) ──────────────────
+        function renderAllCharts() {
+        if (typeof Chart === 'undefined') return;
+        if (typeof ChartDataLabels !== 'undefined') {
+        Chart.register(ChartDataLabels);
+        }
+
+        makeDoughnut('chartMemberType',  DATA.memberType);
+        makeDoughnut('chartStatus',      DATA.status);
+        makeDoughnut('chartMemberGroup', DATA.memberGroup);
+        makeDoughnut('chartGender',      DATA.gender);
+        makeHBar('chartReligion',        DATA.religion);
+        makeHBar('chartOccupation',      DATA.occupation);
+        }
+
+        // Run once DOM is ready
+        if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', renderAllCharts);
+        } else {
+        renderAllCharts();
+        }
+
+        // Expose for post-pagination re-render
+        window._vReportRenderCharts = renderAllCharts;
+
+        }());
+    </script>
+
+    @* ════════════════════════════════════════════════════════════════════
+       VIEW-only pagination (same architecture as MemberAllDetails)
+    ════════════════════════════════════════════════════════════════════ *@
+    @if (isView)
+    {
+        <script>
+            (function () {
+            'use strict';
+
+            var MAX_RETRIES = 6;
+            var RETRY_DELAY = 100;
+            var retryCount  = 0;
+            var PAGE_W      = 3600;
+            var PAGE_H      = 1587;   // 420 mm @@ 96 dpi
+            var FOOTER_H    = 28;
+
+            function buildPages() {
+            var subHdrTpl  = document.getElementById('subheaderTemplate');
+            var kpiTpl     = document.getElementById('kpiTemplate');
+            var chartsTpl  = document.getElementById('chartsTemplate');
+            var commonHdrEl = document.getElementById('commonHeaderSource');
+
+            if (!subHdrTpl || !kpiTpl || !chartsTpl) {
+            if (retryCount++ < MAX_RETRIES)
+            setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+            return;
+            }
+
+            // Wait until charts are painted (canvas height > 0)
+            var anyCanvas = chartsTpl.querySelector('canvas');
+            if (anyCanvas && anyCanvas.getBoundingClientRect().height === 0) {
+            if (retryCount++ < MAX_RETRIES)
+            setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+            return;
+            }
+
+            // ── Measure source element heights ─────────────────────────
+            var commonHdrH = commonHdrEl ? commonHdrEl.getBoundingClientRect().height : 0;
+            var commonHdrHtml = commonHdrEl ? commonHdrEl.innerHTML : '';
+            var subHdrH    = subHdrTpl.getBoundingClientRect().height;
+            var kpiH       = kpiTpl.getBoundingClientRect().height;
+            var chartsH    = chartsTpl.getBoundingClientRect().height;
+
+            var subHdrHtml  = subHdrTpl.outerHTML;
+            var kpiHtml     = kpiTpl.outerHTML;
+            var chartsHtml  = chartsTpl.outerHTML;
+
+            // ── Remove source DOM ──────────────────────────────────────
+            var sourceWrap = document.getElementById('sourceWrap');
+            if (sourceWrap)  sourceWrap.parentNode.removeChild(sourceWrap);
+            if (commonHdrEl) commonHdrEl.parentNode.removeChild(commonHdrEl);
+
+            var viewOuter = document.getElementById('viewOuter');
+
+            // ── Build page card ────────────────────────────────────────
+            // This report is always ONE visual page (charts only, no rows to paginate).
+            var card = document.createElement('div');
+            card.className = 'view-page';
+            card.setAttribute('data-page', '1');
+
+            var contentHtml = '<div class="view-page-content">';
+
+            if (commonHdrHtml) {
+            contentHtml += '<div class="common-header-wrap">' + commonHdrHtml + '</div>';
+            }
+            contentHtml += '<div class="page-subheader">' + subHdrHtml + '</div>';
+            contentHtml += '<div class="page-kpi">'        + kpiHtml    + '</div>';
+            contentHtml += '<div class="page-charts">'     + chartsHtml + '</div>';
+
+            contentHtml += '</div>';  // .view-page-content
+            contentHtml += '<div class="view-page-footer">Page 1 of 1</div>';
+
+            card.innerHTML = contentHtml;
+            viewOuter.appendChild(card);
+
+            // ── Re-render charts inside the live card ──────────────────
+            // innerHTML clones DOM but canvas pixels are lost — must re-init.
+            setTimeout(function () {
+            if (typeof window._vReportRenderCharts === 'function') {
+            window._vReportRenderCharts();
+            }
+            }, 80);
+
+            // ── Drag-to-scroll ─────────────────────────────────────────
+            (function (el) {
+            var drag = false, sx = 0, ss = 0;
+            el.addEventListener('mousedown', function (e) {
+            if (e.button !== 0) return;
+            drag = true; sx = e.clientX; ss = el.scrollLeft;
+            el.style.userSelect = 'none'; e.preventDefault();
+            });
+            document.addEventListener('mousemove', function (e) {
+            if (drag) el.scrollLeft = ss - (e.clientX - sx);
+            });
+            document.addEventListener('mouseup', function () {
+            drag = false; el.style.userSelect = '';
+            });
+            })(viewOuter);
+
+            // ── Notify parent iframe ───────────────────────────────────
+            if (window.parent && window.parent !== window) {
+            window.parent.postMessage(
+            { type: 'REPORT_PAGES_READY', totalPages: 1 }, '*'
+            );
+            }
+            }
+
+            // Give Chart.js time to paint before we measure heights
+            setTimeout(function () {
+            requestAnimationFrame(function () { requestAnimationFrame(buildPages); });
+            }, 200);
+
+            }());
+        </script>
+    }
+
+</body>
+</html>
