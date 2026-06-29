@@ -106,6 +106,7 @@ builder.Services.AddScoped<ISavingAcWiseBalance, SavingAcWiseBalanceRepository>(
 builder.Services.AddScoped<IComCalendar, CalendarRepository>();
 builder.Services.AddScoped<IDepositeType, DepositeTypeRepository>();
 builder.Services.AddScoped<IMemberAllDetails, MemberAllDetailsRepository>();
+builder.Services.AddScoped<IMemberDetailsSummary, MemberDetailsSummaryRepository>();
 
 var app = builder.Build();
 

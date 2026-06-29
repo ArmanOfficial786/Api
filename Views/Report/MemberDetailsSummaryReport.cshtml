@@ -1,0 +1,496 @@
+﻿@model Dictionary<string, object>
+@using NexgenCosysReport.Dtos.RequestDtos.Member
+@{
+    Layout = null;
+
+    var memberInfo = Model["MemberDetail"] as MemberDetailInfoDto;
+    var shareAccounts = Model["ShareAccounts"] as List<ShareAccountDto> ?? new List<ShareAccountDto>();
+    var savingAccounts = Model["SavingAccounts"] as List<SavingAccountDto> ?? new List<SavingAccountDto>();
+    var loanIssues = Model["LoanIssues"] as List<LoanIssueDto> ?? new List<LoanIssueDto>();
+    var groupGuarantees = Model["GroupGuarantees"] as List<GroupGuaranteeDto> ?? new List<GroupGuaranteeDto>();
+
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    decimal totalShare = shareAccounts.Sum(x => x.ShareAmount);
+    decimal totalSavingBalance = savingAccounts.Sum(x => x.Balance);
+    decimal totalGuaranteeAmount = groupGuarantees.Sum(x => x.GuaranteeAmount);
+
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    string FormatAmount(decimal amount) =>
+        amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
+
+    string NullDisplay(object value) =>
+        value == null || string.IsNullOrWhiteSpace(value?.ToString()) ? "-" : value.ToString();
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Member Details Summary</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 8.5pt;
+                background: white;
+                color: #111;
+            }
+
+            /* ── Page wrapper ── */
+            .page-wrap {
+                width: 100%;
+                padding: 6px 10px;
+            }
+
+            /* ── Report meta rows ── */
+            .meta-line {
+                font-size: 8.5pt;
+                margin-bottom: 2px;
+            }
+
+            .report-title {
+                text-align: center;
+                font-size: 12pt;
+                font-weight: bold;
+                text-decoration: underline;
+                margin: 4px 0 6px 0;
+            }
+
+            .meta-row-wrap {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 2px;
+                font-size: 8.5pt;
+            }
+
+            /* ── Section header ── */
+            .section-header {
+                font-weight: bold;
+                font-size: 9pt;
+                margin: 8px 0 2px 0;
+                border-bottom: 1.5px solid #333;
+                padding-bottom: 2px;
+            }
+
+            /* ── Common table ── */
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8pt;
+                table-layout: auto;
+                margin-bottom: 6px;
+            }
+
+                .data-table th {
+                    background: #f0f0f0;
+                    border-top: 1.5px solid #333;
+                    border-bottom: 1px solid #555;
+                    border-left: 1px solid #ccc;
+                    border-right: 1px solid #ccc;
+                    padding: 3px 5px;
+                    font-weight: bold;
+                    text-align: left;
+                    white-space: nowrap;
+                }
+
+                .data-table td {
+                    border: 1px solid #ddd;
+                    padding: 3px 5px;
+                    vertical-align: middle;
+                    word-wrap: break-word;
+                }
+
+                .data-table tr:nth-child(even) td {
+                    background: #fafafa;
+                }
+
+            /* ── Grand total / sub-total rows ── */
+            .total-row td {
+                border-top: 1.5px solid #333;
+                border-bottom: 1.5px solid #333;
+                font-weight: bold;
+                background: #f5f5f5 !important;
+            }
+
+            .sub-total-row td {
+                border-top: 1px solid #aaa;
+                font-weight: bold;
+                background: #f9f9f9 !important;
+            }
+
+            /* ── Alignment helpers ── */
+            .tr {
+                text-align: right !important;
+            }
+
+            .tc {
+                text-align: center !important;
+            }
+
+            .tl {
+                text-align: left !important;
+            }
+
+            /* ── Loan sub-rows ── */
+            .loan-opening-row td {
+                background: #fff !important;
+            }
+
+            .loan-between-row td {
+                background: #fafafa !important;
+            }
+
+            .loan-payment-row td {
+                background: #f0f4f8 !important;
+                font-weight: bold;
+                border-top: 1px dashed #aaa;
+            }
+
+            /* ── No-data cell ── */
+            .no-data {
+                text-align: center;
+                color: #888;
+                font-style: italic;
+                padding: 6px;
+            }
+
+            @@media print {
+                body {
+                    margin: 0;
+                    padding: 0;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="page-wrap">
+
+        @* ── COMMON HEADER (logo + company info) ── *@
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        @* ── REPORT TITLE ── *@
+        <div class="report-title">Member Details Summary Report</div>
+
+        @* ── DATE META ── *@
+        <div class="meta-row-wrap">
+            <span><strong>From Date :</strong> @NullDisplay(fromDate)</span>
+            <span><strong>To Date :</strong> @NullDisplay(toDate)</span>
+        </div>
+        <div class="meta-line">
+            <strong>Report Generated on :</strong> @generatedOn
+        </div>
+
+        @* ═══════════════════════════════════════════════════════
+       SECTION 1 — MEMBER DETAILS
+    ═══════════════════════════════════════════════════════ *@
+        <div class="section-header">Member Details</div>
+        <table class="data-table" data-sheet-name="MemberDetails">
+            <thead>
+                <tr>
+                    <th>MemberId</th>
+                    <th>MemberName</th>
+                    <th>Gender</th>
+                    <th>Date Of Birth</th>
+                    <th>Registration Date</th>
+                    <th>Contact No</th>
+                    <th>Address</th>
+                    <th>Citizenship No</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (memberInfo != null)
+                {
+                    <tr>
+                        <td>@NullDisplay(memberInfo.MemberId)</td>
+                        <td>@NullDisplay(memberInfo.Name)</td>
+                        <td>@NullDisplay(memberInfo.Sex)</td>
+                        <td>@NullDisplay(memberInfo.DateOfBirth)</td>
+                        <td>@NullDisplay(memberInfo.RegistrationDate)</td>
+                        <td>@NullDisplay(memberInfo.MobileNo)</td>
+                        <td>@NullDisplay(memberInfo.PermanentAddress)</td>
+                        <td>@NullDisplay(memberInfo.CitizenshipNo)</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="8" class="no-data">Member information not available</td></tr>
+                }
+            </tbody>
+        </table>
+
+        @* ═══════════════════════════════════════════════════════
+       SECTION 2 — SHARE TYPE
+    ═══════════════════════════════════════════════════════ *@
+        <div class="section-header">Share Type</div>
+        <table class="data-table" data-sheet-name="ShareType">
+            <thead>
+                <tr>
+                    <th>Share Holder</th>
+                    <th class="tr">Previous Share</th>
+                    <th class="tr">Share Purchase</th>
+                    <th class="tr">Share Return</th>
+                    <th class="tr">Total Share</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (shareAccounts.Any())
+                {
+                    decimal prev = shareAccounts.Sum(x => x.PreviousShare);
+                    decimal purchase = shareAccounts.Sum(x => x.SharePurchase);
+                    decimal ret = shareAccounts.Sum(x => x.ShareReturn);
+                    <tr>
+                        <td>@NullDisplay(memberInfo?.Name)</td>
+                        <td class="tr">@FormatAmount(prev)</td>
+                        <td class="tr">@FormatAmount(purchase)</td>
+                        <td class="tr">@FormatAmount(ret)</td>
+                        <td class="tr">@FormatAmount(totalShare)</td>
+                    </tr>
+                    <tr class="total-row">
+                        <td colspan="4" class="tr">Total :</td>
+                        <td class="tr">@FormatAmount(totalShare)</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="5" class="no-data">No share records found</td></tr>
+                }
+            </tbody>
+        </table>
+
+        @* ═══════════════════════════════════════════════════════
+       SECTION 3 — ACCOUNT OPENING
+       Matches Image 2: A/C No | Deposit Type | A/C Status |
+       Interest | A/C Open Date | Opening Bal | Deposit Amt |
+       Withdraw Amt | Total Balance
+    ═══════════════════════════════════════════════════════ *@
+        <div class="section-header">Account Opening</div>
+        <table class="data-table" data-sheet-name="AccountOpening">
+            <thead>
+                <tr>
+                    <th>A/C No</th>
+                    <th>Deposit Type</th>
+                    <th>A/C Status</th>
+                    <th class="tr">Interest</th>
+                    <th>A/C Open Date</th>
+                    <th class="tr">Opening Balance</th>
+                    <th class="tr">Deposit Amount</th>
+                    <th class="tr">Withdraw Amount</th>
+                    <th class="tr">Total Balance</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (savingAccounts.Any())
+                {
+                    decimal totalOpening = 0;
+                    decimal totalDeposit = 0;
+                    decimal totalWithdraw = 0;
+
+                    foreach (var acc in savingAccounts)
+                    {
+                        totalOpening += acc.OpeningBalance;
+                        totalDeposit += acc.DepositAmount;
+                        totalWithdraw += acc.WithdrawAmount;
+                        <tr>
+                            <td>@NullDisplay(acc.AccountNo)</td>
+                            <td>@NullDisplay(acc.AccountType)</td>
+                            <td>@NullDisplay(acc.Status)</td>
+                            <td class="tr">@(acc.InterestRate?.ToString("F2") ?? "0.00")</td>
+                            <td>@NullDisplay(acc.OpeningDate)</td>
+                            <td class="tr">@FormatAmount(acc.OpeningBalance)</td>
+                            <td class="tr">@FormatAmount(acc.DepositAmount)</td>
+                            <td class="tr">@FormatAmount(acc.WithdrawAmount)</td>
+                            <td class="tr">@FormatAmount(acc.Balance)</td>
+                        </tr>
+                    }
+                    <tr class="total-row">
+                        <td colspan="5" class="tr">Total :</td>
+                        <td class="tr">@FormatAmount(totalOpening)</td>
+                        <td class="tr">@FormatAmount(totalDeposit)</td>
+                        <td class="tr">@FormatAmount(totalWithdraw)</td>
+                        <td class="tr">@FormatAmount(totalSavingBalance)</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="9" class="no-data">No saving accounts found</td></tr>
+                }
+            </tbody>
+        </table>
+
+        @* ═══════════════════════════════════════════════════════
+       SECTION 4 — LOAN ISSUE DETAILS
+       Matches Image 2:
+         Row 1: A/C NO | Issue Date | Maturity Date |
+                Principle Due | Interest Due | Penalty Due |
+                Total Due | "Opening Details" | 0 | 0 | 0 | 0
+         Row 2: (blank x7) | "Between Date Details" | Issue Amt | Prin Paid | Int Paid | Pent Paid
+         Row 3: (blank x7) | "Total Issue Payment"  | SUM | SUM | SUM | SUM  ← bold summary
+    ═══════════════════════════════════════════════════════ *@
+        <div class="section-header">Loan Issue Details</div>
+        <table class="data-table" data-sheet-name="LoanIssue">
+            <thead>
+                <tr>
+                    <th>A/C NO</th>
+                    <th>Issue Date</th>
+                    <th>Maturity Date</th>
+                    <th class="tr">Principle Due</th>
+                    <th class="tr">Interest Due</th>
+                    <th class="tr">Penalty Due</th>
+                    <th class="tr">Total Due Amt</th>
+                    <th>Issue/Payment Details</th>
+                    <th class="tr">Issue Amount</th>
+                    <th class="tr">Prin Paid</th>
+                    <th class="tr">Int Paid</th>
+                    <th class="tr">Pent Paid</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (loanIssues.Any())
+                {
+                    decimal grandIssue = 0;
+                    decimal grandPrinPaid = 0;
+                    decimal grandIntPaid = 0;
+                    decimal grandPentPaid = 0;
+
+                    foreach (var loan in loanIssues)
+                    {
+                        grandIssue += loan.LoanAmount;
+                        grandPrinPaid += loan.PrincipalPaid;
+                        grandIntPaid += loan.InterestPaid;
+                        grandPentPaid += loan.PenaltyPaid;
+
+                        @* ── Opening Details row ── *@
+                        <tr class="loan-opening-row">
+                            <td>@NullDisplay(loan.LoanAccountNo)</td>
+                            <td>@NullDisplay(loan.IssueDate)</td>
+                            <td>@NullDisplay(loan.MaturityDate)</td>
+                            <td class="tr">@FormatAmount(loan.PrincipleDue)</td>
+                            <td class="tr">@FormatAmount(loan.InterestDue)</td>
+                            <td class="tr">@FormatAmount(loan.PenaltyDue)</td>
+                            <td class="tr">@FormatAmount(loan.TotalDue)</td>
+                            <td><strong>Opening Details:</strong></td>
+                            <td class="tr">0.00</td>
+                            <td class="tr">0.00</td>
+                            <td class="tr">0.00</td>
+                            <td class="tr">0.00</td>
+                        </tr>
+
+                        @* ── Between Date Details row ── *@
+                        <tr class="loan-between-row">
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td><strong>Between Date Details:</strong></td>
+                            <td class="tr">@FormatAmount(loan.LoanAmount)</td>
+                            <td class="tr">@FormatAmount(loan.PrincipalPaid)</td>
+                            <td class="tr">@FormatAmount(loan.InterestPaid)</td>
+                            <td class="tr">@FormatAmount(loan.PenaltyPaid)</td>
+                        </tr>
+
+                        @* ── Total Issue Payment row (per loan) ── *@
+                        <tr class="loan-payment-row">
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td><strong>Total Issue Payment:</strong></td>
+                            <td class="tr">@FormatAmount(loan.LoanAmount)</td>
+                            <td class="tr">@FormatAmount(loan.PrincipalPaid)</td>
+                            <td class="tr">@FormatAmount(loan.InterestPaid)</td>
+                            <td class="tr">@FormatAmount(loan.PenaltyPaid)</td>
+                        </tr>
+                    }
+
+                    @* ── Grand Total row ── *@
+                    <tr class="total-row">
+                        <td colspan="8" class="tr">Total :</td>
+                        <td class="tr">@FormatAmount(grandIssue)</td>
+                        <td class="tr">@FormatAmount(grandPrinPaid)</td>
+                        <td class="tr">@FormatAmount(grandIntPaid)</td>
+                        <td class="tr">@FormatAmount(grandPentPaid)</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="12" class="no-data">No loan records found</td></tr>
+                }
+            </tbody>
+        </table>
+
+        @* ═══════════════════════════════════════════════════════
+       SECTION 5 — GROUP GUARANTEE DETAILS
+       Matches Image 2: A/C NO | Loan Type | Saving A/C No |
+       Saving Amount | Share Amount | Guarantee Date |
+       Lonee Id | Lonee Name | Loan Issue Amount
+    ═══════════════════════════════════════════════════════ *@
+        <div class="section-header">Group Guarantee Details</div>
+        <table class="data-table" data-sheet-name="GroupGuarantee">
+            <thead>
+                <tr>
+                    <th>A/C NO</th>
+                    <th>Loan Type</th>
+                    <th>Saving A/C No</th>
+                    <th class="tr">Saving Amount</th>
+                    <th class="tr">Share Amount</th>
+                    <th>Guarantee Date</th>
+                    <th>Lonee Id</th>
+                    <th>Lonee Name</th>
+                    <th class="tr">Loan Issue Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (groupGuarantees.Any())
+                {
+                    foreach (var g in groupGuarantees)
+                    {
+                        <tr>
+                            <td>@NullDisplay(g.AccountNo)</td>
+                            <td>@NullDisplay(g.LoanType)</td>
+                            <td>@NullDisplay(g.SavingAccountNo)</td>
+                            <td class="tr">@FormatAmount(g.SavingAmount)</td>
+                            <td class="tr">@FormatAmount(g.ShareAmount)</td>
+                            <td>@NullDisplay(g.GuaranteeDate)</td>
+                            <td>@NullDisplay(g.LoneyId)</td>
+                            <td>@NullDisplay(g.LoneyName)</td>
+                            <td class="tr">@FormatAmount(g.LoanIssueAmount)</td>
+                        </tr>
+                    }
+                    <tr class="total-row">
+                        <td colspan="8" class="tr">Total :</td>
+                        <td class="tr">@FormatAmount(totalGuaranteeAmount)</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="9" class="no-data">No group guarantee records found</td></tr>
+                }
+            </tbody>
+        </table>
+
+    </div>
+</body>
+</html>
