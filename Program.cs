@@ -107,6 +107,8 @@ builder.Services.AddScoped<IComCalendar, CalendarRepository>();
 builder.Services.AddScoped<IDepositeType, DepositeTypeRepository>();
 builder.Services.AddScoped<IMemberAllDetails, MemberAllDetailsRepository>();
 builder.Services.AddScoped<IMemberDetailsSummary, MemberDetailsSummaryRepository>();
+builder.Services.AddScoped<IMemberBloodGroup, MemberBloodGroupReportRepository>();
+builder.Services.AddScoped<ISoleMemberGroup, SoleMemberGroupRepository>();
 
 var app = builder.Build();
 

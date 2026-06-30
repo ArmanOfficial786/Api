@@ -1,0 +1,183 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Member
+@model Dictionary<string, object>
+
+@{
+    Layout = null;
+
+    var dataSet = (Model["MemberDataSet"] as List<MemberBasicDetailsSpDto>) ?? new List<MemberBasicDetailsSpDto>();
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    string NullDisplay(object value) =>
+        value == null || string.IsNullOrWhiteSpace(value.ToString()) ? "-" : value.ToString();
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Member Details With Age Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-family: Arial, sans-serif;
+                font-size: 8pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    white-space: normal;
+                    vertical-align: middle;
+                    background: #FFFFFF;
+                    padding: 3px 4px;
+                    border: 1px solid #ddd;
+                }
+
+                .data-table th {
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    font-weight: bold;
+                    background: #f2f2f2;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 4px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 8px;
+            }
+
+            .grand-total td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            @@media print {
+                body {
+                    margin: 0;
+                    padding: 0;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="MemberBasicDetails">
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="12">Member Details With Age Report</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="6"><strong>Branch Name :</strong> @branchName</td>
+                    <td colspan="6" class="text-right"><strong>From Date :</strong> @fromDate</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="6"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="6" class="text-right"><strong>To Date :</strong> @toDate</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="12"></td></tr>
+
+                <tr>
+                    <th>S.N.</th>
+                    <th>Member Id</th>
+                    <th>Full Name</th>
+                    <th>Date of Birth</th>
+                    <th>Age (Y/M/D)</th>
+                    <th>Permanent Address</th>
+                    <th>Temporary Address</th>
+                    <th>Phone</th>
+                    <th>Mobile</th>
+                    <th>Email</th>
+                    <th>Citizenship</th>
+                    <th>Registration Date</th>
+                </tr>
+                @{
+                    int sn = 0;
+                }
+                @foreach (var row in dataSet)
+                {
+                    sn++;
+                    <tr>
+                        <td class="text-center">@sn</td>
+                        <td>@NullDisplay(row.MemberId)</td>
+                        <td>@NullDisplay(row.FullName)</td>
+                        <td>@NullDisplay(row.DateOfBirth)</td>
+                        <td>@(row.NoOfYear?.ToString() ?? "0") / @(row.NoOfMonth?.ToString() ?? "0") / @(row.NoOfDay?.ToString() ?? "0")</td>
+                        <td>@NullDisplay(row.PermanentAddress)</td>
+                        <td>@NullDisplay(row.TemporaryAddress)</td>
+                        <td>@NullDisplay(row.PhoneNo)</td>
+                        <td>@NullDisplay(row.MobileNo)</td>
+                        <td>@NullDisplay(row.EmailId)</td>
+                        <td>@NullDisplay(row.CitizenshipNo)</td>
+                        <td>@NullDisplay(row.RegistrationDate)</td>
+                    </tr>
+                }
+                <tr class="grand-total">
+                    <td colspan="2">Total Records</td>
+                    <td colspan="10">@dataSet.Count</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

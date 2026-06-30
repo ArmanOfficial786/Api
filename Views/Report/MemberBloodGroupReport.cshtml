@@ -1,0 +1,140 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Member
+@model Dictionary<string, object>
+
+@{
+    Layout = null;
+
+    var data = Model["BloodGroupDataSet"] as List<MemberBloodGroupSpDto> ?? new List<MemberBloodGroupSpDto>();
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    string NullDisplay(object value) =>
+        value == null || string.IsNullOrWhiteSpace(value.ToString()) ? "-" : value.ToString();
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Member Blood Group Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    border: 1px solid #ddd;
+                    vertical-align: middle;
+                }
+
+                .data-table th {
+                    background: #f2f2f2;
+                    font-weight: bold;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 4px 6px;
+            }
+
+            .meta-spacer td {
+                height: 8px;
+            }
+
+            .text-center {
+                text-align: center;
+            }
+
+            .text-right {
+                text-align: right;
+            }
+
+            .grand-total td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+            }
+    </style>
+</head>
+<body>
+    @if (!isExcel)
+    {
+        @await Html.PartialAsync("_CommonHeader", Model)
+    }
+
+    <table class="data-table" data-sheet-name="MemberBloodGroupReport">
+        <tbody>
+            <tr class="meta-title">
+                <td colspan="8">Member Blood Group Report</td>
+            </tr>
+            <tr class="meta-row">
+                <td colspan="4"><strong>Branch :</strong> @branchName</td>
+                <td colspan="4" class="text-right"><strong>From Date :</strong> @fromDate</td>
+            </tr>
+            <tr class="meta-row">
+                <td colspan="8"><strong>Report Generated on :</strong> @generatedOn</td>
+            </tr>
+            <tr class="meta-spacer"><td colspan="8"></td></tr>
+            <tr>
+                <th>S.N.</th>
+                <th>Member Id</th>
+                <th>Member Name</th>
+                <th>Gender</th>
+                <th>Date Of Birth</th>
+                <th>Registration Date</th>
+                <th>Blood Group</th>
+                <th>Contact</th>
+            </tr>
+            @{
+                int sn = 0;
+            }
+            @foreach (var row in data)
+            {
+                sn++;
+                <tr>
+                    <td class="text-center">@sn</td>
+                    <td>@NullDisplay(row.MemberId)</td>
+                    <td>@NullDisplay(row.Name)</td>
+                    <td>@NullDisplay(row.Sex)</td>
+                    <td>@NullDisplay(row.DateOfBirth)</td>
+                    <td>@NullDisplay(row.RegistrationDate)</td>
+                    <td>@NullDisplay(row.BloodGroup)</td>
+                    <td>@NullDisplay(row.ContactNo)</td>
+                </tr>
+            }
+            <tr class="grand-total">
+                <td colspan="7" class="text-right">Total Records:</td>
+                <td>@data.Count</td>
+            </tr>
+        </tbody>
+    </table>
+</body>
+</html>
