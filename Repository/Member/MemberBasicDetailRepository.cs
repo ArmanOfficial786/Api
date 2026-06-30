@@ -40,7 +40,7 @@ namespace NexgenCosysReport.Repository.Member
             parameters.Add("@SqlFilterOrderby", sqlFilterOrderby);
 
             var results = await connection.QueryAsync<MemberBasicDetailsSpDto>(
-                "sp_4_11_GetMemberDetailsWithBirthday‎", // note invisible char after 'Birthday'
+                "sp_4_11_GetMemberDetailsWithBirthday", // note invisible char after 'Birthday'
                 parameters,
                 commandType: CommandType.StoredProcedure
             );

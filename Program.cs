@@ -109,6 +109,7 @@ builder.Services.AddScoped<IMemberAllDetails, MemberAllDetailsRepository>();
 builder.Services.AddScoped<IMemberDetailsSummary, MemberDetailsSummaryRepository>();
 builder.Services.AddScoped<IMemberBloodGroup, MemberBloodGroupReportRepository>();
 builder.Services.AddScoped<ISoleMemberGroup, SoleMemberGroupRepository>();
+builder.Services.AddScoped<IMemberBasicDetail, MemberBasicDetailsRepository>();
 
 var app = builder.Build();
 
