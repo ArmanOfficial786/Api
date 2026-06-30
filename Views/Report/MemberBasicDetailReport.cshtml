@@ -21,6 +21,14 @@
     <meta charset="utf-8" />
     <title>Member Details With Age Report</title>
     <style>
+            /* ---- Reset & full-width ---- */
+            html, body {
+                margin: 0;
+                padding: 0;
+                width: 100%;
+                min-height: 100vh;
+            }
+
             * {
                 margin: 0;
                 padding: 0;
@@ -28,8 +36,6 @@
             }
 
             body {
-                margin: 0;
-                padding: 0;
                 font-family: Arial, sans-serif;
                 font-size: 9pt;
                 background: white;
@@ -37,21 +43,23 @@
 
             .report-container {
                 width: 100%;
+                margin: 0;
+                padding: 0;
                 overflow: visible;
             }
 
+            /* ---- Table styles ---- */
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
                 font-family: Arial, sans-serif;
                 font-size: 8pt;
-                table-layout: fixed;
+                table-layout: auto; /* columns size to content */
             }
 
                 .data-table td, .data-table th {
                     word-wrap: break-word;
                     overflow-wrap: break-word;
-                    white-space: normal;
                     vertical-align: middle;
                     background: #FFFFFF;
                     padding: 3px 4px;
@@ -65,6 +73,49 @@
                     background: #f2f2f2;
                 }
 
+            /* ---- Special column width hints (via colgroup) ---- */
+            .col-sn {
+                width: 5%;
+            }
+
+            .col-memberid {
+                width: 12%;
+            }
+
+            .col-name {
+                width: 18%;
+            }
+
+            .col-gender {
+                width: 6%;
+            }
+
+            .col-contact {
+                width: 12%;
+            }
+
+            .col-father {
+                width: 12%;
+            }
+
+            .col-mother {
+                width: 12%;
+            }
+
+            .col-dob {
+                width: 10%;
+            }
+
+            .col-age {
+                width: 8%;
+            }
+
+            /* Prevent wrapping on short columns */
+            .col-sn, .col-memberid, .col-gender, .col-age {
+                white-space: nowrap;
+            }
+
+            /* ---- Meta rows ---- */
             .meta-title td {
                 text-align: center;
                 font-size: 14pt;
@@ -82,6 +133,7 @@
                 height: 8px;
             }
 
+            /* ---- Grand total ---- */
             .grand-total td {
                 border-top: 2px solid #000;
                 border-bottom: 2px solid #000;
@@ -89,6 +141,7 @@
                 background: #f9f9f9;
             }
 
+            /* ---- Alignment helpers ---- */
             .text-right {
                 text-align: right !important;
             }
@@ -101,6 +154,7 @@
                 text-align: center !important;
             }
 
+            /* ---- Print ---- */
             @@media print {
                 body {
                     margin: 0;
@@ -123,34 +177,51 @@
         }
 
         <table class="data-table" data-sheet-name="MemberBasicDetails">
+            <!-- Column width hints -->
+            <colgroup>
+                <col class="col-sn" />
+                <col class="col-memberid" />
+                <col class="col-name" />
+                <col class="col-gender" />
+                <col class="col-contact" />
+                <col class="col-father" />
+                <col class="col-mother" />
+                <col class="col-dob" />
+                <col class="col-age" />
+            </colgroup>
             <tbody>
+                <!-- Title spans all 9 columns -->
                 <tr class="meta-title">
-                    <td colspan="12">Member Details With Age Report</td>
+                    <td colspan="9">Member Details With Age Report</td>
                 </tr>
-                <tr class="meta-row">
-                    <td colspan="6"><strong>Branch Name :</strong> @branchName</td>
-                    <td colspan="6" class="text-right"><strong>From Date :</strong> @fromDate</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="6"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="6" class="text-right"><strong>To Date :</strong> @toDate</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="12"></td></tr>
 
+                <!-- Branch Name + From Date -->
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Branch Name :</strong> @branchName</td>
+                    <td colspan="5" class="text-right"><strong>From Date :</strong> @fromDate</td>
+                </tr>
+
+                <!-- Generated On + To Date -->
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="5" class="text-right"><strong>To Date :</strong> @toDate</td>
+                </tr>
+
+                <tr class="meta-spacer"><td colspan="9"></td></tr>
+
+                <!-- Header row -->
                 <tr>
                     <th>S.N.</th>
                     <th>Member Id</th>
                     <th>Full Name</th>
+                    <th>Gender</th>
+                    <th>Contact No</th>
+                    <th>Father Name</th>
+                    <th>Mother Name</th>
                     <th>Date of Birth</th>
                     <th>Age (Y/M/D)</th>
-                    <th>Permanent Address</th>
-                    <th>Temporary Address</th>
-                    <th>Phone</th>
-                    <th>Mobile</th>
-                    <th>Email</th>
-                    <th>Citizenship</th>
-                    <th>Registration Date</th>
                 </tr>
+
                 @{
                     int sn = 0;
                 }
@@ -161,20 +232,19 @@
                         <td class="text-center">@sn</td>
                         <td>@NullDisplay(row.MemberId)</td>
                         <td>@NullDisplay(row.FullName)</td>
+                        <td>@NullDisplay(row.Gender)</td>
+                        <td>@NullDisplay(row.ContactNo)</td>
+                        <td>@NullDisplay(row.FatherName)</td>
+                        <td>@NullDisplay(row.MotherName)</td>
                         <td>@NullDisplay(row.DateOfBirth)</td>
-                        <td>@(row.NoOfYear?.ToString() ?? "0") / @(row.NoOfMonth?.ToString() ?? "0") / @(row.NoOfDay?.ToString() ?? "0")</td>
-                        <td>@NullDisplay(row.PermanentAddress)</td>
-                        <td>@NullDisplay(row.TemporaryAddress)</td>
-                        <td>@NullDisplay(row.PhoneNo)</td>
-                        <td>@NullDisplay(row.MobileNo)</td>
-                        <td>@NullDisplay(row.EmailId)</td>
-                        <td>@NullDisplay(row.CitizenshipNo)</td>
-                        <td>@NullDisplay(row.RegistrationDate)</td>
+                        <td>@NullDisplay(row.NoOfYear)</td>
                     </tr>
                 }
+
+                <!-- Grand Total: 2 columns for label + 7 for count = 9 -->
                 <tr class="grand-total">
                     <td colspan="2">Total Records</td>
-                    <td colspan="10">@dataSet.Count</td>
+                    <td colspan="7">@dataSet.Count</td>
                 </tr>
             </tbody>
         </table>
