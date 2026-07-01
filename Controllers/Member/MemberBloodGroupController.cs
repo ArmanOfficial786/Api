@@ -115,8 +115,8 @@ namespace NexgenCosysReport.Controllers.Member
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
                         reportKey: reportKey,
                         reportPath: request.VisualReport
-                            ? "Views/VisualReport/VMemberBloodGroupReport.cshtml"
-                            : "Views/Report/MemberBloodGroupReport.cshtml",
+                            ? "Views/VisualReport/Member/VMemberBloodGroupReport.cshtml"
+                            : "Views/Report/Member/MemberBloodGroupReport.cshtml",
                         data: reportData));
 
                 if (upperFormat == "VIEW")

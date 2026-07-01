@@ -1,16 +1,16 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
+using NexgenCosysReport.Dtos.RequestDtos.Account;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
-using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
 using NexgenCosysReport.Inteface.ReportInterface;
+using NexgenCosysReport.Inteface.ServiceInterface.Account;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Member;
-using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 
-namespace NexgenCosysReport.Controllers.MembeAccount
+namespace NexgenCosysReport.Controllers.Account
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -143,7 +143,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount
                         reportKey: reportKey,
                         //reportPath: "Views/Report/AccountStatementReport.cshtml",
                         //reportPath: "Views/VisualReport/VAccountStatementReport.cshtml",
-                        reportPath: request.VisualReport ? "Views/VisualReport/VAccountStatementReport.cshtml" : "Views/Report/AccountStatementReport.cshtml",
+                        reportPath: request.VisualReport ? "Views/VisualReport/Account/VAccountStatementReport.cshtml" : "Views/Report/Account/AccountStatementReport.cshtml",
 
                         data: reportData));
 

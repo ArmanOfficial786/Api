@@ -1,4 +1,4 @@
-namespace NexgenCosysReport.Dtos.RequestDtos.MemberAccount
+namespace NexgenCosysReport.Dtos.RequestDtos.Account
 {
     // -- Request ---------------------------------------------------
     public class AccountStatementRequest

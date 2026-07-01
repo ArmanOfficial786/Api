@@ -1,12 +1,12 @@
 ﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
-using NexgenCosysReport.Dtos.RequestDtos.Account;
-using NexgenCosysReport.Inteface.ServiceInterface.Account;
+using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
 using System.Data;
 
-namespace NexgenCosysReport.Repository.Account
+namespace NexgenCosysReport.Repository.MemberAccount
 {
     public class SavingAcWiseBalanceRepository : ISavingAcWiseBalance
     {

@@ -1,6 +1,6 @@
-using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
+using NexgenCosysReport.Dtos.RequestDtos.Account;
 
-namespace NexgenCosysReport.Inteface.ServiceInterface.MemberAccount
+namespace NexgenCosysReport.Inteface.ServiceInterface.Account
 {
     public interface IAccountStatement
     {

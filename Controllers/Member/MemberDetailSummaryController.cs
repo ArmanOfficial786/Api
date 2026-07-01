@@ -113,8 +113,8 @@ namespace NexgenCosysReport.Controllers.Member
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
                         reportKey: reportKey,
                         reportPath: request.VisualReport
-                            ? "Views/VisualReport/VMemberDetailsSummaryReport.cshtml"
-                            : "Views/Report/MemberDetailsSummaryReport.cshtml",
+                            ? "Views/VisualReport/Member/VMemberDetailsSummaryReport.cshtml"
+                            : "Views/Report/Member/MemberDetailsSummaryReport.cshtml",
                         data: reportData));
 
                 // ── VIEW — return binary PDF ──────────────────────────────────

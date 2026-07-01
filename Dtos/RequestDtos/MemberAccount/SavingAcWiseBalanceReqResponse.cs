@@ -1,4 +1,4 @@
-﻿namespace NexgenCosysReport.Dtos.RequestDtos.Account
+﻿namespace NexgenCosysReport.Dtos.RequestDtos.MemberAccount
 {
     public class SavingAcWiseBalanceReqResponse
     {

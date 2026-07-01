@@ -1,6 +1,6 @@
-﻿using NexgenCosysReport.Dtos.RequestDtos.Account;
+﻿using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
 
-namespace NexgenCosysReport.Inteface.ServiceInterface.Account
+namespace NexgenCosysReport.Inteface.ServiceInterface.MemberAccount
 {
     public interface ISavingAcWiseBalance
     {

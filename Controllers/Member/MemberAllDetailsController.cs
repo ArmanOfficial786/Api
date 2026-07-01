@@ -116,7 +116,7 @@ namespace NexgenCosysReport.Controllers.Member
                 var htmlContent = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
                    reportKey: reportKey,
                    //reportPath: "Views/Report/MemberAllDetails.cshtml",
-                   reportPath: request.visualReport ? "Views/VisualReport/VMemeberAllDetailReport.cshtml" : "Views/Report/MemberAllDetails.cshtml",
+                   reportPath: request.visualReport ? "Views/VisualReport/Member/VMemeberAllDetailReport.cshtml" : "Views/Report/Member/MemberAllDetails.cshtml",
                    data: reportData);
 
                 if (upperFormat == "VIEW")

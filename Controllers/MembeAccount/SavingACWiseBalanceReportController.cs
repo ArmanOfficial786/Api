@@ -470,15 +470,15 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Account;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Account;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
 using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
 
-namespace NexgenCosysReport.Controllers.Account
+namespace NexgenCosysReport.Controllers.MembeAccount
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -494,7 +494,7 @@ namespace NexgenCosysReport.Controllers.Account
         private readonly ILogger<SavingACWiseBalanceReportController> _logger;
 
         private const string ReportName = "SavingACWiseBalanceReport";
-        private const string ReportPath = "Views/Report/SavingAcWiseBalance.cshtml";
+        private const string ReportPath = "Views/Report/MemberAC/SavingAcWiseBalance.cshtml";
         private const string RowsKey = "SavingAcWiseBalanceDataset";
 
         /// <summary>

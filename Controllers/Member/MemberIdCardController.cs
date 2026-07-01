@@ -363,7 +363,7 @@ namespace NexgenCosysReport.Controllers.Member
 
                 var htmlContent = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
                     reportKey: reportKey,
-                    reportPath: "Views/Report/MemberIdCard.cshtml",
+                    reportPath: "Views/Report/Member/MemberIdCard.cshtml",
                     data: reportData);
 
                 // -- STAGE 5: PDF generation ---------------------------------------
