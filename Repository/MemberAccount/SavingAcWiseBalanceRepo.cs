@@ -181,32 +181,32 @@ namespace NexgenCosysReport.Repository.MemberAccount
             };
 
             // ---- ORDER BY ----
-            string orderByClause = request.OrderBy.Trim() switch
+            string orderByClause = request.OrderBy switch
             {
-                "memberName" =>
-                    "ORDER BY Name ASC",
+                "Member Name" =>
+                    "ORDER BY MemberName",
 
-                "memberId" =>
+                "Member Id" =>
                     // Strips the branch-prefix before the last '-' then sorts numerically
                     "ORDER BY substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId",
 
-                "accountNo" =>
+                "Account No" =>
                     "ORDER BY substring(AccountNo, 1,(len(AccountNo)-charindex('-', AccountNo))-1), AccountNo",
 
-                "interestRate" =>
+                "Interest Rate" =>
                     "ORDER BY InterestRate DESC",
 
-                "deposit" =>
+                "Deposit" =>
                     "ORDER BY Deposit DESC",
 
-                "withdrawl" =>          // legacy label kept (note the typo)
+                "Withdrawl" =>          // legacy label kept (note the typo)
                     "ORDER BY Withdraw DESC",
 
-                "balance" =>
+                "Balance" =>
                     "ORDER BY Balance DESC",
 
                 _ =>
-                    "ORDER BY Name ASC"
+                    "ORDER BY MemberName"
             };
 
             return statusClause + orderByClause;
