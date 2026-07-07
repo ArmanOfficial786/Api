@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 
 namespace NexgenCosysReport.Models;
@@ -184,6 +184,8 @@ public partial class MemMemberRegistration
     public DateTime? VerifiedOn { get; set; }
 
     public string? RegistrationNo { get; set; }
+
+    public string? BloodGroup { get; set; }
 
     public virtual SycMemberGroup SycMemberGroup { get; set; } = null!;
 

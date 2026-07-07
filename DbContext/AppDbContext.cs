@@ -1,7 +1,5 @@
-using System;
-using System.Collections.Generic;
+﻿using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace NexgenCosysReport;
 
@@ -15,6 +13,8 @@ public partial class AppDbContext : DbContext
         : base(options)
     {
     }
+
+    public virtual DbSet<AcoFiscalYear> AcoFiscalYears { get; set; }
 
     public virtual DbSet<ComCalendar> ComCalendars { get; set; }
 
@@ -33,11 +33,23 @@ public partial class AppDbContext : DbContext
     public virtual DbSet<UsmRelationUserToOffice> UsmRelationUserToOffices { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
-//#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-//        => optionsBuilder.UseSqlServer("Server=DESKTOP-G41KGSS\\SQLEXPRESS;Database=NexGenCoSysDBDev;Persist Security Info=True;User ID=SA;Password=cosys123;TrustServerCertificate=True;Encrypt=False");
+    //#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
+    //        => optionsBuilder.UseSqlServer("Server=DESKTOP-G41KGSS\\SQLEXPRESS;Database=NexGenCoSysDBDev;Persist Security Info=True;User ID=SA;Password=cosys123;TrustServerCertificate=True;Encrypt=False");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<AcoFiscalYear>(entity =>
+        {
+            entity.ToTable("AcoFiscalYear");
+
+            entity.Property(e => e.AcoFiscalYearId).ValueGeneratedNever();
+            entity.Property(e => e.FiscalYear).HasMaxLength(10);
+            entity.Property(e => e.FiscalYearFromOn).HasColumnType("datetime");
+            entity.Property(e => e.FiscalYearFromOnBs).HasMaxLength(50);
+            entity.Property(e => e.FiscalYearToOn).HasColumnType("datetime");
+            entity.Property(e => e.FiscalYearToOnBs).HasMaxLength(50);
+        });
+
         modelBuilder.Entity<ComCalendar>(entity =>
         {
             entity.ToTable("ComCalendar");
@@ -84,6 +96,7 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.BirthOnBs)
                 .HasMaxLength(20)
                 .HasColumnName("BirthOnBS");
+            entity.Property(e => e.BloodGroup).HasMaxLength(10);
             entity.Property(e => e.CitizenShipIssuedDistrict).HasMaxLength(50);
             entity.Property(e => e.CitizenShipIssuedOn).HasColumnType("datetime");
             entity.Property(e => e.CitizenShipIssuedOnBs).HasMaxLength(50);

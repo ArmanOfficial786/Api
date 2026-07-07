@@ -1,0 +1,959 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Account
+@model Dictionary<string, object>
+@using Newtonsoft.Json
+@{
+    Layout = null;
+
+   
+    var chartJsInline = Model.ContainsKey("ChartJsSource") ? Model["ChartJsSource"]?.ToString() : null;
+    var dataLabelsInline = Model.ContainsKey("DataLabelsSource") ? Model["DataLabelsSource"]?.ToString() : null;
+
+    var rows = (Model["BalanceSheetRows"] as IEnumerable<BalanceSheetDto>)?.ToList()
+               ?? new List<BalanceSheetDto>();
+
+    var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "All";
+    var tillDate = Model.ContainsKey("TillDate") ? Model["TillDate"]?.ToString() : "";
+    var reportType = Model.ContainsKey("ReportType") ? Model["ReportType"]?.ToString() : "Summary";
+    var fiscalYear = Model.ContainsKey("FiscalYearLabel") ? Model["FiscalYearLabel"]?.ToString() : "";
+    var includePrev = Model.ContainsKey("IncludePreviousYearBalance")
+                        && Model["IncludePreviousYearBalance"] != null
+                        && Convert.ToBoolean(Model["IncludePreviousYearBalance"]);
+    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
+    var isView = format == "VIEW";
+    var isPdf = format == "PDF";
+
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    decimal totalDebit = Model.ContainsKey("TotalDebit") && Model["TotalDebit"] != null ? Convert.ToDecimal(Model["TotalDebit"]) : rows.Sum(r => r.DebitAmount);
+    decimal totalCredit = Model.ContainsKey("TotalCredit") && Model["TotalCredit"] != null ? Convert.ToDecimal(Model["TotalCredit"]) : rows.Sum(r => r.CreditAmount);
+
+    // ── Server-side aggregations ────────────────────────────────────────
+    var ledgerHeadGroups = rows
+        .GroupBy(r => string.IsNullOrEmpty(r.LedgerHead) ? "-" : r.LedgerHead)
+        .Select(g => new
+        {
+            Label = g.Key,
+            Current = g.Sum(x => x.CurrentAmount),
+            Previous = g.Sum(x => x.PreviousAmount)
+        })
+        .OrderByDescending(x => Math.Abs(x.Current))
+        .ToList();
+
+    decimal totalAssets = rows.Where(r => r.LedgerHead == "ASSETS").Sum(r => r.CurrentAmount);
+    decimal totalLiabilities = rows.Where(r => r.LedgerHead == "LIABILITIES").Sum(r => r.CurrentAmount);
+    decimal totalIncome = rows.Where(r => r.LedgerHead == "INCOME").Sum(r => r.CurrentAmount);
+    decimal totalExpenses = rows.Where(r => r.LedgerHead == "EXPENSES").Sum(r => r.CurrentAmount);
+    decimal netPosition = totalAssets - Math.Abs(totalLiabilities);
+
+    var assetsBreakdown = rows
+        .Where(r => r.LedgerHead == "ASSETS")
+        .GroupBy(r => string.IsNullOrEmpty(r.MainLedger) ? "-" : r.MainLedger)
+        .Select(g => new { Label = g.Key, Value = Math.Abs(g.Sum(x => x.CurrentAmount)) })
+        .Where(x => x.Value != 0)
+        .OrderByDescending(x => x.Value)
+        .Take(10)
+        .ToList();
+
+    var liabilitiesBreakdown = rows
+        .Where(r => r.LedgerHead == "LIABILITIES")
+        .GroupBy(r => string.IsNullOrEmpty(r.MainLedger) ? "-" : r.MainLedger)
+        .Select(g => new { Label = g.Key, Value = Math.Abs(g.Sum(x => x.CurrentAmount)) })
+        .Where(x => x.Value != 0)
+        .OrderByDescending(x => x.Value)
+        .Take(10)
+        .ToList();
+
+    var incomeExpenseGroups = rows
+        .Where(r => r.LedgerHead == "INCOME" || r.LedgerHead == "EXPENSES")
+        .GroupBy(r => string.IsNullOrEmpty(r.LedgerHead) ? "-" : r.LedgerHead)
+        .Select(g => new { Label = g.Key, Value = Math.Abs(g.Sum(x => x.CurrentAmount)) })
+        .OrderByDescending(x => x.Value)
+        .ToList();
+
+    var topMainLedgers = rows
+        .GroupBy(r => string.IsNullOrEmpty(r.MainLedger) ? "-" : r.MainLedger)
+        .Select(g => new { Label = g.Key, Value = g.Sum(x => x.CurrentAmount) })
+        .Where(x => x.Value != 0)
+        .OrderByDescending(x => Math.Abs(x.Value))
+        .Take(10)
+        .ToList();
+
+    // ── JSON for JS ──────────────────────────────────────────────────────
+    var ledgerHeadLabelsJson = JsonConvert.SerializeObject(ledgerHeadGroups.Select(x => x.Label));
+    var ledgerHeadAbsJson = JsonConvert.SerializeObject(ledgerHeadGroups.Select(x => Math.Abs(x.Current)));
+    var ledgerHeadCurrentJson = JsonConvert.SerializeObject(ledgerHeadGroups.Select(x => x.Current));
+    var ledgerHeadPreviousJson = JsonConvert.SerializeObject(ledgerHeadGroups.Select(x => x.Previous));
+
+    var assetsLabelsJson = JsonConvert.SerializeObject(assetsBreakdown.Select(x => x.Label));
+    var assetsValuesJson = JsonConvert.SerializeObject(assetsBreakdown.Select(x => x.Value));
+
+    var liabLabelsJson = JsonConvert.SerializeObject(liabilitiesBreakdown.Select(x => x.Label));
+    var liabValuesJson = JsonConvert.SerializeObject(liabilitiesBreakdown.Select(x => x.Value));
+
+    var incExpLabelsJson = JsonConvert.SerializeObject(incomeExpenseGroups.Select(x => x.Label));
+    var incExpValuesJson = JsonConvert.SerializeObject(incomeExpenseGroups.Select(x => x.Value));
+
+    var topLedgerLabelsJson = JsonConvert.SerializeObject(topMainLedgers.Select(x => x.Label));
+    var topLedgerValuesJson = JsonConvert.SerializeObject(topMainLedgers.Select(x => x.Value));
+
+    string FormatFull(decimal v) => v.ToString("N2");
+    string FormatSigned(decimal v) => v < 0 ? $"({Math.Abs(v):N2})" : v.ToString("N2");
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Balance Sheet – Visual Report</title>
+
+    @* jsreport's chrome-pdf recipe (when configured with waitForJS /
+       renderAsync) waits for this flag to flip to true before taking the
+       PDF snapshot. Without it, chrome-pdf can capture the page before
+       Chart.js has even finished loading/parsing/drawing, leaving blank
+       canvases in the exported PDF even when the library loads fine. *@
+    <script>window.JSREPORT_READY_TO_START = false;</script>
+
+    @if (!string.IsNullOrEmpty(chartJsInline))
+    {
+        <script>@Html.Raw(chartJsInline)</script>
+    }
+    else
+    {
+        <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    }
+    @if (!string.IsNullOrEmpty(dataLabelsInline))
+    {
+        <script>@Html.Raw(dataLabelsInline)</script>
+    }
+    else
+    {
+        <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    }
+    <style>
+        /* ── Reset & base ─────────────────────────────────────────────── */
+        * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        }
+
+        body {
+        font-family: Arial, sans-serif;
+        font-size: 7pt;
+        background: @(isView ? "#d0d0d0" : "#fff");
+        @(isView ? "" : "margin-top: 25px;")
+        }
+
+        /* ── Sub-header ───────────────────────────────────────────────── */
+        .report-subheader {
+        width: 100%;
+        padding: 4px 6px 0 6px;
+        background: #fff;
+        }
+
+        .subheader-title {
+        text-align: center;
+        font-size: 13pt;
+        font-weight: bold;
+        text-decoration: underline;
+        padding: 6px 4px 4px;
+        }
+
+        .subheader-meta {
+        display: flex;
+        justify-content: space-between;
+        font-size: 7.5pt;
+        padding: 2px 4px;
+        }
+
+        .subheader-spacer {
+        height: 5px;
+        }
+
+        /* ── KPI strip ────────────────────────────────────────────────── */
+        .kpi-strip {
+        display: flex;
+        gap: 10px;
+        padding: 10px 12px;
+        background: #fff;
+        border-bottom: 1px solid #e0e0e0;
+        }
+
+        .kpi-card {
+        flex: 1;
+        background: #f4f6fb;
+        border-left: 4px solid #4e73df;
+        padding: 8px 14px;
+        border-radius: 3px;
+        }
+
+        .kpi-card.green {
+        border-color: #1cc88a;
+        }
+
+        .kpi-card.yellow {
+        border-color: #f6c23e;
+        }
+
+        .kpi-card.red {
+        border-color: #e74a3b;
+        }
+
+        .kpi-card.teal {
+        border-color: #36b9cc;
+        }
+
+        .kpi-card.purple {
+        border-color: #6f42c1;
+        }
+
+        .kpi-label {
+        font-size: 6.5pt;
+        color: #888;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        margin-bottom: 2px;
+        }
+
+        .kpi-value {
+        font-size: 14pt;
+        font-weight: bold;
+        color: #333;
+        line-height: 1.1;
+        }
+
+        /* ── Charts grid ──────────────────────────────────────────────── */
+        .charts-section {
+        background: #fff;
+        padding: 14px 12px 10px;
+        }
+
+        .charts-row {
+        display: flex;
+        gap: 14px;
+        margin-bottom: 14px;
+        }
+
+        .chart-card {
+        flex: 1;
+        border: 1px solid #e4e6ef;
+        border-radius: 4px;
+        padding: 10px 12px 8px;
+        background: #fff;
+        min-width: 0;
+        }
+
+        .chart-card-title {
+        font-size: 8pt;
+        font-weight: bold;
+        color: #444;
+        margin-bottom: 6px;
+        padding-bottom: 4px;
+        border-bottom: 2px solid #4e73df;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        }
+
+        .chart-card-title.green {
+        border-color: #1cc88a;
+        }
+
+        .chart-card-title.yellow {
+        border-color: #f6c23e;
+        }
+
+        .chart-card-title.red {
+        border-color: #e74a3b;
+        }
+
+        .chart-card-title.teal {
+        border-color: #36b9cc;
+        }
+
+        .chart-card-title.purple {
+        border-color: #6f42c1;
+        }
+
+        .chart-canvas-wrap {
+        position: relative;
+        width: 100%;
+        height: 220px;
+        }
+
+        .chart-canvas-wrap canvas {
+        display: block;
+        }
+
+        .no-data-msg {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100%;
+        color: #bbb;
+        font-size: 8pt;
+        }
+
+        @@media print {
+        body {
+        margin: 0;
+        background: #fff;
+        }
+        }
+
+        /* ── VIEW chrome (same dimensions as other visual reports) ────── */
+        .view-outer {
+        background: #d0d0d0;
+        padding: 2px 16px 20px 16px;
+        min-height: 100vh;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        cursor: grab;
+        }
+
+        .view-outer:active {
+        cursor: grabbing;
+        }
+
+        .view-page {
+        background: #fff;
+        margin: 0 auto 24px auto;
+        box-shadow: 0 2px 8px rgba(0,0,0,.18);
+        width: 3600px;
+        height: 1587px; /* 420 mm @@ 96 dpi */
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        }
+
+        .view-page-content {
+        flex: 1;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        }
+
+        .view-page-footer {
+        background: #fff;
+        border-top: 1px solid #ccc;
+        text-align: center;
+        font-size: 9pt;
+        font-weight: bold;
+        padding: 6px 0;
+        flex-shrink: 0;
+        }
+
+        .common-header-wrap {
+        width: 3600px;
+        overflow: hidden;
+        flex-shrink: 0;
+        }
+
+        .page-subheader {
+        flex-shrink: 0;
+        }
+
+        .page-kpi {
+        flex-shrink: 0;
+        }
+
+        .page-charts {
+        flex: 1;
+        overflow: hidden;
+        }
+
+        /* Hidden source elements */
+        #sourceWrap {
+        opacity: 0;
+        pointer-events: none;
+        width: 3600px;
+        position: absolute;
+        top: 0;
+        left: 0;
+        }
+
+        #commonHeaderSource {
+        visibility: hidden;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 3600px;
+        pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    @* ── Common header ─────────────────────────────────────────────────── *@
+    <div id="commonHeaderSource">
+        @await Html.PartialAsync("_CommonHeader", Model)
+    </div>
+
+    @* ════════════════════════════════════════════════════════════════════
+       VIEW branch
+    ════════════════════════════════════════════════════════════════════ *@
+    @if (isView)
+    {
+        <div id="sourceWrap">
+
+            <div id="subheaderTemplate" class="report-subheader">
+                <div class="subheader-title">Balance Sheet Report</div>
+                <div class="subheader-meta">
+                    <span><strong>Branch Name :</strong> @branchName</span>
+                    <span><strong>Till Date :</strong> @tillDate</span>
+                </div>
+                <div class="subheader-meta">
+                    <span><strong>Report Generated On :</strong> @generatedOn</span>
+                    <span><strong>Fiscal Year :</strong> @fiscalYear</span>
+                </div>
+                <div class="subheader-spacer"></div>
+            </div>
+
+            <div id="kpiTemplate" class="kpi-strip">
+                <div class="kpi-card">
+                    <div class="kpi-label">Total Debit</div>
+                    <div class="kpi-value">@FormatFull(totalDebit)</div>
+                </div>
+                <div class="kpi-card green">
+                    <div class="kpi-label">Total Credit</div>
+                    <div class="kpi-value">@FormatFull(totalCredit)</div>
+                </div>
+                <div class="kpi-card yellow">
+                    <div class="kpi-label">Total Assets</div>
+                    <div class="kpi-value">@FormatSigned(totalAssets)</div>
+                </div>
+                <div class="kpi-card red">
+                    <div class="kpi-label">Total Liabilities</div>
+                    <div class="kpi-value">@FormatSigned(totalLiabilities)</div>
+                </div>
+                <div class="kpi-card teal">
+                    <div class="kpi-label">Net Position</div>
+                    <div class="kpi-value">@FormatSigned(netPosition)</div>
+                </div>
+                <div class="kpi-card purple">
+                    <div class="kpi-label">Report Type</div>
+                    <div class="kpi-value" style="font-size:11pt;">@reportType</div>
+                </div>
+            </div>
+
+            <div id="chartsTemplate" class="charts-section">
+                <div class="charts-row">
+                    <div class="chart-card">
+                        <div class="chart-card-title">Balance Sheet Composition</div>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="chartLedgerHead"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-card-title green">Assets Breakdown by Main Ledger</div>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="chartAssets"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-card-title red">Liabilities Breakdown by Main Ledger</div>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="chartLiabilities"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="charts-row" style="margin-bottom:0;">
+                    <div class="chart-card">
+                        <div class="chart-card-title teal">
+                            Current @(includePrev ? "vs Previous Year " : "")by Ledger Head
+                        </div>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="chartCurrentVsPrevious"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-card-title yellow">Income vs Expenses</div>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="chartIncomeExpense"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="chart-card-title purple">Top 10 Main Ledgers by Balance</div>
+                        <div class="chart-canvas-wrap">
+                            <canvas id="chartTopLedgers"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>@* end #sourceWrap *@
+
+        <div class="view-outer" id="viewOuter"></div>
+    }
+
+    @* ════════════════════════════════════════════════════════════════════
+       PDF branch (non-VIEW)
+    ════════════════════════════════════════════════════════════════════ *@
+    @if (!isView)
+    {
+        @await Html.PartialAsync("_CommonHeader", Model)
+
+        <div class="report-subheader">
+            <div class="subheader-title">Balance Sheet Report</div>
+            <div class="subheader-meta">
+                <span><strong>Branch Name :</strong> @branchName</span>
+                <span><strong>Till Date :</strong> @tillDate</span>
+            </div>
+            <div class="subheader-meta">
+                <span><strong>Report Generated On :</strong> @generatedOn</span>
+                <span><strong>Fiscal Year :</strong> @fiscalYear</span>
+            </div>
+            <div class="subheader-spacer"></div>
+        </div>
+
+        <div class="kpi-strip">
+            <div class="kpi-card">
+                <div class="kpi-label">Total Debit</div>
+                <div class="kpi-value">@FormatFull(totalDebit)</div>
+            </div>
+            <div class="kpi-card green">
+                <div class="kpi-label">Total Credit</div>
+                <div class="kpi-value">@FormatFull(totalCredit)</div>
+            </div>
+            <div class="kpi-card yellow">
+                <div class="kpi-label">Total Assets</div>
+                <div class="kpi-value">@FormatSigned(totalAssets)</div>
+            </div>
+            <div class="kpi-card red">
+                <div class="kpi-label">Total Liabilities</div>
+                <div class="kpi-value">@FormatSigned(totalLiabilities)</div>
+            </div>
+            <div class="kpi-card teal">
+                <div class="kpi-label">Net Position</div>
+                <div class="kpi-value">@FormatSigned(netPosition)</div>
+            </div>
+            <div class="kpi-card purple">
+                <div class="kpi-label">Report Type</div>
+                <div class="kpi-value" style="font-size:11pt;">@reportType</div>
+            </div>
+        </div>
+
+        <div class="charts-section">
+            <div class="charts-row">
+                <div class="chart-card">
+                    <div class="chart-card-title">Balance Sheet Composition</div>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartLedgerHead"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-card-title green">Assets Breakdown by Main Ledger</div>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartAssets"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-card-title red">Liabilities Breakdown by Main Ledger</div>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartLiabilities"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="charts-row" style="margin-bottom:0;">
+                <div class="chart-card">
+                    <div class="chart-card-title teal">
+                        Current @(includePrev ? "vs Previous Year " : "")by Ledger Head
+                    </div>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartCurrentVsPrevious"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-card-title yellow">Income vs Expenses</div>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartIncomeExpense"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-card-title purple">Top 10 Main Ledgers by Balance</div>
+                    <div class="chart-canvas-wrap">
+                        <canvas id="chartTopLedgers"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    @* ════════════════════════════════════════════════════════════════════
+       Shared chart data + rendering
+    ════════════════════════════════════════════════════════════════════ *@
+    <script>
+        (function () {
+        'use strict';
+
+        // In PDF mode we disable Chart.js animation entirely so charts
+        // paint synchronously within a single frame - no need to wait
+        // out a 600ms animation before jsreport takes its snapshot, and
+        // no risk of capturing a half-animated/blank frame.
+        var IS_PDF = @Json.Serialize(isPdf);
+        var ANIM   = IS_PDF ? false : undefined;
+
+        // ── Data from server ──────────────────────────────────────────
+        var DATA = {
+        ledgerHead: {
+        labels:   @Html.Raw(ledgerHeadLabelsJson),
+        abs:      @Html.Raw(ledgerHeadAbsJson),
+        current:  @Html.Raw(ledgerHeadCurrentJson),
+        previous: @Html.Raw(ledgerHeadPreviousJson)
+        },
+        assets:      { labels: @Html.Raw(assetsLabelsJson),     values: @Html.Raw(assetsValuesJson)     },
+        liabilities: { labels: @Html.Raw(liabLabelsJson),       values: @Html.Raw(liabValuesJson)       },
+        incomeExpense: { labels: @Html.Raw(incExpLabelsJson),   values: @Html.Raw(incExpValuesJson)     },
+        topLedgers:  { labels: @Html.Raw(topLedgerLabelsJson),  values: @Html.Raw(topLedgerValuesJson)  }
+        };
+
+        var PALETTE = [
+        '#4e73df','#1cc88a','#f6c23e','#e74a3b',
+        '#36b9cc','#6f42c1','#fd7e14','#20c997',
+        '#e83e8c','#17a2b8','#ffc107','#6610f2'
+        ];
+
+        function colors(n) {
+        return Array.from({ length: n }, function (_, i) { return PALETTE[i % PALETTE.length]; });
+        }
+
+        function fullNum(v) {
+        return Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        // ── Plugins ───────────────────────────────────────────────────
+        var centerTotalPlugin = {
+        id: 'centerTotal',
+        afterDraw: function (chart) {
+        if (chart.config.type !== 'doughnut') return;
+        var total = chart.data.datasets[0].data.reduce(function (a, b) { return a + b; }, 0);
+        var cx = chart.ctx;
+        var w  = chart.chartArea.left + (chart.chartArea.right  - chart.chartArea.left) / 2;
+        var h  = chart.chartArea.top  + (chart.chartArea.bottom - chart.chartArea.top)  / 2;
+        cx.save();
+        cx.font         = 'bold 11px Arial';
+        cx.fillStyle    = '#444';
+        cx.textAlign    = 'center';
+        cx.textBaseline = 'middle';
+        cx.fillText(fullNum(total), w, h);
+        cx.restore();
+        }
+        };
+
+        // ── Doughnut ────────────────────────────────────────────────────
+        function makeDoughnut(canvasId, data) {
+        var el = document.getElementById(canvasId);
+        if (!el) return;
+        if (!data.values.length) {
+        el.parentElement.innerHTML = '<div class="no-data-msg">No data</div>';
+        return;
+        }
+        var existing = Chart.getChart(el);
+        if (existing) existing.destroy();
+
+        new Chart(el, {
+        type: 'doughnut',
+        data: {
+        labels: data.labels,
+        datasets: [{
+        data: data.values,
+        backgroundColor: colors(data.values.length),
+        borderWidth: 2,
+        hoverOffset: 6
+        }]
+        },
+        options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '58%',
+        animation: ANIM,
+        plugins: {
+        legend: {
+        position: 'bottom',
+        labels: { font: { size: 8 }, usePointStyle: true, padding: 6 }
+        },
+        datalabels: {
+        color: '#fff',
+        font: { weight: 'bold', size: 9 },
+        formatter: function (value, ctx) {
+        var total = ctx.dataset.data.reduce(function (a, b) { return a + b; }, 0);
+        if (!total) return '';
+        var pct = ((value / total) * 100).toFixed(1);
+        return pct + '%';
+        },
+        anchor: 'center',
+        align: 'center'
+        },
+        tooltip: {
+        callbacks: {
+        label: function (ctx) {
+        var total = ctx.dataset.data.reduce(function (a, b) { return a + b; }, 0);
+        var pct   = total ? ((ctx.parsed / total) * 100).toFixed(1) : '0.0';
+        return ' ' + ctx.label + ': ' + fullNum(ctx.parsed) + ' (' + pct + '%)';
+        }
+        }
+        }
+        },
+        plugins: [centerTotalPlugin]
+        });
+        }
+
+        // ── Horizontal bar (single dataset, frequency/value colour gradient) ──
+        function makeHBar(canvasId, data) {
+        var el = document.getElementById(canvasId);
+        if (!el) return;
+        if (!data.values.length) {
+        el.parentElement.innerHTML = '<div class="no-data-msg">No data</div>';
+        return;
+        }
+        var existing = Chart.getChart(el);
+        if (existing) existing.destroy();
+
+        var vals = data.values.map(function (v) { return Math.abs(v); });
+        var minV = Math.min.apply(null, vals);
+        var maxV = Math.max.apply(null, vals);
+        var diff = maxV - minV || 1;
+        var bgColors = data.values.map(function (v) {
+        var ratio = (Math.abs(v) - minV) / diff;
+        var hue = v < 0 ? 0 : Math.round(120 * ratio);
+        return 'hsl(' + hue + ',65%,45%)';
+        });
+
+        new Chart(el, {
+        type: 'bar',
+        data: {
+        labels: data.labels,
+        datasets: [{
+        label: 'Balance',
+        data: data.values,
+        backgroundColor: bgColors,
+        borderColor: bgColors.map(function (c) { return c.replace('45%', '35%'); }),
+        borderWidth: 1,
+        borderRadius: 3
+        }]
+        },
+        options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: ANIM,
+        scales: {
+        x: {
+        ticks: { font: { size: 8 }, callback: function (v) { return fullNum(v); } },
+        title: { display: true, text: 'Amount', font: { size: 8 } }
+        },
+        y: {
+        ticks: { font: { size: 8 } }
+        }
+        },
+        plugins: {
+        legend: { display: false },
+        datalabels: {
+        anchor: 'end',
+        align: 'end',
+        color: '#333',
+        font: { size: 7 },
+        formatter: function (v) { return fullNum(v); }
+        },
+        tooltip: {
+        callbacks: {
+        label: function (ctx) { return ' ' + fullNum(ctx.parsed.x); }
+        }
+        }
+        }
+        }
+        });
+        }
+
+        // ── Grouped vertical bar (Current vs Previous) ─────────────────
+        function makeGroupedBar(canvasId, data, showPrevious) {
+        var el = document.getElementById(canvasId);
+        if (!el) return;
+        if (!data.labels.length) {
+        el.parentElement.innerHTML = '<div class="no-data-msg">No data</div>';
+        return;
+        }
+        var existing = Chart.getChart(el);
+        if (existing) existing.destroy();
+
+        var datasets = [{
+        label: 'Current Year',
+        data: data.current,
+        backgroundColor: '#4e73df',
+        borderRadius: 3,
+        barPercentage: 0.7,
+        categoryPercentage: 0.7
+        }];
+
+        if (showPrevious) {
+        datasets.push({
+        label: 'Previous Year',
+        data: data.previous,
+        backgroundColor: '#c3cdf7',
+        borderRadius: 3,
+        barPercentage: 0.7,
+        categoryPercentage: 0.7
+        });
+        }
+
+        new Chart(el, {
+        type: 'bar',
+        data: { labels: data.labels, datasets: datasets },
+        options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: ANIM,
+        scales: {
+        x: { ticks: { font: { size: 8 } } },
+        y: { ticks: { font: { size: 8 }, callback: function (v) { return fullNum(v); } } }
+        },
+        plugins: {
+        legend: { display: true, position: 'bottom', labels: { font: { size: 8 } } },
+        datalabels: { display: false },
+        tooltip: { callbacks: { label: function (ctx) { return ' ' + ctx.dataset.label + ': ' + fullNum(ctx.parsed.y); } } }
+        }
+        }
+        });
+        }
+
+        // ── Render all charts ──────────────────────────────────────────
+        function renderAllCharts() {
+        if (typeof Chart === 'undefined') return;
+        if (typeof ChartDataLabels !== 'undefined') {
+        Chart.register(ChartDataLabels);
+        }
+
+        makeDoughnut('chartLedgerHead',    { labels: DATA.ledgerHead.labels, values: DATA.ledgerHead.abs });
+        makeDoughnut('chartAssets',        DATA.assets);
+        makeDoughnut('chartLiabilities',   DATA.liabilities);
+        makeGroupedBar('chartCurrentVsPrevious', DATA.ledgerHead, @Json.Serialize(includePrev));
+        makeDoughnut('chartIncomeExpense', DATA.incomeExpense);
+        makeHBar('chartTopLedgers',        DATA.topLedgers);
+        }
+
+        function renderAndSignalReady() {
+        renderAllCharts();
+
+        if (IS_PDF) {
+        // Two nested rAFs: the first fires once the browser has
+        // scheduled the next repaint after chart creation, the second
+        // confirms that repaint has actually been committed to the
+        // compositor. jsreport's chrome-pdf (configured to wait for
+        // window.JSREPORT_READY_TO_START) will hold the snapshot until
+        // this flips true, guaranteeing the canvases are painted first.
+        requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+        window.JSREPORT_READY_TO_START = true;
+        });
+        });
+        }
+        }
+
+        if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', renderAndSignalReady);
+        } else {
+        renderAndSignalReady();
+        }
+
+        window._vReportRenderCharts = renderAllCharts;
+
+        }());
+    </script>
+
+    @* ════════════════════════════════════════════════════════════════════
+       VIEW-only single-page assembly (same architecture as other visual reports)
+    ════════════════════════════════════════════════════════════════════ *@
+    @if (isView)
+    {
+        <script>
+            (function () {
+            'use strict';
+
+            var MAX_RETRIES = 6;
+            var RETRY_DELAY = 100;
+            var retryCount  = 0;
+
+            function buildPages() {
+            var subHdrTpl   = document.getElementById('subheaderTemplate');
+            var kpiTpl      = document.getElementById('kpiTemplate');
+            var chartsTpl   = document.getElementById('chartsTemplate');
+            var commonHdrEl = document.getElementById('commonHeaderSource');
+
+            if (!subHdrTpl || !kpiTpl || !chartsTpl) {
+            if (retryCount++ < MAX_RETRIES)
+            setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+            return;
+            }
+
+            var anyCanvas = chartsTpl.querySelector('canvas');
+            if (anyCanvas && anyCanvas.getBoundingClientRect().height === 0) {
+            if (retryCount++ < MAX_RETRIES)
+            setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+            return;
+            }
+
+            var commonHdrHtml = commonHdrEl ? commonHdrEl.innerHTML : '';
+            var subHdrHtml     = subHdrTpl.outerHTML;
+            var kpiHtml        = kpiTpl.outerHTML;
+            var chartsHtml     = chartsTpl.outerHTML;
+
+            var sourceWrap = document.getElementById('sourceWrap');
+            if (sourceWrap)  sourceWrap.parentNode.removeChild(sourceWrap);
+            if (commonHdrEl) commonHdrEl.parentNode.removeChild(commonHdrEl);
+
+            var viewOuter = document.getElementById('viewOuter');
+
+            var card = document.createElement('div');
+            card.className = 'view-page';
+            card.setAttribute('data-page', '1');
+
+            var contentHtml = '<div class="view-page-content">';
+            if (commonHdrHtml) {
+            contentHtml += '<div class="common-header-wrap">' + commonHdrHtml + '</div>';
+            }
+            contentHtml += '<div class="page-subheader">' + subHdrHtml + '</div>';
+            contentHtml += '<div class="page-kpi">'        + kpiHtml    + '</div>';
+            contentHtml += '<div class="page-charts">'     + chartsHtml + '</div>';
+            contentHtml += '</div>';
+            contentHtml += '<div class="view-page-footer">Page 1 of 1</div>';
+
+            card.innerHTML = contentHtml;
+            viewOuter.appendChild(card);
+
+            setTimeout(function () {
+            if (typeof window._vReportRenderCharts === 'function') {
+            window._vReportRenderCharts();
+            }
+            }, 80);
+
+            (function (el) {
+            var drag = false, sx = 0, ss = 0;
+            el.addEventListener('mousedown', function (e) {
+            if (e.button !== 0) return;
+            drag = true; sx = e.clientX; ss = el.scrollLeft;
+            el.style.userSelect = 'none'; e.preventDefault();
+            });
+            document.addEventListener('mousemove', function (e) {
+            if (drag) el.scrollLeft = ss - (e.clientX - sx);
+            });
+            document.addEventListener('mouseup', function () {
+            drag = false; el.style.userSelect = '';
+            });
+            })(viewOuter);
+
+            if (window.parent && window.parent !== window) {
+            window.parent.postMessage(
+            { type: 'REPORT_PAGES_READY', totalPages: 1 }, '*'
+            );
+            }
+            }
+
+            setTimeout(function () {
+            requestAnimationFrame(function () { requestAnimationFrame(buildPages); });
+            }, 200);
+
+            }());
+        </script>
+    }
+
+</body>
+</html>
