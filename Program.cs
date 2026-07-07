@@ -111,6 +111,7 @@ builder.Services.AddScoped<IMemberBloodGroup, MemberBloodGroupReportRepository>(
 builder.Services.AddScoped<ISoleMemberGroup, SoleMemberGroupRepository>();
 builder.Services.AddScoped<IMemberBasicDetail, MemberBasicDetailsRepository>();
 builder.Services.AddScoped<IBalanceSheet, BalanceSheetRepository>();
+builder.Services.AddScoped<IPLAccount, PLAccountRepository>();
 
 var app = builder.Build();
 
