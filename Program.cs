@@ -10,6 +10,7 @@ using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Member;
 using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
 using NexgenCosysReport.Repository.Account;
+using NexgenCosysReport.Repository.AccountOperation;
 using NexgenCosysReport.Repository.Common;
 using NexgenCosysReport.Repository.Member;
 using NexgenCosysReport.Repository.MemberAccount;
@@ -112,6 +113,8 @@ builder.Services.AddScoped<ISoleMemberGroup, SoleMemberGroupRepository>();
 builder.Services.AddScoped<IMemberBasicDetail, MemberBasicDetailsRepository>();
 builder.Services.AddScoped<IBalanceSheet, BalanceSheetRepository>();
 builder.Services.AddScoped<IPLAccount, PLAccountRepository>();
+builder.Services.AddScoped<ISummaryTrailBalance, SummaryTrialBalanceRepository>();
+builder.Services.AddScoped<ICashFlowDetail, CashFlowDetailsRepository>();
 
 var app = builder.Build();
 

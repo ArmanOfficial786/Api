@@ -1,0 +1,211 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Account;
+@model Dictionary<string, object>
+
+@{
+    Layout = null;
+
+    var rows = (Model["TrialBalanceRows"] as List<SummaryTrialBalanceRowDto>) ?? new List<SummaryTrialBalanceRowDto>();
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "Ledger Name";
+    var withClosingBalance = Model.ContainsKey("WithClosingBalance") && Convert.ToBoolean(Model["WithClosingBalance"]);
+    var reportType = Model["ReportType"]?.ToString() ?? "Detail";
+    var isSubLedger = Model.ContainsKey("IsSubLedger") && Convert.ToBoolean(Model["IsSubLedger"]);
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    string FormatAmount(decimal amount) => amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
+
+    // Group by LedgerHead and MainLedger for totals
+    var groups = rows
+        .GroupBy(r => new { r.LedgerHead, r.MainLedger })
+        .OrderBy(g => g.Key.LedgerHead)
+        .ThenBy(g => g.Key.MainLedger)
+        .ToList();
+
+    decimal grandDebit = rows.Sum(r => r.DebitAmount);
+    decimal grandCredit = rows.Sum(r => r.CreditAmount);
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Summary Trial Balance Report</title>
+    <style>
+            /* Same styles as previous reports */
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table th, .data-table td {
+                    padding: 4px 6px;
+                    border: 1px solid #ddd;
+                }
+
+                .data-table th {
+                    background: #f2f2f2;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 4px 6px;
+            }
+
+            .section-header td {
+                font-weight: bold;
+                background: #e6e6e6;
+                text-align: center;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+            }
+
+            .grand-total td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .indent {
+                padding-left: 20px;
+            }
+
+            @@media print {
+                body {
+                    margin: 0;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="SummaryTrialBalance">
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="5">Summary Trial Balance Report</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="3"><strong>Branch Name :</strong> @branchName</td>
+                    <td colspan="2" class="text-right"><strong>From Date :</strong> @fromDate</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="2" class="text-right"><strong>To Date :</strong> @toDate</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="5"></td></tr>
+
+                <tr>
+                    <th style="width:15%;">Ledger Head</th>
+                    <th style="width:35%;">Sub Ledger</th>
+                    <th style="width:16%;" class="text-right">Debit</th>
+                    <th style="width:17%;" class="text-right">Credit</th>
+                    <th style="width:17%;" class="text-right">Balance</th>
+                </tr>
+
+                @if (reportType == "Detail")
+                {
+                    // Show each row with possible grouping
+                    foreach (var group in groups)
+                    {
+                        // Show group header (LedgerHead and MainLedger)
+                        <tr class="section-header">
+                            <td colspan="5">@group.Key.LedgerHead - @group.Key.MainLedger</td>
+                        </tr>
+                        // Show rows for this group
+                        foreach (var row in group)
+                        {
+                            <tr>
+                                <td></td>
+                                <td>@row.SubLedger</td>
+                                <td class="text-right">@FormatAmount(row.DebitAmount)</td>
+                                <td class="text-right">@FormatAmount(row.CreditAmount)</td>
+                                <td class="text-right">@FormatAmount(row.Balance)</td>
+                            </tr>
+                        }
+                        // Show subtotal for this group
+                        <tr class="grand-total">
+                            <td colspan="2" class="text-right">Total @group.Key.MainLedger</td>
+                            <td class="text-right">@FormatAmount(group.Sum(r => r.DebitAmount))</td>
+                            <td class="text-right">@FormatAmount(group.Sum(r => r.CreditAmount))</td>
+                            <td class="text-right">@FormatAmount(group.Sum(r => r.Balance))</td>
+                        </tr>
+                    }
+                }
+                else // Summary mode – no grouping, just flat list
+                {
+                    foreach (var row in rows)
+                    {
+                        <tr>
+                            <td>@row.LedgerHead</td>
+                            <td>@row.SubLedger</td>
+                            <td class="text-right">@FormatAmount(row.DebitAmount)</td>
+                            <td class="text-right">@FormatAmount(row.CreditAmount)</td>
+                            <td class="text-right">@FormatAmount(row.Balance)</td>
+                        </tr>
+                    }
+                }
+
+                <tr class="grand-total">
+                    <td colspan="2" class="text-right">Grand Total</td>
+                    <td class="text-right">@FormatAmount(grandDebit)</td>
+                    <td class="text-right">@FormatAmount(grandCredit)</td>
+                    <td></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
