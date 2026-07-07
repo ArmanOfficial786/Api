@@ -8,6 +8,7 @@ using NexgenCosysReport.Inteface.ServiceInterface.Account;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
+using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Account
 {
@@ -19,6 +20,7 @@ namespace NexgenCosysReport.Controllers.Account
         private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
+        private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
         private readonly ILogger<PLAccountController> _logger;
 
@@ -28,7 +30,8 @@ namespace NexgenCosysReport.Controllers.Account
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             IOptions<ReportSettings> reportSettings,
-            ILogger<PLAccountController> logger)
+            ILogger<PLAccountController> logger,
+            CustomHeaderResponse headerResponse)
         {
             _plAccountService = plAccountService;
             _commonHeaderRepository = commonHeaderRepository;
@@ -36,6 +39,7 @@ namespace NexgenCosysReport.Controllers.Account
             _webHostEnvironment = webHostEnvironment;
             _reportSettings = reportSettings;
             _logger = logger;
+            _headerResponse = headerResponse;
         }
 
         [HttpPost("GenerateReport")]
@@ -130,27 +134,26 @@ namespace NexgenCosysReport.Controllers.Account
 
                 if (upperFormat == "VIEW")
                 {
-                    var pdfBytes = await Task.Run(() =>
-                        _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey));
+
+                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
+                                  htmlContent, "PDF", reportKey);
                     var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    response.isValid = true;
-                    response.statusCode = 200;
-                    response.message = "Report generated successfully";
-                    response.data = new ReportResponseDtos
+                    var pagination = new Pagination
                     {
-                        pdfData = Convert.ToBase64String(pdfBytes),
-                        reportName = reportName,
-                        pagination = new Pagination
-                        {
-                            currentPage = 1,
-                            totalPages = totalPages,
-                            totalRecord = (data is PLAccountHorizontalData h) ? h.IncomeRows.Count + h.ExpenseRows.Count : (data as PLAccountVerticalData)?.Rows.Count ?? 0,
-                            pageSize = 1,
-                            hasNextPage = totalPages > 1,
-                            hasPreviousPage = false
-                        }
+                        currentPage = 1,
+                        totalPages = totalPages,
+                        pageSize = 1,
+                        hasNextPage = totalPages > 1,
+                        hasPreviousPage = false
                     };
-                    return Ok(response);
+                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
+                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
+
+                    Response.Headers.Append(
+                        "Content-Disposition",
+                        "inline; filename=\"MemberIdCardReport.pdf\"");
+
+                    return new FileContentResult(pdfBytes, "application/pdf");
                 }
 
                 return await ReportExportHelper.ExportFromCacheAsync(
