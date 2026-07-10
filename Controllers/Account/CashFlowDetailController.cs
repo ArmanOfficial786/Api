@@ -41,9 +41,9 @@ namespace NexgenCosysReport.Controllers.Account
             _reportSettings = reportSettings;
             _logger = logger;
         }
-
-        [HttpPost("GenerateReport")]
-        public async Task<IActionResult> GenerateReport(
+        //need imporve the reposiotry
+        [HttpPost()]
+        public async Task<ActionResult> GenerateReport(
             [FromBody] CashFlowDetailsRequest request,
             [FromQuery] string format = "VIEW")
         {
@@ -51,6 +51,8 @@ namespace NexgenCosysReport.Controllers.Account
             {
                 var reportName = "CashFlowDetails";
                 var upperFormat = format.ToUpper();
+                if (request == null || !ModelState.IsValid)
+                    return BadRequest(new { success = false, status = 400, message = "Invalid request" });
                 var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
@@ -80,7 +82,7 @@ namespace NexgenCosysReport.Controllers.Account
 
                 if (!data.OperatingRows.Any() && !data.InvestingRows.Any() && !data.FinancingRows.Any())
                 {
-                    return NotFound(new { success = false, message = "No data found" });
+                    return NotFound(new { success = false, status = 400, message = "No data found" });
                 }
 
                 var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);

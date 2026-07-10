@@ -1,0 +1,158 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Account;
+@model Dictionary<string, object>
+
+@{
+    Layout = null;
+    var data = Model["CostOfFundData"] as CostOfFundData;
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    string FormatAmount(decimal amount) =>
+        amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
+    string FormatPercent(decimal value) => value.ToString("F2") + "%";
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Cost of Fund Analysis Report</title>
+    <style>
+            * { margin:0; padding:0; box-sizing:border-box; }
+            body { margin:0; padding:0; font-family:Arial, sans-serif; font-size:9pt; background:white; }
+            .report-container { width:100%; overflow:visible; }
+            .data-table { width:100%; border-collapse:collapse; font-size:9pt; table-layout:fixed; }
+            .data-table td, .data-table th { padding:4px 6px; border:1px solid #ddd; }
+            .data-table th { border-top:2px solid #000; border-bottom:1px solid #000; background:#f2f2f2; }
+            .section-title { background:#e6e6e6; font-weight:bold; text-align:center; }
+            .grand-total { border-top:2px solid #000; border-bottom:2px solid #000; font-weight:bold; background:#f9f9f9; }
+            .text-right { text-align:right !important; }
+            .text-center { text-align:center !important; }
+            .summary-row td { border-top:2px solid #000; border-bottom:2px solid #000; font-weight:bold; }
+            .main-ledger-row td { font-weight:bold; background:#f0f0f0; }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <tbody>
+                <tr><td colspan="6" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">Cost of Fund Analysis Report</td></tr>
+                <tr><td colspan="6"><strong>Branch:</strong> @branchName &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Till Date:</strong> @tillDate &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Report Generated On:</strong> @generatedOn</td></tr>
+                <tr><td colspan="6">&nbsp;</td></tr>
+
+                @* Deposit / Saving Table *@
+                <tr class="section-title"><td colspan="6">Deposit / Saving Accounts</td></tr>
+                <tr>
+                    <th style="width:30%;">Type Name</th>
+                    <th style="width:15%;" class="text-right">No. of Accounts</th>
+                    <th style="width:20%;" class="text-right">Balance (Rs)</th>
+                    <th style="width:17%;" class="text-right">Average Interest Rate</th>
+                    <th style="width:18%;" class="text-right">WACC (%)</th>
+                    <th></th>
+                </tr>
+                @if (data.DepositRows.Any())
+                {
+                    decimal totalBalance = data.DepositRows.Sum(r => r.TotalAmount);
+                    foreach (var row in data.DepositRows)
+                    {
+                        <tr>
+                            <td>@row.TypeName</td>
+                            <td class="text-right">@row.NoOfAccount</td>
+                            <td class="text-right">@FormatAmount(row.TotalAmount)</td>
+                            <td class="text-right">@FormatPercent(row.AverageInterestRate)</td>
+                            <td class="text-right">@FormatPercent(row.WACC)</td>
+                            <td></td>
+                        </tr>
+                    }
+                    <tr class="grand-total">
+                        <td><strong>Total</strong></td>
+                        <td class="text-right"><strong>@data.DepositRows.Sum(r => r.NoOfAccount)</strong></td>
+                        <td class="text-right"><strong>@FormatAmount(totalBalance)</strong></td>
+                        <td colspan="3"></td>
+                    </tr>
+                    <tr>
+                        <td colspan="5" class="text-right"><strong>Cost of Deposit (Interest Expense / Average Balance) * 100</strong></td>
+                        <td class="text-right"><strong>@FormatPercent(data.CostOfDeposit)</strong></td>
+                    </tr>
+                    <tr>
+                        <td colspan="5" class="text-right"><strong>Cost of Deposit Interest</strong></td>
+                        <td class="text-right"><strong>@FormatAmount(data.CostOfDepositInterest)</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="6" class="text-center">No deposit data found</td></tr>
+                }
+
+                <tr><td colspan="6">&nbsp;</td></tr>
+
+                @* Loan Table *@
+                <tr class="section-title"><td colspan="6">Loan Accounts</td></tr>
+                <tr>
+                    <th style="width:30%;">Type Name</th>
+                    <th style="width:15%;" class="text-right">No. of Accounts</th>
+                    <th style="width:20%;" class="text-right">Balance (Rs)</th>
+                    <th style="width:17%;" class="text-right">Average Interest Rate</th>
+                    <th style="width:18%;" class="text-right">WACC (%)</th>
+                    <th></th>
+                </tr>
+                @if (data.LoanRows.Any())
+                {
+                    decimal totalLoanBalance = data.LoanRows.Sum(r => r.TotalAmount);
+                    foreach (var row in data.LoanRows)
+                    {
+                        <tr>
+                            <td>@row.TypeName</td>
+                            <td class="text-right">@row.NoOfAccount</td>
+                            <td class="text-right">@FormatAmount(row.TotalAmount)</td>
+                            <td class="text-right">@FormatPercent(row.AverageInterestRate)</td>
+                            <td class="text-right">@FormatPercent(row.WACC)</td>
+                            <td></td>
+                        </tr>
+                    }
+                    <tr class="grand-total">
+                        <td><strong>Total</strong></td>
+                        <td class="text-right"><strong>@data.LoanRows.Sum(r => r.NoOfAccount)</strong></td>
+                        <td class="text-right"><strong>@FormatAmount(totalLoanBalance)</strong></td>
+                        <td colspan="3"></td>
+                    </tr>
+                    <tr>
+                        <td colspan="5" class="text-right"><strong>Cost of Loan (Interest Expense / Average Balance) * 100</strong></td>
+                        <td class="text-right"><strong>@FormatPercent(data.CostOfLoan)</strong></td>
+                    </tr>
+                    <tr>
+                        <td colspan="5" class="text-right"><strong>Cost of Loan Interest</strong></td>
+                        <td class="text-right"><strong>@FormatAmount(data.CostOfLoanInterest)</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="6" class="text-center">No loan data found</td></tr>
+                }
+
+                <tr><td colspan="6">&nbsp;</td></tr>
+                <tr class="section-title"><td colspan="6">Additional Ratios</td></tr>
+                <tr>
+                    <td colspan="5" class="text-right"><strong>CRR (Cash Reserve Ratio)</strong></td>
+                    <td class="text-right">@FormatPercent(data.CRR)</td>
+                </tr>
+                <tr>
+                    <td colspan="5" class="text-right"><strong>SLR (Statutory Liquidity Ratio)</strong></td>
+                    <td class="text-right">@FormatPercent(data.SLR)</td>
+                </tr>
+                <tr>
+                    <td colspan="5" class="text-right"><strong>CDR (Credit Deposit Ratio)</strong></td>
+                    <td class="text-right">@FormatPercent(data.CDR)</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

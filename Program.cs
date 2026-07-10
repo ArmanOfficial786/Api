@@ -115,6 +115,11 @@ builder.Services.AddScoped<IBalanceSheet, BalanceSheetRepository>();
 builder.Services.AddScoped<IPLAccount, PLAccountRepository>();
 builder.Services.AddScoped<ISummaryTrailBalance, SummaryTrialBalanceRepository>();
 builder.Services.AddScoped<ICashFlowDetail, CashFlowDetailsRepository>();
+builder.Services.AddScoped<ICostofFund, CostOfFundRepository>();
+builder.Services.AddScoped<ICashFlow, CashFlowRepository>();
+builder.Services.AddScoped<IDetailTrailBalance, DetailTrialBalanceRepository>();
+builder.Services.AddScoped<IMonthlyReport, MonthlyReportRepository>();
+builder.Services.AddScoped<IRatioAnalysis, RatioAnalysisRepository>();
 
 var app = builder.Build();
 

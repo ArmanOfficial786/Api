@@ -1,0 +1,125 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Account
+
+@model Dictionary<string, object>
+
+@{
+    Layout = null;
+    var data = Model["RatioData"] as RatioAnalysisData;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "";
+    var isTotalOnly = Model["IsTotalOnly"] as bool? ?? false;
+    var provisionType = Model["ProvisionType"]?.ToString() ?? "";
+    var enable1to30 = Model["Enable1to30Days"] as bool? ?? false;
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    string FormatAmount(decimal amount) =>
+        amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
+
+    var grouped = data.Rows.GroupBy(r => r.Category ?? "Other").OrderBy(g => g.Key);
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Ratio Analysis Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    border: 1px solid #ddd;
+                }
+
+                .data-table th {
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    background: #f2f2f2;
+                }
+
+            .section-title {
+                background: #e6e6e6;
+                font-weight: bold;
+                text-align: center;
+            }
+
+            .grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <thead>
+                <tr><th colspan="3" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">Ratio Analysis Report</th></tr>
+                <tr><td colspan="3"><strong>Branch:</strong> @branchName &nbsp;&nbsp;|&nbsp;&nbsp; <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp; <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Generated:</strong> @generatedOn &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Provision:</strong> @provisionType &nbsp;&nbsp;|&nbsp;&nbsp; <strong>1-30 Days:</strong> @(enable1to30 ? "Yes" : "No")</td></tr>
+                <tr>
+                    <th style="width:5%;">SN</th>
+                    <th style="width:70%;">Ratio Name</th>
+                    <th style="width:25%;" class="text-right">Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                @{
+                    int sn = 0;
+                    foreach (var group in grouped)
+                    {
+                        <tr class="section-title"><td colspan="3">@group.Key</td></tr>
+                        foreach (var row in group)
+                        {
+                            sn++;
+                            <tr>
+                                <td class="text-center">@sn</td>
+                                <td>@row.RatioName</td>
+                                <td class="text-right">@FormatAmount(row.Value)</td>
+                            </tr>
+                        }
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

@@ -43,7 +43,7 @@ namespace NexgenCosysReport.Controllers.Account
         }
 
         [HttpPost()]
-        public async Task<IActionResult> GenerateReport(
+        public async Task<ActionResult> GenerateReport(
             [FromBody] SummaryTrialBalanceRequest request,
             [FromQuery] string format = "VIEW")
         {
@@ -51,15 +51,10 @@ namespace NexgenCosysReport.Controllers.Account
             {
                 var reportName = "SummaryTrialBalance";
                 var upperFormat = format.ToUpper();
-                var response = new GeneralResponse<ReportResponseDtos>();
 
-                if (request == null || string.IsNullOrEmpty(request.FromDate) || string.IsNullOrEmpty(request.ToDate))
-                {
-                    response.isValid = false;
-                    response.statusCode = 400;
-                    response.message = "FromDate and ToDate are required.";
-                    return BadRequest(response);
-                }
+
+                if (request == null || !ModelState.IsValid)
+                    return BadRequest(new { success = false, status = 400, message = "Invalid request" });
 
                 var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 
@@ -88,13 +83,8 @@ namespace NexgenCosysReport.Controllers.Account
                 var data = await dataTask;
                 var headerData = await headerTask;
 
-                if (!data.Any())
-                {
-                    response.isValid = false;
-                    response.statusCode = 404;
-                    response.message = "No data found.";
-                    return NotFound(response);
-                }
+                if (data == null)
+                    return NotFound(new { success = false, status = 400, message = "No data found." });
 
                 var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
 

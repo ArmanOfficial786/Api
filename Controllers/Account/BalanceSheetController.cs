@@ -9,7 +9,6 @@ using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace NexgenCosysReport.Controllers.Account
 {
@@ -43,8 +42,8 @@ namespace NexgenCosysReport.Controllers.Account
             _headerResponse = headerResponse;
         }
 
-        [HttpPost("GenerateReport")]
-        public async Task<ActionResult<GeneralResponse<ReportResponseDtos>>> GenerateReport(
+        [HttpPost()]
+        public async Task<ActionResult> GenerateReport(
             [FromBody] BalanceSheetRequest request,
             [FromQuery] string format = "VIEW")
         {
@@ -52,20 +51,12 @@ namespace NexgenCosysReport.Controllers.Account
             {
                 var reportName = "BalanceSheet";
                 var upperFormat = format.ToUpper();
-                var response = new GeneralResponse<ReportResponseDtos>();
+
 
                 if (request == null || !ModelState.IsValid)
                     return BadRequest(new { success = false, message = "Invalid request" });
 
-                // The stored procedures do a literal "IN (@branchId)" with no
-                // "-1 = all offices" handling, so a real office id list is required.
-                if (string.IsNullOrWhiteSpace(request.BranchIds) || !Regex.IsMatch(request.BranchIds, @"^\d+(,\d+)*$"))
-                {
-                    response.isValid = false;
-                    response.statusCode = 400;
-                    response.message = "BranchIds is required and must be a comma-separated list of office ids (e.g. \"1,2,3\"). \"-1\"/\"all\" is not supported.";
-                    return BadRequest(response);
-                }
+
 
                 var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 

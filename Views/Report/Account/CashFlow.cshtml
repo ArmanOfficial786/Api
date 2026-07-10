@@ -1,0 +1,175 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Account;
+@model Dictionary<string, object>
+
+@{
+    Layout = null;
+    var data = Model["CashFlowData"] as CashFlowData;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    string FormatAmount(decimal amount) =>
+        amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
+
+    int sn = 0;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Cash Day Book Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    border: 1px solid #ddd;
+                }
+
+                .data-table th {
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    background: #f2f2f2;
+                }
+
+            .section-title {
+                background: #e6e6e6;
+                font-weight: bold;
+                text-align: center;
+            }
+
+            .grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .summary-label {
+                font-weight: bold;
+                background: #f0f0f0;
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <thead>
+                <tr><th colspan="5" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">Cash Day Book Report</th></tr>
+                <tr><td colspan="5"><strong>Branch:</strong> @branchName &nbsp;&nbsp;|&nbsp;&nbsp; <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp; <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Generated:</strong> @generatedOn</td></tr>
+                <tr><th style="width:5%;">S.N.</th><th style="width:15%;">Voucher Date</th><th style="width:15%;">Voucher No</th><th style="width:45%;">Narration</th><th style="width:20%;" class="text-right">Amount</th></tr>
+            </thead>
+            <tbody>
+                @* ── Inflows ── *@
+                <tr class="section-title"><td colspan="5">Cash Inflows</td></tr>
+                @if (data.InflowRows.Any())
+                {
+                    sn = 0;
+                    foreach (var row in data.InflowRows)
+                    {
+                        sn++;
+                        <tr>
+                            <td class="text-center">@sn</td>
+                            <td>@(row.VoucherDate ?? "-")</td>
+                            <td>@row.VoucherNo</td>
+                            <td>@row.Narration</td>
+                            <td class="text-right">@FormatAmount(row.Amount)</td>
+                        </tr>
+                    }
+                    <tr class="grand-total"><td colspan="4" class="text-right"><strong>Total Inflow</strong></td><td class="text-right"><strong>@FormatAmount(data.TotalInflow)</strong></td></tr>
+                }
+                else
+                {
+                    <tr><td colspan="5" class="text-center">No cash inflows found</td></tr>
+                }
+
+                @* ── Outflows ── *@
+                <tr class="section-title"><td colspan="5">Cash Outflows</td></tr>
+                @if (data.OutflowRows.Any())
+                {
+                    sn = 0;
+                    foreach (var row in data.OutflowRows)
+                    {
+                        sn++;
+                        <tr>
+                            <td class="text-center">@sn</td>
+                            <td>@(row.VoucherDate ?? "-")</td>
+                            <td>@row.VoucherNo</td>
+                            <td>@row.Narration</td>
+                            <td class="text-right">@FormatAmount(row.Amount)</td>
+                        </tr>
+                    }
+                    <tr class="grand-total"><td colspan="4" class="text-right"><strong>Total Outflow</strong></td><td class="text-right"><strong>@FormatAmount(data.TotalOutflow)</strong></td></tr>
+                }
+                else
+                {
+                    <tr><td colspan="5" class="text-center">No cash outflows found</td></tr>
+                }
+
+                @* ── Summary ── *@
+                <tr><td colspan="5" style="height:10px;"></td></tr>
+                <tr class="section-title"><td colspan="5">Summary</td></tr>
+                <tr>
+                    <td colspan="4" class="summary-label">Opening Cash Balance</td>
+                    <td class="text-right">@FormatAmount(data.OpeningCashBalance)</td>
+                </tr>
+                <tr>
+                    <td colspan="4" class="summary-label">Total Inflow</td>
+                    <td class="text-right">@FormatAmount(data.TotalInflow)</td>
+                </tr>
+                <tr>
+                    <td colspan="4" class="summary-label">Total Outflow</td>
+                    <td class="text-right">@FormatAmount(data.TotalOutflow)</td>
+                </tr>
+                <tr class="grand-total">
+                    <td colspan="4" class="text-right"><strong>Net Cash Flow</strong></td>
+                    <td class="text-right"><strong>@FormatAmount(data.NetCashFlow)</strong></td>
+                </tr>
+                <tr class="grand-total">
+                    <td colspan="4" class="text-right"><strong>Closing Cash Balance</strong></td>
+                    <td class="text-right"><strong>@FormatAmount(data.ClosingCashBalance)</strong></td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

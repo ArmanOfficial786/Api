@@ -1,0 +1,251 @@
+﻿@* File: Views/Report/Account/MonthlyReport.cshtml *@
+@using NexgenCosysReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.RequestDtos.Account;
+@model Dictionary<string, object>
+
+@{
+    Layout = null;
+    var data = Model["MonthlyData"] as MonthlyReportData;
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "";
+    var reportType = Model["ReportType"] as int? ?? 1;
+    var isMonthWise = Model["IsMonthWise"] as bool? ?? false;
+    var isNepali = Model["IsNepali"] as bool? ?? false;
+    var showBudget = Model["ShowBudget"] as bool? ?? false;
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    string FormatAmount(decimal amount) =>
+        amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
+
+    string SectionTitle(string title) => isNepali ? title switch
+    {
+        "Assets" => "सम्पत्ति",
+        "Liabilities" => "दायित्व",
+        "Income" => "आय",
+        "Expenses" => "खर्च",
+        _ => title
+    } : title;
+
+    int sn = 0;
+
+    // Local function (NOT a Func<> lambda) — this is the supported ASP.NET Core
+    // Razor pattern for mixing C# logic with raw <tr>/<td> markup, equivalent to
+    // the old MVC @helper syntax. It writes directly to the page output, so it's
+    // called as a plain statement (no return value, no "await").
+    void RenderSection(List<MonthlyReportRowDto> rows, string sectionName)
+    {
+        <tr class="section-title"><td colspan="@(showBudget ? 6 : 5)">@SectionTitle(sectionName)</td></tr>
+        if (rows != null && rows.Any())
+        {
+            sn = 0;
+            var groups = rows.GroupBy(r => r.MainLedger ?? "Other").OrderBy(g => g.Key);
+            foreach (var group in groups)
+            {
+                decimal groupCurrent = group.Sum(r => r.CurrentAmount);
+                decimal groupPrevious = group.Sum(r => r.PreviousAmount);
+                decimal groupBudget = group.Sum(r => r.BudgetAmount);
+                <tr>
+                    <td></td>
+                    <td><strong>@group.Key</strong></td>
+                    <td></td>
+                    <td class="text-right">@FormatAmount(groupCurrent)</td>
+                    <td class="text-right">@FormatAmount(groupPrevious)</td>
+                    @if (showBudget)
+                    {
+                        <td class="text-right">@FormatAmount(groupBudget)</td>
+                    }
+                </tr>
+                foreach (var row in group.OrderBy(r => r.SubLedger))
+                {
+                    sn++;
+                    <tr>
+                        <td class="text-center">@sn</td>
+                        <td class="sub-ledger">@row.SubLedger</td>
+                        <td class="detail">@row.SubLedger1</td>
+                        <td class="text-right">@FormatAmount(row.CurrentAmount)</td>
+                        <td class="text-right">@FormatAmount(row.PreviousAmount)</td>
+                        @if (showBudget)
+                        {
+                            <td class="text-right">@FormatAmount(row.BudgetAmount)</td>
+                        }
+                    </tr>
+                }
+            }
+        }
+        else
+        {
+            <tr><td colspan="@(showBudget ? 6 : 5)" class="text-center">No data</td></tr>
+        }
+    }
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Monthly Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    border: 1px solid #ddd;
+                }
+
+                .data-table th {
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    background: #f2f2f2;
+                }
+
+            .section-title {
+                background: #e6e6e6;
+                font-weight: bold;
+                text-align: center;
+            }
+
+            .grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .summary-label {
+                font-weight: bold;
+                background: #f0f0f0;
+            }
+
+            .sub-ledger {
+                padding-left: 20px;
+            }
+
+            .detail {
+                padding-left: 40px;
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <thead>
+                <tr><th colspan="@(showBudget ? 6 : 5)" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">Monthly Report</th></tr>
+                <tr><td colspan="@(showBudget ? 6 : 5)"><strong>Branch:</strong> @branchName &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Till Date:</strong> @tillDate &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Generated:</strong> @generatedOn &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Report Type:</strong> @(reportType == 1 ? "Summary" : reportType == 2 ? "SubLedger" : "Detail")</td></tr>
+                <tr>
+                    <th style="width:5%;">SN</th>
+                    <th style="width:25%;">Ledger</th>
+                    <th style="width:20%;">Sub Ledger</th>
+                    <th style="width:15%;" class="text-right">Current</th>
+                    <th style="width:15%;" class="text-right">Previous</th>
+                    @if (showBudget)
+                    {
+                        <th style="width:15%;" class="text-right">Budget</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @{
+                    RenderSection(data.AssetsRows, "Assets");
+                    RenderSection(data.LiabilitiesRows, "Liabilities");
+                    RenderSection(data.IncomeRows, "Income");
+                    RenderSection(data.ExpensesRows, "Expenses");
+                }
+
+                @* Totals *@
+                <tr class="section-title"><td colspan="@(showBudget ? 6 : 5)">Totals</td></tr>
+                <tr>
+                    <td colspan="3" class="summary-label">Total Assets</td>
+                    <td class="text-right">@FormatAmount(data.TotalAssets)</td>
+                    <td></td>
+                    @if (showBudget)
+                    {
+                        <td></td>
+                    }
+                </tr>
+                <tr>
+                    <td colspan="3" class="summary-label">Total Liabilities</td>
+                    <td class="text-right">@FormatAmount(data.TotalLiabilities)</td>
+                    <td></td>
+                    @if (showBudget)
+                    {
+                        <td></td>
+                    }
+                </tr>
+                <tr>
+                    <td colspan="3" class="summary-label">Net Assets (Assets - Liabilities)</td>
+                    <td class="text-right">@FormatAmount(data.TotalAssets - data.TotalLiabilities)</td>
+                    <td></td>
+                    @if (showBudget)
+                    {
+                        <td></td>
+                    }
+                </tr>
+                <tr>
+                    <td colspan="3" class="summary-label">Total Income</td>
+                    <td class="text-right">@FormatAmount(data.TotalIncome)</td>
+                    <td></td>
+                    @if (showBudget)
+                    {
+                        <td></td>
+                    }
+                </tr>
+                <tr>
+                    <td colspan="3" class="summary-label">Total Expenses</td>
+                    <td class="text-right">@FormatAmount(data.TotalExpenses)</td>
+                    <td></td>
+                    @if (showBudget)
+                    {
+                        <td></td>
+                    }
+                </tr>
+                <tr class="grand-total">
+                    <td colspan="3"><strong>Net Profit (Income - Expenses)</strong></td>
+                    <td class="text-right"><strong>@FormatAmount(data.TotalIncome - data.TotalExpenses)</strong></td>
+                    <td></td>
+                    @if (showBudget)
+                    {
+                        <td></td>
+                    }
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
