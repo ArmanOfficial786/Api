@@ -120,6 +120,8 @@ builder.Services.AddScoped<ICashFlow, CashFlowRepository>();
 builder.Services.AddScoped<IDetailTrailBalance, DetailTrialBalanceRepository>();
 builder.Services.AddScoped<IMonthlyReport, MonthlyReportRepository>();
 builder.Services.AddScoped<IRatioAnalysis, RatioAnalysisRepository>();
+builder.Services.AddScoped<IOfficeProgress, OfficeProgressRepository>();
+builder.Services.AddScoped<IThresholdTransaction, ThresholdTransactionRepository>();
 
 var app = builder.Build();
 
