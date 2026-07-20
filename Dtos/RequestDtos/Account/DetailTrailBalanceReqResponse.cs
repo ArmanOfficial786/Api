@@ -4,7 +4,7 @@
     {
         public string FromDate { get; set; } = string.Empty;   // Nepali "yyyy/MM/dd"
         public string ToDate { get; set; } = string.Empty;
-        public string? BranchIds { get; set; }                 // comma‑separated, e.g. "2,5"
+        public string? BranchId { get; set; }                 // comma‑separated, e.g. "2,5"
         public string BranchName { get; set; } = "All";
         public string OrderBy { get; set; } = "Sub Ledger";    // Sub Ledger, Debit Amount, Credit Amount, Balance
         public bool SameCompanyName { get; set; } = true;

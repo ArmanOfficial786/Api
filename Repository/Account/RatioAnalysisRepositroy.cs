@@ -297,7 +297,7 @@ namespace NexgenCosysReport.Repository.Account
             // string will actually throw a conversion error when inserted
             // into the @tblBranchIds INT column. Only pass through what the
             // caller actually selected.
-            string branchFilter = request.BranchIds ?? string.Empty;
+            string branchFilter = request.BranchId ?? string.Empty;
 
             _logger.LogInformation(
                 "RatioAnalysis query: FromDate(AD)={FromDate}, ToDate(AD)={ToDate}, BranchIds={BranchIds}, IsLoanMaturity1to30={Enable1to30}, ProvisionType={ProvisionType}",

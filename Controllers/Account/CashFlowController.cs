@@ -67,10 +67,10 @@ namespace NexgenCosysReport.Controllers.Account
                 // Fetch data
                 var dataTask = _cashFlowService.GetCashFlow(request);
                 string? branchIdForHeader = null;
-                if (!request.SameCompanyName && !string.IsNullOrEmpty(request.BranchIds) &&
-                    request.BranchIds != "-1" && !request.BranchIds.Contains(','))
+                if (!request.SameCompanyName && !string.IsNullOrEmpty(request.BranchId) &&
+                    request.BranchId != "-1" && !request.BranchId.Contains(','))
                 {
-                    branchIdForHeader = request.BranchIds;
+                    branchIdForHeader = request.BranchId;
                 }
                 var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
 

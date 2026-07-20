@@ -3,10 +3,10 @@
     public class MonthlyReportRequest
     {
         public string TillDate { get; set; } = string.Empty;  // Nepali "yyyy/MM/dd"
-        public string? BranchIds { get; set; }
+        public string? BranchId { get; set; }
         public string BranchName { get; set; } = "All";
         public int AccountTypeId { get; set; } = -1;          // -1 = All
-        public int ReportType { get; set; } = 1;              // 1=Summary, 2=SubLedger, 3=Detail
+        public string ReportType { get; set; } = "Summary";              // 1=Summary, 2=SubLedger, 3=Detail
         public bool IsMonthWise { get; set; } = false;
         public bool IsNepali { get; set; } = false;
         public bool ShowBudget { get; set; } = false;

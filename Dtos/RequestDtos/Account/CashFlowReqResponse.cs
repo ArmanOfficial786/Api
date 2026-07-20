@@ -4,7 +4,7 @@
     {
         public string FromDate { get; set; } = string.Empty;
         public string ToDate { get; set; } = string.Empty;
-        public string? BranchIds { get; set; }
+        public string? BranchId { get; set; }
         public string BranchName { get; set; } = "All";
         public string OrderBy { get; set; } = "Voucher Date";
         public bool SameCompanyName { get; set; } = true;

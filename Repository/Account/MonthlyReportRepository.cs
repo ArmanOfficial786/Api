@@ -200,9 +200,9 @@ namespace NexgenCosysReport.Repository.Account
             // it to the actual comma-separated list of active office IDs
             // instead of passing through an empty string.
             string branchFilter;
-            if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
+            if (!string.IsNullOrEmpty(request.BranchId) && request.BranchId != "-1")
             {
-                branchFilter = request.BranchIds;
+                branchFilter = request.BranchId;
             }
             else
             {
@@ -220,8 +220,8 @@ namespace NexgenCosysReport.Repository.Account
             bool isMonthly = request.IsMonthWise;
 
             _logger.LogInformation(
-                "MonthlyReport query: TillDate(AD)={TillDate}, FromDate(AD)={FromDate}, BranchIds(raw)={RawBranchIds}, BranchFilter(sent)={BranchFilter}, AccountTypes={AccountTypes}, IsMonthly={IsMonthly}, IsNepali={IsNepali}, FiscalYearId={FiscalYearId}",
-                tillDateEng, fromDateEng, request.BranchIds, branchFilter, string.Join(",", accountTypes), isMonthly, request.IsNepali, fiscalYearId);
+                "MonthlyReport query: TillDate(AD)={TillDate}, FromDate(AD)={FromDate}, BranchId(raw)={RawBranchId}, BranchFilter(sent)={BranchFilter}, AccountTypes={AccountTypes}, IsMonthly={IsMonthly}, IsNepali={IsNepali}, FiscalYearId={FiscalYearId}",
+                tillDateEng, fromDateEng, request.BranchId, branchFilter, string.Join(",", accountTypes), isMonthly, request.IsNepali, fiscalYearId);
 
             var assetsRows = new List<MonthlyReportRowDto>();
             var liabilitiesRows = new List<MonthlyReportRowDto>();

@@ -2,8 +2,8 @@
 {
     public class CostOfFundRequest
     {
-        public string? TillDate { get; set; } = string.Empty;   // Nepali "yyyy/MM/dd"
-        public long BranchId { get; set; }          // comma-separated or "-1"
+        public string? TillDate { get; set; } = string.Empty;
+        public long BranchId { get; set; }
         public string? BranchName { get; set; }
         public string? OrderBy { get; set; }
         public bool SameCompanyName { get; set; } = true;

@@ -4,7 +4,7 @@
     {
         public string FromDate { get; set; } = string.Empty;  // Nepali "yyyy/MM/dd"
         public string ToDate { get; set; } = string.Empty;
-        public string? BranchIds { get; set; }                // comma‑separated
+        public string? BranchId { get; set; }                // comma‑separated
         public string BranchName { get; set; } = "All";
         public string ProvisionType { get; set; } = "S";      // S=Schedule Wise, R=Remaining Principal, A=After Maturity
         public bool Enable1to30Days { get; set; } = false;

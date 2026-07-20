@@ -39,9 +39,9 @@ namespace NexgenCosysReport.Repository.Account
 
             // Build branch filter
             string branchFilter = "";
-            if (!request.SameCompanyName && !string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
+            if (!request.SameCompanyName && !string.IsNullOrEmpty(request.BranchId) && request.BranchId != "-1")
             {
-                branchFilter = request.BranchIds;
+                branchFilter = request.BranchId;
             }
 
             // Build filter strings
