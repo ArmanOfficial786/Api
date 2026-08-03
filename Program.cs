@@ -122,6 +122,11 @@ builder.Services.AddScoped<IMonthlyReport, MonthlyReportRepository>();
 builder.Services.AddScoped<IRatioAnalysis, RatioAnalysisRepository>();
 builder.Services.AddScoped<IOfficeProgress, OfficeProgressRepository>();
 builder.Services.AddScoped<IThresholdTransaction, ThresholdTransactionRepository>();
+//builder.Services.AddScoped<IThresholdTransactionDetail, ThresholdTransactionDetailRepository>();
+builder.Services.AddScoped<ISavingTypeWiseBalance, SavingTypeWiseBalanceRepository>();
+builder.Services.AddScoped<ISavingTypeWiseIndividualBalance, SavingTypeWiseIndividualBalanceRepository>();
+builder.Services.AddScoped<ISMSCategory, SMSCategoryRepository>();
+builder.Services.AddScoped<IDepositUnverified, DepositUnverifiedRepository>();
 
 var app = builder.Build();
 
@@ -152,6 +157,8 @@ if (!app.Environment.IsDevelopment())
 // 3. Routing and auth
 app.UseRouting();
 app.UseAuthorization();
+
+DapperTypeMaps.Register();
 
 app.MapControllerRoute(
     name: "default",

@@ -1,0 +1,209 @@
+﻿
+@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    // Raw rows - one per account. The legacy DevExpress report grouped these
+    // by Saving Type (a group-header line with just the type name, no sums -
+    // this report has no monetary aggregation, it's a categorical listing).
+    var rows = (Model["Rows"] as List<SMSCategoryRowDto>) ?? new List<SMSCategoryRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var branchName = Model["BranchName"]?.ToString() ?? "";
+    var smsCategoryId = Model["SmsCategoryId"]?.ToString() ?? "";
+    var smsCategoryLabel = Model.TryGetValue("SmsCategoryName", out var scn) && !string.IsNullOrWhiteSpace(scn?.ToString())
+        ? scn!.ToString()
+        : (string.IsNullOrWhiteSpace(smsCategoryId) || smsCategoryId == "-1" ? "All SMS Criteria" : smsCategoryId);
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var showHeader = !Model.TryGetValue("ShowHeader", out var shVal) || (shVal is bool sh && sh);
+
+    string NullDisplay(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    // Group by Saving Type - alphabetical group order (matches image:
+    // "1 Year Normal Saving", "2 Year Normal Saving", "AA", ...), rows
+    // within each group keep the order the SP returned them in (i.e. the
+    // requested OrderBy).
+    var groups = rows
+        .GroupBy(r => string.IsNullOrWhiteSpace(r.DepositTypeName) ? "-" : r.DepositTypeName!)
+        .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+        .ToList();
+
+    const int colCount = 6; // Savings Type, Member ID, Member Name, A/C No, A/C Open Date, SMS Criteria
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>SMS Category Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            /* Stop <thead> from re-printing on every page */
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                }
+
+                .data-table th {
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                }
+
+                .data-table tbody tr td {
+                    border-bottom: 1px solid #eee;
+                }
+
+                .data-table tr,
+                .group-header td,
+                .grand-total td {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+                border: none;
+            }
+
+            .meta-row td {
+                padding: 4px 6px;
+                font-size: 9pt;
+                border: none;
+            }
+
+            .meta-spacer td {
+                height: 8px;
+                border: none;
+            }
+
+            .group-header td {
+                font-weight: bold;
+                border-bottom: 1px solid #999;
+            }
+
+            .grand-total td {
+                border-top: 2px solid #000;
+                font-weight: bold;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            @@media print {
+                body {
+                    margin: 0;
+                    padding: 0;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel && showHeader)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <thead>
+                @if (showHeader)
+                {
+                    <tr class="meta-title">
+                        <td colspan="@colCount">SMS Category Report</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="3"><strong>Report Generated On:</strong> @generatedOn</td>
+                        <td colspan="3" class="text-right"><strong>SMS Criteria :</strong> @smsCategoryLabel</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="@colCount"><strong>Branch Name :</strong> @branchName</td>
+                    </tr>
+                    <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
+                }
+                <tr>
+                    <th style="width:16%;">Savings Type</th>
+                    <th style="width:14%;">Member ID</th>
+                    <th style="width:20%;">Member Name</th>
+                    <th style="width:14%;">A/C No</th>
+                    <th style="width:14%;">A/C Open Date</th>
+                    <th style="width:22%;">SMS Criteria</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (groups.Any())
+                {
+                    foreach (var g in groups)
+                    {
+                        <tr class="group-header">
+                            <td>@g.Key</td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                        foreach (var row in g)
+                        {
+                            <tr>
+                                <td></td>
+                                <td>@NullDisplay(row.MemberId)</td>
+                                <td>@NullDisplay(row.MemberName)</td>
+                                <td>@NullDisplay(row.AccountNo)</td>
+                                <td>@NullDisplay(row.DateOfAccountOpen)</td>
+                                <td>@NullDisplay(row.SMSCriteria)</td>
+                            </tr>
+                        }
+                    }
+                    <tr class="grand-total">
+                        <td colspan="@(colCount - 1)" class="text-right"><strong>Total Records</strong></td>
+                        <td><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="@colCount" class="text-center">No data found</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
