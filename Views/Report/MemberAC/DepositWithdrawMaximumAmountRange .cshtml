@@ -1,0 +1,221 @@
+﻿
+@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
+@model Dictionary<string, object>
+
+@{
+    Layout = null;
+    var rows = (Model["Rows"] as List<DepositWithdrawMaxAmountRowDto>) ?? new List<DepositWithdrawMaxAmountRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalDeposit = Model["TotalDeposit"] as decimal? ?? 0m;
+    var totalWithdraw = Model["TotalWithdraw"] as decimal? ?? 0m;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "";
+    var transactionType = Model["TransactionType"]?.ToString() ?? "Both";
+    var transactionTypeValue = Model["TransactionTypeValue"] as int? ?? 3;
+    var amount = Model["Amount"] as decimal? ?? 0m;
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // Report title changes based on which type was selected, matching the legacy report naming
+    var reportTitle = transactionTypeValue switch
+    {
+        1 => "Deposit Maximum Detail Report",
+        2 => "Withdraw Maximum Detail Report",
+        _ => "Deposit/Withdraw Maximum Detail Report"
+    };
+
+    // Show a single relevant amount column when filtered to one type; both columns when "Both"
+    var showDepositCol = transactionTypeValue == 1 || transactionTypeValue == 3;
+    var showWithdrawCol = transactionTypeValue == 2 || transactionTypeValue == 3;
+
+    string NullDisplay(object? value) =>
+        value == null || string.IsNullOrWhiteSpace(value.ToString()) ? "" : value.ToString()!;
+
+    string FormatAmount(decimal amt) =>
+        amt == 0 ? "" : amt.ToString("N2");
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>@reportTitle</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+            }
+
+            .report-title {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                margin: 10px 0;
+            }
+
+            .report-meta {
+                margin-bottom: 10px;
+                font-size: 9pt;
+            }
+
+                .report-meta div {
+                    margin-bottom: 3px;
+                }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    border: 1px solid #ddd;
+                }
+
+                .data-table thead {
+                    display: table-row-group;
+                }
+
+                    .data-table thead th {
+                        border-top: 2px solid #000;
+                        border-bottom: 1px solid #000;
+                        background: #f2f2f2;
+                        text-align: left;
+                    }
+
+            .member-row td {
+                font-weight: bold;
+                border-bottom: none;
+                padding-top: 8px;
+            }
+
+            .particulars-row td {
+                border-top: none;
+            }
+
+            .particulars-text {
+                padding-left: 15px;
+                font-style: italic;
+                color: #333;
+            }
+
+            .grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <div class="report-title">@reportTitle</div>
+
+        <div class="report-meta">
+            <div><strong>Branch Name :</strong> &nbsp; @branchName</div>
+            <div>
+                <strong>Report Generated On :</strong> &nbsp; @generatedOn &nbsp;&nbsp;&nbsp;&nbsp;
+                <strong>From Date :</strong> &nbsp; @fromDate &nbsp;&nbsp;&nbsp;&nbsp;
+                <strong>To Date :</strong> &nbsp; @toDate &nbsp;&nbsp;&nbsp;&nbsp;
+                <strong>Amount :</strong> &nbsp; @FormatAmount(amount)
+            </div>
+        </div>
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width:15%;">Member Id</th>
+                    <th style="width:25%;">Member Name</th>
+                    <th style="width:20%;">Account</th>
+                    @if (showDepositCol)
+                    {
+                        <th style="width:17%;" class="text-right">Deposit</th>
+                    }
+                    @if (showWithdrawCol)
+                    {
+                        <th style="width:17%;" class="text-right">Withdraw</th>
+                    }
+                    <th style="width:16%;">Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Any())
+                {
+                    string? lastMemberId = null;
+                    foreach (var row in rows)
+                    {
+                        var isNewMember = row.MemberId != lastMemberId;
+                        lastMemberId = row.MemberId;
+
+                        if (isNewMember)
+                        {
+                            <tr class="member-row">
+                                <td>@NullDisplay(row.MemberId)</td>
+                                <td>@NullDisplay(row.MemberName)</td>
+                                <td colspan="@(showDepositCol && showWithdrawCol ? 3 : 2)"></td>
+                            </tr>
+                        }
+                        <tr class="particulars-row">
+                            <td></td>
+                            <td class="particulars-text">@NullDisplay(row.Particulars)</td>
+                            <td>@NullDisplay(row.AccountNo)</td>
+                            @if (showDepositCol)
+                            {
+                                <td class="text-right">@FormatAmount(row.DepositAmount)</td>
+                            }
+                            @if (showWithdrawCol)
+                            {
+                                <td class="text-right">@FormatAmount(row.WithdrawAmount)</td>
+                            }
+                            <td>@NullDisplay(row.TransactionDateBs)</td>
+                        </tr>
+                    }
+                    <tr class="grand-total">
+                        <td colspan="3" class="text-right"><strong>Total (@totalRecords)</strong></td>
+                        @if (showDepositCol)
+                        {
+                            <td class="text-right"><strong>@FormatAmount(totalDeposit)</strong></td>
+                        }
+                        @if (showWithdrawCol)
+                        {
+                            <td class="text-right"><strong>@FormatAmount(totalWithdraw)</strong></td>
+                        }
+                        <td></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="6" class="text-center">No data found</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

@@ -1,0 +1,224 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount
+@model Dictionary<string, object>
+
+@{
+    Layout = null;
+    var rows = (Model["Rows"] as List<MemberPenaltyDepositWithdrawRowDto>) ?? new List<MemberPenaltyDepositWithdrawRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalPenalty = Model["TotalPenalty"] as decimal? ?? 0m;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    string NullDisplay(object? value) =>
+        value == null || string.IsNullOrWhiteSpace(value.ToString()) ? "" : value.ToString()!;
+
+    string FormatAmount(decimal amt) =>
+        amt == 0 ? "" : amt.ToString("N2");
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Member Penalty Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                padding: 20px;
+            }
+
+            .report-container {
+                width: 100%;
+                max-width: 1000px;
+                margin: 0 auto;
+            }
+
+            /* Header Styles */
+            .company-header {
+                text-align: center;
+                border-bottom: 1px solid #000;
+                padding-bottom: 8px;
+                margin-bottom: 10px;
+            }
+
+            .company-name {
+                font-size: 16pt;
+                font-weight: bold;
+            }
+
+            .company-address {
+                font-size: 10pt;
+            }
+
+            .company-details {
+                font-size: 9pt;
+                margin-top: 3px;
+            }
+
+                .company-details span {
+                    margin: 0 8px;
+                }
+
+            .report-title {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                margin: 10px 0 15px 0;
+            }
+
+            .report-meta {
+                margin-bottom: 12px;
+                font-size: 9pt;
+            }
+
+                .report-meta div {
+                    margin-bottom: 2px;
+                }
+
+            /* Table Styles */
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 5px 8px;
+                    border: 1px solid #000;
+                }
+
+                .data-table thead th {
+                    background: #f0f0f0;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                    font-weight: bold;
+                }
+
+                .data-table tbody td {
+                    border-bottom: 1px solid #ddd;
+                }
+
+            .grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+            }
+
+                .grand-total td {
+                    padding: 6px 8px;
+                }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+
+            /* Sn column width */
+            .col-sn {
+                width: 5%;
+            }
+
+            .col-member-id {
+                width: 18%;
+            }
+
+            .col-member-name {
+                width: 22%;
+            }
+
+            .col-address {
+                width: 18%;
+            }
+
+            .col-contact {
+                width: 22%;
+            }
+
+            .col-penalty {
+                width: 15%;
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+
+        <!-- Report Title -->
+        <div class="report-title">Member Penalty Report</div>
+
+        <!-- Report Meta -->
+        <div class="report-meta">
+            <div><strong>Branch Name:</strong> @branchName</div>
+            <div><strong>Report Generated On:</strong> @generatedOn</div>
+        </div>
+
+        <!-- Data Table -->
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th class="col-sn text-center">SN</th>
+                    <th class="col-member-id">Member Id</th>
+                    <th class="col-member-name">Member Name</th>
+                    <th class="col-address">Address</th>
+                    <th class="col-contact">Contact</th>
+                    <th class="col-penalty text-right">Penalty</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Any())
+                {
+                    int sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr>
+                            <td class="text-center">@sn</td>
+                            <td>@NullDisplay(row.MemberId)</td>
+                            <td>@NullDisplay(row.MemberName)</td>
+                            <td>@NullDisplay(row.Address)</td>
+                            <td>@NullDisplay(row.Contact)</td>
+                            <td class="text-right">@FormatAmount(row.PenaltyAmount)</td>
+                        </tr>
+                    }
+
+                    <!-- Grand Total -->
+                    <tr class="grand-total">
+                        <td colspan="5" class="text-right"><strong>Total:</strong></td>
+                        <td class="text-right"><strong>@FormatAmount(totalPenalty)</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="6" class="text-center">No data found</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

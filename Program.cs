@@ -127,6 +127,14 @@ builder.Services.AddScoped<ISavingTypeWiseBalance, SavingTypeWiseBalanceReposito
 builder.Services.AddScoped<ISavingTypeWiseIndividualBalance, SavingTypeWiseIndividualBalanceRepository>();
 builder.Services.AddScoped<ISMSCategory, SMSCategoryRepository>();
 builder.Services.AddScoped<IDepositUnverified, DepositUnverifiedRepository>();
+builder.Services.AddScoped<IMemberAccDeactive, MemberAccountDeactiveRepository>();
+builder.Services.AddScoped<IMemberAccDetailList, MemberAccountDetailNoRepository>();
+builder.Services.AddScoped<IDepositWithdrawMaxAmountRange, DepositWithdrawMaxAmountRangeRepository>();
+builder.Services.AddScoped<IMemberSummary, MemberSummaryRepository>();
+builder.Services.AddScoped<IMemberPenaltyDepositWithdraw, MemberPenaltyDepositWithdrawRepository>();
+builder.Services.AddScoped<IMemberAccountDetail, MemberAccountDetailRepository>();
+builder.Services.AddScoped<ILmtLoanMasterList, LmtLoanMasterListRepository>();
+builder.Services.AddScoped<IShareType, ShareTypeRepository>();
 
 var app = builder.Build();
 

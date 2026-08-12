@@ -20,7 +20,11 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<HurCollector> HurCollectors { get; set; }
 
+    public virtual DbSet<LmtLoanTypeMaster> LmtLoanTypeMasters { get; set; }
+
     public virtual DbSet<MemMemberRegistration> MemMemberRegistrations { get; set; }
+
+    public virtual DbSet<ShmShareType> ShmShareTypes { get; set; }
 
     public virtual DbSet<SycCollectionCenter> SycCollectionCenters { get; set; }
 
@@ -85,6 +89,42 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.UsmOfficeId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_HurCollector_UsmOffice");
+        });
+
+        modelBuilder.Entity<LmtLoanTypeMaster>(entity =>
+        {
+            entity.ToTable("LmtLoanTypeMaster");
+
+            entity.Property(e => e.Commission).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.InterestActivationOn).HasColumnType("datetime");
+            entity.Property(e => e.InterestActivationOnBs)
+                .HasMaxLength(10)
+                .IsFixedLength();
+            entity.Property(e => e.InterestCalculationType)
+                .HasMaxLength(1)
+                .IsUnicode(false)
+                .IsFixedLength()
+                .HasComment("N=FlatInterest ,D= Claculate Interest by Ason Interest");
+            entity.Property(e => e.InterestRate)
+                .HasMaxLength(10)
+                .IsFixedLength();
+            entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_LmtLoanType_IsActive");
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.LoanOdorNormal)
+                .HasMaxLength(1)
+                .IsUnicode(false)
+                .IsFixedLength()
+                .HasColumnName("LoanODorNormal");
+            entity.Property(e => e.LoanTypeCode).HasMaxLength(20);
+            entity.Property(e => e.LoanTypeName).HasMaxLength(200);
+            entity.Property(e => e.MaximumAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.PeriodType).HasMaxLength(1);
+            entity.Property(e => e.Remarks).HasColumnType("ntext");
+
+            entity.HasOne(d => d.UsmOffice).WithMany(p => p.LmtLoanTypeMasters)
+                .HasForeignKey(d => d.UsmOfficeId)
+                .HasConstraintName("FK_LmtLoanTypeMaster_UsmOffice");
         });
 
         modelBuilder.Entity<MemMemberRegistration>(entity =>
@@ -173,6 +213,20 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.UsmOfficeId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_MemMemberRegistration_UsmOffice");
+        });
+
+        modelBuilder.Entity<ShmShareType>(entity =>
+        {
+            entity.ToTable("ShmShareType");
+
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.CreatedOnBs).HasMaxLength(50);
+            entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_ShmShareTypeName_IsActive");
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.LastModifiedOnBs).HasMaxLength(50);
+            entity.Property(e => e.ShareFaceValue).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.SharePremium).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.ShareTypeName).HasMaxLength(50);
         });
 
         modelBuilder.Entity<SycCollectionCenter>(entity =>

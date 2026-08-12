@@ -1,0 +1,214 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount
+@model Dictionary<string, object>
+
+@{
+    Layout = null;
+    var rows = (Model["Rows"] as List<MemberAccountDeactiveRowDto>) ?? new List<MemberAccountDeactiveRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "";
+    var duePeriod = Model["DuePeriod"] as int? ?? 0;
+
+    string duePeriodUnit = "Days";
+    if (Model.TryGetValue("DuePeriodUnit", out var duePeriodUnitObj) && duePeriodUnitObj != null)
+    {
+        duePeriodUnit = duePeriodUnitObj.ToString() ?? "Days";
+    }
+
+    var isActive = Model["IsActive"] as bool? ?? true;
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    string NullDisplay(object value) =>
+        value == null || string.IsNullOrWhiteSpace(value.ToString()) ? "" : value.ToString();
+
+    string FormatAmount(decimal amount) =>
+        amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
+
+    string GetStatusLabel(bool active) => active ? "Active" : "Inactive";
+
+    var totalBalance = rows.Sum(r => r.Balance);
+
+    int sn = 0;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>@(GetStatusLabel(isActive)) Saving Account Detail Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            /* FIX: .data-table th (specificity 0,1,1) was beating this rule's
+                           original .report-title-only selector (specificity 0,1,0), so
+                           text-align:left from .data-table th always won regardless of
+                           source order. Qualifying with the tag+class here (0,1,1 -> 0,2,0
+                           via .data-table th.report-title below) settles the cascade. */
+            .report-title {
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: none;
+                padding: 8px 0;
+            }
+
+            .report-meta {
+                padding: 4px 0 10px 0;
+                font-size: 9pt;
+            }
+
+                .report-meta td {
+                    padding: 2px 4px;
+                }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    border: 1px solid #ccc;
+                }
+
+                .data-table th {
+                    background: #f2f2f2;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                }
+
+                    /* Wins over ".data-table th" above because it's more specific
+                               (element + two classes vs. element + one class). */
+                    .data-table th.report-title {
+                        text-align: center;
+                    }
+
+                /* --- Stop the column-header block from repeating on every PDF page ---
+                                   A <thead> defaults to display:table-header-group, which Chromium/
+                                   Puppeteer-based PDF renderers repeat on every printed page. Overriding
+                                   it to table-row-group makes it a plain row group, so the title/meta/
+                                   column-header block renders once, only on the first page. */
+                .data-table thead {
+                    display: table-row-group;
+                }
+
+            .grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            @@media print {
+                .data-table thead {
+                    display: table-row-group;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th colspan="10" class="report-title">
+                        @(GetStatusLabel(isActive)) Saving Account Detail Report
+                    </th>
+                </tr>
+                <tr>
+                    <td colspan="10">
+                        <table class="report-meta" style="width:100%;">
+                            <tr>
+                                <td style="width:50%;"><strong>Branch Name :</strong> &nbsp;@branchName</td>
+                                <td style="width:50%;">
+                                    <strong>Till Date :</strong> &nbsp;@tillDate &nbsp;&nbsp;&nbsp;
+                                    <strong>Due Period :</strong> &nbsp;@duePeriod @duePeriodUnit
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>Report Generated On :</strong> &nbsp;@generatedOn</td>
+                                <td></td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+                <tr>
+                    <th style="width:4%;">SN</th>
+                    <th style="width:9%;">MemberId</th>
+                    <th style="width:13%;">Name</th>
+                    <th style="width:5%;">Age</th>
+                    <th style="width:12%;">Address</th>
+                    <th style="width:11%;">Contact No</th>
+                    <th style="width:12%;">Type</th>
+                    <th style="width:11%;">Account No</th>
+                    <th style="width:11%;" class="text-right">Balance</th>
+                    <th style="width:12%;">Last Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Any())
+                {
+                    sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr>
+                            <td>@sn</td>
+                            <td>@NullDisplay(row.MemberId)</td>
+                            <td>@NullDisplay(row.MemberName)</td>
+                            <td>@row.Age</td>
+                            <td>@NullDisplay(row.Address)</td>
+                            <td>@NullDisplay(row.ContactNo)</td>
+                            <td>@NullDisplay(row.Type)</td>
+                            <td>@NullDisplay(row.AccountNo)</td>
+                            <td class="text-right">@FormatAmount(row.Balance)</td>
+                            <td>@NullDisplay(row.LastTransactionDate)</td>
+                        </tr>
+                    }
+                    <tr class="grand-total">
+                        <td colspan="8" class="text-right"><strong>Total Records: @totalRecords</strong></td>
+                        <td class="text-right"><strong>@FormatAmount(totalBalance)</strong></td>
+                        <td></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="10" class="text-center">No data found</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

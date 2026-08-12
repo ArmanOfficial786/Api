@@ -53,6 +53,8 @@ public partial class UsmOffice
 
     public virtual ICollection<HurCollector> HurCollectors { get; set; } = new List<HurCollector>();
 
+    public virtual ICollection<LmtLoanTypeMaster> LmtLoanTypeMasters { get; set; } = new List<LmtLoanTypeMaster>();
+
     public virtual ICollection<MemMemberRegistration> MemMemberRegistrations { get; set; } = new List<MemMemberRegistration>();
 
     public virtual ICollection<SycCollectionCenter> SycCollectionCenters { get; set; } = new List<SycCollectionCenter>();

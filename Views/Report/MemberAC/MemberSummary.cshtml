@@ -1,0 +1,331 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount
+
+@model Dictionary<string, object>
+
+@{
+    Layout = null;
+    var rows = (Model["Rows"] as List<MemberSummaryRowDto>) ?? new List<MemberSummaryRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalShareAmount = Model["TotalShareAmount"] as decimal? ?? 0m;
+    var totalSaving = Model["TotalSaving"] as decimal? ?? 0m;
+    var totalLoan = Model["TotalLoan"] as decimal? ?? 0m;
+    var grandTotal = Model["GrandTotal"] as decimal? ?? 0m;
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "Member Id";
+    var enableCollectionCenterGroup = Model["EnableCollectionCenterGroup"] as bool? ?? false;
+    var enableMemberGroupGroup = Model["EnableMemberGroupGroup"] as bool? ?? false;
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    string NullDisplay(object? value) =>
+        value == null || string.IsNullOrWhiteSpace(value.ToString()) ? "-" : value.ToString()!;
+
+    string FormatAmount(decimal amt) =>
+        amt == 0 ? "-" : amt.ToString("N2");
+
+    string GetOrderByDisplay(string orderBy) => orderBy switch
+    {
+        "MemberId" => "Member ID",
+        "MemberName" => "Member Name",
+        "Address" => "Address",
+        "ShareAmount DESC" => "Share Amount",
+        "NormalSaving DESC" => "Normal Saving",
+        "RecurringSaving DESC" => "Recurring Saving",
+        "FixedSaving DESC" => "Fixed Saving",
+        "TermSaving DESC" => "Term Saving",
+        "DoubleDeposit DESC" => "Double Deposit",
+        "RegularSaving DESC" => "Regular Saving",
+        "TotalSaving DESC" => "Total Saving",
+        "LoanAmount DESC" => "Loan Amount",
+        _ => orderBy
+    };
+
+    int sn = 0;
+    string? lastGroupKey = null;
+    string? currentGroupKey = null;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Member Summary Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+            }
+
+            .report-title {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                margin: 10px 0;
+            }
+
+            .report-meta {
+                margin-bottom: 10px;
+                font-size: 9pt;
+            }
+
+                .report-meta div {
+                    margin-bottom: 3px;
+                }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 3px 5px;
+                    border: 1px solid #ddd;
+                }
+
+                .data-table thead {
+                    display: table-row-group;
+                }
+
+                    .data-table thead th {
+                        border-top: 2px solid #000;
+                        border-bottom: 1px solid #000;
+                        background: #f2f2f2;
+                        text-align: left;
+                        font-weight: bold;
+                    }
+
+            .group-header td {
+                background: #e8e8e8;
+                font-weight: bold;
+                border-top: 2px solid #666;
+            }
+
+            .grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .sub-total {
+                font-weight: bold;
+                background: #f5f5f5;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <div class="report-title">Member Summary Report</div>
+
+        <div class="report-meta">
+            <div><strong>Branch Name :</strong> &nbsp; @branchName</div>
+            <div>
+                <strong>Report Generated On :</strong> &nbsp; @generatedOn &nbsp;&nbsp;&nbsp;&nbsp;
+                <strong>Till Date :</strong> &nbsp; @tillDate &nbsp;&nbsp;&nbsp;&nbsp;
+                <strong>Order By :</strong> &nbsp; @GetOrderByDisplay(orderBy)
+            </div>
+            <div>
+                <strong>Group By Collection Center :</strong> &nbsp; @(enableCollectionCenterGroup ? "Yes" : "No")
+                &nbsp;&nbsp;&nbsp;&nbsp;
+                <strong>Group By Member Group :</strong> &nbsp; @(enableMemberGroupGroup ? "Yes" : "No")
+            </div>
+        </div>
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width:5%;">SN</th>
+                    <th style="width:12%;">Member Id</th>
+                    <th style="width:18%;">Member Name</th>
+                    <th style="width:15%;">Address</th>
+                    <th style="width:8%;" class="text-right">Share</th>
+                    <th style="width:8%;" class="text-right">Normal</th>
+                    <th style="width:8%;" class="text-right">Recurring</th>
+                    <th style="width:8%;" class="text-right">Fixed</th>
+                    <th style="width:8%;" class="text-right">Term</th>
+                    <th style="width:8%;" class="text-right">Double</th>
+                    <th style="width:8%;" class="text-right">Regular</th>
+                    <th style="width:10%;" class="text-right">Total Saving</th>
+                    <th style="width:10%;" class="text-right">Loan</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Any())
+                {
+                    sn = 0;
+                    string? lastGroup = null;
+                    string? currentGroup = null;
+                    bool groupBy = enableCollectionCenterGroup || enableMemberGroupGroup;
+
+                    // Group by Collection Center if enabled
+                    if (enableCollectionCenterGroup)
+                    {
+                        var groupedByCenter = rows.GroupBy(r => r.CollectionCenter ?? "Unknown");
+                        foreach (var centerGroup in groupedByCenter)
+                        {
+                            // Group by Member Group within Collection Center if enabled
+                            if (enableMemberGroupGroup)
+                            {
+                                var groupedByGroup = centerGroup.GroupBy(r => r.MemberGroup ?? "Unknown");
+                                foreach (var group in groupedByGroup)
+                                {
+                                    // Group header
+                                    <tr class="group-header">
+                                        <td colspan="13"><strong>@(centerGroup.Key) - @(group.Key)</strong></td>
+                                    </tr>
+                                    // Rows
+                                    foreach (var row in group)
+                                    {
+                                        sn++;
+                                        <tr>
+                                            <td class="text-center">@sn</td>
+                                            <td>@NullDisplay(row.MemberId)</td>
+                                            <td>@NullDisplay(row.MemberName)</td>
+                                            <td>@NullDisplay(row.Address)</td>
+                                            <td class="text-right">@FormatAmount(row.ShareAmount)</td>
+                                            <td class="text-right">@FormatAmount(row.NormalSaving)</td>
+                                            <td class="text-right">@FormatAmount(row.RecurringSaving)</td>
+                                            <td class="text-right">@FormatAmount(row.FixedSaving)</td>
+                                            <td class="text-right">@FormatAmount(row.TermSaving)</td>
+                                            <td class="text-right">@FormatAmount(row.DoubleDeposit)</td>
+                                            <td class="text-right">@FormatAmount(row.RegularSaving)</td>
+                                            <td class="text-right">@FormatAmount(row.TotalSaving)</td>
+                                            <td class="text-right">@FormatAmount(row.LoanAmount)</td>
+                                        </tr>
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // Group header
+                                <tr class="group-header">
+                                    <td colspan="13"><strong>@centerGroup.Key</strong></td>
+                                </tr>
+                                foreach (var row in centerGroup)
+                                {
+                                    sn++;
+                                    <tr>
+                                        <td class="text-center">@sn</td>
+                                        <td>@NullDisplay(row.MemberId)</td>
+                                        <td>@NullDisplay(row.MemberName)</td>
+                                        <td>@NullDisplay(row.Address)</td>
+                                        <td class="text-right">@FormatAmount(row.ShareAmount)</td>
+                                        <td class="text-right">@FormatAmount(row.NormalSaving)</td>
+                                        <td class="text-right">@FormatAmount(row.RecurringSaving)</td>
+                                        <td class="text-right">@FormatAmount(row.FixedSaving)</td>
+                                        <td class="text-right">@FormatAmount(row.TermSaving)</td>
+                                        <td class="text-right">@FormatAmount(row.DoubleDeposit)</td>
+                                        <td class="text-right">@FormatAmount(row.RegularSaving)</td>
+                                        <td class="text-right">@FormatAmount(row.TotalSaving)</td>
+                                        <td class="text-right">@FormatAmount(row.LoanAmount)</td>
+                                    </tr>
+                                }
+                            }
+                        }
+                    }
+                    else if (enableMemberGroupGroup)
+                    {
+                        var groupedByGroup = rows.GroupBy(r => r.MemberGroup ?? "Unknown");
+                        foreach (var group in groupedByGroup)
+                        {
+                            <tr class="group-header">
+                                <td colspan="13"><strong>@group.Key</strong></td>
+                            </tr>
+                            foreach (var row in group)
+                            {
+                                sn++;
+                                <tr>
+                                    <td class="text-center">@sn</td>
+                                    <td>@NullDisplay(row.MemberId)</td>
+                                    <td>@NullDisplay(row.MemberName)</td>
+                                    <td>@NullDisplay(row.Address)</td>
+                                    <td class="text-right">@FormatAmount(row.ShareAmount)</td>
+                                    <td class="text-right">@FormatAmount(row.NormalSaving)</td>
+                                    <td class="text-right">@FormatAmount(row.RecurringSaving)</td>
+                                    <td class="text-right">@FormatAmount(row.FixedSaving)</td>
+                                    <td class="text-right">@FormatAmount(row.TermSaving)</td>
+                                    <td class="text-right">@FormatAmount(row.DoubleDeposit)</td>
+                                    <td class="text-right">@FormatAmount(row.RegularSaving)</td>
+                                    <td class="text-right">@FormatAmount(row.TotalSaving)</td>
+                                    <td class="text-right">@FormatAmount(row.LoanAmount)</td>
+                                </tr>
+                            }
+                        }
+                    }
+                    else
+                    {
+                        foreach (var row in rows)
+                        {
+                            sn++;
+                            <tr>
+                                <td class="text-center">@sn</td>
+                                <td>@NullDisplay(row.MemberId)</td>
+                                <td>@NullDisplay(row.MemberName)</td>
+                                <td>@NullDisplay(row.Address)</td>
+                                <td class="text-right">@FormatAmount(row.ShareAmount)</td>
+                                <td class="text-right">@FormatAmount(row.NormalSaving)</td>
+                                <td class="text-right">@FormatAmount(row.RecurringSaving)</td>
+                                <td class="text-right">@FormatAmount(row.FixedSaving)</td>
+                                <td class="text-right">@FormatAmount(row.TermSaving)</td>
+                                <td class="text-right">@FormatAmount(row.DoubleDeposit)</td>
+                                <td class="text-right">@FormatAmount(row.RegularSaving)</td>
+                                <td class="text-right">@FormatAmount(row.TotalSaving)</td>
+                                <td class="text-right">@FormatAmount(row.LoanAmount)</td>
+                            </tr>
+                        }
+                    }
+
+                    // Grand Total
+                    <tr class="grand-total">
+                        <td colspan="4" class="text-right"><strong>Grand Total (@totalRecords)</strong></td>
+                        <td class="text-right"><strong>@FormatAmount(totalShareAmount)</strong></td>
+                        <td class="text-right"><strong>@FormatAmount((Model["SavingTypeTotals"] as Dictionary<string, decimal>)?.GetValueOrDefault("NormalSaving") ?? 0m)</strong></td>
+                        <td class="text-right"><strong>@FormatAmount((Model["SavingTypeTotals"] as Dictionary<string, decimal>)?.GetValueOrDefault("RecurringSaving") ?? 0m)</strong></td>
+                        <td class="text-right"><strong>@FormatAmount((Model["SavingTypeTotals"] as Dictionary<string, decimal>)?.GetValueOrDefault("FixedSaving") ?? 0m)</strong></td>
+                        <td class="text-right"><strong>@FormatAmount((Model["SavingTypeTotals"] as Dictionary<string, decimal>)?.GetValueOrDefault("TermSaving") ?? 0m)</strong></td>
+                        <td class="text-right"><strong>@FormatAmount((Model["SavingTypeTotals"] as Dictionary<string, decimal>)?.GetValueOrDefault("DoubleDeposit") ?? 0m)</strong></td>
+                        <td class="text-right"><strong>@FormatAmount((Model["SavingTypeTotals"] as Dictionary<string, decimal>)?.GetValueOrDefault("RegularSaving") ?? 0m)</strong></td>
+                        <td class="text-right"><strong>@FormatAmount(totalSaving)</strong></td>
+                        <td class="text-right"><strong>@FormatAmount(totalLoan)</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="13" class="text-center">No data found</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

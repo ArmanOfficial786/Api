@@ -1,0 +1,167 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount
+@model Dictionary<string, object>
+
+@{
+    Layout = null;
+    var rows = (Model["Rows"] as List<MemberAccountDetailNoRowDto>) ?? new List<MemberAccountDetailNoRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalSaving = Model["TotalSaving"] as decimal? ?? 0m;
+    var totalShare = Model["TotalShare"] as decimal? ?? 0m;
+    var totalLoan = Model["TotalLoan"] as decimal? ?? 0m;
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "";
+    var memberType = Model["MemberType"]?.ToString() ?? "All";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    string NullDisplay(object? value) =>
+        value == null || string.IsNullOrWhiteSpace(value.ToString()) ? "" : value.ToString()!;
+
+    string FormatAmount(decimal amount) =>
+        amount == 0 ? "0" : amount.ToString("N0");
+
+    int sn = 0;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>@memberType Member List Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+            }
+
+            .report-title {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                margin: 10px 0;
+            }
+
+            .report-meta {
+                margin-bottom: 10px;
+                font-size: 9pt;
+            }
+
+                .report-meta div {
+                    margin-bottom: 3px;
+                }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    border: 1px solid #ddd;
+                }
+
+                /* IMPORTANT: forces thead to behave as a normal row group instead of
+                           a "table-header-group", which is what browsers/PDF engines repeat
+                           automatically on every page. This makes the column header print
+                           exactly once, like any other row. */
+                .data-table thead {
+                    display: table-row-group;
+                }
+
+                    .data-table thead th {
+                        border-top: 2px solid #000;
+                        border-bottom: 1px solid #000;
+                        background: #f2f2f2;
+                        text-align: left;
+                    }
+
+            .grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <div class="report-title">@memberType Member List Report</div>
+
+        <div class="report-meta">
+            <div><strong>Branch Name :</strong> &nbsp; @branchName</div>
+            <div><strong>Report Generated On :</strong> &nbsp; @generatedOn &nbsp;&nbsp;&nbsp;&nbsp; <strong>Till Date :</strong> &nbsp; @tillDate</div>
+        </div>
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width:5%;">SN</th>
+                    <th style="width:12%;">MemberId</th>
+                    <th style="width:20%;">Name</th>
+                    <th style="width:18%;">Address</th>
+                    <th style="width:18%;">Contact No</th>
+                    <th style="width:9%;" class="text-right">Saving</th>
+                    <th style="width:9%;" class="text-right">Share</th>
+                    <th style="width:9%;" class="text-right">Loan</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Any())
+                {
+                    sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr>
+                            <td class="text-center">@sn</td>
+                            <td>@NullDisplay(row.MemberId)</td>
+                            <td>@NullDisplay(row.Name)</td>
+                            <td>@NullDisplay(row.Address)</td>
+                            <td>@NullDisplay(row.ContactNo)</td>
+                            <td class="text-right">@FormatAmount(row.Saving)</td>
+                            <td class="text-right">@FormatAmount(row.Share)</td>
+                            <td class="text-right">@FormatAmount(row.Loan)</td>
+                        </tr>
+                    }
+                    <tr class="grand-total">
+                        <td colspan="5" class="text-right"><strong>Total (@totalRecords)</strong></td>
+                        <td class="text-right"><strong>@FormatAmount(totalSaving)</strong></td>
+                        <td class="text-right"><strong>@FormatAmount(totalShare)</strong></td>
+                        <td class="text-right"><strong>@FormatAmount(totalLoan)</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="8" class="text-center">No data found</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

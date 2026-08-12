@@ -1,0 +1,1043 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount
+@model Dictionary<string, object>
+
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<MemberAccountDetailRowDto>) ?? new List<MemberAccountDetailRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalDeposit = Model["TotalDeposit"] as decimal? ?? 0m;
+    var totalWithdraw = Model["TotalWithdraw"] as decimal? ?? 0m;
+    var totalBalance = Model["TotalBalance"] as decimal? ?? 0m;
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "";
+    var status = Model["Status"]?.ToString() ?? "";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "Member Name";
+    var selectedColumns = Model["SelectedColumns"] as List<string> ?? new List<string>();
+    var enableCollectionCenterGroup = Model["EnableCollectionCenterGroup"] as bool? ?? false;
+    var enableMemberGroupGroup = Model["EnableMemberGroupGroup"] as bool? ?? false;
+    // Default group-by-Saving-Type (matches the sample report). Only kicks in when the
+    // other two grouping switches are both off, unless the caller explicitly overrides it.
+    var enableSavingTypeGroup = Model.ContainsKey("EnableSavingTypeGroup")
+        ? (Model["EnableSavingTypeGroup"] as bool? ?? true)
+        : (!enableCollectionCenterGroup && !enableMemberGroupGroup);
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isView = format == "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // ── Selected columns from the request ───────
+    bool showAllColumns = selectedColumns == null || selectedColumns.Count == 0;
+
+    // ── All available columns (order + labels match the sample report) ───
+    var allColumns = new List<(string Key, string Header, string CssClass, Func<MemberAccountDetailRowDto, object?> Render)>
+    {
+        ("MemberId",                     "Member ID",             "c-mid",     r => r.MemberId),
+        ("Name",                         "Member Name",           "c-name",    r => r.MemberName),
+        ("SavingAccountType",            "Saving Account",        "c-savtype", r => r.SavingAccountType),
+        ("AccountNo",                    "Account No.",           "c-accno",   r => r.AccountNo),
+        ("ContactNo",                    "Contact No",            "c-contact", r => r.ContactNo),
+        ("BirthOnBS",                    "Birth On BS",           "c-dob",     r => r.BirthOnBS),
+        ("CitizenshipNo",                "Citizenship No",        "c-cit",     r => r.CitizenshipNo),
+        ("Father",                       "Father Name",           "c-father",  r => r.FatherName),
+        ("Mother",                       "Mother Name",           "c-mother",  r => r.MotherName),
+        ("Spouse",                       "Spouse Name",           "c-spouse",  r => r.SpouseName),
+        ("TemporaryAddress",             "Temporary Address",     "c-taddr",   r => r.TemporaryAddress),
+        ("PermanentAddess",              "Permanent Address",     "c-paddr",   r => r.PermanentAddress),
+        ("RegisteredOn",                 "Registration On",       "c-reg",     r => r.RegisteredOn),
+        ("AccountOpenOn",                "Acc. Open on",          "c-accopen", r => r.AccountOpenOn),
+        ("MatureDate",                   "Mature Date",           "c-mature",  r => r.MatureDate),
+        ("InterestTransferType",         "Int. transfer type",    "c-inttype", r => r.InterestTransferType),
+        ("InterestRate",                 "Int. rate",             "c-intrate", r => FormatAmount(r.InterestRate)),
+        ("TaxRate",                      "Tax Rate",              "c-taxrate", r => FormatAmount(r.TaxRate)),
+        ("InterestTransferAccount",      "Int. transfer Account", "c-intacc",  r => r.InterestTransferAccount),
+        ("GuaranteeAmount",              "Guarantee Amt.",        "c-guar",    r => FormatAmount(r.GuaranteeAmount)),
+        ("TermDepositInstallmentAmount", "Installment Amt.",      "c-instamt", r => FormatAmount(r.InstallmentAmount)),
+        ("DueCount",                     "Due Count",             "c-duecnt",  r => NullDisplay(r.DueCount)),
+        ("InstallmentType",              "Installment Type",      "c-insttype",r => r.InstallmentType),
+        ("FreezeAmount",                 "Freeze Amt.",           "c-freeze",  r => FormatAmount(r.FreezeAmount)),
+        ("Deposit",                      "Deposit",               "c-dep",     r => FormatAmount(r.Deposit)),
+        ("Withdraw",                     "Withdraw",              "c-with",    r => FormatAmount(r.Withdraw)),
+        ("Balance",                      "Balance",               "c-bal",     r => FormatAmount(r.Balance))
+    };
+
+    var columns = showAllColumns
+        ? allColumns
+        : allColumns.Where(c => selectedColumns!.Contains(c.Key, StringComparer.OrdinalIgnoreCase)).ToList();
+
+    // S.N. is always shown
+    int totalVisibleCols = columns.Count + 1; // +1 for S.N.
+
+    string NullDisplay(object? value) =>
+        value == null || string.IsNullOrWhiteSpace(value.ToString()) ? "" : value.ToString()!;
+
+    // Always renders with two decimals (e.g. "0.00") to match the sample report,
+    // instead of hiding zero values.
+    string FormatAmount(decimal? amt) => (amt ?? 0m).ToString("N2");
+
+    string GetStatusClass(int? statusId) => statusId switch
+    {
+        1 => "status-opened",
+        2 => "status-closed",
+        4 => "status-suspended",
+        5 => "status-disable",
+        _ => ""
+    };
+
+    string GetStatusLabel(int? statusId) => statusId switch
+    {
+        1 => "Opened",
+        2 => "Closed",
+        4 => "Suspended",
+        5 => "Disable",
+        _ => ""
+    };
+
+    // Renders the group-header row as real <td> cells so each segment lands under the
+    // same columns as the sample report:
+    //   [S.N. + Member ID + Member Name]  -> "No.of Saving Acc.: N"
+    //   [Saving Account + Account No.]    -> "<Label> : <value>"
+    //   [Contact No + Birth On BS]        -> "Deposit: X"      (right aligned)
+    //   [Citizenship No + Father Name]    -> "Withdraw: X"     (right aligned)
+    //   [Mother Name + Spouse Name]       -> "Balance: X"      (right aligned)
+    //   [everything else]                 -> blank filler cell
+    // NOTE: this fixed layout assumes at least 11 visible columns (the default full
+    // column set has 28). If columns are heavily filtered via SelectedColumns, the
+    // filler cell simply shrinks/disappears — the five labelled segments always render.
+    string RenderGroupHeaderRow(string groupLabel, string? groupValue, List<MemberAccountDetailRowDto> groupRows, int totalCols)
+    {
+        var cnt = groupRows.Count;
+        var dep = groupRows.Sum(r => r.Deposit ?? 0m);
+        var wd = groupRows.Sum(r => r.Withdraw ?? 0m);
+        var bal = groupRows.Sum(r => r.Balance ?? 0m);
+        var value = string.IsNullOrWhiteSpace(groupValue) ? "Unknown" : groupValue;
+        var fillerCols = Math.Max(0, totalCols - 11);
+
+        var html = "<td colspan=\"3\"><strong>No.of Saving Acc.:</strong> " + cnt + "</td>"
+                 + "<td colspan=\"2\"><strong>" + Html.Encode(groupLabel) + " :</strong> " + Html.Encode(value) + "</td>"
+                 + "<td colspan=\"2\" class=\"text-right\"><strong>Deposit:</strong> " + FormatAmount(dep) + "</td>"
+                 + "<td colspan=\"2\" class=\"text-right\"><strong>Withdraw:</strong> " + FormatAmount(wd) + "</td>"
+                 + "<td colspan=\"2\" class=\"text-right\"><strong>Balance:</strong> " + FormatAmount(bal) + "</td>";
+
+        if (fillerCols > 0)
+        {
+            html += "<td colspan=\"" + fillerCols + "\"></td>";
+        }
+
+        return html;
+    }
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Member Account Detail Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 7pt;
+                background: @(isView ? "#d0d0d0" : "#fff");
+                @(isView ? "" : "margin-top: 25px;")
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+
+            /* ── Sub-header (title + meta) – sits ABOVE the table header ─────── */
+            .report-subheader {
+                width: 100%;
+                padding: 4px 6px 0 6px;
+                background: #fff;
+            }
+
+            .subheader-title {
+                text-align: center;
+                font-size: 13pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 6px 4px 4px;
+            }
+
+            .subheader-meta {
+                display: flex;
+                justify-content: space-between;
+                font-size: 7.5pt;
+                padding: 2px 4px;
+                flex-wrap: wrap;
+            }
+
+                .subheader-meta span {
+                    margin-right: 10px;
+                }
+
+            .subheader-spacer {
+                height: 5px;
+            }
+
+            /* ── Data table ──────────────────────────────────────────────────── */
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                font-family: Arial, sans-serif;
+                font-size: 7pt;
+            }
+
+                .data-table td,
+                .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    word-break: break-word;
+                    white-space: normal;
+                    vertical-align: middle;
+                    background: #fff;
+                    padding: 3px 4px;
+                    border: none;
+                    font-size: 7pt;
+                    line-height: 1.3;
+                }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table th {
+                border-top: 1.5px solid #000;
+                border-bottom: 1px solid #000;
+                font-weight: bold;
+                background: #f2f2f2;
+                font-size: 6.8pt;
+                white-space: nowrap;
+                padding: 4px;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #e0e0e0;
+            }
+
+            .group-header td {
+                background: #fff;
+                font-weight: bold;
+                border-top: 1.5px solid #000;
+                border-bottom: 1px solid #000;
+                padding: 5px 4px;
+            }
+
+            .grand-total td {
+                border-top: 1.5px solid #000;
+                border-bottom: 1.5px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .status-opened {
+                color: #27ae60;
+            }
+
+            .status-closed {
+                color: #c0392b;
+            }
+
+            .status-suspended {
+                color: #f39c12;
+            }
+
+            .status-disable {
+                color: #7f8c8d;
+            }
+
+            /* ── Column widths (sum = 100%) ─────────────────────────────────── */
+            col.c-sn {
+                width: 1.00%;
+            }
+
+            col.c-mid {
+                width: 3.20%;
+            }
+
+            col.c-name {
+                width: 5.30%;
+            }
+
+            col.c-savtype {
+                width: 4.30%;
+            }
+
+            col.c-accno {
+                width: 4.00%;
+            }
+
+            col.c-contact {
+                width: 3.80%;
+            }
+
+            col.c-dob {
+                width: 3.20%;
+            }
+
+            col.c-cit {
+                width: 3.80%;
+            }
+
+            col.c-father {
+                width: 3.80%;
+            }
+
+            col.c-mother {
+                width: 3.80%;
+            }
+
+            col.c-spouse {
+                width: 3.80%;
+            }
+
+            col.c-taddr {
+                width: 5.00%;
+            }
+
+            col.c-paddr {
+                width: 5.00%;
+            }
+
+            col.c-reg {
+                width: 3.10%;
+            }
+
+            col.c-accopen {
+                width: 3.20%;
+            }
+
+            col.c-mature {
+                width: 3.20%;
+            }
+
+            col.c-inttype {
+                width: 3.80%;
+            }
+
+            col.c-intrate {
+                width: 2.70%;
+            }
+
+            col.c-taxrate {
+                width: 2.70%;
+            }
+
+            col.c-intacc {
+                width: 3.80%;
+            }
+
+            col.c-guar {
+                width: 3.40%;
+            }
+
+            col.c-instamt {
+                width: 3.40%;
+            }
+
+            col.c-duecnt {
+                width: 2.50%;
+            }
+
+            col.c-insttype {
+                width: 3.40%;
+            }
+
+            col.c-freeze {
+                width: 3.40%;
+            }
+
+            col.c-dep {
+                width: 3.80%;
+            }
+
+            col.c-with {
+                width: 3.80%;
+            }
+
+            col.c-bal {
+                width: 3.80%;
+            }
+
+            .meta-title td {
+                text-align: center;
+                font-size: 13pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 6px 4px 4px;
+                border: none;
+                background: #fff;
+            }
+
+            .meta-row td {
+                padding: 2px 4px;
+                border: none;
+                background: #fff;
+                font-size: 7.5pt;
+            }
+
+            .meta-spacer td {
+                border: none;
+                background: #fff;
+                padding: 3px 0;
+            }
+
+            @@media print {
+                body {
+                    margin: 0;
+                    background: #fff;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+
+            /* ── VIEW chrome ─────────────────────────────────────────────────── */
+            .view-outer {
+                background: #d0d0d0;
+                padding: 2px 16px 20px 16px;
+                min-height: 100vh;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                cursor: grab;
+            }
+
+                .view-outer:active {
+                    cursor: grabbing;
+                }
+
+            .view-page {
+                background: #fff;
+                margin: 0 auto 24px auto;
+                box-shadow: 0 2px 8px rgba(0,0,0,.18);
+                width: 3200px;
+                height: 1587px;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .view-page-content {
+                flex: 1;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .view-page-footer {
+                background: #fff;
+                border-top: 1px solid #ccc;
+                text-align: center;
+                font-size: 9pt;
+                font-weight: bold;
+                padding: 6px 0;
+                flex-shrink: 0;
+            }
+
+            .common-header-wrap {
+                width: 3200px;
+                overflow: hidden;
+                flex-shrink: 0;
+            }
+
+            .page-subheader {
+                flex-shrink: 0;
+            }
+
+            .page-table-wrap {
+                flex: 1;
+                overflow: hidden;
+            }
+
+            #sourceWrap {
+                opacity: 0;
+                pointer-events: none;
+                width: 3200px;
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+
+            #commonHeaderSource {
+                visibility: hidden;
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 3200px;
+                pointer-events: none;
+            }
+    </style>
+</head>
+<body>
+
+    @* Common header — rendered for VIEW and PDF, skipped for Excel *@
+    @if (!isExcel)
+    {
+        <div id="commonHeaderSource">
+            @await Html.PartialAsync("_CommonHeader", Model)
+        </div>
+    }
+
+    @if (isView)
+    {
+        <div id="sourceWrap">
+            @* Hidden sub-header template – JS will clone this into each page *@
+            <div id="subheaderTemplate" class="report-subheader">
+                <div class="subheader-title">Member Account Detail Report</div>
+                <div class="subheader-meta">
+                    <span><strong>Branch Name :</strong> @branchName</span>
+                    <span><strong>Till Date :</strong> @tillDate</span>
+                    <span><strong>Status :</strong> @status</span>
+                </div>
+                <div class="subheader-meta">
+                    <span><strong>Report Generated On :</strong> @generatedOn</span>
+                    <span><strong>Order By :</strong> @orderBy</span>
+                    <span><strong>Group By :</strong> @(enableCollectionCenterGroup || enableMemberGroupGroup || enableSavingTypeGroup ? "Yes" : "No")</span>
+                </div>
+                <div class="subheader-spacer"></div>
+            </div>
+
+            <table class="data-table" id="mainTable">
+                <colgroup>
+                    <col class="c-sn" />
+                    @foreach (var col in columns)
+                    {
+                        <col class="@col.CssClass" />
+                    }
+                </colgroup>
+                <thead>
+                    <tr id="colHeaderRow">
+                        <th class="text-center">S.N.</th>
+                        @foreach (var col in columns)
+                        {
+                            <th>@col.Header</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        int snV = 0;
+                    }
+
+                    @if (enableCollectionCenterGroup)
+                    {
+                        var groupedByCenter = rows.GroupBy(r => r.CollectionCenter ?? "Unknown");
+                        foreach (var centerGroup in groupedByCenter)
+                        {
+                            if (enableMemberGroupGroup)
+                            {
+                                var groupedByGroup = centerGroup.GroupBy(r => r.MemberGroup ?? "Unknown");
+                                foreach (var group in groupedByGroup)
+                                {
+                                    <tr class="group-header">@Html.Raw(RenderGroupHeaderRow("Group", centerGroup.Key + " - " + group.Key, group.ToList(), totalVisibleCols))</tr>
+                                    foreach (var row in group)
+                                    {
+                                        snV++;
+                                        <tr class="detail-row">
+                                            <td class="text-center">@snV</td>
+                                            @foreach (var col in columns)
+                                            {
+                                                <td>@col.Render(row)</td>
+                                            }
+                                        </tr>
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                <tr class="group-header">@Html.Raw(RenderGroupHeaderRow("Collection Center", centerGroup.Key, centerGroup.ToList(), totalVisibleCols))</tr>
+                                foreach (var row in centerGroup)
+                                {
+                                    snV++;
+                                    <tr class="detail-row">
+                                        <td class="text-center">@snV</td>
+                                        @foreach (var col in columns)
+                                        {
+                                            <td>@col.Render(row)</td>
+                                        }
+                                    </tr>
+                                }
+                            }
+                        }
+                    }
+                    else if (enableMemberGroupGroup)
+                    {
+                        var groupedByGroup = rows.GroupBy(r => r.MemberGroup ?? "Unknown");
+                        foreach (var group in groupedByGroup)
+                        {
+                            <tr class="group-header">@Html.Raw(RenderGroupHeaderRow("Member Group", group.Key, group.ToList(), totalVisibleCols))</tr>
+                            foreach (var row in group)
+                            {
+                                snV++;
+                                <tr class="detail-row">
+                                    <td class="text-center">@snV</td>
+                                    @foreach (var col in columns)
+                                    {
+                                        <td>@col.Render(row)</td>
+                                    }
+                                </tr>
+                            }
+                        }
+                    }
+                    else if (enableSavingTypeGroup)
+                    {
+                        var groupedBySavingType = rows.GroupBy(r => r.SavingAccountType ?? "Unknown");
+                        foreach (var group in groupedBySavingType)
+                        {
+                            <tr class="group-header">@Html.Raw(RenderGroupHeaderRow("Saving Type", group.Key, group.ToList(), totalVisibleCols))</tr>
+                            foreach (var row in group)
+                            {
+                                snV++;
+                                <tr class="detail-row">
+                                    <td class="text-center">@snV</td>
+                                    @foreach (var col in columns)
+                                    {
+                                        <td>@col.Render(row)</td>
+                                    }
+                                </tr>
+                            }
+                        }
+                    }
+                    else
+                    {
+                        foreach (var row in rows)
+                        {
+                            snV++;
+                            <tr class="detail-row">
+                                <td class="text-center">@snV</td>
+                                @foreach (var col in columns)
+                                {
+                                    <td>@col.Render(row)</td>
+                                }
+                            </tr>
+                        }
+                    }
+
+                    <tr class="grand-total" id="grandTotalRow">
+                        <td><strong>Total Records :</strong></td>
+                        <td colspan="@(totalVisibleCols - 1)"><strong>@totalRecords</strong></td>
+                    </tr>
+                    @if (columns.Any(c => c.Key == "Deposit"))
+                    {
+                        <tr class="grand-total">
+                            <td><strong>Total Deposit :</strong></td>
+                            <td colspan="@(totalVisibleCols - 1)"><strong>@FormatAmount(totalDeposit)</strong></td>
+                        </tr>
+                    }
+                    @if (columns.Any(c => c.Key == "Withdraw"))
+                    {
+                        <tr class="grand-total">
+                            <td><strong>Total Withdraw :</strong></td>
+                            <td colspan="@(totalVisibleCols - 1)"><strong>@FormatAmount(totalWithdraw)</strong></td>
+                        </tr>
+                    }
+                    @if (columns.Any(c => c.Key == "Balance"))
+                    {
+                        <tr class="grand-total">
+                            <td><strong>Total Balance :</strong></td>
+                            <td colspan="@(totalVisibleCols - 1)"><strong>@FormatAmount(totalBalance)</strong></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="view-outer" id="viewOuter"></div>
+    }
+
+    @if (!isView)
+    {
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        @if (!isExcel)
+        {
+            <div class="report-subheader">
+                <div class="subheader-title">Member Account Detail Report</div>
+                <div class="subheader-meta">
+                    <span><strong>Branch Name :</strong> @branchName</span>
+                    <span><strong>Till Date :</strong> @tillDate</span>
+                    <span><strong>Status :</strong> @status</span>
+                </div>
+                <div class="subheader-meta">
+                    <span><strong>Report Generated On :</strong> @generatedOn</span>
+                    <span><strong>Order By :</strong> @orderBy</span>
+                    <span><strong>Group By :</strong> @(enableCollectionCenterGroup || enableMemberGroupGroup || enableSavingTypeGroup ? "Yes" : "No")</span>
+                </div>
+                <div class="subheader-spacer"></div>
+            </div>
+        }
+
+        <table class="data-table" id="mainTable"
+            @(isExcel ? Html.Raw("data-sheet-name=\"MemberAccountDetailReport\"") : Html.Raw(""))>
+            <colgroup>
+                <col class="c-sn" />
+                @foreach (var col in columns)
+                {
+                    <col class="@col.CssClass" />
+                }
+            </colgroup>
+            @if (isExcel)
+            {
+                <thead>
+                    <tr class="meta-title"><td colspan="@totalVisibleCols">Member Account Detail Report</td></tr>
+                    <tr class="meta-row">
+                        <td colspan="@((int)Math.Ceiling(totalVisibleCols * 0.4))"><strong>Branch Name :</strong> @branchName</td>
+                        <td colspan="@((int)Math.Ceiling(totalVisibleCols * 0.3))"><strong>Till Date :</strong> @tillDate</td>
+                        <td colspan="@(totalVisibleCols - (int)Math.Ceiling(totalVisibleCols * 0.4) - (int)Math.Ceiling(totalVisibleCols * 0.3))"><strong>Status :</strong> @status</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="@((int)Math.Ceiling(totalVisibleCols * 0.4))"><strong>Report Generated On :</strong> @generatedOn</td>
+                        <td colspan="@((int)Math.Ceiling(totalVisibleCols * 0.3))"><strong>Order By :</strong> @orderBy</td>
+                        <td colspan="@(totalVisibleCols - (int)Math.Ceiling(totalVisibleCols * 0.4) - (int)Math.Ceiling(totalVisibleCols * 0.3))"><strong>Group By :</strong> @(enableCollectionCenterGroup || enableMemberGroupGroup || enableSavingTypeGroup ? "Yes" : "No")</td>
+                    </tr>
+                    <tr class="meta-spacer"><td colspan="@totalVisibleCols"></td></tr>
+                    <tr>
+                        <th class="text-center">S.N.</th>
+                        @foreach (var col in columns)
+                        {
+                            <th>@col.Header</th>
+                        }
+                    </tr>
+                </thead>
+            }
+            else
+            {
+                <thead>
+                    <tr>
+                        <th class="text-center">S.N.</th>
+                        @foreach (var col in columns)
+                        {
+                            <th>@col.Header</th>
+                        }
+                    </tr>
+                </thead>
+            }
+            <tbody>
+                @{
+                    int snP = 0;
+                }
+
+                @if (enableCollectionCenterGroup)
+                {
+                    var groupedByCenter = rows.GroupBy(r => r.CollectionCenter ?? "Unknown");
+                    foreach (var centerGroup in groupedByCenter)
+                    {
+                        if (enableMemberGroupGroup)
+                        {
+                            var groupedByGroup = centerGroup.GroupBy(r => r.MemberGroup ?? "Unknown");
+                            foreach (var group in groupedByGroup)
+                            {
+                                if (!isExcel)
+                                {
+                                    <tr class="group-header">@Html.Raw(RenderGroupHeaderRow("Group", centerGroup.Key + " - " + group.Key, group.ToList(), totalVisibleCols))</tr>
+                                }
+                                foreach (var row in group)
+                                {
+                                    snP++;
+                                    <tr class="detail-row">
+                                        <td class="text-center">@snP</td>
+                                        @foreach (var col in columns)
+                                        {
+                                            <td>@col.Render(row)</td>
+                                        }
+                                    </tr>
+                                }
+                            }
+                        }
+                        else
+                        {
+                            if (!isExcel)
+                            {
+                                <tr class="group-header">@Html.Raw(RenderGroupHeaderRow("Collection Center", centerGroup.Key, centerGroup.ToList(), totalVisibleCols))</tr>
+                            }
+                            foreach (var row in centerGroup)
+                            {
+                                snP++;
+                                <tr class="detail-row">
+                                    <td class="text-center">@snP</td>
+                                    @foreach (var col in columns)
+                                    {
+                                        <td>@col.Render(row)</td>
+                                    }
+                                </tr>
+                            }
+                        }
+                    }
+                }
+                else if (enableMemberGroupGroup)
+                {
+                    var groupedByGroup = rows.GroupBy(r => r.MemberGroup ?? "Unknown");
+                    foreach (var group in groupedByGroup)
+                    {
+                        if (!isExcel)
+                        {
+                            <tr class="group-header">@Html.Raw(RenderGroupHeaderRow("Member Group", group.Key, group.ToList(), totalVisibleCols))</tr>
+                        }
+                        foreach (var row in group)
+                        {
+                            snP++;
+                            <tr class="detail-row">
+                                <td class="text-center">@snP</td>
+                                @foreach (var col in columns)
+                                {
+                                    <td>@col.Render(row)</td>
+                                }
+                            </tr>
+                        }
+                    }
+                }
+                else if (enableSavingTypeGroup)
+                {
+                    var groupedBySavingType = rows.GroupBy(r => r.SavingAccountType ?? "Unknown");
+                    foreach (var group in groupedBySavingType)
+                    {
+                        if (!isExcel)
+                        {
+                            <tr class="group-header">@Html.Raw(RenderGroupHeaderRow("Saving Type", group.Key, group.ToList(), totalVisibleCols))</tr>
+                        }
+                        foreach (var row in group)
+                        {
+                            snP++;
+                            <tr class="detail-row">
+                                <td class="text-center">@snP</td>
+                                @foreach (var col in columns)
+                                {
+                                    <td>@col.Render(row)</td>
+                                }
+                            </tr>
+                        }
+                    }
+                }
+                else
+                {
+                    foreach (var row in rows)
+                    {
+                        snP++;
+                        <tr class="detail-row">
+                            <td class="text-center">@snP</td>
+                            @foreach (var col in columns)
+                            {
+                                <td>@col.Render(row)</td>
+                            }
+                        </tr>
+                    }
+                }
+
+                <tr class="grand-total">
+                    <td><strong>Total Records :</strong></td>
+                    <td colspan="@(totalVisibleCols - 1)"><strong>@totalRecords</strong></td>
+                </tr>
+                @if (columns.Any(c => c.Key == "Deposit"))
+                {
+                    <tr class="grand-total">
+                        <td><strong>Total Deposit :</strong></td>
+                        <td colspan="@(totalVisibleCols - 1)"><strong>@FormatAmount(totalDeposit)</strong></td>
+                    </tr>
+                }
+                @if (columns.Any(c => c.Key == "Withdraw"))
+                {
+                    <tr class="grand-total">
+                        <td><strong>Total Withdraw :</strong></td>
+                        <td colspan="@(totalVisibleCols - 1)"><strong>@FormatAmount(totalWithdraw)</strong></td>
+                    </tr>
+                }
+                @if (columns.Any(c => c.Key == "Balance"))
+                {
+                    <tr class="grand-total">
+                        <td><strong>Total Balance :</strong></td>
+                        <td colspan="@(totalVisibleCols - 1)"><strong>@FormatAmount(totalBalance)</strong></td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+
+    @if (isView)
+    {
+        <script>
+                (function () {
+                    'use strict';
+
+                    var MAX_RETRIES = 5;
+                    var RETRY_DELAY = 80;
+                    var retryCount = 0;
+                    var PAGE_W = 3200;
+                    var PAGE_H = 1587;
+                    var FOOTER_H = 28;
+
+                    function buildPages() {
+                        var tbl = document.getElementById('mainTable');
+                        var colHdrRow = document.getElementById('colHeaderRow');
+                        var grandTotalEl = document.getElementById('grandTotalRow');
+                        var subHdrTpl = document.getElementById('subheaderTemplate');
+
+                        if (!tbl || !colHdrRow || !subHdrTpl) {
+                            if (retryCount++ < MAX_RETRIES)
+                                setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+                            return;
+                        }
+
+                        var colHdrH = colHdrRow.getBoundingClientRect().height;
+                        var subHdrH = subHdrTpl.getBoundingClientRect().height;
+                        var gtH = grandTotalEl ? grandTotalEl.getBoundingClientRect().height : 0;
+                        var gtHtml = grandTotalEl ? grandTotalEl.outerHTML : '';
+
+                        var commonHdrEl = document.getElementById('commonHeaderSource');
+                        var commonHdrHtml = commonHdrEl ? commonHdrEl.innerHTML : '';
+                        var commonHdrH = commonHdrEl ? commonHdrEl.getBoundingClientRect().height : 0;
+
+                        var detailRows = tbl.querySelectorAll('tr.detail-row, tr.group-header');
+                        var rowData = Array.from(detailRows).map(function (r) {
+                            return { html: r.outerHTML, h: r.getBoundingClientRect().height };
+                        });
+
+                        var allZero = rowData.length > 0 && rowData.every(function (r) { return r.h === 0; });
+                        if (allZero) {
+                            if (retryCount++ < MAX_RETRIES)
+                                setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+                            return;
+                        }
+
+                        var colgroupHtml = tbl.querySelector('colgroup').outerHTML;
+                        var colHdrHtml = colHdrRow.outerHTML;
+                        var subHdrHtml = subHdrTpl.outerHTML;
+
+                        // Header row (colHdrHtml) is only rendered on page 1 (see the
+                        // p === 0 check below), so only page 1's available height needs
+                        // to reserve space for it. Pages 2+ get the full page height
+                        // minus just the footer.
+                        var availP1 = PAGE_H - FOOTER_H - commonHdrH - subHdrH - colHdrH;
+                        var availPN = PAGE_H - FOOTER_H;
+
+                        var pages = [], cur = [], usedH = 0;
+                        var isFirstPage = true;
+
+                        for (var i = 0; i < rowData.length; i++) {
+                            var rh = rowData[i].h || 14;
+                            var avail = isFirstPage ? availP1 : availPN;
+                            var extra = (i === rowData.length - 1) ? gtH : 0;
+
+                            if (cur.length > 0 && usedH + rh + extra > avail) {
+                                pages.push(cur);
+                                cur = [];
+                                usedH = 0;
+                                isFirstPage = false;
+                            }
+                            cur.push(i);
+                            usedH += rh;
+                        }
+                        pages.push(cur);
+
+                        var totalPages = pages.length;
+
+                        var sourceWrap = document.getElementById('sourceWrap');
+                        if (sourceWrap) sourceWrap.parentNode.removeChild(sourceWrap);
+                        if (commonHdrEl) commonHdrEl.parentNode.removeChild(commonHdrEl);
+
+                        var viewOuter = document.getElementById('viewOuter');
+                        var fragment = document.createDocumentFragment();
+
+                        for (var p = 0; p < totalPages; p++) {
+                            var card = document.createElement('div');
+                            card.className = 'view-page';
+                            card.setAttribute('data-page', String(p + 1));
+
+                            var contentHtml = '<div class="view-page-content">';
+
+                            if (p === 0 && commonHdrHtml) {
+                                contentHtml += '<div class="common-header-wrap">' + commonHdrHtml + '</div>';
+                            }
+
+                            if (p === 0) {
+                                contentHtml += '<div class="page-subheader">' + subHdrHtml + '</div>';
+                            }
+
+                            // Only page 1 gets a <thead> with the column header row.
+                            // Pages 2+ start straight into <tbody> — no repeated header.
+                            contentHtml += '<div class="page-table-wrap">'
+                                         + '<table class="data-table" style="width:' + PAGE_W + 'px;">'
+                                         + colgroupHtml
+                                         + (p === 0 ? ('<thead>' + colHdrHtml + '</thead>') : '')
+                                         + '<tbody>';
+
+                            var pageRows = pages[p];
+                            for (var r = 0; r < pageRows.length; r++) {
+                                contentHtml += rowData[pageRows[r]].html;
+                            }
+
+                            if (p === totalPages - 1 && gtHtml) {
+                                contentHtml += gtHtml;
+                            }
+
+                            contentHtml += '</tbody></table>'
+                                         + '</div>';
+
+                            contentHtml += '</div>';
+                            contentHtml += '<div class="view-page-footer">Page '
+                                         + (p + 1) + ' of ' + totalPages
+                                         + '</div>';
+
+                            card.innerHTML = contentHtml;
+                            fragment.appendChild(card);
+                        }
+
+                        viewOuter.appendChild(fragment);
+
+                        (function (el) {
+                            var drag = false, sx = 0, ss = 0;
+                            el.addEventListener('mousedown', function (e) {
+                                if (e.button !== 0) return;
+                                drag = true; sx = e.clientX; ss = el.scrollLeft;
+                                el.style.userSelect = 'none';
+                                e.preventDefault();
+                            });
+                            document.addEventListener('mousemove', function (e) {
+                                if (drag) el.scrollLeft = ss - (e.clientX - sx);
+                            });
+                            document.addEventListener('mouseup', function () {
+                                drag = false; el.style.userSelect = '';
+                            });
+                        })(viewOuter);
+
+                        window.scrollToPage = function (pageNumber) {
+                            var target = document.querySelector('.view-page[data-page="' + pageNumber + '"]');
+                            if (!target) return;
+                            window.scrollTo({ top: target.offsetTop, behavior: 'smooth' });
+                        };
+
+                        if (window.parent && window.parent !== window) {
+                            window.parent.postMessage(
+                                { type: 'REPORT_PAGES_READY', totalPages: totalPages },
+                                '*'
+                            );
+                        }
+                    }
+
+                    requestAnimationFrame(function () {
+                        requestAnimationFrame(buildPages);
+                    });
+                })();
+        </script>
+    }
+</body>
+</html>
