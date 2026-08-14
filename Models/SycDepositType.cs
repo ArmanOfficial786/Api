@@ -77,4 +77,6 @@ public partial class SycDepositType
     public string? DepositTypeInNepali { get; set; }
 
     public bool IsMobileApp { get; set; }
+
+    public virtual ICollection<MamAccountOpening> MamAccountOpenings { get; set; } = new List<MamAccountOpening>();
 }

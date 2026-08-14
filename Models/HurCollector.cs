@@ -53,6 +53,8 @@ public partial class HurCollector
 
     public string? PinCode { get; set; }
 
+    public virtual ICollection<MamAccountOpening> MamAccountOpenings { get; set; } = new List<MamAccountOpening>();
+
     public virtual ICollection<SycCollectionCenter> SycCollectionCenters { get; set; } = new List<SycCollectionCenter>();
 
     public virtual UsmOffice UsmOffice { get; set; } = null!;

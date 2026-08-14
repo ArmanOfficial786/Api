@@ -55,6 +55,8 @@ public partial class UsmOffice
 
     public virtual ICollection<LmtLoanTypeMaster> LmtLoanTypeMasters { get; set; } = new List<LmtLoanTypeMaster>();
 
+    public virtual ICollection<MamAccountOpening> MamAccountOpenings { get; set; } = new List<MamAccountOpening>();
+
     public virtual ICollection<MemMemberRegistration> MemMemberRegistrations { get; set; } = new List<MemMemberRegistration>();
 
     public virtual ICollection<SycCollectionCenter> SycCollectionCenters { get; set; } = new List<SycCollectionCenter>();

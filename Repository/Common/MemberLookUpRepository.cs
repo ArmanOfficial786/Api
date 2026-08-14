@@ -19,7 +19,7 @@ namespace NexgenCosysReport.Repository.Common
         }
 
         // -- 1. Paginated + filtered list for the grid -------------------------
-        public async Task<PagedResult<MemberLookUpDtos>> GetMemberListAsync(
+        public async Task<Pagination<MemberLookUpDtos>> GetMemberListAsync(
             MemberLookUpRequest request,
             long userId)
         {
@@ -50,25 +50,25 @@ namespace NexgenCosysReport.Repository.Common
 
             if (!rawItems.Any())
             {
-                return new PagedResult<MemberLookUpDtos>
+                return new Pagination<MemberLookUpDtos>
                 {
                     Items = new List<MemberLookUpDtos>(),
-                    TotalCount = 0,
-                    CurrentPage = request.Page,
-                    PageSize = FIXED_PAGE_SIZE,
-                    TotalPages = 0
+                    totalRecord = 0,
+                    currentPage = request.Page,
+                    pageSize = FIXED_PAGE_SIZE,
+                    totalPages = 0
                 };
             }
 
             var first = rawItems.First();
 
-            return new PagedResult<MemberLookUpDtos>
+            return new Pagination<MemberLookUpDtos>
             {
                 Items = rawItems,
-                TotalCount = first.TotalCount,
-                CurrentPage = first.CurrentPage > 0 ? first.CurrentPage : request.Page,
-                PageSize = FIXED_PAGE_SIZE,
-                TotalPages = first.TotalPages
+                totalRecord = first.TotalCount,
+                currentPage = first.CurrentPage > 0 ? first.CurrentPage : request.Page,
+                pageSize = FIXED_PAGE_SIZE,
+                totalPages = first.TotalPages
             };
         }
 

@@ -135,6 +135,14 @@ builder.Services.AddScoped<IMemberPenaltyDepositWithdraw, MemberPenaltyDepositWi
 builder.Services.AddScoped<IMemberAccountDetail, MemberAccountDetailRepository>();
 builder.Services.AddScoped<ILmtLoanMasterList, LmtLoanMasterListRepository>();
 builder.Services.AddScoped<IShareType, ShareTypeRepository>();
+builder.Services.AddScoped<IAccountLookUp, AccountLookUpRepository>();
+
+
+
+
+builder.Services.AddControllers()
+    .AddJsonOptions(o => o.JsonSerializerOptions.Converters.Add(
+        new System.Text.Json.Serialization.JsonStringEnumConverter()));
 
 var app = builder.Build();
 

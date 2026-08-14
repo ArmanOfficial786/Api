@@ -187,6 +187,8 @@ public partial class MemMemberRegistration
 
     public string? BloodGroup { get; set; }
 
+    public virtual ICollection<MamAccountOpening> MamAccountOpenings { get; set; } = new List<MamAccountOpening>();
+
     public virtual SycMemberGroup SycMemberGroup { get; set; } = null!;
 
     public virtual UsmOffice UsmOffice { get; set; } = null!;

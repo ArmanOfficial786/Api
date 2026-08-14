@@ -25,7 +25,7 @@ namespace NexgenCosysReport.Controllers.Common
         /// GET /api/MemberLookUp/search?Page=1&MemberName=Ram&Gender=Male
         /// </summary>
         [HttpGet("search")]
-        public async Task<ActionResult<PagedResult<MemberLookUpDtos>>> Search(
+        public async Task<ActionResult<Pagination<MemberLookUpDtos>>> Search(
             [FromQuery] MemberLookUpRequest request)
         {
             try

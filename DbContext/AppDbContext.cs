@@ -22,6 +22,12 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<LmtLoanTypeMaster> LmtLoanTypeMasters { get; set; }
 
+    public virtual DbSet<MamAccountHolderType> MamAccountHolderTypes { get; set; }
+
+    public virtual DbSet<MamAccountOpening> MamAccountOpenings { get; set; }
+
+    public virtual DbSet<MamAccountStatus> MamAccountStatuses { get; set; }
+
     public virtual DbSet<MemMemberRegistration> MemMemberRegistrations { get; set; }
 
     public virtual DbSet<ShmShareType> ShmShareTypes { get; set; }
@@ -125,6 +131,136 @@ public partial class AppDbContext : DbContext
             entity.HasOne(d => d.UsmOffice).WithMany(p => p.LmtLoanTypeMasters)
                 .HasForeignKey(d => d.UsmOfficeId)
                 .HasConstraintName("FK_LmtLoanTypeMaster_UsmOffice");
+        });
+
+        modelBuilder.Entity<MamAccountHolderType>(entity =>
+        {
+            entity.ToTable("MamAccountHolderType");
+
+            entity.Property(e => e.MamAccountHolderTypeId).ValueGeneratedNever();
+            entity.Property(e => e.AccountHolder).HasMaxLength(50);
+            entity.Property(e => e.Description).HasColumnType("ntext");
+        });
+
+        modelBuilder.Entity<MamAccountOpening>(entity =>
+        {
+            entity.ToTable("MamAccountOpening");
+
+            entity.HasIndex(e => e.MemMemberRegistrationId, "NonClusteredIndex-MemMemberRegistrationId");
+
+            entity.HasIndex(e => e.AccountNo, "NonClusteredIndex_AccountNo_INCLUDE_MamAccountOpeningId");
+
+            entity.Property(e => e.AccountClose).HasDefaultValue(true, "DF_MamAccountOpening_AccountClose");
+            entity.Property(e => e.AccountName).HasMaxLength(255);
+            entity.Property(e => e.AccountNamingOption).HasComment("");
+            entity.Property(e => e.AccountNo).HasMaxLength(50);
+            entity.Property(e => e.AccountOpenOn).HasColumnType("datetime");
+            entity.Property(e => e.AccountOpenOnBs).HasMaxLength(50);
+            entity.Property(e => e.BalanceCd)
+                .HasDefaultValue(0m, "DF_MamAccountOpening_BalanceCd")
+                .HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.Certificates).HasMaxLength(255);
+            entity.Property(e => e.CompulsaryAmountLastChangedOnBs)
+                .HasMaxLength(10)
+                .HasColumnName("CompulsaryAmountLastChangedOnBS");
+            entity.Property(e => e.CompulsaryDueAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.CompulsaryDueAmountInstallment).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.CreatedOnBs).HasMaxLength(50);
+            entity.Property(e => e.ESewaId)
+                .HasMaxLength(50)
+                .HasColumnName("eSewaId");
+            entity.Property(e => e.FreezeAmount)
+                .HasDefaultValue(0m, "DF_MamAccountOpening_FreezeAmount")
+                .HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.InterestPayable)
+                .HasDefaultValue(0m, "DF_MamAccountOpening_InterestPayable")
+                .HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.InterestRate).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.IsInterestCalculationActive).HasDefaultValue(true, "DF_MamAccountOpening_IsInterestCalculationActive");
+            entity.Property(e => e.IsInterestCreditable).HasDefaultValue(true, "DF_MamAccountOpening_IsInterestCreditable");
+            entity.Property(e => e.IsVerify)
+                .IsRequired()
+                .HasDefaultValueSql("('1')");
+            entity.Property(e => e.LastInterestDateOn).HasColumnType("datetime");
+            entity.Property(e => e.LastInterestDateOnBs).HasMaxLength(50);
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.LastModifiedOnBs).HasMaxLength(50);
+            entity.Property(e => e.LedgerBalance)
+                .HasDefaultValue(0m, "DF_MamAccountOpening_LedgerBalance")
+                .HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.MaturityOn).HasColumnType("datetime");
+            entity.Property(e => e.MaturityOnBs).HasMaxLength(50);
+            entity.Property(e => e.MaximumAmount).HasColumnType("decimal(18, 0)");
+            entity.Property(e => e.MinimumAmount).HasColumnType("decimal(18, 0)");
+            entity.Property(e => e.MinorAccount).HasComment("");
+            entity.Property(e => e.MinorBirthDateOn).HasColumnType("datetime");
+            entity.Property(e => e.MinorBirthDateOnBs).HasMaxLength(10);
+            entity.Property(e => e.MobileAppIssueDateOn).HasColumnType("datetime");
+            entity.Property(e => e.MobileAppIssueDateOnBs).HasMaxLength(50);
+            entity.Property(e => e.MobileAppMaturityDateOn).HasColumnType("datetime");
+            entity.Property(e => e.MobileAppMaturityDateOnBs).HasMaxLength(50);
+            entity.Property(e => e.MobileAppRenewDateOn).HasColumnType("datetime");
+            entity.Property(e => e.MobileAppRenewDateOnBs).HasMaxLength(50);
+            entity.Property(e => e.NextInterestDateOn).HasColumnType("datetime");
+            entity.Property(e => e.NextInterestDateOnBs).HasMaxLength(50);
+            entity.Property(e => e.PenaltyTillDateOnBs).HasMaxLength(10);
+            entity.Property(e => e.PinCode).HasMaxLength(10);
+            entity.Property(e => e.PinCodeGeneratedOn).HasColumnType("datetime");
+            entity.Property(e => e.PinCodeLastChangedOn).HasColumnType("datetime");
+            entity.Property(e => e.PreviousInterest).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.PreviousPenaltyAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.Remarks).HasColumnType("ntext");
+            entity.Property(e => e.Signature).HasMaxLength(255);
+            entity.Property(e => e.TaxRate).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.TaxReceivable)
+                .HasDefaultValue(0m, "DF_MamAccountOpening_TaxReceivable")
+                .HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.TermDepositInstallmentAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.TermDepositMaturityAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.TermDepositNoOfInstallment).HasColumnType("numeric(18, 0)");
+            entity.Property(e => e.TermDepositNoOfInstallmentType).HasMaxLength(1);
+            entity.Property(e => e.VerifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.Withdrawal).HasDefaultValue(true, "DF_MamAccountOpening_Withdrawal");
+
+            entity.HasOne(d => d.HurCollector).WithMany(p => p.MamAccountOpenings)
+                .HasForeignKey(d => d.HurCollectorId)
+                .HasConstraintName("FK_MamAccountOpening_HurCollector");
+
+            entity.HasOne(d => d.MamAccountHolderType).WithMany(p => p.MamAccountOpenings)
+                .HasForeignKey(d => d.MamAccountHolderTypeId)
+                .HasConstraintName("FK_MamAccountOpening_MamAccountHolderType");
+
+            entity.HasOne(d => d.MamAccountStatus).WithMany(p => p.MamAccountOpenings)
+                .HasForeignKey(d => d.MamAccountStatusId)
+                .HasConstraintName("FK_MamAccountOpening_MamAccountStatus");
+
+            entity.HasOne(d => d.MemMemberRegistration).WithMany(p => p.MamAccountOpenings)
+                .HasForeignKey(d => d.MemMemberRegistrationId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_MamAccountOpening_MemMemberRegistration");
+
+            entity.HasOne(d => d.SycDepositType).WithMany(p => p.MamAccountOpenings)
+                .HasForeignKey(d => d.SycDepositTypeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_MamAccountOpening_SycDepositType");
+
+            entity.HasOne(d => d.UsmOffice).WithMany(p => p.MamAccountOpenings)
+                .HasForeignKey(d => d.UsmOfficeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_MamAccountOpening_UsmOffice");
+        });
+
+        modelBuilder.Entity<MamAccountStatus>(entity =>
+        {
+            entity.ToTable("MamAccountStatus");
+
+            entity.Property(e => e.MamAccountStatusId).ValueGeneratedNever();
+            entity.Property(e => e.AccountStatus)
+                .HasMaxLength(1)
+                .IsUnicode(false)
+                .IsFixedLength();
+            entity.Property(e => e.Description).HasColumnType("ntext");
         });
 
         modelBuilder.Entity<MemMemberRegistration>(entity =>

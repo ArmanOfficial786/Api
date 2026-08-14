@@ -5,7 +5,7 @@ namespace NexgenCosysReport.Inteface.ServiceInterface.Common
     public interface IMemberLookUp
     {
         // Grid search with filters + pagination
-        Task<PagedResult<MemberLookUpDtos>> GetMemberListAsync(
+        Task<Pagination<MemberLookUpDtos>> GetMemberListAsync(
             MemberLookUpRequest request,
             long userId);
 

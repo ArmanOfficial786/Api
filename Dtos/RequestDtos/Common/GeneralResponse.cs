@@ -9,18 +9,31 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Common
         public string message { get; set; } = "";
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public T? data { get; set; }
-        //public Pagination? Pagination { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public Pagination? pagination { get; set; }
     }
 
-    public class Pagination
+    public class PaginationMeta
     {
-        public int? currentPage { get; set; }     // ? PascalCase
+        public int? currentPage { get; set; }
         public int? totalPages { get; set; }
         public int? pageSize { get; set; }
         public int? totalRecord { get; set; }
-        public bool? hasNextPage { get; set; }    // ? PascalCase
+        public bool? hasNextPage { get; set; }
         public bool? hasPreviousPage { get; set; }
     }
+
+    public class Pagination<T> : PaginationMeta
+    {
+        public List<T>? Items { get; set; } = [];
+    }
+
+    public class Pagination : PaginationMeta
+    {
+        public List<object>? Items { get; set; } = [];
+    }
+
+
 
     public class ReportResponseDtos
     {
@@ -31,13 +44,6 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Common
 
     }
 
-
-
 }
 
 
-//public record ApiResponse<T>
-//{
-//    public bool Success { get; set; }
-//    public T Data { get; set; }
-//} both are same
