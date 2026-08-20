@@ -2,6 +2,7 @@
 using jsreport.Binary;
 using jsreport.Local;
 using Microsoft.EntityFrameworkCore;
+using NexgenCosysAPI.Repository.MemberAccount;
 using NexgenCosysReport;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Inteface.ReportInterface;
@@ -136,6 +137,13 @@ builder.Services.AddScoped<IMemberAccountDetail, MemberAccountDetailRepository>(
 builder.Services.AddScoped<ILmtLoanMasterList, LmtLoanMasterListRepository>();
 builder.Services.AddScoped<IShareType, ShareTypeRepository>();
 builder.Services.AddScoped<IAccountLookUp, AccountLookUpRepository>();
+builder.Services.AddScoped<IDepositeStatement, DepositStatementRepository>();
+builder.Services.AddScoped<IDepositStatementVerification, DepositStatementVerifyRepository>();
+
+
+
+
+
 
 
 

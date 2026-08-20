@@ -1,0 +1,368 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+    var rows = (Model["Rows"] as List<DepositStatementRowDto>) ?? new List<DepositStatementRowDto>();
+    var memberDetail = Model["MemberDetail"] as DepositStatementMemberDetailDto;
+    var openingBalance = Model["OpeningBalance"] as decimal? ?? 0;
+    var closingBalance = Model["ClosingBalance"] as decimal? ?? 0;
+    var interestAmount = Model["InterestAmount"] as decimal? ?? 0;
+    var taxAmount = Model["TaxAmount"] as decimal? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var accountNo = Model["AccountNo"]?.ToString() ?? "";
+    var enableInterest = Model["EnableInterest"] as bool? ?? false;
+    var entryBy = Model["EntryBy"] as bool? ?? false;
+    var enableBillNumber = Model["EnableBillNumber"] as bool? ?? false;
+    var showValueDate = Model.ContainsKey("ValueDate") ? (Model["ValueDate"] as bool? ?? true) : true;
+    var verifiedTillBs = Model["VerifiedTillBs"]?.ToString();
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var isNepali = Model["Language"]?.ToString() == "Nepali";
+
+    string NullDisplay(object? value) =>
+        value == null || string.IsNullOrWhiteSpace(value.ToString()) ? "" : value.ToString()!;
+
+    // leadColSpan = every column that precedes Withdrawal/Deposit/Balance -- used to
+    // colspan the "Total :" label so it lines up regardless of which optional columns
+    // (Value Date / Bill No) are switched on.
+    int leadColSpan = 1 /*S.No*/ + 1 /*DateEng*/ + (showValueDate ? 1 : 0) + 1 /*Description*/ + (enableBillNumber ? 1 : 0);
+    int extraCols = (enableBillNumber ? 1 : 0) + (entryBy ? 1 : 0) + (showValueDate ? 1 : 0);
+    int totalCols = 6 + extraCols; // S.No, Date, Description, Withdrawal, Deposit, Balance = 6 base
+
+    // Totals for the "Total :" row -- Balance is a running figure per-row, not summable,
+    // so only Withdrawal/Deposit get totalled here (matches WebForms report).
+    var totalWithdraw = rows.Sum(r => r.Withdraw ?? 0);
+    var totalDeposit = rows.Sum(r => r.Deposit ?? 0);
+
+    var locale = new
+    {
+        ReportTitle = isNepali ? "निक्षेप विवरण प्रतिवेदन" : "Deposit Statement Report",
+        ReportGeneratedOn = isNepali ? "प्रतिवेदन जारी मिति" : "Report Generated On",
+        StatementBetween = isNepali ? "निक्षेप विवरण अवधि" : "Deposit Statement Between",
+
+        MemberId = isNepali ? "सदस्य नं" : "Member Id",
+        MemberName = isNepali ? "सदस्यको नाम" : "Member Name",
+        MemberAddress = isNepali ? "सदस्यको ठेगाना" : "Member Address",
+        AcNo = isNepali ? "खाता नं" : "A/C No",
+        AcType = isNepali ? "खाताको किसिम" : "A/C Type",
+        PhoneNo = isNepali ? "फोन नं" : "Phone No",
+        InterestRate = isNepali ? "ब्याज दर" : "Interest Rate",
+        AcOpenedDate = isNepali ? "खाता खोलेको मिति" : "A/C Opened Date",
+        OpeningBalance = isNepali ? "सुरु मौज्दात" : "Opening Balance",
+
+        SNo = isNepali ? "क्र.सं" : "S.No",
+        DateEng = isNepali ? "मिति" : "DateEng",
+        ValueDate = isNepali ? "मूल्य मिति" : "Value Date",
+        Description = isNepali ? "विवरण" : "Description",
+        BillNo = isNepali ? "बिल नं" : "Bill No",
+        Withdrawal = isNepali ? "झिकुवा" : "Withdrawal",
+        Deposit = isNepali ? "जम्मा" : "Deposit",
+        Balance = isNepali ? "मौज्दात" : "Balance",
+        EntryBy = isNepali ? "प्रविष्ट गर्ने" : "Entry By",
+
+        Total = isNepali ? "जम्मा :" : "Total :",
+        TransactionSummary = isNepali ? "कारोबार सारांश" : "Transaction Summary",
+        ClosingBalance = isNepali ? "अन्तिम मौज्दात" : "Closing Balance",
+
+        VerifiedTill = isNepali ? "पासबुक प्रमाणित मिति सम्म" : "Passbook Verified Till",
+        NoVerification = isNepali ? "प्रमाणित मिति उपलब्ध छैन" : "No Verification Till Date",
+
+        NoData = isNepali ? "छानिएको अवधिमा कुनै कारोबार फेला परेन" : "No transactions found for the selected period"
+    };
+
+    int sn = 0;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>@locale.ReportTitle</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: @(isNepali ? "'Preeti', Arial, sans-serif" : "Arial, sans-serif");
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .report-title {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                margin: 10px 0;
+            }
+
+            .meta-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 8px;
+                font-size: 9pt;
+            }
+
+                .meta-table td {
+                    padding: 2px 4px;
+                    vertical-align: top;
+                }
+
+            .detail-box {
+                width: 100%;
+                border: 1px solid #000;
+                border-collapse: collapse;
+                margin-bottom: 8px;
+                font-size: 9pt;
+            }
+
+                .detail-box td {
+                    border: 1px solid #000;
+                    padding: 4px 6px;
+                }
+
+                .detail-box .label {
+                    font-weight: bold;
+                    width: 15%;
+                }
+
+                .detail-box .value {
+                    width: 35%;
+                }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    border: 1px solid #ccc;
+                }
+
+                .data-table th {
+                    background: #f2f2f2;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                }
+
+                .data-table thead {
+                    display: table-row-group;
+                }
+
+            .total-row {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .summary-title {
+                text-align: center;
+                font-weight: bold;
+                font-size: 10pt;
+                margin-top: 14px;
+                margin-bottom: 4px;
+            }
+
+            .summary-box {
+                width: 100%;
+                border: 1px solid #000;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .summary-box th, .summary-box td {
+                    border: 1px solid #000;
+                    padding: 5px 8px;
+                    text-align: center;
+                }
+
+                .summary-box th {
+                    background: #f2f2f2;
+                    font-weight: bold;
+                }
+
+            .verify-note {
+                margin-top: 8px;
+                font-style: italic;
+                font-size: 8pt;
+            }
+
+            @@media print {
+                .data-table thead {
+                    display: table-row-group;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <div class="report-title">@locale.ReportTitle</div>
+
+        <table class="meta-table">
+            <tr>
+                <td style="width:50%;"><strong>@locale.ReportGeneratedOn :</strong> @generatedOn</td>
+                <td style="width:50%;">
+                    <strong>@locale.StatementBetween :</strong> @fromDate&nbsp;-&nbsp;@toDate
+                </td>
+            </tr>
+        </table>
+
+        <table class="detail-box">
+            <tr>
+                <td class="label">@locale.MemberId :</td>
+                <td class="value">@NullDisplay(memberDetail?.MemberId)</td>
+                <td class="label">@locale.AcNo :</td>
+                <td class="value">@accountNo</td>
+            </tr>
+            <tr>
+                <td class="label">@locale.MemberName :</td>
+                <td class="value">@NullDisplay(memberDetail?.MemberName)</td>
+                <td class="label">@locale.AcType :</td>
+                <td class="value">@NullDisplay(memberDetail?.DepositTypeName)</td>
+            </tr>
+            <tr>
+                <td class="label">@locale.MemberAddress :</td>
+                <td class="value">@NullDisplay(memberDetail?.Address)</td>
+                <td class="label">@locale.PhoneNo :</td>
+                <td class="value">@NullDisplay(memberDetail?.MobileNo)</td>
+            </tr>
+            <tr>
+                <td class="label">@locale.InterestRate :</td>
+                <td class="value">@(memberDetail?.InterestRate?.ToString("N2") ?? "")</td>
+                <td class="label">@locale.AcOpenedDate :</td>
+                <td class="value">@NullDisplay(memberDetail?.AccountOpenDate)</td>
+            </tr>
+            <tr>
+                <td class="label">@locale.OpeningBalance :</td>
+                <td class="value" colspan="3">@openingBalance.ToString("N2")</td>
+            </tr>
+        </table>
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th style="width:5%;">@locale.SNo</th>
+                    <th style="width:10%;">@locale.DateEng</th>
+                    @if (showValueDate)
+                    {
+                        <th style="width:10%;">@locale.ValueDate</th>
+                    }
+                    <th style="width:@(enableBillNumber ? "24%" : "34%");">@locale.Description</th>
+                    @if (enableBillNumber)
+                    {
+                        <th style="width:8%;">@locale.BillNo</th>
+                    }
+                    <th style="width:13%;" class="text-right">@locale.Withdrawal</th>
+                    <th style="width:13%;" class="text-right">@locale.Deposit</th>
+                    <th style="width:13%;" class="text-right">@locale.Balance</th>
+                    @if (entryBy)
+                    {
+                        <th style="width:12%;">@locale.EntryBy</th>
+                    }
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Any())
+                {
+                    sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr>
+                            <td class="text-center">@sn</td>
+                            <td>@NullDisplay(row.Date)</td>
+                            @if (showValueDate)
+                            {
+                                <td>@NullDisplay(row.ValueDate)</td>
+                            }
+                            <td>@NullDisplay(row.Particulars)</td>
+                            @if (enableBillNumber)
+                            {
+                                <td>@NullDisplay(row.BillNo)</td>
+                            }
+                            <td class="text-right">@(row.Withdraw > 0 ? row.Withdraw.Value.ToString("N2") : "")</td>
+                            <td class="text-right">@(row.Deposit > 0 ? row.Deposit.Value.ToString("N2") : "")</td>
+                            <td class="text-right">@row.Balance.ToString("N2")</td>
+                            @if (entryBy)
+                            {
+                                <td>@NullDisplay(row.EntryBy)</td>
+                            }
+                        </tr>
+                    }
+                    <tr class="total-row">
+                        <td colspan="@leadColSpan" class="text-right">@locale.Total</td>
+                        <td class="text-right">@totalWithdraw.ToString("N2")</td>
+                        <td class="text-right">@totalDeposit.ToString("N2")</td>
+                        <td></td>
+                        @if (entryBy)
+                        {
+                            <td></td>
+                        }
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="@totalCols" class="text-center">@locale.NoData</td></tr>
+                }
+            </tbody>
+        </table>
+
+        @if (rows.Any())
+        {
+            <div class="summary-title">@locale.TransactionSummary :</div>
+            <table class="summary-box">
+                <tr>
+                    <th>@locale.OpeningBalance</th>
+                    <th>@locale.Withdrawal</th>
+                    <th>@locale.Deposit</th>
+                    <th>@locale.ClosingBalance</th>
+                </tr>
+                <tr>
+                    <td>@openingBalance.ToString("N2")</td>
+                    <td>@totalWithdraw.ToString("N2")</td>
+                    <td>@totalDeposit.ToString("N2")</td>
+                    <td>@closingBalance.ToString("N2")</td>
+                </tr>
+            </table>
+        }
+
+        <div class="verify-note">
+            @if (!string.IsNullOrEmpty(verifiedTillBs))
+            {
+                @locale.VerifiedTill
+                @: : @verifiedTillBs
+            }
+            else
+            {
+                @locale.NoVerification
+            }
+        </div>
+    </div>
+</body>
+</html>

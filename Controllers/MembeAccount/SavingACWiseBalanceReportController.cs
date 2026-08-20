@@ -76,7 +76,7 @@
 ////                NormalizeFilters(request);
 
 ////                var upperFormat = format.ToUpperInvariant();
-////                var baseKey = ReportUtils.GenerateReportKey(request, ReportName) + $"_{upperFormat}";
+////                var baseKey = ReportUtils.GenerateReportKey(request, ReportName) ;
 ////                var chunkKey = ReportUtils.GenerateReportKey(request, ReportName); // format-independent
 
 ////                ReportExportHelper.LogCacheState(upperFormat, baseKey,
@@ -298,7 +298,7 @@
 //            {
 //                NormalizeFilters(request);
 //                var upperFormat = format.ToUpperInvariant();
-//                var baseKey = ReportUtils.GenerateReportKey(request, ReportName) + $"_{upperFormat}";
+//                var baseKey = ReportUtils.GenerateReportKey(request, ReportName) ;
 
 //                // Cache checks (unchanged)
 //                if (upperFormat == "VIEW" && _jsReportService.TryGetCachedPdf(baseKey, out var cachedPdf) && cachedPdf != null)
@@ -545,7 +545,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount
             {
                 NormalizeFilters(request);
                 var upperFormat = format.ToUpperInvariant();
-                var baseKey = ReportUtils.GenerateReportKey(request, ReportName) + $"_{upperFormat}";
+                var baseKey = ReportUtils.GenerateReportKey(request, ReportName);
 
                 // ── Cache hits (small-PDF path only) ─────────────────────
                 if (upperFormat == "VIEW" &&

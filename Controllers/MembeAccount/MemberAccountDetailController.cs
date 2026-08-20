@@ -81,7 +81,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount
                 }
 
                 var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, "MemberAccountDetail") + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, "MemberAccountDetail");
 
                 ReportExportHelper.LogCacheState(
                     upperFormat, reportKey,

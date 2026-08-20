@@ -83,7 +83,7 @@ namespace NexgenCosysReport.Controllers.AccountOperation
                 }
 
                 var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, "MemberPenaltyDepositWithdrawReport") + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, "MemberPenaltyDepositWithdrawReport");
 
                 ReportExportHelper.LogCacheState(
                     upperFormat, reportKey,

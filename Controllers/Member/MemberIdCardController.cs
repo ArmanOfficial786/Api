@@ -299,7 +299,7 @@ namespace NexgenCosysReport.Controllers.Member
                     return BadRequest(new { success = false, message = "Invalid request" });
 
                 var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, "MemberIdCard") + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, "MemberIdCard");
 
                 ReportExportHelper.LogCacheState(
                     upperFormat, reportKey,

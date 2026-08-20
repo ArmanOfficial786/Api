@@ -56,7 +56,7 @@ namespace NexgenCosysReport.Controllers.Member
                 if (request == null || !ModelState.IsValid || request.MemberRegistrationId <= 0)
                     return BadRequest(new { success = false, message = "Invalid request. MemberRegistrationId is required." });
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
