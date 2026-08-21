@@ -17,7 +17,8 @@ namespace NexgenCosysReport.Utils.Report
         // -- Deterministic cache key -----------------------------------------------
         public static string GenerateReportKey<TRequest>(
             TRequest request,
-            string reportPrefix = "Report")
+            string reportPrefix = "Report"
+           )
         {
             var json = JsonSerializer.Serialize(request,
                 new JsonSerializerOptions { WriteIndented = false });

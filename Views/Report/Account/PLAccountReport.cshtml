@@ -1,4 +1,4 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Account;
+﻿@* @using NexgenCosysReport.Dtos.RequestDtos.Account;
 @model Dictionary<string, object>
 
 @{
@@ -230,13 +230,13 @@
 <body>
     <div class="report-container">
 
-        @* ── COMMON HEADER ── *@
+      
         @if (!isExcel)
         {
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        @* ── DATA EXTRACTION ── *@
+      
         @{
             // Determine which type of data we have
             var plData = Model["PLData"];
@@ -272,7 +272,7 @@
                     </table>
 
                     <div class="pl-horizontal">
-                        @* ── EXPENSES COLUMN ── *@
+                     
                         <div class="pl-column">
                             <table class="data-table">
                                 <thead>
@@ -318,7 +318,6 @@
                             </table>
                         </div>
 
-                        @* ── INCOME COLUMN ── *@
                         <div class="pl-column">
                             <table class="data-table">
                                 <thead>
@@ -364,7 +363,7 @@
                         </div>
                     </div>
 
-                    @* ── NET PROFIT / LOSS ── *@
+                   
                     <table class="data-table" style="margin-top:10px;">
                         <tbody>
                             <tr class="net-profit">
@@ -454,7 +453,7 @@
                                     <tr class="meta-spacer"><td colspan="3"></td></tr>
                                 }
 
-                                @* ── NET PROFIT / LOSS ── *@
+                               
                                 <tr class="net-profit">
                                     <td><strong>@(netProfit >= 0 ? "Net Profit" : "Net Loss")</strong></td>
                                     <td class="text-right"><strong>@FormatAmount(Math.Abs(netProfit))</strong></td>
@@ -473,4 +472,416 @@
 
     </div>
 </body>
+</html> *@
+
+
+@using NexgenCosysReport.Dtos.RequestDtos.Account;
+@model Dictionary<string, object>
+
+@{
+    Layout = null;
+
+    var displayType = Model.ContainsKey("DisplayType") ? Model["DisplayType"]?.ToString() : "Horizontal";
+    var isNepali = Model.ContainsKey("IsNepali") && Convert.ToBoolean(Model["IsNepali"]);
+    var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "All";
+    var fromDate = Model.ContainsKey("FromDate") ? Model["FromDate"]?.ToString() : "";
+    var toDate = Model.ContainsKey("ToDate") ? Model["ToDate"]?.ToString() : "";
+    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
+
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // Helper to format amounts with parentheses for negatives
+    string FormatAmount(decimal amount) =>
+        amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
+
+    // Helper to display SubLedger with proper indentation
+    string FormatSubLedger(PLAccountRowDto row)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrEmpty(row.SubLedger) && row.SubLedger != "-") parts.Add(row.SubLedger);
+        if (!string.IsNullOrEmpty(row.SubLedger1) && row.SubLedger1 != "-") parts.Add(row.SubLedger1);
+        if (!string.IsNullOrEmpty(row.SubLedger2) && row.SubLedger2 != "-") parts.Add(row.SubLedger2);
+        return parts.Count > 0 ? string.Join(" — ", parts) : "-";
+    }
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Profit & Loss Account Report</title>
+    <style>
+            /* ── RESET ── */
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            /* ── STOP THEAD REPEATING ── */
+            thead {
+                display: table-row-group;
+            }
+
+            /* ── TOP-LEVEL TABLE (the ONLY top-level table in the document) ── */
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    white-space: normal;
+                    vertical-align: top;
+                    background: #FFFFFF;
+                }
+
+            /* ── META ROWS ── */
+            .meta-title td {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 8px;
+                font-size: 9pt;
+            }
+
+            /* Last meta row sits directly above the content, so drop its bottom padding */
+            .meta-row.meta-row-last td {
+                padding-bottom: 0;
+            }
+
+            /* ── SECTION HEADERS (vertical layout) ── */
+            .section-header td {
+                font-weight: bold;
+                background: #e6e6e6;
+                text-align: center;
+                font-size: 10pt;
+                padding: 6px 4px;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+            }
+
+            /* ── ROW-LEVEL CLASSES ──
+                           Used two ways in this file:
+                           1) On a <tr> whose <td> children should get the styling
+                              (Vertical layout: ".main-ledger-row td" etc.)
+                           2) On a <td> directly (Horizontal layout, which is a single
+                              FLAT table — no nested <table> — so Excel export sees
+                              ordinary grid cells instead of a text blob).
+                           Both forms are covered so the same classes work everywhere. */
+            .main-ledger-row td, td.main-ledger-row {
+                font-weight: bold;
+                padding: 3px 8px;
+                background: #FFFFFF;
+                border-bottom: 1px solid #ccc;
+            }
+
+            .detail-row td, td.detail-row {
+                padding: 2px 8px;
+                background: #FFFFFF;
+                border-bottom: 1px solid #ccc;
+            }
+
+            .grand-total td, td.grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                padding: 5px 8px;
+                background: #FFFFFF;
+            }
+
+            /* ── COLUMN HEADER BAND (EXPENSES | Amount | INCOME | Amount row) ── */
+            .col-header-row th {
+                padding: 5px 8px;
+                font-weight: bold;
+                background: #f2f2f2;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+            }
+
+                .col-header-row th.text-right {
+                    text-align: right;
+                }
+
+            /* ── NET PROFIT ROW ── */
+            .net-profit td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 8px;
+            }
+
+            /* ── TEXT ALIGNMENT ── */
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            /* ── PRINT ── */
+            @@media print {
+                body {
+                    margin: 0;
+                    padding: 0;
+                }
+                /* Only avoid breaking small, single-line rows.
+                               Do NOT apply this to the big wrapper row that holds the
+                               EXPENSES/INCOME sub-tables — forcing that whole row to
+                               stay together is what pushes it entirely onto the next
+                               page and leaves a blank gap above it. */
+                .meta-title, .meta-row, .section-header,
+                .main-ledger-row, .detail-row, .grand-total, .net-profit {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+
+    @{
+        var plData = Model["PLData"];
+    }
+
+    @if (displayType == "Horizontal")
+    {
+        var data = plData as PLAccountHorizontalData;
+        if (data != null)
+        {
+            var incomeRows = data.IncomeRows ?? new List<PLAccountRowDto>();
+            var expenseRows = data.ExpenseRows ?? new List<PLAccountRowDto>();
+            var totalIncome = data.TotalIncome;
+            var totalExpense = data.TotalExpense;
+            var netProfit = totalIncome - totalExpense;
+
+            // Flatten a grouped list of rows (main-ledger subtotal + its detail
+            // rows + a closing grand-total) into a single ordered line list.
+            // No nested <table> is built from this — each line becomes one
+            // <td> pair inside the ONE top-level table, so Excel export sees
+            // plain grid cells instead of a text blob.
+            List<(string Label, string Amount, string CssClass, bool Indent)> BuildPLLines(
+                List<PLAccountRowDto> rows, string sectionLabel, decimal total)
+            {
+                var lines = new List<(string, string, string, bool)>();
+                if (rows.Any())
+                {
+                    var groups = rows.GroupBy(x => x.MainLedger ?? "Other").OrderBy(g => g.Key);
+                    foreach (var group in groups)
+                    {
+                        decimal groupTotal = group.Sum(x => x.Balance);
+                        lines.Add((group.Key, FormatAmount(groupTotal), "main-ledger-row", false));
+                        foreach (var row in group.OrderBy(x => x.SubLedger))
+                        {
+                            lines.Add((row.SubLedger, FormatAmount(row.Balance), "detail-row", true));
+                        }
+                    }
+                    lines.Add((sectionLabel, FormatAmount(total), "grand-total", false));
+                }
+                else
+                {
+                    lines.Add(($"No {sectionLabel.ToLower()} records found", "", "text-center", false));
+                }
+                return lines;
+            }
+
+            var expenseLines = BuildPLLines(expenseRows, "EXPENSES", totalExpense);
+            var incomeLines = BuildPLLines(incomeRows, "INCOME", totalIncome);
+            var maxLines = Math.Max(expenseLines.Count, incomeLines.Count);
+
+            <table class="data-table" data-sheet-name="PLAccountHorizontal">
+                <colgroup>
+                    <col style="width:29%;" />
+                    <col style="width:19%;" />
+                    <col style="width:4%;" />
+                    <col style="width:29%;" />
+                    <col style="width:19%;" />
+                </colgroup>
+                <tbody>
+
+                    @* ── HEADER (always included; stripped for Excel via RemoveCommonHeader) ── *@
+                    <tr class="header-row">
+                        <td colspan="5">
+                            @await Html.PartialAsync("_CommonHeader", Model)
+                        </td>
+                    </tr>
+
+                    @* ── TITLE / META ── *@
+                    <tr class="meta-title">
+                        <td colspan="5">Profit & Loss Account Report (Horizontal)</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="5"><strong>Branch Name :</strong> @branchName</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="2"><strong>From Date :</strong> @fromDate</td>
+                        <td></td>
+                        <td colspan="2" class="text-right"><strong>To Date :</strong> @toDate</td>
+                    </tr>
+                    <tr class="meta-row meta-row-last">
+                        <td colspan="5"><strong>Report Generated On :</strong> @generatedOn</td>
+                    </tr>
+
+                    @* ── COLUMN HEADER BAND ── *@
+                    <tr class="col-header-row">
+                        <th>EXPENSES</th>
+                        <th class="text-right">Amount</th>
+                        <th></th>
+                        <th>INCOME</th>
+                        <th class="text-right">Amount</th>
+                    </tr>
+
+                    @* ── EXPENSES (left) | INCOME (right) — parallel flat rows, no nested tables ── *@
+                    @for (int i = 0; i < maxLines; i++)
+                    {
+                        var exp = i < expenseLines.Count ? expenseLines[i] : ("", "", "", false);
+                        var inc = i < incomeLines.Count ? incomeLines[i] : ("", "", "", false);
+                        <tr>
+                            <td class="@exp.Item3" style="@(exp.Item4 ? "padding-left:20px;" : "")">@exp.Item1</td>
+                            <td class="@exp.Item3 text-right">@exp.Item2</td>
+                            <td></td>
+                            <td class="@inc.Item3" style="@(inc.Item4 ? "padding-left:20px;" : "")">@inc.Item1</td>
+                            <td class="@inc.Item3 text-right">@inc.Item2</td>
+                        </tr>
+                    }
+
+                    @* ── NET PROFIT / LOSS ── *@
+                    <tr class="net-profit">
+                        <td colspan="4"><strong>@(netProfit >= 0 ? "Net Profit" : "Net Loss")</strong></td>
+                        <td class="text-right"><strong>@FormatAmount(Math.Abs(netProfit))</strong></td>
+                    </tr>
+
+                </tbody>
+            </table>
+        }
+    }
+    else // Vertical
+    {
+        var data = plData as PLAccountVerticalData;
+        if (data != null)
+        {
+            var rows = data.Rows ?? new List<PLAccountRowDto>();
+            var totalIncome = data.TotalIncome;
+            var totalExpense = data.TotalExpense;
+            var netProfit = data.NetProfit;
+
+            <table class="data-table" data-sheet-name="PLAccountVertical">
+                <colgroup>
+                    <col style="width:55%;" />
+                    <col style="width:35%;" />
+                    <col style="width:10%;" />
+                </colgroup>
+                <tbody>
+
+                    @* ── HEADER (always included; stripped for Excel via RemoveCommonHeader) ── *@
+                    <tr class="header-row">
+                        <td colspan="3">
+                            @await Html.PartialAsync("_CommonHeader", Model)
+                        </td>
+                    </tr>
+
+                    <tr class="meta-title">
+                        <td colspan="3">Profit & Loss Account Report (Vertical)</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="3"><strong>Branch Name :</strong> @branchName</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td><strong>From Date :</strong> @fromDate</td>
+                        <td class="text-right"><strong>To Date :</strong> @toDate</td>
+                        <td></td>
+                    </tr>
+                    <tr class="meta-row meta-row-last">
+                        <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
+                    </tr>
+
+                    @if (rows.Any())
+                    {
+                        var groups = rows.GroupBy(x => x.LedgerHead ?? "Other")
+                            .OrderByDescending(g => g.Key == "INCOME")
+                            .ToList();
+
+                        foreach (var group in groups)
+                        {
+                            <tr class="section-header">
+                                <td colspan="3">@group.Key</td>
+                            </tr>
+                            <tr>
+                                <th style="width:55%;">Sub Ledger</th>
+                                <th style="width:35%;" class="text-right">Amount</th>
+                                <th style="width:10%;"></th>
+                            </tr>
+
+                            var mainGroups = group.GroupBy(x => x.MainLedger ?? "Other")
+                                .OrderBy(g => g.Key);
+
+                            decimal groupTotal = 0;
+                            foreach (var mainGroup in mainGroups)
+                            {
+                                decimal mainTotal = mainGroup.Sum(x => x.Balance);
+                                groupTotal += mainTotal;
+                                <tr class="main-ledger-row">
+                                    <td><strong>@mainGroup.Key</strong></td>
+                                    <td class="text-right"><strong>@FormatAmount(mainTotal)</strong></td>
+                                    <td></td>
+                                </tr>
+                                foreach (var row in mainGroup.OrderBy(x => x.SubLedger))
+                                {
+                                    <tr class="detail-row">
+                                        <td style="padding-left:20px;">@row.SubLedger</td>
+                                        <td class="text-right">@FormatAmount(row.Balance)</td>
+                                        <td></td>
+                                    </tr>
+                                }
+                            }
+
+                            <tr class="grand-total">
+                                <td><strong>Total @group.Key</strong></td>
+                                <td class="text-right"><strong>@FormatAmount(groupTotal)</strong></td>
+                                <td></td>
+                            </tr>
+                        }
+
+                        @* ── NET PROFIT / LOSS ── *@
+                        <tr class="net-profit">
+                            <td><strong>@(netProfit >= 0 ? "Net Profit" : "Net Loss")</strong></td>
+                            <td class="text-right"><strong>@FormatAmount(Math.Abs(netProfit))</strong></td>
+                            <td></td>
+                        </tr>
+                    }
+                    else
+                    {
+                        <tr><td colspan="3" class="text-center">No data found</td></tr>
+                    }
+
+                </tbody>
+            </table>
+        }
+    }
+
+</body>
 </html>
+

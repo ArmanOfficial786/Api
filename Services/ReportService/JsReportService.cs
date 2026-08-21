@@ -1,3 +1,4 @@
+using HtmlAgilityPack;
 using iText.Kernel.Pdf;
 using jsreport.AspNetCore;
 using jsreport.Types;
@@ -107,6 +108,11 @@ namespace NexgenCosysReport.Services.ReportService
                 _logger.LogInformation("📦 PDF cache hit — {Key}", reportKey);
                 return cached;
             }
+            // 🔹 For Excel, strip header rows from the HTML before rendering
+            if (fmt is "EXCEL" or "XLSX")
+            {
+                htmlContent = RemoveHeaderRows(htmlContent);
+            }
 
             var rawBytes = await RenderHtmlToBytesAsync(htmlContent, fmt, pageSetting, ct).ConfigureAwait(false);
             var finalBytes = isPdf ? ReportUtils.CompressPdf(rawBytes, _logger) : rawBytes;
@@ -185,6 +191,19 @@ namespace NexgenCosysReport.Services.ReportService
             using var ms = new MemoryStream();
             await result.Content.CopyToAsync(ms, ct).ConfigureAwait(false);
             return ms.ToArray();
+        }
+
+        private string RemoveHeaderRows(string html)
+        {
+            var doc = new HtmlDocument();
+            doc.LoadHtml(html);
+            var nodes = doc.DocumentNode.SelectNodes("//*[contains(@class,'common-header-table')]");
+            if (nodes != null)
+            {
+                foreach (var node in nodes)
+                    node.Remove();
+            }
+            return doc.DocumentNode.OuterHtml;
         }
     }
 }
