@@ -44,6 +44,14 @@
                 overflow: visible;
             }
 
+            /* STOP THEAD REPEATING — without this, browsers/PDF renderers
+                           repeat the entire <thead> (title, meta line, column header
+                           row) on every printed page. Treating it as a normal row
+                           group makes it render once, like any other row group. */
+            thead {
+                display: table-row-group;
+            }
+
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
@@ -79,6 +87,18 @@
             .summary-label {
                 font-weight: bold;
                 background: #f0f0f0;
+            }
+
+            @@media print {
+                body {
+                    margin: 0;
+                    padding: 0;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
             }
     </style>
 </head>

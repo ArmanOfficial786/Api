@@ -43,7 +43,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount
             _logger = logger;
         }
 
-        [HttpPost("GenerateReport")]
+        [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] DepositStatementRequestDto request,
             [FromQuery] string format = "VIEW")
