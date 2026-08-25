@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using NexgenCosysReport.DbContext;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 
 namespace NexgenCosysReport.Services.CommonService
@@ -91,3 +92,4 @@ namespace NexgenCosysReport.Services.CommonService
         }
     }
 }
+

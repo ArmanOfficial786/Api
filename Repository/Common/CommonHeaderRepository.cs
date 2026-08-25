@@ -1,4 +1,5 @@
 using Dapper;
+using NexgenCosysReport.DbContext;
 using NexgenCosysReport.Dtos.ReportDtos;
 using Microsoft.CodeAnalysis.Operations;
 using Microsoft.Data.SqlClient;
@@ -51,3 +52,4 @@ namespace NexgenCosysReport.Repository.Common
         }
     }
 }
+

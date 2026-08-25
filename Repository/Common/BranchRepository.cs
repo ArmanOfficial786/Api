@@ -1,5 +1,6 @@
 
 //using NexgenCosysReport.Dtos.RequestDtos;
+using NexgenCosysReport.DbContext;
 //using NexgenCosysReport.Inteface.ServiceInterface;
 //using Microsoft.EntityFrameworkCore;
 

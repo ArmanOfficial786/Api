@@ -1,5 +1,6 @@
-﻿//// Repository/AccountOperation/MonthlyReportRepository.cs
+//// Repository/AccountOperation/MonthlyReportRepository.cs
 //using Dapper;
+using NexgenCosysReport.DbContext;
 //using Microsoft.Data.SqlClient;
 //using Microsoft.EntityFrameworkCore;
 //using NexgenCosysReport.Dtos.ReportDtos;
@@ -161,7 +162,7 @@ namespace NexgenCosysReport.Repository.Account
             using var connection = new SqlConnection(connectionString);
             await connection.OpenAsync();
 
-            // 1. Convert dates — SP's own usage comments show 'yyyy-MM-dd'
+            // 1. Convert dates � SP's own usage comments show 'yyyy-MM-dd'
             // (ISO). "MM/dd/yyyy" is locale-ambiguous for the SP's implicit
             // string->date casts and dynamic SQL string concatenation.
             var normalizedTillDate = NormalizeBsDate(request.TillDate);

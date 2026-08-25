@@ -1,9 +1,12 @@
 ﻿using jsreport.AspNetCore;
 using jsreport.Binary;
 using jsreport.Local;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using NexgenCosysAPI.Repository.MemberAccount;
-using NexgenCosysReport;
+using NexgenCosysReport.DbContext;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Account;
@@ -18,6 +21,7 @@ using NexgenCosysReport.Repository.MemberAccount;
 using NexgenCosysReport.Services.CommonService;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,8 +44,30 @@ jsreportServer.StartAsync().GetAwaiter().GetResult();
 builder.Services.AddJsReport(jsreportServer);
 builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+//builder.Services.AddSwaggerGen();
 builder.Services.AddHttpContextAccessor();
+
+
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo { Title = "NexgenCosysReport API", Version = "v1" });
+
+    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer",
+        BearerFormat = "JWT",
+        In = ParameterLocation.Header,
+        Description = "Enter your JWT token. Just paste the token — 'Bearer ' prefix is added automatically."
+    });
+
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecuritySchemeReference("Bearer", document)] = []
+    });
+});
+
 
 
 // CORS
@@ -68,6 +94,24 @@ builder.Services.AddCors(options =>
                 );
     });
 });
+
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        var jwtKey = builder.Configuration["Jwt:Key"]!;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtKey))
+        };
+    });
+
+builder.Services.AddAuthorization();
 
 // Database
 builder.Services.AddDbContext<AppDbContext>(options =>
@@ -139,6 +183,9 @@ builder.Services.AddScoped<IShareType, ShareTypeRepository>();
 builder.Services.AddScoped<IAccountLookUp, AccountLookUpRepository>();
 builder.Services.AddScoped<IDepositeStatement, DepositStatementRepository>();
 builder.Services.AddScoped<IDepositStatementVerification, DepositStatementVerifyRepository>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IAuth, AuthRepository>();
+
 
 
 
@@ -180,6 +227,7 @@ if (!app.Environment.IsDevelopment())
 
 // 3. Routing and auth
 app.UseRouting();
+app.UseAuthentication();
 app.UseAuthorization();
 
 DapperTypeMaps.Register();

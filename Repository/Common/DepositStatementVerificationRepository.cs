@@ -1,5 +1,6 @@
-ï»¿//// Repositories/Implementations/AccountOperation/DepositStatementVerifyRepository.cs
+//// Repositories/Implementations/AccountOperation/DepositStatementVerifyRepository.cs
 //using Dapper;
+using NexgenCosysReport.DbContext;
 //using Microsoft.Data.SqlClient;
 //using Microsoft.EntityFrameworkCore;
 //using NexgenCosysReport.Dtos.RequestDtos.Common;
@@ -283,7 +284,7 @@ namespace NexgenCosysReport.Repository.Common
         }
 
         /// <summary>
-        /// Mirrors CMamDepositStatementVerification.GetByAccountNo â€” joins on AccountNo
+        /// Mirrors CMamDepositStatementVerification.GetByAccountNo — joins on AccountNo
         /// rather than filtering by MamAccountOpeningId. This is what the WebForm's
         /// verify flow actually queries, and what GetVerificationStatus uses internally.
         /// </summary>
@@ -461,7 +462,7 @@ namespace NexgenCosysReport.Repository.Common
         /// <summary>
         /// Public contract is by mamAccountOpeningId (matches the generated client route
         /// Status/{mamAccountOpeningId}), but resolves AccountNo first and scopes the actual
-        /// lookup by AccountNo â€” replicating the WebForm's GetByAccountNo-based refresh.
+        /// lookup by AccountNo — replicating the WebForm's GetByAccountNo-based refresh.
         /// Returns null if the account opening doesn't exist (controller returns 404).
         /// </summary>
         public async Task<VerificationStatusDto?> GetVerificationStatus(long mamAccountOpeningId)
@@ -484,7 +485,7 @@ namespace NexgenCosysReport.Repository.Common
                 };
             }
 
-            // WebForm: depositStatementVerification.Max(p => p.VerifiedToDateOnBs) â€” raw string max.
+            // WebForm: depositStatementVerification.Max(p => p.VerifiedToDateOnBs) — raw string max.
             var maxVerifiedToBs = history.Max(h => h.VerifiedToDateOnBs);
             var latestRecord = history
                 .Where(h => h.VerifiedToDateOnBs == maxVerifiedToBs)

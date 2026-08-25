@@ -1,4 +1,5 @@
 using NexgenCosysReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.DbContext;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 
@@ -31,3 +32,4 @@ namespace NexgenCosysReport.Repository.Common
         }
     }
 }
+

@@ -1,5 +1,6 @@
-﻿////// Repository/AccountOperation/DepositWithdrawMaxAmountRangeRepository.cs
+////// Repository/AccountOperation/DepositWithdrawMaxAmountRangeRepository.cs
 ////using Dapper;
+using NexgenCosysReport.DbContext;
 ////using Microsoft.Data.SqlClient;
 ////using Microsoft.EntityFrameworkCore;
 ////using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
@@ -515,7 +516,7 @@ namespace NexgenCosysReport.Repository.MemberAccount
             {
                 return DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed)
                     ? parsed
-                    : null; // e.g. a BS-format string — not a valid Gregorian date, handled by caller
+                    : null; // e.g. a BS-format string � not a valid Gregorian date, handled by caller
             }
 
             try

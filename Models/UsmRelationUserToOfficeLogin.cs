@@ -1,10 +1,10 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 
 namespace NexgenCosysReport.Models;
 
 [PrimaryKey(nameof(UsmUserId), nameof(UsmOfficeId))]
-public partial class UsmRelationUserToOffice
+public partial class UsmRelationUserToOfficeLogin
 {
     public long UsmUserId { get; set; }
 

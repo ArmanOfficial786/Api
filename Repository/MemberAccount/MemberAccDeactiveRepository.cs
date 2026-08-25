@@ -1,5 +1,6 @@
-ï»¿//// Repository/AccountOperation/MemberAccountDeactiveRepository.cs
+//// Repository/AccountOperation/MemberAccountDeactiveRepository.cs
 //using Dapper;
+using NexgenCosysReport.DbContext;
 //using Microsoft.Data.SqlClient;
 //using Microsoft.EntityFrameworkCore;
 //using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
@@ -154,7 +155,7 @@ namespace NexgenCosysReport.Repository.MemberAccount
 
             // Convert Nepali date to English
             // Webform: tillDate = ncpTillDateOnBS.ShortNepaliDate, always populated (DefaultDate="True",
-            // RequiredValidation="true" on the picker) â€” the "-1" skip only matters if the API caller
+            // RequiredValidation="true" on the picker) — the "-1" skip only matters if the API caller
             // omits it, which the aspx never did.
             string tillDateStr = "";
             if (!string.IsNullOrEmpty(request.TillDate) && request.TillDate != "-1")
@@ -169,14 +170,14 @@ namespace NexgenCosysReport.Repository.MemberAccount
 
             // Webform: branchId = -1 when TotalCount == count (i.e. all branches selected/"Select All"
             // checked), otherwise branchSelected is the comma-joined list of checked UsmOfficeIds.
-            // No SameCompanyName concept in the aspx â€” branch filtering is purely from the checkbox list.
+            // No SameCompanyName concept in the aspx — branch filtering is purely from the checkbox list.
             string branchFilter = "-1";
             if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
             {
                 branchFilter = request.BranchIds;
             }
 
-            // Map order by â€” MUST include the "order by" keyword itself, because
+            // Map order by — MUST include the "order by" keyword itself, because
             // the SP concatenates @SqlFilterExpOrderBy directly into its dynamic SQL
             // (same convention as every other report SP in this system, e.g.
             // sp_5_43_GetAllDepositStatementVerifiedUnVerifiedReport's @SqlFilterExpOrder).

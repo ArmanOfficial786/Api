@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using NexgenCosysReport.DbContext;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
 
 namespace NexgenCosysReport.Controllers.Common

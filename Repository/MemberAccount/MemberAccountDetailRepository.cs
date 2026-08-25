@@ -1,5 +1,6 @@
-﻿//// Repository/AccountOperation/MemberAccountDetailRepository.cs
+//// Repository/AccountOperation/MemberAccountDetailRepository.cs
 //using Dapper;
+using NexgenCosysReport.DbContext;
 //using Microsoft.Data.SqlClient;
 //using Microsoft.EntityFrameworkCore;
 //using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;

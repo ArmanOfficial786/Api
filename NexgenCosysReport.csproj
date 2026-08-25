@@ -27,6 +27,7 @@
     <PackageReference Include="jsreport.Client" Version="3.8.1" />
     <PackageReference Include="jsreport.Local" Version="3.8.2" />
     <PackageReference Include="jsreport.Types" Version="3.9.4" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.11" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.1" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.2">
       <PrivateAssets>all</PrivateAssets>
@@ -54,7 +55,7 @@
 
   <ItemGroup>
     <Folder Include="DbContext\" />
-    <Folder Include="Models\" />
+    <Folder Include="SqlScripts\" />
     <Folder Include="Views\VisualReport\MemberAC\" />
   </ItemGroup>
 

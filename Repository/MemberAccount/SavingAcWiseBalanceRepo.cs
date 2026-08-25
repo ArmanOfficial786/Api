@@ -1,4 +1,5 @@
-﻿using Dapper;
+using Dapper;
+using NexgenCosysReport.DbContext;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
@@ -52,7 +53,7 @@ namespace NexgenCosysReport.Repository.MemberAccount
         }
 
         // ================================================================
-        //  @SqlFilterExpa  — applied to the no-transaction (account-only)
+        //  @SqlFilterExpa  � applied to the no-transaction (account-only)
         //  arm of the SP's WHERE clause:
         //    OR (t.AcoTransactionId IS NULL <@SqlFilterExpa>)
         //
@@ -96,7 +97,7 @@ namespace NexgenCosysReport.Repository.MemberAccount
         }
 
         // ================================================================
-        //  @SqlFilterExpt  — applied to the transaction arm of the WHERE:
+        //  @SqlFilterExpt  � applied to the transaction arm of the WHERE:
         //    t.IsActive = 1 AND att.AcoTransactionTypeId IN (...) <@SqlFilterExpt>
         //
         //  Filters: DepositType, Collector, TillDate (<=), Office,
@@ -114,7 +115,7 @@ namespace NexgenCosysReport.Repository.MemberAccount
             if (request.CollectorId != -1)
                 filter += $" AND a.HurCollectorId = {request.CollectorId}";
 
-            // Till date — convert BS → AD then apply as upper bound
+            // Till date � convert BS ? AD then apply as upper bound
             if (!string.IsNullOrWhiteSpace(request.TillDate) &&
                 request.TillDate != "-1")
             {
@@ -145,27 +146,27 @@ namespace NexgenCosysReport.Repository.MemberAccount
         }
 
         // ================================================================
-        //  @SqlFilterExpOrderBy — injected AFTER the GROUP BY in #FINALTEMP.
+        //  @SqlFilterExpOrderBy � injected AFTER the GROUP BY in #FINALTEMP.
         //  Handles the status WHERE clause AND the ORDER BY together,
         //  exactly as the legacy BLL does.
         //
         //  Status mapping (MamAccountStatusId):
-        //    1 → IN (1,4,5)   [Opened + Suspended + Disabled]
-        //    2 → IN (2)       [Closed]
-        //    3 → Balance > 0  [With Balance]
-        //    4 → IN (4)       [Suspended]
-        //    5 → IN (5)       [Disabled]
-        //   -1 → IN (1,2,4,5) [All]
+        //    1 ? IN (1,4,5)   [Opened + Suspended + Disabled]
+        //    2 ? IN (2)       [Closed]
+        //    3 ? Balance > 0  [With Balance]
+        //    4 ? IN (4)       [Suspended]
+        //    5 ? IN (5)       [Disabled]
+        //   -1 ? IN (1,2,4,5) [All]
         //
         //  Order-by mapping (exact legacy UI label strings):
-        //    "Member Name"   → ORDER BY MemberName
-        //    "Member Id"     → ORDER BY substring(MemberId, …), MemberId
-        //    "Account No"    → ORDER BY substring(AccountNo, …), AccountNo
-        //    "Interest Rate" → ORDER BY InterestRate DESC
-        //    "Deposit"       → ORDER BY Deposit DESC
-        //    "Withdrawl"     → ORDER BY Withdraw DESC  (note legacy typo kept)
-        //    "Balance"       → ORDER BY Balance DESC
-        //    default         → ORDER BY MemberName
+        //    "Member Name"   ? ORDER BY MemberName
+        //    "Member Id"     ? ORDER BY substring(MemberId, �), MemberId
+        //    "Account No"    ? ORDER BY substring(AccountNo, �), AccountNo
+        //    "Interest Rate" ? ORDER BY InterestRate DESC
+        //    "Deposit"       ? ORDER BY Deposit DESC
+        //    "Withdrawl"     ? ORDER BY Withdraw DESC  (note legacy typo kept)
+        //    "Balance"       ? ORDER BY Balance DESC
+        //    default         ? ORDER BY MemberName
         // ================================================================
         private static string BuildSqlFilterExpOrderBy(SavingAcWiseBalanceRequest request)
         {
@@ -214,3 +215,4 @@ namespace NexgenCosysReport.Repository.MemberAccount
     }
 
 }
+

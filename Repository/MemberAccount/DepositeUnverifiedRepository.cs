@@ -1,6 +1,7 @@
-ï»¿
+
 // Repository/AccountOperation/DepositUnverifiedRepository.cs
 using Dapper;
+using NexgenCosysReport.DbContext;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
@@ -126,7 +127,7 @@ namespace NexgenCosysReport.Repository.MemberAccount
 
             // sp_5_43_GetDepositStatementUnVerifiedReport never returns VerifiedDate at all
             // (unverified rows have none by definition), and none of the SPs return a
-            // dedicated IsVerified bit column â€” derive it instead of trusting a bound value.
+            // dedicated IsVerified bit column — derive it instead of trusting a bound value.
             foreach (var row in rows)
             {
                 row.IsVerified = !string.IsNullOrWhiteSpace(row.VerifiedDate);
@@ -147,7 +148,7 @@ namespace NexgenCosysReport.Repository.MemberAccount
             var filters = new List<string>();
 
             // sp_5_43_GetDepositStatementVerification aliases MemMemberRegistration as "m"
-            // and MamAccountOpening as "a" â€” not "MR"/"MA" like the other two SPs.
+            // and MamAccountOpening as "a" — not "MR"/"MA" like the other two SPs.
             string memberAlias = isVerificationOnlySp ? "m" : "MR";
             string officeAlias = isVerificationOnlySp ? "a" : "MA";
 
@@ -161,7 +162,7 @@ namespace NexgenCosysReport.Repository.MemberAccount
                 filters.Add($" And {officeAlias}.SycDepositTypeId = {depositTypeId}");
 
             // sp_5_43_GetDepositStatementVerification doesn't join HurCollector at all,
-            // so a collector filter has no valid column to bind to there â€” skip it.
+            // so a collector filter has no valid column to bind to there — skip it.
             if (!isVerificationOnlySp && !string.IsNullOrEmpty(collectorId) && collectorId != "-1")
                 filters.Add($" And {officeAlias}.HurCollectorId = {collectorId}");
 
@@ -194,7 +195,7 @@ namespace NexgenCosysReport.Repository.MemberAccount
             };
 
             // sp_5_43_GetDepositStatementVerification doesn't select DepositTypeName,
-            // AccountOpenOnBs, or Collector â€” ordering by them would throw "Invalid column name".
+            // AccountOpenOnBs, or Collector — ordering by them would throw "Invalid column name".
             if (isVerificationOnlySp && column is "DepositTypeName" or "AccountOpenOnBs" or "Collector")
                 column = "MemberId";
 

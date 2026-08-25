@@ -1,5 +1,6 @@
-﻿// Repository/AccountOperation/SavingTypeWiseIndividualBalanceRepository.cs
+// Repository/AccountOperation/SavingTypeWiseIndividualBalanceRepository.cs
 using Dapper;
+using NexgenCosysReport.DbContext;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;

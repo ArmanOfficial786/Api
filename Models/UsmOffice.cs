@@ -63,5 +63,9 @@ public partial class UsmOffice
 
     public virtual ICollection<SycMemberGroup> SycMemberGroups { get; set; } = new List<SycMemberGroup>();
 
+    public virtual ICollection<UsmUser> UsmUsers { get; set; } = new List<UsmUser>();
+
     public virtual ICollection<UsmRelationUserToOffice> UsmRelationUserToOffices { get; set; } = new List<UsmRelationUserToOffice>();
+
+    public virtual ICollection<UsmRelationUserToOfficeLogin> UsmRelationUserToOfficeLogins { get; set; } = new List<UsmRelationUserToOfficeLogin>();
 }

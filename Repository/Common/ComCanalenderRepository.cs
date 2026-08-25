@@ -1,4 +1,5 @@
-﻿using NexgenCosysReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.DbContext;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 
 namespace NexgenCosysReport.Repository.Common
@@ -13,7 +14,7 @@ namespace NexgenCosysReport.Repository.Common
             _context = context;
         }
 
-        // ── Helpers (private, raw DB queries) ──────────────────────────────
+        // -- Helpers (private, raw DB queries) ------------------------------
 
         private List<int> QueryDistinctYears()
             => _context.ComCalendars
@@ -31,7 +32,7 @@ namespace NexgenCosysReport.Repository.Common
                 .FirstOrDefault(c => c.EnglishStartDate <= date.Date
                                   && c.EnglishEndDate >= date.Date);
 
-        // ── Public methods (business logic merged in) ───────────────────────
+        // -- Public methods (business logic merged in) -----------------------
 
         public YearsResponseDto GetYears()
         {
@@ -108,3 +109,4 @@ namespace NexgenCosysReport.Repository.Common
         }
     }
 }
+

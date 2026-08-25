@@ -1,4 +1,5 @@
-﻿//using Dapper;
+//using Dapper;
+using NexgenCosysReport.DbContext;
 //using Microsoft.Data.SqlClient;
 //using Microsoft.EntityFrameworkCore;
 //using NexgenCosysReport.Dtos.RequestDtos.Account;
@@ -75,7 +76,7 @@
 //            var invRows = await connection.QueryAsync<dynamic>("sp_6_56_GetCashFlowInvesting", invParams, commandType: CommandType.StoredProcedure);
 //            var finRows = await connection.QueryAsync<dynamic>("sp_6_56_GetCashFlowFinancing", finParams, commandType: CommandType.StoredProcedure);
 
-//            // Map to DTO – assume columns: MainLedger, SubLedger, Amount (or maybe DebitAmount/CreditAmount)
+//            // Map to DTO � assume columns: MainLedger, SubLedger, Amount (or maybe DebitAmount/CreditAmount)
 //            var operating = opRows.Select(r => new CashFlowRowDto
 //            {
 //                MainLedger = r.MainLedger,

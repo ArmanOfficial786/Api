@@ -1,5 +1,6 @@
 // Repository/MemberLookUpRepository.cs
 using Dapper;
+using NexgenCosysReport.DbContext;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;

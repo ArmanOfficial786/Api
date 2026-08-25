@@ -1,5 +1,6 @@
-ï»¿////// Repository/AccountOperation/RatioAnalysisRepository.cs
+////// Repository/AccountOperation/RatioAnalysisRepository.cs
 ////using Dapper;
+using NexgenCosysReport.DbContext;
 ////using Microsoft.Data.SqlClient;
 ////using Microsoft.EntityFrameworkCore;
 ////using NexgenCosysReport.Dtos.RequestDtos.Account;
@@ -132,21 +133,21 @@
 //            using var connection = new SqlConnection(connectionString);
 //            await connection.OpenAsync();
 
-//            // Convert dates to English (DateTime) â€” matches legacy's
+//            // Convert dates to English (DateTime) — matches legacy's
 //            // cComCalender.NepaliToEnglish(fromDateBs)/toDateBs calls before
 //            // invoking the SP.
 //            var fromDateAd = await _dateConverter.NepaliToEnglishAsync(request.FromDate);
 //            var toDateAd = await _dateConverter.NepaliToEnglishAsync(request.ToDate);
 
 //            // FIX: legacy (btnViewReport_Click) always passed the actual
-//            // selected office IDs straight through â€” there was no
+//            // selected office IDs straight through — there was no
 //            // "SameCompanyName" gate suppressing the filter. Gating on
 //            // SameCompanyName here meant @BranchIds was silently sent as ""
 //            // on every request where SameCompanyName == true, which is very
 //            // likely why the SP returned zero rows ("no data found").
 //            //
 //            // "-1" is the one legitimate case that should map to "no
-//            // filter" (i.e. all branches) â€” everything else passes through
+//            // filter" (i.e. all branches) — everything else passes through
 //            // verbatim, exactly as the WebForms code did with branchSelected.
 //            string branchFilter = (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
 //                ? request.BranchIds
@@ -182,7 +183,7 @@
 //                // first row of each result set. This is the fastest way to
 //                // confirm whether Category/RatioName/Value truly exist under
 //                // those names, or under something else entirely (e.g.
-//                // "Title", "LedgerHead", "Percentage", "Amount" â€” the SP's
+//                // "Title", "LedgerHead", "Percentage", "Amount" — the SP's
 //                // actual output columns are unknown to me without seeing
 //                // sp_6_113_RatioAnalysisReport's definition).
 //                if (table.Count > 0)
@@ -218,7 +219,7 @@
 //                    else
 //                    {
 //                        _logger.LogWarning(
-//                            "RatioAnalysis row skipped â€” no RatioName/Ratio/Description/SubLedger column matched. Available columns: {Columns}",
+//                            "RatioAnalysis row skipped — no RatioName/Ratio/Description/SubLedger column matched. Available columns: {Columns}",
 //                            string.Join(", ", ((IDictionary<string, object>)row).Keys));
 //                    }
 //                }
@@ -293,7 +294,7 @@ namespace NexgenCosysReport.Repository.Account
             // sp_6_113_RatioAnalysisReport expects @BranchIds as a literal,
             // comma-separated list of office ids (its WHILE loop splits on
             // commas and inserts each piece into an INT column). It does NOT
-            // understand an empty string or "-1" as "all branches" â€” an empty
+            // understand an empty string or "-1" as "all branches" — an empty
             // string will actually throw a conversion error when inserted
             // into the @tblBranchIds INT column. Only pass through what the
             // caller actually selected.
@@ -316,7 +317,7 @@ namespace NexgenCosysReport.Repository.Account
                 commandType: CommandType.StoredProcedure
             );
 
-            // Result set 1: #tempTable â€” GroupOrder, GroupName, SN, Detail,
+            // Result set 1: #tempTable — GroupOrder, GroupName, SN, Detail,
             // Total, TotalPercent, plus dynamic Col{n}/ColPer{n} pairs per
             // selected branch. We only need GroupName/Detail/Total since the
             // DTO is a flat Category/RatioName/Value shape and Total is
@@ -361,7 +362,7 @@ namespace NexgenCosysReport.Repository.Account
                 else
                 {
                     _logger.LogWarning(
-                        "RatioAnalysis row skipped â€” Detail column was empty. Columns: {Columns}",
+                        "RatioAnalysis row skipped — Detail column was empty. Columns: {Columns}",
                         string.Join(", ", dict.Keys));
                 }
             }

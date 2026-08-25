@@ -1,9 +1,9 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.Models;
 
-namespace NexgenCosysReport;
+namespace NexgenCosysReport.DbContext;
 
-public partial class AppDbContext : DbContext
+public partial class AppDbContext : Microsoft.EntityFrameworkCore.DbContext
 {
     public AppDbContext()
     {
@@ -34,17 +34,29 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<SycCollectionCenter> SycCollectionCenters { get; set; }
 
+    public virtual DbSet<SycCompany> SycCompanies { get; set; }
+
     public virtual DbSet<SycDepositType> SycDepositTypes { get; set; }
 
     public virtual DbSet<SycMemberGroup> SycMemberGroups { get; set; }
 
+    public virtual DbSet<UsmLogin> UsmLogins { get; set; }
+
+    public virtual DbSet<UsmLoginActivity> UsmLoginActivities { get; set; }
+
     public virtual DbSet<UsmOffice> UsmOffices { get; set; }
+
+    public virtual DbSet<UsmSystemEdition> UsmSystemEditions { get; set; }
+
+    public virtual DbSet<UsmUser> UsmUsers { get; set; }
+
+    public virtual DbSet<UsmUserType> UsmUserTypes { get; set; }
 
     public virtual DbSet<UsmRelationUserToOffice> UsmRelationUserToOffices { get; set; }
 
+    public virtual DbSet<UsmRelationUserToOfficeLogin> UsmRelationUserToOfficeLogins { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
-    //#warning To protect potentially sensitive information in your connection string, you should move it out of source code. You can avoid scaffolding the connection string by using the Name= syntax to read it from configuration - see https://go.microsoft.com/fwlink/?linkid=2131148. For more guidance on storing connection strings, see https://go.microsoft.com/fwlink/?LinkId=723263.
-    //        => optionsBuilder.UseSqlServer("Server=DESKTOP-G41KGSS\\SQLEXPRESS;Database=NexGenCoSysDBDev;Persist Security Info=True;User ID=SA;Password=cosys123;TrustServerCertificate=True;Encrypt=False");
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -401,6 +413,43 @@ public partial class AppDbContext : DbContext
                 .HasConstraintName("FK_SycCollectionCenter_UsmOffice");
         });
 
+        modelBuilder.Entity<SycCompany>(entity =>
+        {
+            entity.HasKey(e => e.SycCompanyId).HasName("PK_dbo.SycCompany");
+
+            entity.ToTable("SycCompany");
+
+            entity.Property(e => e.SycCompanyId).ValueGeneratedNever();
+            entity.Property(e => e.AppType).HasMaxLength(15);
+            entity.Property(e => e.BroadCastId)
+                .HasMaxLength(15)
+                .HasDefaultValue("");
+            entity.Property(e => e.ClientCode).HasMaxLength(10);
+            entity.Property(e => e.CompanyAddress).HasMaxLength(200);
+            entity.Property(e => e.CompanyAddressNepali).HasMaxLength(200);
+            entity.Property(e => e.CompanyEmailId).HasMaxLength(100);
+            entity.Property(e => e.CompanyName).HasMaxLength(200);
+            entity.Property(e => e.CompanyNameNepali).HasMaxLength(200);
+            entity.Property(e => e.CompanyWebSite).HasMaxLength(200);
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.CurrentVersion).HasMaxLength(10);
+            entity.Property(e => e.Description).HasColumnType("ntext");
+            entity.Property(e => e.FaxNo).HasMaxLength(100);
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.LicenceIsActive).HasDefaultValue(true, "DF_SycCompany_LicenceIsActive");
+            entity.Property(e => e.LicenseKey)
+                .HasMaxLength(25)
+                .IsUnicode(false)
+                .IsFixedLength();
+            entity.Property(e => e.NoReplyEmail).HasMaxLength(225);
+            entity.Property(e => e.PanNo).HasMaxLength(100);
+            entity.Property(e => e.PhoneNo).HasMaxLength(100);
+            entity.Property(e => e.RegisteredNo).HasMaxLength(100);
+            entity.Property(e => e.ServerKey)
+                .HasMaxLength(255)
+                .HasDefaultValue("");
+        });
+
         modelBuilder.Entity<SycDepositType>(entity =>
         {
             entity.ToTable("SycDepositType");
@@ -454,6 +503,33 @@ public partial class AppDbContext : DbContext
                 .HasConstraintName("FK_SycMemberGroup_UsmOffice");
         });
 
+        modelBuilder.Entity<UsmLogin>(entity =>
+        {
+            entity.ToTable("UsmLogin");
+
+            entity.Property(e => e.LogOutOn).HasColumnType("datetime");
+            entity.Property(e => e.LoginInOn).HasColumnType("datetime");
+            entity.Property(e => e.SessionId).HasMaxLength(50);
+
+            entity.HasOne(d => d.UsmUser).WithMany(p => p.UsmLogins)
+                .HasForeignKey(d => d.UsmUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UsmLogin_UsmUser");
+        });
+
+        modelBuilder.Entity<UsmLoginActivity>(entity =>
+        {
+            entity.ToTable("UsmLoginActivity");
+
+            entity.Property(e => e.ActivityOn).HasColumnType("datetime");
+            entity.Property(e => e.ActivityOnBs).HasMaxLength(50);
+
+            entity.HasOne(d => d.UsmLogin).WithMany(p => p.UsmLoginActivities)
+                .HasForeignKey(d => d.UsmLoginId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UsmLoginActivity_UsmLogin");
+        });
+
         modelBuilder.Entity<UsmOffice>(entity =>
         {
             entity.ToTable("UsmOffice");
@@ -483,16 +559,98 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.WardNo).HasMaxLength(50);
         });
 
+        modelBuilder.Entity<UsmSystemEdition>(entity =>
+        {
+            entity.ToTable("UsmSystemEdition");
+
+            entity.Property(e => e.UsmSystemEditionId).ValueGeneratedNever();
+            entity.Property(e => e.Descrption).HasColumnType("ntext");
+            entity.Property(e => e.SystemEditionName).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<UsmUser>(entity =>
+        {
+            entity.ToTable("UsmUser");
+
+            entity.HasIndex(e => e.LoginEmailAddress, "IX_UsmUser").IsUnique();
+
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.FullName).HasMaxLength(200);
+            entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_UsmUser_IsActive");
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.LoginEmailAddress).HasMaxLength(100);
+            entity.Property(e => e.Password).HasMaxLength(1000);
+            entity.Property(e => e.PasswordChangedOn).HasColumnType("datetime");
+            entity.Property(e => e.Remarks).HasColumnType("ntext");
+            entity.Property(e => e.TellerLimit).HasColumnType("decimal(18, 2)");
+            entity.Property(e => e.UserCode).HasMaxLength(10);
+            entity.Property(e => e.UserDetailAddress).HasMaxLength(200);
+            entity.Property(e => e.UserPhoneNumber).HasMaxLength(100);
+            entity.Property(e => e.WithdrawlLimit).HasColumnType("numeric(18, 2)");
+
+            entity.HasOne(d => d.UsmOffice).WithMany(p => p.UsmUsers)
+                .HasForeignKey(d => d.UsmOfficeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UsmUser_UsmOffice");
+
+            entity.HasOne(d => d.UsmUserType).WithMany(p => p.UsmUsers)
+                .HasForeignKey(d => d.UsmUserTypeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UsmUser_UsmUserType");
+
+            // NOTE: skip-navigation UsingEntity<Dictionary<string,object>> blocks for
+            // UsmRelationUserToOffice / UsmRelationUserToOfficeLogin removed from here.
+            // They're configured as real entity types below instead — having both
+            // caused the plural-table-name convention fallback that broke queries.
+        });
+
+        modelBuilder.Entity<UsmUserType>(entity =>
+        {
+            entity.ToTable("UsmUserType");
+
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.Description).HasColumnType("ntext");
+            entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_UsmUserType_IsActive");
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.UserTypeName).HasMaxLength(50);
+        });
+
+        // Configure UsmRelationUserToOffice as a real keyed entity with explicit table name
         modelBuilder.Entity<UsmRelationUserToOffice>(entity =>
         {
             entity.HasKey(e => new { e.UsmUserId, e.UsmOfficeId });
-
             entity.ToTable("UsmRelationUserToOffice");
 
-            entity.HasOne(d => d.UsmOffice).WithMany(p => p.UsmRelationUserToOffices)
+            entity.HasOne(d => d.UsmUser)
+                .WithMany(p => p.UsmRelationUserToOffices)
+                .HasForeignKey(d => d.UsmUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UsmRelationUserToOffice_UsmUser");
+
+            entity.HasOne(d => d.UsmOffice)
+                .WithMany(p => p.UsmRelationUserToOffices)
                 .HasForeignKey(d => d.UsmOfficeId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_UsmRelationUserToOffice_UsmOffice");
+        });
+
+        // Configure UsmRelationUserToOfficeLogin as a real keyed entity with explicit table name
+        modelBuilder.Entity<UsmRelationUserToOfficeLogin>(entity =>
+        {
+            entity.HasKey(e => new { e.UsmUserId, e.UsmOfficeId });
+            entity.ToTable("UsmRelationUserToOfficeLogin");
+
+            entity.HasOne(d => d.UsmUser)
+                .WithMany(p => p.UsmRelationUserToOfficeLogins)
+                .HasForeignKey(d => d.UsmUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UsmRelationUserToOfficeLogin_UsmUser");
+
+            entity.HasOne(d => d.UsmOffice)
+                .WithMany(p => p.UsmRelationUserToOfficeLogins)
+                .HasForeignKey(d => d.UsmOfficeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_UsmRelationUserToOfficeLogin_UsmOffice");
         });
 
         OnModelCreatingPartial(modelBuilder);

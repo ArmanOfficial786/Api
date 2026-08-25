@@ -1,5 +1,6 @@
-﻿// Repository/AccountOperation/DetailTrialBalanceRepository.cs
+// Repository/AccountOperation/DetailTrialBalanceRepository.cs
 using Dapper;
+using NexgenCosysReport.DbContext;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.Dtos.RequestDtos.Account;

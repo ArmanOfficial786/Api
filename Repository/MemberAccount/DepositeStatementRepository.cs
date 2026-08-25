@@ -1,5 +1,6 @@
-﻿// Repositories/Implementations/AccountOperation/DepositStatementRepository.cs
+// Repositories/Implementations/AccountOperation/DepositStatementRepository.cs
 using Dapper;
+using NexgenCosysReport.DbContext;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport;
