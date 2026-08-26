@@ -5,20 +5,9 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
-using NexgenCosysAPI.Repository.MemberAccount;
 using NexgenCosysReport.DbContext;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Account;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Inteface.ServiceInterface.Member;
-using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount;
-using NexgenCosysReport.Repository.Account;
-using NexgenCosysReport.Repository.AccountOperation;
-using NexgenCosysReport.Repository.Common;
-using NexgenCosysReport.Repository.Member;
-using NexgenCosysReport.Repository.MemberAccount;
-using NexgenCosysReport.Services.CommonService;
+using NexgenCosysReport.Extensions;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Text;
@@ -132,59 +121,12 @@ Console.WriteLine($"[Startup] WebRootPath = '{settingsCheck?.WebRootPath}'");
 builder.Services.AddMemoryCache();
 
 builder.Services.AddScoped<CustomHeaderResponse>();
-builder.Services.AddScoped<IReportFileResponse, ReportFileResponse>();
-builder.Services.AddSingleton<IRazorRenderService, RazorRenderService>();
-builder.Services.AddScoped<IPdfChunkService, PdfChunkService>();
-builder.Services.AddSingleton<IJsReportService, JsReportService>();
-builder.Services.AddSingleton<IProgressivePdfService, ProgressivePdfService>();
 builder.Services.AddHostedService<ProgressiveTempCleanupService>();
-builder.Services.AddScoped<IMemberDetail, MemberRegistrationDetailHandler>();
-builder.Services.AddScoped<IMemberIdCard, MemberIdCardRepository>();
-builder.Services.AddScoped<IAccountStatement, AccountStatementRepository>();
-builder.Services.AddScoped<IBranch, BranchRepository>();
-builder.Services.AddScoped<IOrderBy, OrderByService>();
-builder.Services.AddScoped<IDateConverterService, DateConverterService>();
-builder.Services.AddScoped<IMemberLookUp, MemberLookUpRepository>();
-builder.Services.AddScoped<ICollectionCenter, CollectionCenterRepository>();
-builder.Services.AddScoped<IMemberGroup, MemberGroupRepository>();
-builder.Services.AddScoped<ICommonHeaderRepository, CommonHeaderRepository>();
-builder.Services.AddScoped<ISavingAcWiseBalance, SavingAcWiseBalanceRepository>();
-builder.Services.AddScoped<IComCalendar, CalendarRepository>();
-builder.Services.AddScoped<IDepositeType, DepositeTypeRepository>();
-builder.Services.AddScoped<IMemberAllDetails, MemberAllDetailsRepository>();
-builder.Services.AddScoped<IMemberDetailsSummary, MemberDetailsSummaryRepository>();
-builder.Services.AddScoped<IMemberBloodGroup, MemberBloodGroupReportRepository>();
-builder.Services.AddScoped<ISoleMemberGroup, SoleMemberGroupRepository>();
-builder.Services.AddScoped<IMemberBasicDetail, MemberBasicDetailsRepository>();
-builder.Services.AddScoped<IBalanceSheet, BalanceSheetRepository>();
-builder.Services.AddScoped<IPLAccount, PLAccountRepository>();
-builder.Services.AddScoped<ISummaryTrailBalance, SummaryTrialBalanceRepository>();
-builder.Services.AddScoped<ICashFlowDetail, CashFlowDetailsRepository>();
-builder.Services.AddScoped<ICostofFund, CostOfFundRepository>();
-builder.Services.AddScoped<ICashFlow, CashFlowRepository>();
-builder.Services.AddScoped<IDetailTrailBalance, DetailTrialBalanceRepository>();
-builder.Services.AddScoped<IMonthlyReport, MonthlyReportRepository>();
-builder.Services.AddScoped<IRatioAnalysis, RatioAnalysisRepository>();
-builder.Services.AddScoped<IOfficeProgress, OfficeProgressRepository>();
-builder.Services.AddScoped<IThresholdTransaction, ThresholdTransactionRepository>();
-//builder.Services.AddScoped<IThresholdTransactionDetail, ThresholdTransactionDetailRepository>();
-builder.Services.AddScoped<ISavingTypeWiseBalance, SavingTypeWiseBalanceRepository>();
-builder.Services.AddScoped<ISavingTypeWiseIndividualBalance, SavingTypeWiseIndividualBalanceRepository>();
-builder.Services.AddScoped<ISMSCategory, SMSCategoryRepository>();
-builder.Services.AddScoped<IDepositUnverified, DepositUnverifiedRepository>();
-builder.Services.AddScoped<IMemberAccDeactive, MemberAccountDeactiveRepository>();
-builder.Services.AddScoped<IMemberAccDetailList, MemberAccountDetailNoRepository>();
-builder.Services.AddScoped<IDepositWithdrawMaxAmountRange, DepositWithdrawMaxAmountRangeRepository>();
-builder.Services.AddScoped<IMemberSummary, MemberSummaryRepository>();
-builder.Services.AddScoped<IMemberPenaltyDepositWithdraw, MemberPenaltyDepositWithdrawRepository>();
-builder.Services.AddScoped<IMemberAccountDetail, MemberAccountDetailRepository>();
-builder.Services.AddScoped<ILmtLoanMasterList, LmtLoanMasterListRepository>();
-builder.Services.AddScoped<IShareType, ShareTypeRepository>();
-builder.Services.AddScoped<IAccountLookUp, AccountLookUpRepository>();
-builder.Services.AddScoped<IDepositeStatement, DepositStatementRepository>();
-builder.Services.AddScoped<IDepositStatementVerification, DepositStatementVerifyRepository>();
-builder.Services.AddScoped<ITokenService, TokenService>();
-builder.Services.AddScoped<IAuth, AuthRepository>();
+
+// Auto-register repositories and services via reflection
+builder.Services.AddRepositoriesAndServices(
+    typeof(Program).Assembly
+);
 
 
 
