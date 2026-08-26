@@ -1,5 +1,5 @@
 ﻿using Dapper;
-using NexgenCosysReport.Dtos.RequestDtos.MemberAccount;
+using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.SavingAcWiseReport;
 using System.Reflection;
 
 namespace NexgenCosysReport.Utils.Report
