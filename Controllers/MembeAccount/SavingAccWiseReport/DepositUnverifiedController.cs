@@ -108,7 +108,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount.SavingAccWiseReport
                         reportKey: reportKey,
                         reportPath: request.VisualReport
                             ? "Views/VisualReport/VDepositUnverifiedReport.cshtml"
-                            : "Views/Report/MemberAC/DepositUnverified.cshtml",
+                            : "Views/Report/MemberAC/SavingAcWiseReport/DepositUnverified.cshtml",
                         data: reportData));
 
                 if (upperFormat == "VIEW")

@@ -494,7 +494,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount.SavingAccWiseReport
         private readonly ILogger<SavingACWiseBalanceReportController> _logger;
 
         private const string ReportName = "SavingACWiseBalanceReport";
-        private const string ReportPath = "Views/Report/MemberAC/SavingAcWiseBalance.cshtml";
+        private const string ReportPath = "Views/Report/MemberAC/SavingAcWiseReport/SavingAcWiseBalance.cshtml";
         private const string RowsKey = "SavingAcWiseBalanceDataset";
 
         /// <summary>

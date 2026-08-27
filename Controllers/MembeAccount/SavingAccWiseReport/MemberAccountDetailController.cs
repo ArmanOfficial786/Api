@@ -146,7 +146,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount.SavingAccWiseReport
                     reportKey: reportKey,
                     reportPath: request.VisualReport
                         ? "Views/VisualReport/AccountOperation/VMemberAccountDetailReport.cshtml"
-                        : "Views/Report/MemberAC/MemberAccountDetail.cshtml",
+                        : "Views/Report/MemberAC/SavingAcWiseReport/MemberAccountDetail.cshtml",
                     data: reportData);
 
                 // Handle VIEW format

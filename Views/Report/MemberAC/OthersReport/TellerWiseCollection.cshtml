@@ -1,0 +1,345 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    // ---------------------------------------------------------------
+    // Model data (same keys your controller already puts in the dict)
+    // ---------------------------------------------------------------
+    var rows = (Model["Rows"] as List<TellerWiseCollectionRowDto>) ?? new List<TellerWiseCollectionRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? rows.Count;
+    var grandShare = Model["TotalShareAmount"] as decimal? ?? rows.Sum(r => r.ShareAmount.GetValueOrDefault());
+    var grandSaving = Model["TotalSavingAmount"] as decimal? ?? rows.Sum(r => r.SavingAmount.GetValueOrDefault());
+    var grandPrinciple = Model["TotalLoanPrinciple"] as decimal? ?? rows.Sum(r => r.LoanPrinciple.GetValueOrDefault());
+    var grandInterest = Model["TotalLoanInterest"] as decimal? ?? rows.Sum(r => r.LoanInterest.GetValueOrDefault());
+    var grandPenalty = Model["TotalLoanPenalty"] as decimal? ?? rows.Sum(r => r.LoanPenalty.GetValueOrDefault());
+    var grandMisc = Model["TotalMiscellaneousAmount"] as decimal? ?? rows.Sum(r => r.MiscellaneousAmount.GetValueOrDefault());
+    var grandTotal = Model["TotalAmount"] as decimal? ?? rows.Sum(r => r.RowTotal);
+
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var tellerHeader = Model["TellerName"]?.ToString() ?? "All Tellers";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // ---------------------------------------------------------------
+    // Grouping: Teller -> Date -> Member (mirrors the XtraReport bands)
+    // ---------------------------------------------------------------
+    var tellerGroups = rows.GroupBy(r => string.IsNullOrEmpty(r.TellerName) ? tellerHeader : r.TellerName).ToList();
+
+    Func<decimal, string> N = v => v.ToString("N2");
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Teller Wise Collection Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 8.5pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            /* -------- Title block -------- */
+            .report-title {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 13pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 6px 0 8px 0;
+            }
+
+            .meta-bar {
+                width: 100%;
+                font-size: 8.5pt;
+                padding-bottom: 6px;
+                border-bottom: 1px solid #000;
+                margin-bottom: 4px;
+            }
+
+                .meta-bar td {
+                    padding: 2px 4px;
+                }
+
+            /* -------- Main data table -------- */
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8.3pt;
+            }
+
+                .data-table th {
+                    background: #f2f2f2;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    border-left: 1px solid #ccc;
+                    border-right: 1px solid #ccc;
+                    text-align: left;
+                    padding: 4px 5px;
+                    white-space: nowrap;
+                }
+
+                .data-table td {
+                    padding: 3px 5px;
+                    border-left: 1px solid #eee;
+                    border-right: 1px solid #eee;
+                    vertical-align: middle;
+                }
+
+                .data-table thead {
+                    display: table-row-group;
+                }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            /* -------- Group bands -------- */
+            .grp-teller td {
+                font-family: "Times New Roman", Times, serif;
+                font-weight: bold;
+                font-size: 9.5pt;
+                border-top: 1px solid #000;
+                border-bottom: 1px solid #000;
+                padding-top: 6px;
+                padding-bottom: 3px;
+            }
+
+            .grp-date td {
+                font-weight: bold;
+                padding-left: 14px;
+                padding-top: 6px;
+            }
+
+            .grp-member .member-id {
+                font-weight: bold;
+                padding-left: 40px;
+            }
+
+            .grp-member .member-name {
+                font-weight: bold;
+            }
+
+            .detail-row td {
+                border-top: none;
+            }
+
+            .date-subtotal td {
+                border-top: 1px solid #000;
+                font-weight: bold;
+            }
+
+            /* -------- Boxed date-wise total (matches the bordered box in the sample) -------- */
+            .date-total-wrap {
+                padding: 6px 0 14px 4px;
+            }
+
+            .date-total-box {
+                display: inline-block;
+                border: 1px solid #000;
+                padding: 4px 14px;
+                font-weight: bold;
+                font-size: 8.8pt;
+            }
+
+            /* -------- Grand total -------- */
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .footer-count {
+                padding-top: 6px;
+                font-size: 8.5pt;
+                text-align: right;
+                font-weight: bold;
+            }
+
+            @@media print {
+                .data-table thead {
+                    display: table-row-group;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <div class="report-title">Teller Wise Collection Report</div>
+
+        <table class="meta-bar">
+            <tr>
+                <td><strong>Report Generated On:</strong> @generatedOn</td>
+                <td style="text-align:right;">
+                    <strong>From Date :</strong> @fromDate
+                    &nbsp;&nbsp;&nbsp;
+                    <strong>To Date :</strong> @toDate
+                </td>
+            </tr>
+            <tr>
+                <td><strong>Teller:</strong> @tellerHeader</td>
+                <td style="text-align:right;"><strong>Order By:</strong> @orderBy</td>
+            </tr>
+        </table>
+
+        <table class="data-table">
+            <colgroup>
+                <col style="width:4%">
+                <col style="width:9%">
+                <col style="width:13%">
+                <col style="width:9%">
+                <col style="width:9%">
+                <col style="width:9%">
+                <col style="width:9%">
+                <col style="width:9%">
+                <col style="width:9%">
+                <col style="width:9%">
+                <col style="width:11%">
+            </colgroup>
+            <thead>
+                <tr>
+                    <th>SN</th>
+                    <th>Member Id</th>
+                    <th>A/C No</th>
+                    <th>Bill No</th>
+                    <th class="text-right">Share Amt</th>
+                    <th class="text-right">Saving Amt</th>
+                    <th class="text-right">Loan Principle</th>
+                    <th class="text-right">Loan Interest</th>
+                    <th class="text-right">Loan Penalty</th>
+                    <th class="text-right">Misc. Amt</th>
+                    <th class="text-right">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Any())
+                {
+                    foreach (var tellerGroup in tellerGroups)
+                    {
+                        <tr class="grp-teller">
+                            <td colspan="11">@tellerGroup.Key</td>
+                        </tr>
+
+                        var dateGroups = tellerGroup.GroupBy(r => r.Date).ToList();
+
+                        foreach (var dateGroup in dateGroups)
+                        {
+                            <tr class="grp-date">
+                                <td colspan="11">@dateGroup.Key</td>
+                            </tr>
+
+                            var memberGroups = dateGroup
+                                .GroupBy(r => new { r.MemberId, r.MemberName })
+                                .ToList();
+
+                            int dateLineCount = 0;
+
+                            foreach (var memberGroup in memberGroups)
+                            {
+                                <tr class="grp-member">
+                                    <td></td>
+                                    <td class="member-id">@memberGroup.Key.MemberId</td>
+                                    <td class="member-name" colspan="9">@memberGroup.Key.MemberName</td>
+                                </tr>
+
+                                int sn = 0;
+                                foreach (var row in memberGroup)
+                                {
+                                    sn++;
+                                    dateLineCount++;
+                                    <tr class="detail-row">
+                                        <td class="text-center">@sn</td>
+                                        <td></td>
+                                        <td>@(row.Details ?? "")</td>
+                                        <td>@(row.BillNo ?? "")</td>
+                                        <td class="text-right">@N(row.ShareAmount.GetValueOrDefault())</td>
+                                        <td class="text-right">@N(row.SavingAmount.GetValueOrDefault())</td>
+                                        <td class="text-right">@N(row.LoanPrinciple.GetValueOrDefault())</td>
+                                        <td class="text-right">@N(row.LoanInterest.GetValueOrDefault())</td>
+                                        <td class="text-right">@N(row.LoanPenalty.GetValueOrDefault())</td>
+                                        <td class="text-right">@N(row.MiscellaneousAmount.GetValueOrDefault())</td>
+                                        <td class="text-right">@N(row.RowTotal)</td>
+                                    </tr>
+                                }
+                            }
+
+                            var dShare = dateGroup.Sum(r => r.ShareAmount.GetValueOrDefault());
+                            var dSaving = dateGroup.Sum(r => r.SavingAmount.GetValueOrDefault());
+                            var dPrinciple = dateGroup.Sum(r => r.LoanPrinciple.GetValueOrDefault());
+                            var dInterest = dateGroup.Sum(r => r.LoanInterest.GetValueOrDefault());
+                            var dPenalty = dateGroup.Sum(r => r.LoanPenalty.GetValueOrDefault());
+                            var dMisc = dateGroup.Sum(r => r.MiscellaneousAmount.GetValueOrDefault());
+                            var dTotal = dateGroup.Sum(r => r.RowTotal);
+
+                            <tr class="date-subtotal">
+                                <td class="text-center">@dateLineCount</td>
+                                <td></td>
+                                <td colspan="2">@dateGroup.Key</td>
+                                <td class="text-right">@N(dShare)</td>
+                                <td class="text-right">@N(dSaving)</td>
+                                <td class="text-right">@N(dPrinciple)</td>
+                                <td class="text-right">@N(dInterest)</td>
+                                <td class="text-right">@N(dPenalty)</td>
+                                <td class="text-right">@N(dMisc)</td>
+                                <td class="text-right">@N(dTotal)</td>
+                            </tr>
+                            <tr>
+                                <td colspan="11" class="date-total-wrap">
+                                    <span class="date-total-box">Date Wise Total Income&nbsp;:&nbsp; @N(dTotal)</span>
+                                </td>
+                            </tr>
+                        }
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="4" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-right"><strong>@N(grandShare)</strong></td>
+                        <td class="text-right"><strong>@N(grandSaving)</strong></td>
+                        <td class="text-right"><strong>@N(grandPrinciple)</strong></td>
+                        <td class="text-right"><strong>@N(grandInterest)</strong></td>
+                        <td class="text-right"><strong>@N(grandPenalty)</strong></td>
+                        <td class="text-right"><strong>@N(grandMisc)</strong></td>
+                        <td class="text-right"><strong>@N(grandTotal)</strong></td>
+                    </tr>
+                    <tr>
+                        <td colspan="11" class="footer-count">Total Records : @totalRecords</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="11" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

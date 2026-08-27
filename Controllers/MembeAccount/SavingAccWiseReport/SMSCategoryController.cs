@@ -99,7 +99,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount.SavingAccWiseReport
                         reportKey: reportKey,
                         reportPath: request.VisualReport
                             ? "Views/VisualReport/VSMSCategoryReport.cshtml"
-                            : "Views/Report/MemberAC/SMSCategory.cshtml",
+                            : "Views/Report/MemberAC/SavingAcWiseReport/SMSCategory.cshtml",
                         data: reportData));
 
                 if (upperFormat == "VIEW")

@@ -118,7 +118,7 @@ public class DepositWithdrawMaxAmountRangeController : ControllerBase
                     reportKey: reportKey,
                     reportPath: request.VisualReport
                         ? "Views/VisualReport/VDepositWithdrawMaximumAmountRangeReport.cshtml"
-                        : "Views/Report/MemberAC/DepositWithdrawMaximumAmountRange .cshtml",
+                        : "Views/Report/MemberAC/SavingAcWiseReport/DepositWithdrawMaximumAmountRange .cshtml",
                     data: reportData));
 
             if (upperFormat == "VIEW")

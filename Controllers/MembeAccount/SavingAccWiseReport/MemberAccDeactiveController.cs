@@ -109,7 +109,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount.SavingAccWiseReport
                         reportKey: reportKey,
                         reportPath: request.VisualReport
                             ? "Views/VisualReport/VMemberAccountDeactiveReport.cshtml"
-                            : "Views/Report/MemberAC/MemberAccDeactive.cshtml",
+                            : "Views/Report/MemberAC/SavingAcWiseReport/MemberAccDeactive.cshtml",
                         data: reportData));
 
                 if (upperFormat == "VIEW")
