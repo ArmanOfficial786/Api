@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using System.Security.Claims;
 
 namespace NexgenCosysAPI.Controllers.Common
 {
@@ -13,12 +12,14 @@ namespace NexgenCosysAPI.Controllers.Common
     public class TellerController : ControllerBase
     {
         private readonly ITeller _tellerService;
+        private readonly ITokenService _tokenService;
         private readonly IDateConverterService _dateConverter;
         private readonly ILogger<TellerController> _logger;
 
-        public TellerController(ITeller tellerService, IDateConverterService dateConverter, ILogger<TellerController> logger)
+        public TellerController(ITeller tellerService, ITokenService tokenService, IDateConverterService dateConverter, ILogger<TellerController> logger)
         {
             _tellerService = tellerService;
+            _tokenService = tokenService;
             _dateConverter = dateConverter;
             _logger = logger;
         }
@@ -27,14 +28,14 @@ namespace NexgenCosysAPI.Controllers.Common
         /// Get list of tellers for the given date range (replaces btnLoadTeller_Click)
         /// GET /api/Teller/Tellers?fromDateBs=2081/01/01&toDateBs=2081/12/30
         /// </summary>
-        [HttpGet("Tellers")]
+        [HttpGet()]
         public async Task<ActionResult<List<TellerLookupResponse>>> GetTellers(
     [FromQuery] string fromDateBs,
     [FromQuery] string toDateBs)
         {
             try
             {
-                var userId = GetUserIdFromToken();
+                var userId = _tokenService.GetUserIdFromPrincipal(User);
                 if (userId == null)
                     return Unauthorized(new GeneralResponse<List<TellerLookupResponse>>
                     {
@@ -67,14 +68,5 @@ namespace NexgenCosysAPI.Controllers.Common
             }
         }
 
-        private long? GetUserIdFromToken()
-        {
-            var userIdClaim = User.FindFirst("UserId")?.Value;
-            if (string.IsNullOrEmpty(userIdClaim))
-                userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (long.TryParse(userIdClaim, out var id))
-                return id;
-            return null;
-        }
     }
 }

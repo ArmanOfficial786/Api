@@ -1,5 +1,4 @@
-﻿// Controllers/AccountOperation/TellerWiseCollectionController.cs
-using Microsoft.AspNetCore.Authorization;
+﻿// Controllers/AccountOperation/TellerWiseExpenseController.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -17,26 +16,26 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
 {
     [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
-    public class TellerWiseCollectionController : ControllerBase
+    // [Authorize]
+    public class TellerWiseExpenseController : ControllerBase
     {
-        private readonly ITellerWiseCollection _repository;
+        private readonly ITellerExpense _repository;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly ILogger<TellerWiseCollectionController> _logger;
+        private readonly ILogger<TellerWiseExpenseController> _logger;
         private readonly IDateConverterService _dateConverter;
 
-        public TellerWiseCollectionController(
-            ITellerWiseCollection repository,
+        public TellerWiseExpenseController(
+            ITellerExpense repository,
             ICommonHeaderRepository commonHeaderRepository,
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<TellerWiseCollectionController> logger,
+            ILogger<TellerWiseExpenseController> logger,
             IDateConverterService dateConverter)
         {
             _repository = repository;
@@ -49,17 +48,22 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
             _dateConverter = dateConverter;
         }
 
+        /// <summary>
+        /// Generate Teller Wise Expense Report (replaces btnViewReport_Click)
+        /// POST /api/TellerWiseExpense/GenerateReport?format=VIEW
+        /// </summary>
         [HttpPost()]
         public async Task<ActionResult<GeneralResponse<ReportResponseDtos>>> GenerateReport(
-            [FromBody] TellerWiseCollectionRequestDto request,
+            [FromBody] TellerWiseExpenseRequestDto request,
             [FromQuery] string format = "VIEW")
         {
             try
             {
-                var userId = GetUserIdFromToken();
+                var userId = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (userId == null)
                     return Unauthorized(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 401, message = "User not authenticated" });
 
+                // Validate request
                 if (string.IsNullOrEmpty(request.FromDateBs) || request.FromDateBs == "-1")
                     return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "From date is required" });
                 if (string.IsNullOrEmpty(request.ToDateBs) || request.ToDateBs == "-1")
@@ -72,7 +76,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                     return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "From date cannot be greater than To date" });
                 }
 
-                var reportName = "TellerWiseCollection";
+                var reportName = "TellerWiseExpense";
                 var upperFormat = format.ToUpper();
                 var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 
@@ -101,6 +105,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                     }
                 }
 
+                // Get report data
                 var data = await _repository.GetReportDataAsync(request);
 
                 if (!data.Rows.Any())
@@ -109,16 +114,16 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                     {
                         isValid = false,
                         statusCode = 404,
-                        message = "No data found"
+                        message = "No transactions found for the selected period and teller"
                     });
                 }
 
+                // Header data
+                var officeIdClaim = User.FindFirst("OfficeId")?.Value;
                 string? branchIdForHeader = null;
-                if (!request.SameCompanyName)
+                if (!request.SameCompanyName && !string.IsNullOrEmpty(officeIdClaim) && long.TryParse(officeIdClaim, out var officeId))
                 {
-                    var officeId = GetOfficeIdFromToken();
-                    if (officeId.HasValue)
-                        branchIdForHeader = officeId.Value.ToString();
+                    branchIdForHeader = officeId.ToString();
                 }
 
                 var headerData = await _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
@@ -131,11 +136,9 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                 {
                     { "Rows", data.Rows },
                     { "TotalRecords", data.TotalRecords },
-                    { "TotalShareAmount", data.TotalShareAmount },
-                    { "TotalSavingAmount", data.TotalSavingAmount },
-                    { "TotalLoanPrinciple", data.TotalLoanPrinciple },
-                    { "TotalLoanInterest", data.TotalLoanInterest },
-                    { "TotalLoanPenalty", data.TotalLoanPenalty },
+                    { "TotalSavingWithdrawlAmount", data.TotalSavingWithdrawlAmount },
+                    { "TotalShareReturnAmount", data.TotalShareReturnAmount },
+                    { "TotalLoanIssueAmount", data.TotalLoanIssueAmount },
                     { "TotalMiscellaneousAmount", data.TotalMiscellaneousAmount },
                     { "TotalAmount", data.TotalAmount },
                     { "HeaderDataSet", headerData },
@@ -148,8 +151,8 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                 };
 
                 string viewPath = request.VisualReport
-                    ? "Views/VisualReport/VTellerWiseCollectionReport.cshtml"
-                    : "Views/Report/MemberAC/OthersReport/TellerWiseCollection.cshtml";
+                    ? "Views/VisualReport/VTellerWiseExpenseReport.cshtml"
+                    : "Views/Report/MemberAC/OthersReport/TellerWiseExpense.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -222,7 +225,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "TellerWiseCollection report generation failed");
+                _logger.LogError(ex, "TellerWiseExpense report generation failed");
                 return StatusCode(500, new GeneralResponse<ReportResponseDtos>
                 {
                     isValid = false,
@@ -232,22 +235,5 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
             }
         }
 
-        private long? GetUserIdFromToken()
-        {
-            var userIdClaim = User.FindFirst("UserId")?.Value;
-            if (string.IsNullOrEmpty(userIdClaim))
-                userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-            if (long.TryParse(userIdClaim, out var id))
-                return id;
-            return null;
-        }
-
-        private long? GetOfficeIdFromToken()
-        {
-            var officeIdClaim = User.FindFirst("OfficeId")?.Value;
-            if (long.TryParse(officeIdClaim, out var id))
-                return id;
-            return null;
-        }
     }
 }

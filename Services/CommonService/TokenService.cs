@@ -51,4 +51,16 @@ public class TokenService : ITokenService
     {
         return _config.GetValue<int?>("Jwt:ExpiryMinutes") ?? 30;
     }
+
+    public long? GetUserIdFromPrincipal(ClaimsPrincipal user)
+    {
+        var userIdClaim = user.FindFirst("UserId")?.Value;
+        if (string.IsNullOrEmpty(userIdClaim))
+            userIdClaim = user.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+        if (long.TryParse(userIdClaim, out var id))
+            return id;
+
+        return null;
+    }
 }

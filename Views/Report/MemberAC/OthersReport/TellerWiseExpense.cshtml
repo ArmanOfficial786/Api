@@ -1,0 +1,268 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+    var rows = (Model["Rows"] as List<TellerWiseExpenseRowDto>) ?? new List<TellerWiseExpenseRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalSavingWithdrawlAmount = Model["TotalSavingWithdrawlAmount"] as decimal? ?? 0;
+    var totalShareReturnAmount = Model["TotalShareReturnAmount"] as decimal? ?? 0;
+    var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
+    var totalMiscellaneousAmount = Model["TotalMiscellaneousAmount"] as decimal? ?? 0;
+    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var tellerName = Model["TellerName"]?.ToString() ?? "All Tellers";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+
+    // ── Row total isn't an SP column — each row is only ever populated in ONE
+    // of the four amount buckets, so summing them gives that row's amount. ──
+    decimal RowTotal(TellerWiseExpenseRowDto r) =>
+        (r.SavingWithdrawlAmount ?? 0) + (r.ShareReturnAmount ?? 0) +
+        (r.LoanIssueAmount ?? 0) + (r.MiscellaneousAmount ?? 0);
+
+    // ── BillNo comes back as string (SP aliases it straight through), not
+    // decimal? — parse defensively for display only, fall back to raw text. ──
+    string FormatBillNo(string? billNo)
+    {
+        if (string.IsNullOrWhiteSpace(billNo)) return "";
+        return decimal.TryParse(billNo, out var parsed) && parsed != 0
+            ? parsed.ToString("N2")
+            : billNo;
+    }
+
+    // ── Group by Teller → Date to match the legacy DevExpress group bands.
+    // Sort first (stable) so same-teller/same-date rows are contiguous. ──
+    var grouped = rows
+        .OrderBy(r => r.TellerName ?? "")
+        .ThenBy(r => r.Date ?? "")
+        .GroupBy(r => r.TellerName ?? "")
+        .Select(tellerGroup => new
+        {
+            TellerName = tellerGroup.Key,
+            Dates = tellerGroup
+                .GroupBy(r => r.Date ?? "")
+                .Select(dateGroup => new
+                {
+                    Date = dateGroup.Key,
+                    Rows = dateGroup.ToList(),
+                    DateTotal = dateGroup.Sum(RowTotal),
+                })
+                .ToList(),
+        })
+        .ToList();
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Teller Wise Expense Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    border: 1px solid #ccc;
+                }
+
+                .data-table th {
+                    background: #f2f2f2;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                }
+
+                .data-table thead {
+                    display: table-row-group;
+                }
+
+            .grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .member-box {
+                margin-bottom: 6px;
+            }
+
+            /* ── Group bands, matching the legacy report's layout ────────── */
+            .teller-group-row td {
+                border: none;
+                border-top: 2px solid #000;
+                padding-top: 8px;
+                font-weight: bold;
+                font-size: 10pt;
+            }
+
+            .date-group-row td {
+                border: none;
+                font-weight: bold;
+                padding-top: 6px;
+            }
+
+            .member-sub-row td {
+                border: none;
+                padding-left: 20px;
+                color: #333;
+            }
+
+            .date-total-row td {
+                border-top: 1px solid #000;
+                border-bottom: 3px double #000;
+                font-weight: bold;
+                background: #fafafa;
+            }
+
+            .detail-row td {
+                border: none;
+                border-bottom: 1px solid #eee;
+            }
+
+            @@media print {
+                .data-table thead {
+                    display: table-row-group;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th colspan="9" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
+                        Teller Wise Expense Report
+                    </th>
+                </tr>
+                <tr>
+                    <td colspan="9">
+                        <div class="member-box">
+                            <strong>Report Generated On:</strong> @generatedOn &nbsp;&nbsp;|&nbsp;&nbsp;
+                            <strong>From Date:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
+                            <strong>To Date:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;
+                            <strong>Order By:</strong> @orderBy
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <th style="width:3%;">SN</th>
+                    <th style="width:10%;">Member Id</th>
+                    <th style="width:14%;">A/C No</th>
+                    <th style="width:8%;" class="text-right">Bill No</th>
+                    <th style="width:13%;" class="text-right">Savings Withdrawl Amt</th>
+                    <th style="width:13%;" class="text-right">Share Return</th>
+                    <th style="width:13%;" class="text-right">Loan Issue</th>
+                    <th style="width:13%;" class="text-right">Miscellaneous Amt</th>
+                    <th style="width:13%;" class="text-right">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (grouped.Any())
+                {
+                    foreach (var tellerGroup in grouped)
+                    {
+                        <tr class="teller-group-row">
+                            <td colspan="9">@tellerGroup.TellerName</td>
+                        </tr>
+
+                        foreach (var dateGroup in tellerGroup.Dates)
+                        {
+                            <tr class="date-group-row">
+                                <td colspan="9">@dateGroup.Date</td>
+                            </tr>
+
+                            int sn = 0;
+                            var firstRow = dateGroup.Rows.FirstOrDefault();
+
+                            if (firstRow != null)
+                            {
+                                <tr class="member-sub-row">
+                                    <td></td>
+                                    <td colspan="8">@(firstRow.MemberId ?? "") &nbsp;&nbsp; @(firstRow.MemberName ?? "")</td>
+                                </tr>
+                            }
+
+                            foreach (var row in dateGroup.Rows)
+                            {
+                                sn++;
+                                <tr class="detail-row">
+                                    <td>@sn</td>
+                                    <td>@(row.MemberId ?? "")</td>
+                                    <td>@(row.Details ?? "")</td>
+                                    <td class="text-right">@FormatBillNo(row.BillNo)</td>
+                                    <td class="text-right">@(row.SavingWithdrawlAmount.HasValue && row.SavingWithdrawlAmount.Value != 0 ? row.SavingWithdrawlAmount.Value.ToString("N2") : "0.00")</td>
+                                    <td class="text-right">@(row.ShareReturnAmount.HasValue && row.ShareReturnAmount.Value != 0 ? row.ShareReturnAmount.Value.ToString("N2") : "0.00")</td>
+                                    <td class="text-right">@(row.LoanIssueAmount.HasValue && row.LoanIssueAmount.Value != 0 ? row.LoanIssueAmount.Value.ToString("N2") : "0.00")</td>
+                                    <td class="text-right">@(row.MiscellaneousAmount.HasValue && row.MiscellaneousAmount.Value != 0 ? row.MiscellaneousAmount.Value.ToString("N2") : "0.00")</td>
+                                    <td class="text-right">@RowTotal(row).ToString("N2")</td>
+                                </tr>
+                            }
+
+                            <tr class="date-total-row">
+                                <td colspan="8" class="text-right">Date Wise Total Expense :</td>
+                                <td class="text-right">@dateGroup.DateTotal.ToString("N2")</td>
+                            </tr>
+                        }
+                    }
+
+                    <tr class="grand-total">
+                        <td colspan="4" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-right"><strong>@totalSavingWithdrawlAmount.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalShareReturnAmount.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalMiscellaneousAmount.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalAmount.ToString("N2")</strong></td>
+                    </tr>
+                    <tr>
+                        <td colspan="8" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-right"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="9" class="text-center">No data found for the selected criteria</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

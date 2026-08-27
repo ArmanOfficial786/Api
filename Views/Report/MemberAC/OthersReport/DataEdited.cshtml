@@ -1,0 +1,214 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<DataEditedRowDto>) ?? new List<DataEditedRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? rows.Count;
+    var grandTotal = Model["TotalActualAmount"] as decimal? ?? rows.Sum(r => r.ActualAmount.GetValueOrDefault());
+
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var entryByName = Model["EntryByName"]?.ToString() ?? "All";
+    var editedByName = Model["EditedByName"]?.ToString() ?? "All";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    Func<decimal, string> N = v => v.ToString("N2");
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Data Edited Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 8.5pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .report-title {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 13pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 6px 0 8px 0;
+            }
+
+            .meta-bar {
+                width: 100%;
+                font-size: 8.5pt;
+                padding-bottom: 6px;
+                border-bottom: 1px solid #000;
+                margin-bottom: 4px;
+            }
+
+                .meta-bar td {
+                    padding: 2px 4px;
+                }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8.3pt;
+            }
+
+                .data-table th {
+                    background: #f2f2f2;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    border-left: 1px solid #ccc;
+                    border-right: 1px solid #ccc;
+                    text-align: left;
+                    padding: 4px 5px;
+                    white-space: nowrap;
+                }
+
+                .data-table td {
+                    padding: 3px 5px;
+                    border-left: 1px solid #eee;
+                    border-right: 1px solid #eee;
+                    vertical-align: middle;
+                }
+
+                .data-table thead {
+                    display: table-row-group;
+                }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .footer-count {
+                padding-top: 6px;
+                font-size: 8.5pt;
+                text-align: right;
+                font-weight: bold;
+            }
+
+            @@media print {
+                .data-table thead {
+                    display: table-row-group;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <div class="report-title">Data Edited Report</div>
+
+        <table class="meta-bar">
+            <tr>
+                <td><strong>Report Generated On:</strong> @generatedOn</td>
+                <td style="text-align:right;">
+                    <strong>From Date :</strong> @fromDate
+                    &nbsp;&nbsp;&nbsp;
+                    <strong>To Date :</strong> @toDate
+                </td>
+            </tr>
+            <tr>
+                <td><strong>Branch:</strong> @branchName</td>
+                <td style="text-align:right;"><strong>Order By:</strong> @orderBy</td>
+            </tr>
+            <tr>
+                <td><strong>Entry By:</strong> @entryByName</td>
+                <td style="text-align:right;"><strong>Edited By:</strong> @editedByName</td>
+            </tr>
+        </table>
+
+        <table class="data-table">
+            <colgroup>
+                <col style="width:5%">
+                <col style="width:13%">
+                <col style="width:18%">
+                <col style="width:13%">
+                <col style="width:22%">
+                <col style="width:14%">
+                <col style="width:13%">
+                <col style="width:13%">
+            </colgroup>
+            <thead>
+                <tr>
+                    <th>SN</th>
+                    <th>Date</th>
+                    <th>Member Id / Name</th>
+                    <th>A/C No</th>
+                    <th>Description</th>
+                    <th class="text-right">Actual Amount</th>
+                    <th>Edited Date</th>
+                    <th>Edited By</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Any())
+                {
+                    int sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr>
+                            <td class="text-center">@sn</td>
+                            <td>@(row.Date ?? "")</td>
+                            <td>@(row.MemberId ?? "") @(!string.IsNullOrEmpty(row.MemberName) ? "- " + row.MemberName : "")</td>
+                            <td>@(row.AccountNo ?? "")</td>
+                            <td>@(row.Description ?? "")</td>
+                            <td class="text-right">@N(row.ActualAmount.GetValueOrDefault())</td>
+                            <td>@(row.EditedDate ?? "")</td>
+                            <td>@(row.EditedBy ?? "")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="5" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-right"><strong>@N(grandTotal)</strong></td>
+                        <td colspan="2"></td>
+                    </tr>
+                    <tr>
+                        <td colspan="8" class="footer-count">Total Records : @totalRecords</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="8" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
