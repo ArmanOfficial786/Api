@@ -111,6 +111,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.Configure<ReportSettings>(
     builder.Configuration.GetSection(ReportSettings.SectionName));
 
+
 // Startup verification
 var settingsCheck = builder.Configuration
     .GetSection(ReportSettings.SectionName)

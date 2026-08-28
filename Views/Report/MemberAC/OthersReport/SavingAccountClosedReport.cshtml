@@ -1,0 +1,209 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+    var rows = (Model["Rows"] as List<SavingAccountClosedRowDto>) ?? new List<SavingAccountClosedRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalCloseAmount = Model["TotalCloseAmount"] as decimal? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "";
+    var reportMode = Model["ReportMode"]?.ToString() ?? "DateWise";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+    var selectedMemberId = Model["SelectedMemberId"]?.ToString();
+    var selectedMemberName = Model["SelectedMemberName"]?.ToString();
+    var totalClosedAccounts = Model["TotalClosedAccounts"] as int? ?? 0;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Saving Account Closed Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    border: 1px solid #ccc;
+                }
+
+                .data-table th {
+                    background: #f2f2f2;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                }
+
+                .data-table thead {
+                    display: table-row-group;
+                }
+
+            .grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .filter-info {
+                margin-bottom: 4px;
+            }
+
+            .report-title {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+            }
+
+            .highlight-closed {
+                color: #c62828;
+                font-weight: bold;
+            }
+
+            .closed-badge {
+                display: inline-block;
+                padding: 1px 8px;
+                border-radius: 3px;
+                font-size: 7pt;
+                font-weight: bold;
+                background: #ffebee;
+                color: #c62828;
+            }
+
+            @@media print {
+                .data-table thead {
+                    display: table-row-group;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th colspan="10" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
+                        Saving Account Closed Report - @reportMode Wise
+                    </th>
+                </tr>
+                <tr>
+                    <td colspan="10">
+                        <div class="filter-info">
+                            <strong>Branches:</strong> @branchNames &nbsp;&nbsp;|&nbsp;&nbsp;
+                            @if (!string.IsNullOrEmpty(fromDate) && fromDate != "-1")
+                            {
+                                <span><strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;</span>
+                            }
+                            @if (!string.IsNullOrEmpty(toDate) && toDate != "-1")
+                            {
+                                <span><strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;</span>
+                            }
+                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
+                            <strong>Generated:</strong> @generatedOn
+                        </div>
+                        @if (!string.IsNullOrEmpty(selectedMemberId))
+                        {
+                            <div class="filter-info">
+                                <strong>Member ID:</strong> @selectedMemberId &nbsp;&nbsp;|&nbsp;&nbsp;
+                                <strong>Member Name:</strong> @selectedMemberName
+                            </div>
+                        }
+                    </td>
+                </tr>
+                <tr>
+                    <th style="width:3%;">SN</th>
+                    <th style="width:11%;">Member Id</th>
+                    <th style="width:17%;">Member Name</th>
+                    <th style="width:11%;">Account No</th>
+                    <th style="width:10%;">Account Open</th>
+                    <th style="width:10%;">Close Date</th>
+                    <th style="width:10%;">Deposit Type</th>
+                    <th style="width:10%;" class="text-right">Close Amount</th>
+                    <th style="width:10%;">Collector</th>
+                    <th style="width:8%;">Operator</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Any())
+                {
+                    int sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr>
+                            <td class="text-center">@sn</td>
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.MemberName ?? "")</td>
+                            <td>@(row.AccountNo ?? "")</td>
+                            <td>@(row.AccountOpenOnBs ?? "")</td>
+                            <td class="highlight-closed">@(row.AccountCloseOnBs ?? "")</td>
+                            <td>@(row.DepositTypeName ?? "")</td>
+                            <td class="text-right">@(row.CloseAmount.HasValue ? row.CloseAmount.Value.ToString("N2") : "")</td>
+                            <td>@(row.CollectorName ?? "")</td>
+                            <td>@(row.Operator ?? "")</td>
+                        </tr>
+                    }
+                    <tr class="grand-total">
+                        <td colspan="7" class="text-right"><strong>Total</strong></td>
+                        <td class="text-right"><strong>@totalCloseAmount.ToString("N2")</strong></td>
+                        <td colspan="2"></td>
+                    </tr>
+                    <tr>
+                        <td colspan="7" class="text-right"><strong>Total Closed Accounts</strong></td>
+                        <td class="text-right"><strong>@totalClosedAccounts</strong></td>
+                        <td colspan="2"></td>
+                    </tr>
+                    <tr>
+                        <td colspan="7" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-right"><strong>@totalRecords</strong></td>
+                        <td colspan="2"></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="10" class="text-center">No closed saving accounts found for the selected criteria</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

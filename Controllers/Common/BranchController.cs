@@ -52,5 +52,34 @@ namespace NexgenCosysReport.Controllers.Common
                 });
             }
         }
+
+        [HttpGet("GetCollectionBranch")]
+        public async Task<ActionResult<GeneralResponse<List<BranchResponse>>>> GetUserBranches([FromQuery] long userId)
+        {
+            try
+            {
+                var branches = await _branchService.GetByUserId(userId);
+
+                var response = new GeneralResponse<List<BranchResponse>>
+                {
+                    isValid = true,
+                    statusCode = 200,
+                    data = branches,
+
+                };
+
+                return Ok(response);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error fetching user branches for userId: {UserId}", userId);
+                return StatusCode(500, new GeneralResponse<List<BranchResponse>>
+                {
+                    isValid = false,
+                    statusCode = 500,
+                    message = "An error occurred while fetching branches"
+                });
+            }
+        }
     }
 }

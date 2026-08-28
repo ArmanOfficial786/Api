@@ -1,5 +1,6 @@
 
 //using NexgenCosysReport.Dtos.RequestDtos;
+using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
 //using NexgenCosysReport.Inteface.ServiceInterface;
 //using Microsoft.EntityFrameworkCore;
@@ -40,7 +41,6 @@ using NexgenCosysReport.DbContext;
 
 
 using NexgenCosysReport.Dtos.RequestDtos.Common;
-using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 
 namespace NexgenCosysReport.Repository.Common
@@ -89,7 +89,27 @@ namespace NexgenCosysReport.Repository.Common
 
 
 
+
+        }
+
+        public async Task<List<BranchResponse>> GetCollectionBranch(long usmUserId)
+        {
+            var branchList = await (
+                from relation in _context.UsmRelationUserToOffices
+                join office in _context.UsmOffices
+                    on relation.UsmOfficeId equals office.UsmOfficeId
+                where relation.UsmUserId == usmUserId
+                   && office.IsActive == true
+                orderby office.OfficeName
+                select new BranchResponse
+                {
+                    BranchId = office.UsmOfficeId,
+                    BranchName = office.OfficeName
+                }
+            ).ToListAsync();
+
             return branchList;
         }
+
     }
 }

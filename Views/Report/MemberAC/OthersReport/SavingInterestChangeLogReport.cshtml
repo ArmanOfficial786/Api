@@ -1,0 +1,200 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+    var rows = (Model["Rows"] as List<SavingInterestChangeLogRowDto>) ?? new List<SavingInterestChangeLogRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var reportType = Model["ReportType"]?.ToString() ?? "1";
+    var reportTypeText = reportType == "1" ? "Account No" : "Deposit Type";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+    var accountNo = Model["AccountNo"]?.ToString();
+    var depositTypeName = Model["DepositTypeName"]?.ToString();
+    var officeName = Model["OfficeName"]?.ToString() ?? "All";
+    var totalChanges = Model["TotalChanges"] as int? ?? 0;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Saving Interest Change Log Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    border: 1px solid #ccc;
+                }
+
+                .data-table th {
+                    background: #f2f2f2;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                }
+
+                .data-table thead {
+                    display: table-row-group;
+                }
+
+            .grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .filter-info {
+                margin-bottom: 4px;
+            }
+
+            .report-title {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+            }
+
+            .highlight-change {
+                color: #1565c0;
+                font-weight: bold;
+            }
+
+            .rate-old {
+                color: #c62828;
+            }
+
+            .rate-new {
+                color: #2e7d32;
+            }
+
+            .rate-arrow {
+                color: #f57f17;
+            }
+
+            @@media print {
+                .data-table thead {
+                    display: table-row-group;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th colspan="8" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
+                        Saving Interest Change Log Report
+                    </th>
+                </tr>
+                <tr>
+                    <td colspan="8">
+                        <div class="filter-info">
+                            <strong>Report Type:</strong> @reportTypeText &nbsp;&nbsp;|&nbsp;&nbsp;
+                            @if (!string.IsNullOrEmpty(accountNo))
+                            {
+                                <span><strong>Account No:</strong> @accountNo &nbsp;&nbsp;|&nbsp;&nbsp;</span>
+                            }
+                            @if (!string.IsNullOrEmpty(depositTypeName))
+                            {
+                                <span><strong>Deposit Type:</strong> @depositTypeName &nbsp;&nbsp;|&nbsp;&nbsp;</span>
+                            }
+                            <strong>Office:</strong> @officeName &nbsp;&nbsp;|&nbsp;&nbsp;
+                            <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
+                            <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;
+                            <strong>Generated:</strong> @generatedOn
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <th style="width:3%;">SN</th>
+                    <th style="width:12%;">Account No</th>
+                    <th style="width:12%;">Member Id</th>
+                    <th style="width:18%;">Member Name</th>
+                    <th style="width:12%;">Deposit Type</th>
+                    <th style="width:15%;" class="text-center">Interest Rate Change</th>
+                    <th style="width:12%;">Changed Date</th>
+                    <th style="width:16%;">Changed By</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Any())
+                {
+                    int sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        var oldRate = row.OldInterestRate.HasValue ? row.OldInterestRate.Value.ToString("N2") : "-";
+                        var newRate = row.NewInterestRate.HasValue ? row.NewInterestRate.Value.ToString("N2") : "-";
+                        <tr>
+                            <td class="text-center">@sn</td>
+                            <td>@(row.AccountNo ?? "")</td>
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.MemberName ?? "")</td>
+                            <td>@(row.DepositTypeName ?? "")</td>
+                            <td class="text-center">
+                                <span class="rate-old">@oldRate</span>
+                                <span class="rate-arrow"> → </span>
+                                <span class="rate-new">@newRate</span>
+                            </td>
+                            <td class="highlight-change">@(row.ChangedDateBs ?? "")</td>
+                            <td>@(row.ChangedBy ?? "")</td>
+                        </tr>
+                    }
+                    <tr class="grand-total">
+                        <td colspan="7" class="text-right"><strong>Total Changes</strong></td>
+                        <td class="text-right"><strong>@totalChanges</strong></td>
+                    </tr>
+                    <tr>
+                        <td colspan="7" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-right"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="8" class="text-center">No interest change log found for the selected criteria</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
