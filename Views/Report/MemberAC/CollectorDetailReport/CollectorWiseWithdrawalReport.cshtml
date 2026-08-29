@@ -1,0 +1,171 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.CollectorDetailReport
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+    var rows = (Model["Rows"] as List<CollectorWiseWithdrawalRowDto>) ?? new List<CollectorWiseWithdrawalRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "";
+    var collectorName = Model["CollectorName"]?.ToString() ?? "";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Collector Wise Withdrawal Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    border: 1px solid #ccc;
+                }
+
+                .data-table th {
+                    background: #f2f2f2;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                }
+
+                .data-table thead {
+                    display: table-row-group;
+                }
+
+            .grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .filter-info {
+                margin-bottom: 4px;
+            }
+
+            .report-title {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+            }
+
+            .highlight-withdrawal {
+                color: #c62828;
+                font-weight: bold;
+            }
+
+            @@media print {
+                .data-table thead {
+                    display: table-row-group;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th colspan="7" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
+                        Collector Wise Withdrawal Report
+                    </th>
+                </tr>
+                <tr>
+                    <td colspan="7">
+                        <div class="filter-info">
+                            <strong>Collector:</strong> @collectorName &nbsp;&nbsp;|&nbsp;&nbsp;
+                            <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
+                            <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;
+                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
+                            <strong>Generated:</strong> @generatedOn
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <th style="width:3%;">SN</th>
+                    <th style="width:12%;">Date</th>
+                    <th style="width:15%;">Member Id</th>
+                    <th style="width:20%;">Member Name</th>
+                    <th style="width:15%;">Account No</th>
+                    <th style="width:15%;" class="text-right">Amount</th>
+                    <th style="width:20%;">Operator</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Any())
+                {
+                    int sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr>
+                            <td class="text-center">@sn</td>
+                            <td>@(row.Date ?? "")</td>
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.MemberName ?? "")</td>
+                            <td>@(row.AccountNo ?? "")</td>
+                            <td class="text-right highlight-withdrawal">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
+                            <td>@(row.Operator ?? "")</td>
+                        </tr>
+                    }
+                    <tr class="grand-total">
+                        <td colspan="5" class="text-right"><strong>Total</strong></td>
+                        <td class="text-right"><strong>@totalAmount.ToString("N2")</strong></td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td colspan="5" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-right"><strong>@totalRecords</strong></td>
+                        <td></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="7" class="text-center">No withdrawal transactions found for the selected criteria</td></tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

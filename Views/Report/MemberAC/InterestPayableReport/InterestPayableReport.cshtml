@@ -1,0 +1,204 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+    var rows = (Model["Rows"] as List<InterestPayableRowDto>) ?? new List<InterestPayableRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalInterest = Model["TotalInterest"] as decimal? ?? 0;
+    var totalTax = Model["TotalTax"] as decimal? ?? 0;
+    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var officeName = Model["OfficeName"]?.ToString() ?? "All";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "";
+    var reportViewName = Model["ReportViewName"]?.ToString() ?? "All";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+    var totalDepositTypes = Model["TotalDepositTypes"] as int? ?? 0;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Interest Payable Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    border: 1px solid #ccc;
+                }
+
+                .data-table th {
+                    background: #f2f2f2;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                }
+
+                .data-table thead {
+                    display: table-row-group;
+                }
+
+            .grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .filter-info {
+                margin-bottom: 4px;
+            }
+
+            .report-title {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+            }
+
+            .highlight-interest {
+                color: #2e7d32;
+                font-weight: bold;
+            }
+
+            .highlight-tax {
+                color: #c62828;
+                font-weight: bold;
+            }
+
+            .highlight-balance {
+                color: #1565c0;
+                font-weight: bold;
+            }
+
+            .highlight-rate {
+                color: #f57f17;
+                font-weight: bold;
+            }
+
+            @@media print {
+                .data-table thead {
+                    display: table-row-group;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th colspan="10" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
+                        Saving Interest Payable Report - @reportViewName
+                    </th>
+                </tr>
+                <tr>
+                    <td colspan="10">
+                        <div class="filter-info">
+                            <strong>Office:</strong> @officeName &nbsp;&nbsp;|&nbsp;&nbsp;
+                            <strong>Till Date:</strong> @tillDate &nbsp;&nbsp;|&nbsp;&nbsp;
+                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
+                            <strong>Generated:</strong> @generatedOn
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <th style="width:3%;">SN</th>
+                    <th style="width:12%;">Deposit Type</th>
+                    <th style="width:10%;">Member ID</th>
+                    <th style="width:15%;">Member Name</th>
+                    <th style="width:10%;">Account No</th>
+                    <th style="width:8%;">Interest From</th>
+                    <th style="width:8%;" class="text-right">Rate (%)</th>
+                    <th style="width:12%;" class="text-right">Interest</th>
+                    <th style="width:10%;" class="text-right">Tax</th>
+                    <th style="width:12%;" class="text-right">Balance</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Any())
+                {
+                    int sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr>
+                            <td class="text-center">@sn</td>
+                            <td>@(row.DepositTypeName ?? "")</td>
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.MemberName ?? "")</td>
+                            <td>@(row.AccountNo ?? "")</td>
+                            <td>@(row.InterestFrom ?? "")</td>
+                            <td class="text-right highlight-rate">@(row.InterestRate.HasValue ? row.InterestRate.Value.ToString("N2") : "")</td>
+                            <td class="text-right highlight-interest">@(row.InterestAmount.HasValue ? row.InterestAmount.Value.ToString("N2") : "")</td>
+                            <td class="text-right highlight-tax">@(row.TaxAmount.HasValue ? row.TaxAmount.Value.ToString("N2") : "")</td>
+                            <td class="text-right highlight-balance">@(row.Balance.HasValue ? row.Balance.Value.ToString("N2") : "")</td>
+                        </tr>
+                    }
+                    <tr class="grand-total">
+                        <td colspan="7" class="text-right"><strong>Total</strong></td>
+                        <td class="text-right"><strong>@totalInterest.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalTax.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalBalance.ToString("N2")</strong></td>
+                    </tr>
+                    <tr>
+                        <td colspan="7" class="text-right"><strong>Total Deposit Types</strong></td>
+                        <td class="text-right"><strong>@totalDepositTypes</strong></td>
+                        <td colspan="2"></td>
+                    </tr>
+                    <tr>
+                        <td colspan="7" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-right"><strong>@totalRecords</strong></td>
+                        <td colspan="2"></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="10" class="text-center">
+                            No interest payable records found for the selected criteria
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

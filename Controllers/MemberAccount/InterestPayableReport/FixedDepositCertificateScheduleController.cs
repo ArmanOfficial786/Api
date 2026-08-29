@@ -1,45 +1,41 @@
-﻿
+﻿// Controllers/MemberAccount/FixedDepositCertificateSchedule/FixedDepositCertificateScheduleController.cs
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
-using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport;
+using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
+using NexgenCosysReport.Interfaces.ServiceInterface.MemberAccount.FixedDepositCertificateSchedule;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
 using System.Text.Json;
 
-
-namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
-
-
+namespace NexgenCosysReport.Controllers.MemberAccount.FixedDepositCertificateSchedule
 {
     [ApiController]
     [Route("api/[controller]")]
     [Authorize]
-    public class BranchToBranchExpenseController : ControllerBase
+    public class FixedDepositCertificateScheduleController : ControllerBase
     {
-        private readonly IBranchToBranchExpenseRepository _repository;
+        private readonly IFixedDepositCertificateScheduleRepository _repository;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly ILogger<BranchToBranchExpenseController> _logger;
-        private readonly IDateConverterService _dateConverter;
+        private readonly ILogger<FixedDepositCertificateScheduleController> _logger;
 
-        public BranchToBranchExpenseController(
-            IBranchToBranchExpenseRepository repository,
+        public FixedDepositCertificateScheduleController(
+            IFixedDepositCertificateScheduleRepository repository,
             ICommonHeaderRepository commonHeaderRepository,
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<BranchToBranchExpenseController> logger,
-            IDateConverterService dateConverter)
+            ILogger<FixedDepositCertificateScheduleController> logger)
         {
             _repository = repository;
             _commonHeaderRepository = commonHeaderRepository;
@@ -48,18 +44,57 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
             _headerResponse = headerResponse;
             _reportSettings = reportSettings;
             _logger = logger;
-            _dateConverter = dateConverter;
         }
 
-        [HttpPost()]
+        [HttpGet()]
+        public async Task<ActionResult<GeneralResponse<List<FixedDepositAccountListDto>>>> GetAccounts()
+        {
+            try
+            {
+                var userIdClaim = User.FindFirst("UserId")?.Value
+                                  ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                {
+                    return Unauthorized(new GeneralResponse<List<FixedDepositAccountListDto>>
+                    {
+                        isValid = false,
+                        statusCode = 401,
+                        message = "User not authenticated"
+                    });
+                }
+
+                var accounts = await _repository.GetFixedDepositAccountsAsync(userId);
+
+                return Ok(new GeneralResponse<List<FixedDepositAccountListDto>>
+                {
+                    isValid = true,
+                    statusCode = 200,
+                    message = "Accounts retrieved successfully",
+                    data = accounts
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to get fixed deposit accounts");
+                return StatusCode(500, new GeneralResponse<List<FixedDepositAccountListDto>>
+                {
+                    isValid = false,
+                    statusCode = 500,
+                    message = "An error occurred while retrieving accounts"
+                });
+            }
+        }
+
+        [HttpPost("GenerateReport")]
         public async Task<ActionResult<GeneralResponse<ReportResponseDtos>>> GenerateReport(
-            [FromBody] BranchToBranchExpenseRequestDto request,
+            [FromBody] FixedDepositCertificateScheduleRequestDto request,
             [FromQuery] string format = "VIEW")
         {
             try
             {
                 // Extract userId from JWT
-                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var userIdClaim = User.FindFirst("UserId")?.Value
+                                  ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
                 {
                     return Unauthorized(new GeneralResponse<ReportResponseDtos>
@@ -71,24 +106,19 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                 }
 
                 // Validate request
-                if (string.IsNullOrEmpty(request.FromDateBs) || request.FromDateBs == "-1")
-                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "From date is required" });
-                if (string.IsNullOrEmpty(request.ToDateBs) || request.ToDateBs == "-1")
-                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "To date is required" });
-                if (request.BranchFromId == -1)
-                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "Collection Branch is required" });
+                if (request.AccountId == -1)
+                    return BadRequest(new GeneralResponse<ReportResponseDtos>
+                    {
+                        isValid = false,
+                        statusCode = 400,
+                        message = "Please select an account"
+                    });
 
-                var fromDate = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
-                var toDate = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
-                if (fromDate > toDate)
-                {
-                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "From date cannot be greater than To date" });
-                }
-
-                var reportName = "BranchToBranchExpense";
+                var reportName = $"FixedDeposit{request.ReportType}";
                 var upperFormat = format.ToUpper();
                 var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 
+                // Check cache
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
 
@@ -114,22 +144,31 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                     }
                 }
 
-                var data = await _repository.GetReportDataAsync(request);
+                // Get report data based on report type
+                FixedDepositCertificateScheduleData data;
+                if (request.ReportType == "Schedule")
+                {
+                    data = await _repository.GetScheduleDataAsync(request);
+                }
+                else
+                {
+                    data = await _repository.GetCertificateDataAsync(request);
+                }
 
-                if (!data.Rows.Any())
+                if (data.CertificateDetail == null)
                 {
                     return NotFound(new GeneralResponse<ReportResponseDtos>
                     {
                         isValid = false,
                         statusCode = 404,
-                        message = "No transactions found for the selected criteria"
+                        message = "No fixed deposit account found for the selected criteria"
                     });
                 }
 
-                // Header data
+                // Get header data
                 var officeIdClaim = User.FindFirst("OfficeId")?.Value;
                 string? branchIdForHeader = null;
-                if (!request.SameCompanyName && !string.IsNullOrEmpty(officeIdClaim) && long.TryParse(officeIdClaim, out var officeId))
+                if (!string.IsNullOrEmpty(officeIdClaim) && long.TryParse(officeIdClaim, out var officeId))
                 {
                     branchIdForHeader = officeId.ToString();
                 }
@@ -140,26 +179,28 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                 await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
                     headerData, nameof(CommonHeader.CompanyLogo), webRoot));
 
+                // Build report data
                 var reportData = new Dictionary<string, object>
                 {
-                    { "Rows", data.Rows },
+                    { "CertificateDetail", data.CertificateDetail },
+                    { "ScheduleRows", data.ScheduleRows },
                     { "TotalRecords", data.TotalRecords },
+                    { "TotalPrincipal", data.TotalPrincipal },
+                    { "TotalInterest", data.TotalInterest },
                     { "TotalAmount", data.TotalAmount },
                     { "HeaderDataSet", headerData },
-                    { "FromDate", request.FromDateBs },
-                    { "ToDate", request.ToDateBs },
-                    { "BranchFromName", data.BranchFromName },
-                    { "BranchToName", data.BranchToName },
-                    { "CollectorName", data.CollectorName ?? "All Collectors" },
+                    { "AccountNo", data.AccountNo ?? "" },
+                    { "MemberId", data.MemberId ?? "" },
+                    { "MemberName", data.MemberName ?? "" },
+                    { "ShowHeader", request.ShowHeader },
                     { "ReportType", request.ReportType },
-                    { "OrderBy", request.OrderBy },
-                    { "Format", upperFormat },
-                    { "VisualReport", request.VisualReport }
+                    { "Format", upperFormat }
                 };
 
-                string viewPath = request.VisualReport
-                    ? "Views/VisualReport/VBranchToBranchExpenseReport.cshtml"
-                    : "Views/Report/MemberAC/BranchToBranchExpenseReport.cshtml";
+                // Render view based on report type
+                string viewPath = request.ReportType == "Schedule"
+                    ? "Views/Report/MemberAC/FixedDepositScheduleReport.cshtml"
+                    : "Views/Report/MemberAC/FixedDepositCertificateReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -178,7 +219,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                         pageSize = 1,
                         hasNextPage = totalPages > 1,
                         hasPreviousPage = false,
-                        totalRecord = data.Rows.Count
+                        totalRecord = request.ReportType == "Schedule" ? data.TotalRecords : 1
                     };
 
                     _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
@@ -208,7 +249,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                                 currentPage = 1,
                                 totalPages = 1,
                                 pageSize = 1,
-                                totalRecord = data.Rows.Count
+                                totalRecord = request.ReportType == "Schedule" ? data.TotalRecords : 1
                             }
                         }
                     });
@@ -232,16 +273,14 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "BranchToBranchExpense report generation failed");
+                _logger.LogError(ex, "Fixed Deposit Certificate/Schedule report generation failed");
                 return StatusCode(500, new GeneralResponse<ReportResponseDtos>
                 {
                     isValid = false,
                     statusCode = 500,
-                    message = ex.Message
+                    message = "An error occurred while generating the report"
                 });
             }
         }
     }
 }
-
-

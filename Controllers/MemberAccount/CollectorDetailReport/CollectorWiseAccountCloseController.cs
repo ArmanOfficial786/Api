@@ -1,44 +1,42 @@
-﻿
+﻿// Controllers/MemberAccount/CollectorDetailReport/CollectorWiseAccountCloseController.cs
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
-using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport;
+using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.CollectorDetailReport;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.CollectorDetailReport;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
 using System.Text.Json;
 
-
-namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
-
-
+namespace NexgenCosysReport.Controllers.MemberAccount.CollectorDetailReport
 {
     [ApiController]
     [Route("api/[controller]")]
     [Authorize]
-    public class BranchToBranchExpenseController : ControllerBase
+    public class CollectorWiseAccountCloseController : ControllerBase
     {
-        private readonly IBranchToBranchExpenseRepository _repository;
+        private readonly ICollectorWiseAccountCloseRepository _repository;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly ILogger<BranchToBranchExpenseController> _logger;
+        private readonly ILogger<CollectorWiseAccountCloseController> _logger;
         private readonly IDateConverterService _dateConverter;
 
-        public BranchToBranchExpenseController(
-            IBranchToBranchExpenseRepository repository,
+        public CollectorWiseAccountCloseController(
+            ICollectorWiseAccountCloseRepository repository,
             ICommonHeaderRepository commonHeaderRepository,
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<BranchToBranchExpenseController> logger,
+            ILogger<CollectorWiseAccountCloseController> logger,
             IDateConverterService dateConverter)
         {
             _repository = repository;
@@ -53,7 +51,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
 
         [HttpPost()]
         public async Task<ActionResult<GeneralResponse<ReportResponseDtos>>> GenerateReport(
-            [FromBody] BranchToBranchExpenseRequestDto request,
+            [FromBody] CollectorWiseAccountCloseRequestDto request,
             [FromQuery] string format = "VIEW")
         {
             try
@@ -75,8 +73,6 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                     return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "From date is required" });
                 if (string.IsNullOrEmpty(request.ToDateBs) || request.ToDateBs == "-1")
                     return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "To date is required" });
-                if (request.BranchFromId == -1)
-                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "Collection Branch is required" });
 
                 var fromDate = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
                 var toDate = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
@@ -85,7 +81,10 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                     return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "From date cannot be greater than To date" });
                 }
 
-                var reportName = "BranchToBranchExpense";
+                if (request.CollectorId == -1)
+                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "Please select a collector" });
+
+                var reportName = "CollectorWiseAccountClose";
                 var upperFormat = format.ToUpper();
                 var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 
@@ -122,14 +121,14 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                     {
                         isValid = false,
                         statusCode = 404,
-                        message = "No transactions found for the selected criteria"
+                        message = "No account closed transactions found for the selected criteria"
                     });
                 }
 
                 // Header data
                 var officeIdClaim = User.FindFirst("OfficeId")?.Value;
                 string? branchIdForHeader = null;
-                if (!request.SameCompanyName && !string.IsNullOrEmpty(officeIdClaim) && long.TryParse(officeIdClaim, out var officeId))
+                if (!string.IsNullOrEmpty(officeIdClaim) && long.TryParse(officeIdClaim, out var officeId))
                 {
                     branchIdForHeader = officeId.ToString();
                 }
@@ -144,22 +143,21 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                 {
                     { "Rows", data.Rows },
                     { "TotalRecords", data.TotalRecords },
-                    { "TotalAmount", data.TotalAmount },
+                    { "TotalCloseAmount", data.TotalCloseAmount },
                     { "HeaderDataSet", headerData },
                     { "FromDate", request.FromDateBs },
                     { "ToDate", request.ToDateBs },
-                    { "BranchFromName", data.BranchFromName },
-                    { "BranchToName", data.BranchToName },
-                    { "CollectorName", data.CollectorName ?? "All Collectors" },
-                    { "ReportType", request.ReportType },
                     { "OrderBy", request.OrderBy },
+                    { "CollectorName", data.CollectorName },
+                    { "CollectorId", data.CollectorId },
                     { "Format", upperFormat },
-                    { "VisualReport", request.VisualReport }
+                    { "VisualReport", request.VisualReport },
+                    { "TotalClosedAccounts", data.TotalClosedAccounts }
                 };
 
                 string viewPath = request.VisualReport
-                    ? "Views/VisualReport/VBranchToBranchExpenseReport.cshtml"
-                    : "Views/Report/MemberAC/BranchToBranchExpenseReport.cshtml";
+                    ? "Views/VisualReport/VCollectorWiseAccountCloseReport.cshtml"
+                    : "Views/Report/MemberAC/CollectorWiseAccountCloseReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -232,16 +230,14 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "BranchToBranchExpense report generation failed");
+                _logger.LogError(ex, "Collector Wise Account Close report generation failed");
                 return StatusCode(500, new GeneralResponse<ReportResponseDtos>
                 {
                     isValid = false,
                     statusCode = 500,
-                    message = ex.Message
+                    message = "An error occurred while generating the report"
                 });
             }
         }
     }
 }
-
-

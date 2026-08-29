@@ -49,7 +49,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
             _dateConverter = dateConverter;
         }
 
-        [HttpPost("GenerateReport")]
+        [HttpPost()]
         public async Task<ActionResult<GeneralResponse<ReportResponseDtos>>> GenerateReport(
             [FromBody] LoanPaymentThroughSavingRequestDto request,
             [FromQuery] string format = "VIEW")

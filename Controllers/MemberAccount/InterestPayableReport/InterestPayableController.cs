@@ -1,44 +1,42 @@
-﻿
+﻿// Controllers/MemberAccount/InterestPayableReport/InterestPayableController.cs
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
-using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport;
+using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
+using NexgenCosysReport.Interfaces.ServiceInterface.MemberAccount.InterestPayableReport;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
 using System.Text.Json;
 
-
-namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
-
-
+namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
 {
     [ApiController]
     [Route("api/[controller]")]
     [Authorize]
-    public class BranchToBranchExpenseController : ControllerBase
+    public class InterestPayableController : ControllerBase
     {
-        private readonly IBranchToBranchExpenseRepository _repository;
+        private readonly IInterestPayableRepository _repository;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly ILogger<BranchToBranchExpenseController> _logger;
+        private readonly ILogger<InterestPayableController> _logger;
         private readonly IDateConverterService _dateConverter;
 
-        public BranchToBranchExpenseController(
-            IBranchToBranchExpenseRepository repository,
+        public InterestPayableController(
+            IInterestPayableRepository repository,
             ICommonHeaderRepository commonHeaderRepository,
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<BranchToBranchExpenseController> logger,
+            ILogger<InterestPayableController> logger,
             IDateConverterService dateConverter)
         {
             _repository = repository;
@@ -53,13 +51,14 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
 
         [HttpPost()]
         public async Task<ActionResult<GeneralResponse<ReportResponseDtos>>> GenerateReport(
-            [FromBody] BranchToBranchExpenseRequestDto request,
+            [FromBody] InterestPayableRequestDto request,
             [FromQuery] string format = "VIEW")
         {
             try
             {
                 // Extract userId from JWT
-                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var userIdClaim = User.FindFirst("UserId")?.Value
+                                  ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
                 {
                     return Unauthorized(new GeneralResponse<ReportResponseDtos>
@@ -71,24 +70,28 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                 }
 
                 // Validate request
-                if (string.IsNullOrEmpty(request.FromDateBs) || request.FromDateBs == "-1")
-                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "From date is required" });
-                if (string.IsNullOrEmpty(request.ToDateBs) || request.ToDateBs == "-1")
-                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "To date is required" });
-                if (request.BranchFromId == -1)
-                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "Collection Branch is required" });
+                if (string.IsNullOrEmpty(request.TillDateBs) || request.TillDateBs == "-1")
+                    return BadRequest(new GeneralResponse<ReportResponseDtos>
+                    {
+                        isValid = false,
+                        statusCode = 400,
+                        message = "Till date is required"
+                    });
 
-                var fromDate = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
-                var toDate = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
-                if (fromDate > toDate)
-                {
-                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "From date cannot be greater than To date" });
-                }
+                // Validate office selection
+                if (string.IsNullOrEmpty(request.OfficeId) || request.OfficeId == "-1")
+                    return BadRequest(new GeneralResponse<ReportResponseDtos>
+                    {
+                        isValid = false,
+                        statusCode = 400,
+                        message = "Please select an office"
+                    });
 
-                var reportName = "BranchToBranchExpense";
+                var reportName = $"InterestPayable_{request.ReportView}";
                 var upperFormat = format.ToUpper();
                 var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 
+                // Check cache
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
 
@@ -114,6 +117,7 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                     }
                 }
 
+                // Get report data
                 var data = await _repository.GetReportDataAsync(request);
 
                 if (!data.Rows.Any())
@@ -122,14 +126,14 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                     {
                         isValid = false,
                         statusCode = 404,
-                        message = "No transactions found for the selected criteria"
+                        message = "No interest payable records found for the selected criteria"
                     });
                 }
 
-                // Header data
+                // Get header data
                 var officeIdClaim = User.FindFirst("OfficeId")?.Value;
                 string? branchIdForHeader = null;
-                if (!request.SameCompanyName && !string.IsNullOrEmpty(officeIdClaim) && long.TryParse(officeIdClaim, out var officeId))
+                if (!string.IsNullOrEmpty(officeIdClaim) && long.TryParse(officeIdClaim, out var officeId))
                 {
                     branchIdForHeader = officeId.ToString();
                 }
@@ -140,26 +144,29 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
                 await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
                     headerData, nameof(CommonHeader.CompanyLogo), webRoot));
 
+                // Build report data
                 var reportData = new Dictionary<string, object>
                 {
                     { "Rows", data.Rows },
                     { "TotalRecords", data.TotalRecords },
-                    { "TotalAmount", data.TotalAmount },
+                    { "TotalInterest", data.TotalInterest },
+                    { "TotalTax", data.TotalTax },
+                    { "TotalBalance", data.TotalBalance },
                     { "HeaderDataSet", headerData },
-                    { "FromDate", request.FromDateBs },
-                    { "ToDate", request.ToDateBs },
-                    { "BranchFromName", data.BranchFromName },
-                    { "BranchToName", data.BranchToName },
-                    { "CollectorName", data.CollectorName ?? "All Collectors" },
-                    { "ReportType", request.ReportType },
+                    { "TillDate", request.TillDateBs },
+                    { "OfficeName", request.OfficeName },
                     { "OrderBy", request.OrderBy },
+                    { "ReportView", request.ReportView },
+                    { "ReportViewName", data.ReportViewName ?? "All" },
                     { "Format", upperFormat },
-                    { "VisualReport", request.VisualReport }
+                    { "VisualReport", request.VisualReport },
+                    { "TotalDepositTypes", data.TotalDepositTypes }
                 };
 
+                // Render view
                 string viewPath = request.VisualReport
-                    ? "Views/VisualReport/VBranchToBranchExpenseReport.cshtml"
-                    : "Views/Report/MemberAC/BranchToBranchExpenseReport.cshtml";
+                    ? "Views/VisualReport/VInterestPayableReport.cshtml"
+                    : "Views/Report/MemberAC/InterestPayableReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -232,16 +239,14 @@ namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "BranchToBranchExpense report generation failed");
+                _logger.LogError(ex, "Interest Payable report generation failed");
                 return StatusCode(500, new GeneralResponse<ReportResponseDtos>
                 {
                     isValid = false,
                     statusCode = 500,
-                    message = ex.Message
+                    message = "An error occurred while generating the report"
                 });
             }
         }
     }
 }
-
-
