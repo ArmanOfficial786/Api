@@ -1,5 +1,4 @@
-﻿// Interfaces/ServiceInterface/MemberAccount/InterestExpenseReport/IInterestAndTaxDetailRepository.cs
-using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestExpenseReport;
+﻿using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestExpenseReport;
 
 namespace NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestExpenseReportInterface
 {

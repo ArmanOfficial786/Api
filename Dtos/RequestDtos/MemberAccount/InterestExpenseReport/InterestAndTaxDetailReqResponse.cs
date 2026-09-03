@@ -5,9 +5,9 @@
     {
         public string FromDateBs { get; set; } = string.Empty;
         public string ToDateBs { get; set; } = string.Empty;
-        public string BranchIds { get; set; } = "-1";
+        public string? BranchIds { get; set; }
         public string OrderBy { get; set; } = "Member Id";
-        public string BranchName { get; set; } = "All Branches";
+        public string? BranchName { get; set; }
         public long MemberRegistrationId { get; set; } = -1;
         public string MemberId { get; set; } = string.Empty;
         public string MemberName { get; set; } = string.Empty;
@@ -17,16 +17,15 @@
     public class InterestAndTaxDetailRowDto
     {
         public string? DepositTypeName { get; set; }
-        public string? Date { get; set; }
-        public string? DateBs { get; set; }
+        public string? Date { get; set; } // TransactionOnBs from SP
         public string? MemberId { get; set; }
         public string? MemberName { get; set; }
         public string? AccountNo { get; set; }
         public string? Narration { get; set; }
         public decimal? Interest { get; set; }
         public decimal? Tax { get; set; }
-        public decimal? PercentTax { get; set; }
-        public decimal? NetAmount { get; set; }
+        public decimal? NetAmount { get; set; } // Calculated
+        public decimal? PercentTax { get; set; } // Calculated
     }
 
     public class InterestAndTaxDetailData

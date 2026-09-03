@@ -50,7 +50,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.CollectorDetailReport
         }
 
         [HttpPost()]
-        public async Task<ActionResult<GeneralResponse<ReportResponseDtos>>> GenerateReport(
+        public async Task<IActionResult> GenerateReport(
             [FromBody] CollectorWiseCommissionSummaryRequestDto request,
             [FromQuery] string format = "VIEW")
         {
@@ -60,80 +60,49 @@ namespace NexgenCosysReport.Controllers.MemberAccount.CollectorDetailReport
                 var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
                 {
-                    return Unauthorized(new GeneralResponse<ReportResponseDtos>
-                    {
-                        isValid = false,
-                        statusCode = 401,
-                        message = "User not authenticated"
-                    });
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
                 }
-
-                // Validate request
-                if (string.IsNullOrEmpty(request.FromDateBs) || request.FromDateBs == "-1")
-                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "From date is required" });
-                if (string.IsNullOrEmpty(request.ToDateBs) || request.ToDateBs == "-1")
-                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "To date is required" });
-
-                var fromDate = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
-                var toDate = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
-                if (fromDate > toDate)
-                {
-                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "From date cannot be greater than To date" });
-                }
-
-                if (string.IsNullOrEmpty(request.BranchIds) || request.BranchIds == "-1")
-                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "Please select at least one branch" });
 
                 var reportName = "CollectorWiseCommissionSummary";
                 var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                if (request == null || !ModelState.IsValid)
+                {
+                    return NotFound(new { success = false, StatusCode = 400, message = "Invalid request" });
+                }
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
 
                 if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
                 {
-                    var cachedResult = await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, reportName,
+                    return await ReportExportHelper.ExportFromCacheAsync(
+                        reportKey, upperFormat,
+                        reportName,
                         _jsReportService, _logger);
-
-                    if (cachedResult is FileContentResult fileResult)
-                    {
-                        return Ok(new GeneralResponse<ReportResponseDtos>
-                        {
-                            isValid = true,
-                            statusCode = 200,
-                            message = "Report generated from cache",
-                            data = new ReportResponseDtos
-                            {
-                                pdfData = Convert.ToBase64String(fileResult.FileContents),
-                                reportName = $"{reportName}.{upperFormat.ToLower()}"
-                            }
-                        });
-                    }
                 }
 
-                var data = await _repository.GetReportDataAsync(request);
 
-                if (!data.Rows.Any())
-                {
-                    return NotFound(new GeneralResponse<ReportResponseDtos>
-                    {
-                        isValid = false,
-                        statusCode = 404,
-                        message = "No commission summary found for the selected criteria"
-                    });
-                }
+                var dataTask = _repository.GetReportDataAsync(request);
 
-                // Header data
-                var officeIdClaim = User.FindFirst("OfficeId")?.Value;
                 string? branchIdForHeader = null;
+                var officeIdClaim = User.FindFirst("OfficeId")?.Value;
                 if (!string.IsNullOrEmpty(officeIdClaim) && long.TryParse(officeIdClaim, out var officeId))
                 {
                     branchIdForHeader = officeId.ToString();
                 }
 
-                var headerData = await _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+
+                await Task.WhenAll(dataTask, headerTask);
+
+                var data = await dataTask;
+                var headerData = await headerTask;
+
+                if (!data.Rows.Any())
+                {
+                    return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
+                }
 
                 var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
                 await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
@@ -185,57 +154,18 @@ namespace NexgenCosysReport.Controllers.MemberAccount.CollectorDetailReport
 
                     return new FileContentResult(pdfBytes, "application/pdf");
                 }
-
-                var exportResult = await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, reportName,
-                    _jsReportService, _logger);
-
-                if (exportResult is FileContentResult fileResult2)
-                {
-                    return Ok(new GeneralResponse<ReportResponseDtos>
-                    {
-                        isValid = true,
-                        statusCode = 200,
-                        message = "Report generated successfully",
-                        data = new ReportResponseDtos
-                        {
-                            pdfData = Convert.ToBase64String(fileResult2.FileContents),
-                            reportName = $"{reportName}.{upperFormat.ToLower()}",
-                            pagination = new Pagination
-                            {
-                                currentPage = 1,
-                                totalPages = 1,
-                                pageSize = 1,
-                                totalRecord = data.Rows.Count
-                            }
-                        }
-                    });
-                }
-
-                return Ok(new GeneralResponse<ReportResponseDtos>
-                {
-                    isValid = true,
-                    statusCode = 200,
-                    message = "Report generated successfully"
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new GeneralResponse<ReportResponseDtos>
-                {
-                    isValid = false,
-                    statusCode = 400,
-                    message = ex.Message
-                });
+                return await ReportExportHelper.ExportFromCacheAsync(
+                                 reportKey, upperFormat,
+                                 reportName,
+                                 _jsReportService, _logger);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Collector Wise Commission Summary report generation failed");
-                return StatusCode(500, new GeneralResponse<ReportResponseDtos>
+                return StatusCode(500, new
                 {
-                    isValid = false,
-                    statusCode = 500,
-                    message = "An error occurred while generating the report"
+                    message = ex.Message,
+                    inner = ex.InnerException?.Message,
+                    stack = ex.StackTrace
                 });
             }
         }

@@ -108,6 +108,29 @@
                 font-weight: bold;
             }
 
+            .highlight-interest-date {
+                color: #6a1b9a;
+                font-weight: bold;
+            }
+
+            .highlight-member-name {
+                font-weight: bold;
+            }
+
+            .highlight-account-no {
+                color: #00695c;
+                font-weight: bold;
+            }
+
+            .highlight-net-interest {
+                color: #e65100;
+                font-weight: bold;
+            }
+
+            .saving-type-header {
+                background: #e8f5e9;
+            }
+
             @@media print {
                 .data-table thead {
                     display: table-row-group;
@@ -125,12 +148,12 @@
         <table class="data-table">
             <thead>
                 <tr>
-                    <th colspan="10" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
+                    <th colspan="11" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
                         Saving Interest and Tax Posted Report
                     </th>
                 </tr>
                 <tr>
-                    <td colspan="10">
+                    <td colspan="11">
                         <div class="filter-info">
                             <strong>Branches:</strong> @branchNames &nbsp;&nbsp;|&nbsp;&nbsp;
                             <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
@@ -141,59 +164,68 @@
                     </td>
                 </tr>
                 <tr>
-                    <th style="width:3%;">SN</th>
-                    <th style="width:12%;">Deposit Type</th>
+                    <th style="width:8%;">Saving Type</th>
                     <th style="width:10%;">Member ID</th>
                     <th style="width:15%;">Member Name</th>
-                    <th style="width:10%;">Account No</th>
-                    <th style="width:8%;">Interest Date</th>
-                    <th style="width:8%;" class="text-right">Rate (%)</th>
-                    <th style="width:12%;" class="text-right">Interest</th>
-                    <th style="width:10%;" class="text-right">Tax</th>
-                    <th style="width:12%;" class="text-right">Net Balance</th>
+                    <th style="width:8%;">Account No</th>
+                    <th style="width:10%;">Interest Date</th>
+                    <th style="width:6%;" class="text-right">Rate (%)</th>
+                    <th style="width:10%;" class="text-right">Interest</th>
+                    <th style="width:8%;" class="text-right">Tax</th>
+                    <th style="width:10%;" class="text-right">Net Interest</th>
+                    <th style="width:10%;" class="text-right">Net Balance</th>
                 </tr>
             </thead>
             <tbody>
                 @if (rows.Any())
                 {
-                    int sn = 0;
                     foreach (var row in rows)
                     {
-                        sn++;
+                        // Parse the rate to a numeric value for display
+                        decimal? rateValue = null;
+                        if (!string.IsNullOrEmpty(row.InterestRate))
+                        {
+                            if (decimal.TryParse(row.InterestRate, out decimal parsedRate))
+                            {
+                                rateValue = parsedRate;
+                            }
+                        }
+
                         <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@(row.DepositTypeName ?? "")</td>
+                            <td class="saving-type-header">@(row.DepositTypeName ?? "")</td>
                             <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td>@(row.InterestDate ?? "")</td>
-                            <td class="text-right highlight-rate">@(row.InterestRate.HasValue ? row.InterestRate.Value.ToString("N2") : "")</td>
+                            <td class="highlight-member-name">@(row.MemberName ?? "")</td>
+                            <td class="highlight-account-no">@(row.AccountNo ?? "")</td>
+                            <td class="highlight-interest-date">@(row.InterestDate ?? "")</td>
+                            <td class="text-right highlight-rate">@(rateValue.HasValue ? rateValue.Value.ToString("N2") + " %" : "")</td>
                             <td class="text-right highlight-interest">@(row.Interest.HasValue ? row.Interest.Value.ToString("N2") : "")</td>
                             <td class="text-right highlight-tax">@(row.Tax.HasValue ? row.Tax.Value.ToString("N2") : "")</td>
+                            <td class="text-right highlight-net-interest">@(row.NetInterest.HasValue ? row.NetInterest.Value.ToString("N2") : "")</td>
                             <td class="text-right highlight-net">@(row.NetBalance.HasValue ? row.NetBalance.Value.ToString("N2") : "")</td>
                         </tr>
                     }
                     <tr class="grand-total">
-                        <td colspan="7" class="text-right"><strong>Total</strong></td>
+                        <td colspan="6" class="text-right"><strong>Total</strong></td>
                         <td class="text-right"><strong>@totalInterest.ToString("N2")</strong></td>
                         <td class="text-right"><strong>@totalTax.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@((totalInterest - totalTax).ToString("N2"))</strong></td>
                         <td class="text-right"><strong>@totalNetBalance.ToString("N2")</strong></td>
                     </tr>
                     <tr>
-                        <td colspan="7" class="text-right"><strong>Total Deposit Types</strong></td>
+                        <td colspan="6" class="text-right"><strong>Total Deposit Types</strong></td>
                         <td class="text-right"><strong>@totalDepositTypes</strong></td>
-                        <td colspan="2"></td>
+                        <td colspan="4"></td>
                     </tr>
                     <tr>
-                        <td colspan="7" class="text-right"><strong>Total Records</strong></td>
+                        <td colspan="6" class="text-right"><strong>Total Records</strong></td>
                         <td class="text-right"><strong>@totalRecords</strong></td>
-                        <td colspan="2"></td>
+                        <td colspan="4"></td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="10" class="text-center">
+                        <td colspan="11" class="text-center">
                             No interest and tax posted records found for the selected criteria
                         </td>
                     </tr>

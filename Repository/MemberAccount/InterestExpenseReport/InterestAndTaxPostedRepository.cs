@@ -9,7 +9,7 @@ using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestExpenseR
 using System.Data;
 using System.Text;
 
-namespace NexgenCosysReport.Repositories.MemberAccount.InterestExpenseReport
+namespace NexgenCosysReport.Repository.MemberAccount.InterestExpenseReport
 {
     public class InterestAndTaxPostedRepository : IInterestAndTaxPostedRepository
     {
@@ -37,30 +37,18 @@ namespace NexgenCosysReport.Repositories.MemberAccount.InterestExpenseReport
                 var fromDateStr = fromDateAd.ToString("yyyy-MM-dd");
                 var toDateStr = toDateAd.ToString("yyyy-MM-dd");
 
-                // Build filter expression
-                var sqlFilterExp = new StringBuilder();
-                var sqlFilterExpOrder = new StringBuilder();
+                // Build optimized filter expression
+                var sqlFilterExp = BuildFilterExpression(fromDateStr, toDateStr, request.BranchIds);
 
-                // Date filter
-                sqlFilterExp.Append($" AND At.TransactionOn BETWEEN '{fromDateStr}' AND '{toDateStr}'");
-
-                // Branch filter
-                if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
-                {
-                    sqlFilterExp.Append($" AND At.UsmOfficeId IN ({request.BranchIds})");
-                }
-
-                // Build Order By clause (converted from legacy switch)
                 var orderByClause = BuildOrderByClause(request.OrderBy);
 
                 var parameters = new DynamicParameters();
-                parameters.Add("@SqlFilterExp", sqlFilterExp.ToString(), DbType.String, size: -1);
+                parameters.Add("@SqlFilterExp", sqlFilterExp, DbType.String, size: -1);
                 parameters.Add("@SqlFilterExpOrder", orderByClause, DbType.String, size: -1);
                 parameters.Add("@SqlTillDate", toDateStr, DbType.String);
 
                 var connectionString = _context.Database.GetConnectionString();
                 using var connection = new SqlConnection(connectionString);
-                await connection.OpenAsync();
 
                 var rows = await connection.QueryAsync<InterestAndTaxPostedRowDto>(
                     "sp_5_43_GetInterestAndTaxPosted",
@@ -70,7 +58,19 @@ namespace NexgenCosysReport.Repositories.MemberAccount.InterestExpenseReport
 
                 var resultList = rows.AsList();
 
-                // Get unique deposit types count
+                // Clean up InterestRate - remove percentage sign if present
+                foreach (var row in resultList)
+                {
+                    if (!string.IsNullOrEmpty(row.InterestRate))
+                    {
+                        // Remove % sign and trim whitespace
+                        row.InterestRate = row.InterestRate.Replace("%", "").Trim();
+                    }
+                }
+
+                // Calculate totals
+                var (totalInterest, totalTax, totalNetBalance) = CalculateTotals(resultList);
+
                 var totalDepositTypes = resultList
                     .Select(r => r.DepositTypeName)
                     .Distinct()
@@ -80,9 +80,9 @@ namespace NexgenCosysReport.Repositories.MemberAccount.InterestExpenseReport
                 {
                     Rows = resultList,
                     TotalRecords = resultList.Count,
-                    TotalInterest = resultList.Sum(r => r.Interest ?? 0),
-                    TotalTax = resultList.Sum(r => r.Tax ?? 0),
-                    TotalNetBalance = resultList.Sum(r => r.NetBalance ?? 0),
+                    TotalInterest = totalInterest,
+                    TotalTax = totalTax,
+                    TotalNetBalance = totalNetBalance,
                     FromDateBs = request.FromDateBs,
                     ToDateBs = request.ToDateBs,
                     BranchNames = request.BranchName,
@@ -97,9 +97,38 @@ namespace NexgenCosysReport.Repositories.MemberAccount.InterestExpenseReport
             }
         }
 
+        private static string BuildFilterExpression(string fromDateStr, string toDateStr, string branchIds)
+        {
+            var filter = new StringBuilder();
+            filter.Append($" AND At.TransactionOn BETWEEN '{fromDateStr}' AND '{toDateStr}'");
+
+            if (!string.IsNullOrEmpty(branchIds) && branchIds != "-1")
+            {
+                filter.Append($" AND At.UsmOfficeId IN ({branchIds})");
+            }
+
+            return filter.ToString();
+        }
+
+        private static (decimal totalInterest, decimal totalTax, decimal totalNetBalance) CalculateTotals(
+            List<InterestAndTaxPostedRowDto> rows)
+        {
+            decimal totalInterest = 0;
+            decimal totalTax = 0;
+            decimal totalNetBalance = 0;
+
+            foreach (var row in rows)
+            {
+                totalInterest += row.Interest ?? 0;
+                totalTax += row.Tax ?? 0;
+                totalNetBalance += row.NetBalance ?? 0;
+            }
+
+            return (totalInterest, totalTax, totalNetBalance);
+        }
+
         private static string BuildOrderByClause(string orderBy)
         {
-            // Converted from legacy switch in GetInterestAndTaxPosted
             return orderBy switch
             {
                 "Deposit Type" => " ORDER BY DepositTypeName",

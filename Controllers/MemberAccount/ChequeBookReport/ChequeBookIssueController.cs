@@ -50,7 +50,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.ChequeBookReport
         }
 
         [HttpGet("GetMember")]
-        public async Task<ActionResult<GeneralResponse<MemberInfoDto>>> GetMember([FromQuery] string memberId)
+        public async Task<IActionResult> GetMember([FromQuery] string memberId)
         {
             try
             {
@@ -201,7 +201,21 @@ namespace NexgenCosysReport.Controllers.MemberAccount.ChequeBookReport
                     }
                 }
 
-                var data = await _repository.GetReportDataAsync(request);
+                var dataTask = _repository.GetReportDataAsync(request);
+
+                var officeIdClaim = User.FindFirst("OfficeId")?.Value;
+                string? branchIdForHeader = null;
+                if (!string.IsNullOrEmpty(officeIdClaim) && long.TryParse(officeIdClaim, out var officeId))
+                {
+                    branchIdForHeader = officeId.ToString();
+                }
+
+                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+
+                await Task.WhenAll(dataTask, headerTask);
+
+                var data = await dataTask;
+                var headerData = await headerTask;
 
                 if (data.Rows == null || data.Rows.Count == 0)
                 {
@@ -212,15 +226,6 @@ namespace NexgenCosysReport.Controllers.MemberAccount.ChequeBookReport
                         message = "No cheque book issue records found for the selected criteria"
                     });
                 }
-
-                var officeIdClaim = User.FindFirst("OfficeId")?.Value;
-                string? branchIdForHeader = null;
-                if (!string.IsNullOrEmpty(officeIdClaim) && long.TryParse(officeIdClaim, out var officeId))
-                {
-                    branchIdForHeader = officeId.ToString();
-                }
-
-                var headerData = await _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
 
                 var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
                 await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(

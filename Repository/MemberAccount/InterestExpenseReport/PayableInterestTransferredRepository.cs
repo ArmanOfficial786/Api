@@ -9,7 +9,7 @@ using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestExpenseR
 using System.Data;
 using System.Text;
 
-namespace NexgenCosysReport.Repositories.MemberAccount.InterestExpenseReport
+namespace NexgenCosysReport.Repository.MemberAccount.InterestExpenseReport
 {
     public class PayableInterestTransferredRepository : IPayableInterestTransferredRepository
     {

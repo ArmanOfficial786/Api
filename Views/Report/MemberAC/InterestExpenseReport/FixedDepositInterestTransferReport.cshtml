@@ -5,16 +5,15 @@
     Layout = null;
     var rows = (Model["Rows"] as List<FixedDepositInterestTransferRowDto>) ?? new List<FixedDepositInterestTransferRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalInterestAmount = Model["TotalInterestAmount"] as decimal? ?? 0;
-    var totalTaxAmount = Model["TotalTaxAmount"] as decimal? ?? 0;
-    var totalNetAmount = Model["TotalNetAmount"] as decimal? ?? 0;
+    var totalInterest = Model["TotalInterest"] as decimal? ?? 0;
+    var totalTax = Model["TotalTax"] as decimal? ?? 0;
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
     var orderBy = Model["OrderBy"]?.ToString() ?? "";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+    var generatedOn = Model["GeneratedOn"]?.ToString() ?? DateTime.Now.ToString("yyyy/MM/dd");
     var totalTransactions = Model["TotalTransactions"] as int? ?? 0;
 }
 <!DOCTYPE html>
@@ -31,23 +30,29 @@
 
             body {
                 font-family: Arial, sans-serif;
-                font-size: 9pt;
+                font-size: 7.5pt;
                 background: white;
+                color: #000;
             }
 
             .report-container {
                 width: 100%;
                 overflow: visible;
+                padding: 5px 10px;
             }
 
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 9pt;
+                font-size: 7.5pt;
+                table-layout: fixed;
             }
 
                 .data-table td, .data-table th {
-                    padding: 4px 6px;
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 2px 4px;
+                    vertical-align: middle;
                     border: 1px solid #ccc;
                 }
 
@@ -56,17 +61,31 @@
                     border-top: 2px solid #000;
                     border-bottom: 1px solid #000;
                     text-align: left;
+                    font-weight: bold;
+                    white-space: nowrap;
+                    font-size: 7.5pt;
                 }
 
-                .data-table thead {
-                    display: table-row-group;
-                }
-
-            .grand-total {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
+            /* Report Title - matches webform */
+            .report-title {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 12pt;
                 font-weight: bold;
-                background: #f9f9f9;
+                text-decoration: underline;
+                padding: 4px 6px;
+            }
+
+            /* Header meta rows - matches webform */
+            .meta-row td {
+                padding: 2px 4px;
+                font-size: 7.5pt;
+                border: none;
+            }
+
+            .meta-spacer td {
+                height: 4px;
+                border: none;
             }
 
             .text-right {
@@ -77,17 +96,41 @@
                 text-align: center !important;
             }
 
-            .filter-info {
-                margin-bottom: 4px;
+            .text-left {
+                text-align: left !important;
             }
 
-            .report-title {
-                text-align: center;
-                font-size: 14pt;
+            /* Group header rows - matches webform grouping */
+            .group-header td {
                 font-weight: bold;
-                text-decoration: underline;
+                padding-top: 8px;
+                padding-bottom: 2px;
+                background: #f5f5f5;
+                border-top: 1px solid #999;
+                font-size: 7.5pt;
             }
 
+            .group-header.first-group td {
+                padding-top: 4px;
+            }
+
+            .group-subtotal td {
+                border-bottom: 1px solid #000;
+                padding-bottom: 2px;
+                font-weight: bold;
+            }
+
+            /* Grand total rows - matches webform */
+            .grand-total td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 3px 4px;
+                font-size: 7.5pt;
+            }
+
+            /* Color coding for amounts */
             .highlight-interest {
                 color: #2e7d32;
                 font-weight: bold;
@@ -103,9 +146,35 @@
                 font-weight: bold;
             }
 
+            /* Filter info row - matches image */
+            .filter-row td {
+                padding: 2px 4px;
+                font-size: 7.5pt;
+                border: none;
+                font-weight: bold;
+            }
+
+            .filter-label {
+                font-weight: bold;
+            }
+
+            .filter-value {
+                font-weight: normal;
+            }
+
+            /* Print styles */
             @@media print {
-                .data-table thead {
+                thead {
                     display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+
+                .no-print {
+                    display: none !important;
                 }
             }
     </style>
@@ -118,77 +187,124 @@
         }
 
         <table class="data-table">
-            <thead>
+            <colgroup>
+                <col style="width:9%;" />    <!-- Saving Type / Deposit Type -->
+                <col style="width:10%;" />   <!-- Member Id -->
+                <col style="width:13%;" />   <!-- Member Name -->
+                <col style="width:9%;" />    <!-- Account No -->
+                <col style="width:9%;" />    <!-- Interest Date -->
+                <col style="width:10%;" />   <!-- Interest (Rs) -->
+                <col style="width:10%;" />   <!-- Tax (Rs) -->
+                <col style="width:30%;" />   <!-- Remarks -->
+            </colgroup>
+            <tbody>
+                <!-- Report Title -->
                 <tr>
-                    <th colspan="10" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
+                    <td colspan="8" class="report-title">
                         Fixed Deposit Interest Transfer Report
-                    </th>
-                </tr>
-                <tr>
-                    <td colspan="10">
-                        <div class="filter-info">
-                            <strong>Branches:</strong> @branchNames &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Generated:</strong> @generatedOn
-                        </div>
                     </td>
                 </tr>
-                <tr>
-                    <th style="width:3%;">SN</th>
-                    <th style="width:11%;">Member Id</th>
-                    <th style="width:15%;">Member Name</th>
-                    <th style="width:10%;">Account No</th>
-                    <th style="width:10%;">Deposit Type</th>
-                    <th style="width:10%;">Interest Date</th>
-                    <th style="width:10%;" class="text-right">Interest</th>
-                    <th style="width:10%;" class="text-right">Tax</th>
-                    <th style="width:11%;" class="text-right">Net Amount</th>
-                    <th style="width:10%;">Remarks</th>
+
+                <!-- Meta Info - matches image -->
+                <tr class="meta-row">
+                    <td colspan="4">
+                        <strong>Branch Name:</strong> @branchNames
+                    </td>
+                    <td colspan="4" class="text-right">
+                        <strong>Report Generated On:</strong> @generatedOn
+                    </td>
                 </tr>
-            </thead>
-            <tbody>
+
+                <!-- Filter info - matches image format: "From Date : 2079/03/01 | To Date : 2079/03/31" -->
+                <tr class="meta-row">
+                    <td colspan="8" class="text-left">
+                        <strong>From Date :</strong> @fromDate &nbsp;|&nbsp; <strong>To Date :</strong> @toDate
+                    </td>
+                </tr>
+
+                <tr class="meta-spacer"><td colspan="8"></td></tr>
+
+                <!-- Column Headers - matches image exactly -->
+                <tr>
+                    <th>Saving Type</th>
+                    <th>Member Id</th>
+                    <th>Member Name</th>
+                    <th>Account No</th>
+                    <th class="text-center">Interest Date</th>
+                    <th class="text-right">Interest (Rs)</th>
+                    <th class="text-right">Tax (Rs)</th>
+                    <th>Remarks</th>
+                </tr>
+
+                <!-- Data Rows with Grouping by Deposit Type -->
                 @if (rows.Any())
                 {
-                    int sn = 0;
-                    foreach (var row in rows)
+                    // Group by Deposit Type
+                    var groupedRows = rows.GroupBy(r => r.DepositTypeName ?? "Uncategorized").ToList();
+                    bool isFirstGroup = true;
+
+                    foreach (var group in groupedRows)
                     {
-                        sn++;
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td>@(row.DepositTypeName ?? "")</td>
-                            <td>@(row.InterestDateBs ?? "")</td>
-                            <td class="text-right highlight-interest">@(row.InterestAmount.HasValue ? row.InterestAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right highlight-tax">@(row.TaxAmount.HasValue ? row.TaxAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right highlight-net">@(row.NetAmount.HasValue ? row.NetAmount.Value.ToString("N2") : "")</td>
-                            <td>@(row.Remarks ?? "")</td>
+                        // Group Header - matches image "Daily Saving1"
+                        <tr class="group-header @(isFirstGroup ? "first-group" : "")">
+                            <td colspan="8"><strong>@group.Key</strong></td>
+                        </tr>
+                        isFirstGroup = false;
+
+                        var groupItems = group.ToList();
+                        for (int i = 0; i < groupItems.Count; i++)
+                        {
+                            var row = groupItems[i];
+                            var isLast = i == groupItems.Count - 1;
+
+                            <tr class="@(isLast ? "group-subtotal" : "")">
+                                <td>@(row.DepositTypeName ?? "")</td>
+                                <td>@(row.MemberId ?? "")</td>
+                                <td>@(row.MemberName ?? "")</td>
+                                <td>@(row.AccountNo ?? "")</td>
+                                <td class="text-center">@(row.InterestDate ?? "")</td>
+                                <td class="text-right highlight-interest">@(row.Interest.HasValue ? row.Interest.Value.ToString("N2") : "0.00")</td>
+                                <td class="text-right highlight-tax">@(row.Tax.HasValue ? row.Tax.Value.ToString("N2") : "0.00")</td>
+                                <td>@(row.Remarks ?? "")</td>
+                            </tr>
+                        }
+
+                        <!-- Group Subtotal -->
+                        var groupTotalInterest = group.Sum(r => r.Interest ?? 0);
+                        var groupTotalTax = group.Sum(r => r.Tax ?? 0);
+                        var groupTotalNet = group.Sum(r => (r.Interest ?? 0) - (r.Tax ?? 0));
+
+                        <tr style="border-bottom: 2px solid #000; background: #f9f9f9; font-weight: bold;">
+                            <td colspan="5" class="text-right">Sub Total</td>
+                            <td class="text-right">@groupTotalInterest.ToString("N2")</td>
+                            <td class="text-right">@groupTotalTax.ToString("N2")</td>
+                            <td></td>
                         </tr>
                     }
+
+                    <!-- Grand Total - matches image -->
                     <tr class="grand-total">
-                        <td colspan="6" class="text-right"><strong>Total</strong></td>
-                        <td class="text-right"><strong>@totalInterestAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalTaxAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalNetAmount.ToString("N2")</strong></td>
+                        <td colspan="5" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-right"><strong>@totalInterest.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalTax.ToString("N2")</strong></td>
                         <td></td>
                     </tr>
-                    <tr>
-                        <td colspan="6" class="text-right"><strong>Total Transactions</strong></td>
+                    <tr class="grand-total">
+                        <td colspan="5" class="text-right"><strong>Total Transactions</strong></td>
                         <td class="text-right"><strong>@totalTransactions</strong></td>
-                        <td colspan="3"></td>
+                        <td colspan="2"></td>
                     </tr>
-                    <tr>
-                        <td colspan="6" class="text-right"><strong>Total Records</strong></td>
+                    <tr class="grand-total">
+                        <td colspan="5" class="text-right"><strong>Total Records</strong></td>
                         <td class="text-right"><strong>@totalRecords</strong></td>
-                        <td colspan="3"></td>
+                        <td colspan="2"></td>
                     </tr>
                 }
                 else
                 {
-                    <tr><td colspan="10" class="text-center">No fixed deposit interest transfer records found for the selected criteria</td></tr>
+                    <tr>
+                        <td colspan="8" class="text-center">No fixed deposit interest transfer records found for the selected criteria</td>
+                    </tr>
                 }
             </tbody>
         </table>

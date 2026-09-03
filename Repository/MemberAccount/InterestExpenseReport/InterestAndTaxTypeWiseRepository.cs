@@ -76,8 +76,17 @@ namespace NexgenCosysReport.Repository.MemberAccount.InterestExpenseReport
 
                 var resultList = rows.AsList();
 
+                // Calculate NetAmount for each row (Interest - Tax)
+                foreach (var row in resultList)
+                {
+                    row.NetAmount = (row.Interest ?? 0) - (row.Tax ?? 0);
+                }
+
                 // Get unique deposit types count
                 var totalDepositTypes = resultList.Select(r => r.DepositTypeName).Distinct().Count();
+
+                // Resolve branch names
+                var branchNames = await GetBranchNamesByIdsAsync(request.BranchIds);
 
                 return new InterestAndTaxTypeWiseData
                 {
@@ -88,7 +97,7 @@ namespace NexgenCosysReport.Repository.MemberAccount.InterestExpenseReport
                     TotalNetAmount = resultList.Sum(r => r.NetAmount ?? 0),
                     FromDateBs = request.FromDateBs,
                     ToDateBs = request.ToDateBs,
-                    BranchNames = request.BranchName,
+                    BranchNames = branchNames,
                     OrderBy = request.OrderBy,
                     ReportView = request.ReportView,
                     TotalDepositTypes = totalDepositTypes
@@ -98,6 +107,43 @@ namespace NexgenCosysReport.Repository.MemberAccount.InterestExpenseReport
             {
                 _logger.LogError(ex, "Error in GetReportDataAsync for Interest and Tax Type Wise Report");
                 throw;
+            }
+        }
+
+        private async Task<string> GetBranchNamesByIdsAsync(string? branchIdsCsv)
+        {
+            if (string.IsNullOrWhiteSpace(branchIdsCsv) || branchIdsCsv == "-1")
+            {
+                return "All Branches";
+            }
+
+            try
+            {
+                var ids = branchIdsCsv
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(id => long.TryParse(id, out var parsed) ? parsed : (long?)null)
+                    .Where(id => id.HasValue)
+                    .Select(id => id!.Value)
+                    .ToList();
+
+                if (!ids.Any())
+                {
+                    return "All Branches";
+                }
+
+                var connectionString = _context.Database.GetConnectionString();
+                using var connection = new SqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                const string sql = "SELECT OfficeName FROM UsmOffice WHERE UsmOfficeId IN @Ids";
+                var names = (await connection.QueryAsync<string>(sql, new { Ids = ids })).ToList();
+
+                return names.Any() ? string.Join(", ", names) : "All Branches";
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetBranchNamesByIdsAsync");
+                return "All Branches";
             }
         }
 

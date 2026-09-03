@@ -1,6 +1,5 @@
 ﻿namespace NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestExpenseReport
 {
-
     public class InterestAndTaxTypeWiseRequestDto
     {
         public string FromDateBs { get; set; } = string.Empty;
@@ -15,12 +14,11 @@
     public class InterestAndTaxTypeWiseRowDto
     {
         public string? DepositTypeName { get; set; }
-        public string? Date { get; set; }
-        public string? DateBs { get; set; }
+        public string? Date { get; set; } // TransactionOnBs from SP
         public decimal? Interest { get; set; }
         public decimal? Tax { get; set; }
         public decimal? PercentTax { get; set; }
-        public decimal? NetAmount { get; set; }
+        public decimal? NetAmount { get; set; } // This will be calculated
         public string? Remarks { get; set; }
     }
 

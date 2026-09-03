@@ -85,87 +85,43 @@ namespace NexgenCosysReport.Controllers.MemberAccount.FixedDepositCertificateSch
             }
         }
 
-        [HttpPost("GenerateReport")]
-        public async Task<ActionResult<GeneralResponse<ReportResponseDtos>>> GenerateReport(
+        [HttpPost()]
+        public async Task<IActionResult> GenerateReport(
             [FromBody] FixedDepositCertificateScheduleRequestDto request,
             [FromQuery] string format = "VIEW")
         {
             try
             {
-                // Extract userId from JWT
+                if (request == null || !ModelState.IsValid)
+                {
+                    return NotFound(new { success = false, StatusCode = 400, message = "Invalid request" });
+                }
                 var userIdClaim = User.FindFirst("UserId")?.Value
                                   ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
                 {
-                    return Unauthorized(new GeneralResponse<ReportResponseDtos>
-                    {
-                        isValid = false,
-                        statusCode = 401,
-                        message = "User not authenticated"
-                    });
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
                 }
 
-                // Validate request
-                if (request.AccountId == -1)
-                    return BadRequest(new GeneralResponse<ReportResponseDtos>
-                    {
-                        isValid = false,
-                        statusCode = 400,
-                        message = "Please select an account"
-                    });
 
                 var reportName = $"FixedDeposit{request.ReportType}";
                 var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 // Check cache
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
-
                 if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
                 {
-                    var cachedResult = await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, reportName,
+                    return await ReportExportHelper.ExportFromCacheAsync(
+                        reportKey, upperFormat,
+                        reportName,
                         _jsReportService, _logger);
-
-                    if (cachedResult is FileContentResult fileResult)
-                    {
-                        return Ok(new GeneralResponse<ReportResponseDtos>
-                        {
-                            isValid = true,
-                            statusCode = 200,
-                            message = "Report generated from cache",
-                            data = new ReportResponseDtos
-                            {
-                                pdfData = Convert.ToBase64String(fileResult.FileContents),
-                                reportName = $"{reportName}.{upperFormat.ToLower()}"
-                            }
-                        });
-                    }
                 }
 
-                // Get report data based on report type
+                // Get report data based on report type and header data in parallel
                 FixedDepositCertificateScheduleData data;
-                if (request.ReportType == "Schedule")
-                {
-                    data = await _repository.GetScheduleDataAsync(request);
-                }
-                else
-                {
-                    data = await _repository.GetCertificateDataAsync(request);
-                }
 
-                if (data.CertificateDetail == null)
-                {
-                    return NotFound(new GeneralResponse<ReportResponseDtos>
-                    {
-                        isValid = false,
-                        statusCode = 404,
-                        message = "No fixed deposit account found for the selected criteria"
-                    });
-                }
-
-                // Get header data
                 var officeIdClaim = User.FindFirst("OfficeId")?.Value;
                 string? branchIdForHeader = null;
                 if (!string.IsNullOrEmpty(officeIdClaim) && long.TryParse(officeIdClaim, out var officeId))
@@ -173,7 +129,28 @@ namespace NexgenCosysReport.Controllers.MemberAccount.FixedDepositCertificateSch
                     branchIdForHeader = officeId.ToString();
                 }
 
-                var headerData = await _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+                // Create tasks for parallel execution
+                Task<FixedDepositCertificateScheduleData> dataTask;
+                if (request.ReportType == "Schedule")
+                {
+                    dataTask = _repository.GetScheduleDataAsync(request);
+                }
+                else
+                {
+                    dataTask = _repository.GetCertificateDataAsync(request);
+                }
+
+                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+
+                await Task.WhenAll(dataTask, headerTask);
+
+                data = await dataTask;
+                var headerData = await headerTask;
+
+                if (data.CertificateDetail == null)
+                {
+                    return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
+                }
 
                 var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
                 await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
@@ -229,56 +206,18 @@ namespace NexgenCosysReport.Controllers.MemberAccount.FixedDepositCertificateSch
                     return new FileContentResult(pdfBytes, "application/pdf");
                 }
 
-                var exportResult = await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, reportName,
-                    _jsReportService, _logger);
-
-                if (exportResult is FileContentResult fileResult2)
-                {
-                    return Ok(new GeneralResponse<ReportResponseDtos>
-                    {
-                        isValid = true,
-                        statusCode = 200,
-                        message = "Report generated successfully",
-                        data = new ReportResponseDtos
-                        {
-                            pdfData = Convert.ToBase64String(fileResult2.FileContents),
-                            reportName = $"{reportName}.{upperFormat.ToLower()}",
-                            pagination = new Pagination
-                            {
-                                currentPage = 1,
-                                totalPages = 1,
-                                pageSize = 1,
-                                totalRecord = request.ReportType == "Schedule" ? data.TotalRecords : 1
-                            }
-                        }
-                    });
-                }
-
-                return Ok(new GeneralResponse<ReportResponseDtos>
-                {
-                    isValid = true,
-                    statusCode = 200,
-                    message = "Report generated successfully"
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new GeneralResponse<ReportResponseDtos>
-                {
-                    isValid = false,
-                    statusCode = 400,
-                    message = ex.Message
-                });
+                return await ReportExportHelper.ExportFromCacheAsync(
+                   reportKey, upperFormat,
+                   reportName,
+                   _jsReportService, _logger);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Fixed Deposit Certificate/Schedule report generation failed");
-                return StatusCode(500, new GeneralResponse<ReportResponseDtos>
+                return StatusCode(500, new
                 {
-                    isValid = false,
-                    statusCode = 500,
-                    message = "An error occurred while generating the report"
+                    message = ex.Message,
+                    inner = ex.InnerException?.Message,
+                    stack = ex.StackTrace
                 });
             }
         }

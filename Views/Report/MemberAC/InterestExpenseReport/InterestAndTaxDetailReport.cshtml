@@ -16,31 +16,241 @@
     var memberName = Model["MemberName"]?.ToString() ?? "";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+    var generatedOn = Model["GeneratedOn"]?.ToString() ?? DateTime.Now.ToString("yyyy/MM/dd");
     var totalDepositTypes = Model["TotalDepositTypes"] as int? ?? 0;
+
+    // Group by Deposit Type then by Member for two-level grouping
+    var groupedData = rows
+        .GroupBy(r => r.DepositTypeName ?? "Uncategorized")
+        .Select(depositGroup => new
+        {
+            DepositType = depositGroup.Key,
+            Members = depositGroup
+                .GroupBy(r => new { r.MemberId, r.MemberName })
+                .Select(memberGroup => new
+                {
+                    MemberId = memberGroup.Key.MemberId,
+                    MemberName = memberGroup.Key.MemberName,
+                    Accounts = memberGroup.ToList()
+                })
+                .ToList()
+        })
+        .ToList();
+
+    // Calculate page number
+    var pageNumber = 1;
+    var totalPages = Math.Max(1, (int)Math.Ceiling((double)totalRecords / 20));
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Interest and Tax Detail Report</title>
+    <title>Savings Interest/Tax Details Report</title>
     <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; font-size: 9pt; background: white; }
-            .report-container { width: 100%; overflow: visible; }
-            .data-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
-            .data-table td, .data-table th { padding: 4px 6px; border: 1px solid #ccc; }
-            .data-table th { background: #f2f2f2; border-top: 2px solid #000; border-bottom: 1px solid #000; text-align: left; }
-            .data-table thead { display: table-row-group; }
-            .grand-total { border-top: 2px solid #000; border-bottom: 2px solid #000; font-weight: bold; background: #f9f9f9; }
-            .text-right { text-align: right !important; }
-            .text-center { text-align: center !important; }
-            .filter-info { margin-bottom: 4px; }
-            .report-title { text-align: center; font-size: 14pt; font-weight: bold; text-decoration: underline; }
-            .highlight-interest { color: #2e7d32; font-weight: bold; }
-            .highlight-tax { color: #c62828; font-weight: bold; }
-            .highlight-net { color: #1565c0; font-weight: bold; }
-            @@media print { .data-table thead { display: table-row-group; } }
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 6.5pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+                padding: 3px 8px;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 6.5pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 1.5px 3px;
+                    vertical-align: middle;
+                    border: 1px solid #ccc;
+                }
+
+                .data-table th {
+                    background: #f2f2f2;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                    font-weight: bold;
+                    white-space: nowrap;
+                    font-size: 6.5pt;
+                }
+
+            .report-title {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 10pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 2px 4px;
+            }
+
+            .meta-row td {
+                padding: 1.5px 3px;
+                font-size: 6.5pt;
+                border: none;
+            }
+
+            .meta-spacer td {
+                height: 3px;
+                border: none;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+
+            /* Page info - matches image "Page 1 of 50" */
+            .page-info {
+                text-align: right;
+                font-size: 6pt;
+                padding: 1px 3px;
+                border: none !important;
+            }
+
+            /* Level 1: Deposit Type Group Header - matches image "AA" */
+            .deposit-group-header td {
+                font-weight: bold;
+                padding-top: 6px;
+                padding-bottom: 1px;
+                background: #f5f5f5;
+                border-top: 1px solid #999;
+                font-size: 7pt;
+            }
+
+            .deposit-group-header.first-group td {
+                padding-top: 2px;
+            }
+
+            /* Level 2: Member Group Header - matches image "MR-01-204 | Rambabu Chaurasiya" */
+            .member-group-header td {
+                font-weight: bold;
+                padding-top: 4px;
+                padding-bottom: 1px;
+                padding-left: 10px;
+                background: #fafafa;
+                font-size: 6.5pt;
+                border-bottom: 1px solid #ddd;
+            }
+
+            /* Detail rows - matches image */
+            .detail-row td {
+                padding-left: 20px;
+                font-size: 6.5pt;
+            }
+
+            .detail-row.interest-row td {
+                color: #2e7d32;
+            }
+
+            .detail-row.tax-row td {
+                color: #c62828;
+            }
+
+            /* Subtotal row - matches image "MR-01-204 Rambabu Chaurasiya 38,641.10" */
+            .member-subtotal td {
+                border-bottom: 1px solid #999;
+                padding-top: 2px;
+                padding-bottom: 2px;
+                font-weight: bold;
+                background: #f9f9f9;
+                font-size: 6.5pt;
+            }
+
+                .member-subtotal td:first-child {
+                    padding-left: 10px;
+                }
+
+            /* Grand total row */
+            .grand-total td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 2px 3px;
+                font-size: 6.5pt;
+            }
+
+            .deposit-grand-total td {
+                border-bottom: 2px solid #000;
+                background: #f0f0f0;
+                font-weight: bold;
+                padding: 2px 3px;
+                font-size: 6.5pt;
+            }
+
+            .highlight-interest {
+                color: #2e7d32;
+                font-weight: bold;
+            }
+
+            .highlight-tax {
+                color: #c62828;
+                font-weight: bold;
+            }
+
+            .amount {
+                font-family: 'Courier New', monospace;
+                font-size: 6.5pt;
+            }
+
+            /* Company header - matches image */
+            .company-name {
+                font-family: "Times New Roman", Times, serif;
+                font-size: 12pt;
+                font-weight: bold;
+                text-align: center;
+                padding: 2px 4px;
+                border: none !important;
+            }
+
+            .company-details td {
+                font-size: 6pt;
+                padding: 1px 3px;
+                border: none !important;
+            }
+
+            .company-details .label {
+                font-weight: bold;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+
+                .no-print {
+                    display: none !important;
+                }
+            }
     </style>
 </head>
 <body>
@@ -51,83 +261,198 @@
         }
 
         <table class="data-table">
-            <thead>
+            <colgroup>
+                <col style="width:10%;" />   <!-- Saving Type -->
+                <col style="width:10%;" />   <!-- Member Id -->
+                <col style="width:14%;" />   <!-- Member Name -->
+                <col style="width:8%;" />    <!-- Account No -->
+                <col style="width:38%;" />   <!-- Particulars -->
+                <col style="width:10%;" />   <!-- Interest -->
+                <col style="width:10%;" />   <!-- Tax -->
+            </colgroup>
+            <tbody>
+                <!-- Page Info - matches image "Page 1 of 50" -->
                 <tr>
-                    <th colspan="9" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
-                        Interest and Tax Detail Report
-                    </th>
-                </tr>
-                <tr>
-                    <td colspan="9">
-                        <div class="filter-info">
-                            <strong>Branches:</strong> @branchNames &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
-                            @if (!string.IsNullOrEmpty(memberId))
-                            {
-                                <text><strong>Member:</strong> @memberId - @memberName &nbsp;&nbsp;|&nbsp;&nbsp;</text>
-                            }
-                            <strong>Generated:</strong> @generatedOn
-                        </div>
+                    <td colspan="7" class="page-info">
+                        Page @pageNumber of @totalPages
                     </td>
                 </tr>
+
+                <!-- Company Header - matches image -->
                 <tr>
-                    <th style="width:3%;">SN</th>
-                    <th style="width:12%;">Deposit Type</th>
-                    <th style="width:8%;">Date</th>
-                    <th style="width:10%;">Member ID</th>
-                    <th style="width:15%;">Member Name</th>
-                    <th style="width:10%;">Account No</th>
-                    <th style="width:15%;">Particulars</th>
-                    <th style="width:12%;" class="text-right">Interest</th>
-                    <th style="width:10%;" class="text-right">Tax</th>
-                    <th style="width:10%;" class="text-right">Net Amount</th>
+                    <td colspan="7" class="company-name">
+                        Cosys SACCOS
+                    </td>
                 </tr>
-            </thead>
-            <tbody>
-                @if (rows.Any())
+                <tr class="company-details">
+                    <td colspan="2" class="label">Pulchwok, Lalitpur</td>
+                    <td colspan="1" class="label">Phone No:</td>
+                    <td colspan="1">9803391696</td>
+                    <td colspan="1" class="label">Email:</td>
+                    <td colspan="2">cosyssoftwareprivate@gmail.com</td>
+                </tr>
+                <tr class="company-details">
+                    <td colspan="2"></td>
+                    <td colspan="1" class="label">Fax No:</td>
+                    <td colspan="1">01-4243466, 01-4243466</td>
+                    <td colspan="1" class="label">WebSite:</td>
+                    <td colspan="2">www.cosys.com.np</td>
+                </tr>
+                <tr class="company-details">
+                    <td colspan="2"></td>
+                    <td colspan="1" class="label">Pan No:</td>
+                    <td colspan="4">4324235325235</td>
+                </tr>
+
+                <tr class="meta-spacer"><td colspan="7"></td></tr>
+
+                <!-- Report Title - matches image "Savings Interest/Tax Details Report" -->
+                <tr>
+                    <td colspan="7" class="report-title">
+                        Savings Interest/Tax Details Report
+                    </td>
+                </tr>
+
+                <!-- Meta Info - matches image -->
+                <tr class="meta-row">
+                    <td colspan="3">
+                        <strong>Branch Name:</strong> @branchNames
+                    </td>
+                    <td colspan="4" class="text-right">
+                        <strong>Report Generated On:</strong> @generatedOn
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="2">
+                        <strong>From Date:</strong> @fromDate
+                    </td>
+                    <td colspan="2">
+                        <strong>To Date:</strong> @toDate
+                    </td>
+                    <td colspan="3" class="text-right">
+                        @if (!string.IsNullOrEmpty(memberId))
+                        {
+                            <strong>Member Id:</strong> 
+                            @memberId
+                          
+
+                            <strong>Member Name:</strong> 
+                            @memberName
+                        }
+                        else
+                        {
+                            <strong>Order By:</strong> 
+                            @orderBy
+                        }
+                    </td>
+                </tr>
+
+                <tr class="meta-spacer"><td colspan="7"></td></tr>
+
+                <!-- Column Headers - matches image -->
+                <tr>
+                    <th>Saving Type</th>
+                    <th>Member Id</th>
+                    <th>Member Name</th>
+                    <th>Account No</th>
+                    <th>Particulars</th>
+                    <th class="text-right">Interest</th>
+                    <th class="text-right">Tax</th>
+                </tr>
+
+                <!-- Data Rows with Two-Level Grouping -->
+                @if (groupedData.Any())
                 {
-                    int sn = 0;
-                    foreach (var row in rows)
+                    bool isFirstDepositGroup = true;
+
+                    foreach (var depositGroup in groupedData)
                     {
-                        sn++;
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@(row.DepositTypeName ?? "")</td>
-                            <td>@(row.Date ?? "")</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td>@(row.Narration ?? "")</td>
-                            <td class="text-right highlight-interest">@(row.Interest.HasValue ? row.Interest.Value.ToString("N2") : "")</td>
-                            <td class="text-right highlight-tax">@(row.Tax.HasValue ? row.Tax.Value.ToString("N2") : "")</td>
-                            <td class="text-right highlight-net">@(row.NetAmount.HasValue ? row.NetAmount.Value.ToString("N2") : "")</td>
+                        // Level 1: Deposit Type Header - matches image "AA"
+                        <tr class="deposit-group-header @(isFirstDepositGroup ? "first-group" : "")">
+                            <td colspan="7"><strong>@depositGroup.DepositType</strong></td>
+                        </tr>
+                        isFirstDepositGroup = false;
+
+                        foreach (var memberGroup in depositGroup.Members)
+                        {
+                            // Level 2: Member Header - matches image "MR-01-204 | Rambabu Chaurasiya"
+                            <tr class="member-group-header">
+                                <td></td>
+                                <td><strong>@memberGroup.MemberId</strong></td>
+                                <td><strong>@memberGroup.MemberName</strong></td>
+                                <td colspan="4"></td>
+                            </tr>
+
+                            // Detail rows for each account
+                            foreach (var row in memberGroup.Accounts)
+                            {
+                                var isInterest = row.Narration?.Contains("Interest") ?? false;
+                                var rowClass = isInterest ? "detail-row interest-row" : "detail-row tax-row";
+
+                                <tr class="@rowClass">
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td>@(row.AccountNo ?? "")</td>
+                                    <td>@(row.Narration ?? "")</td>
+                                    <td class="text-right amount">@(row.Interest.HasValue ? row.Interest.Value.ToString("N2") : "0.00")</td>
+                                    <td class="text-right amount">@(row.Tax.HasValue ? row.Tax.Value.ToString("N2") : "0.00")</td>
+                                </tr>
+                            }
+
+                            <!-- Member Subtotal - matches image "MR-01-204 Rambabu Chaurasiya 38,641.10" -->
+                            var memberTotalInterest = memberGroup.Accounts.Sum(r => r.Interest ?? 0);
+                            var memberTotalTax = memberGroup.Accounts.Sum(r => r.Tax ?? 0);
+                            var memberTotalNet = memberGroup.Accounts.Sum(r => (r.Interest ?? 0) - (r.Tax ?? 0));
+
+                            <tr class="member-subtotal">
+                                <td></td>
+                                <td colspan="2"><strong>@memberGroup.MemberId @memberGroup.MemberName</strong></td>
+                                <td colspan="2" class="text-right"><strong>Sub Total</strong></td>
+                                <td class="text-right"><strong>@memberTotalInterest.ToString("N2")</strong></td>
+                                <td class="text-right"><strong>@memberTotalTax.ToString("N2")</strong></td>
+                            </tr>
+                        }
+
+                        <!-- Deposit Group Grand Total -->
+                        var depositTotalInterest = depositGroup.Members
+                            .SelectMany(m => m.Accounts)
+                            .Sum(r => r.Interest ?? 0);
+                        var depositTotalTax = depositGroup.Members
+                            .SelectMany(m => m.Accounts)
+                            .Sum(r => r.Tax ?? 0);
+                        var depositTotalNet = depositGroup.Members
+                            .SelectMany(m => m.Accounts)
+                            .Sum(r => (r.Interest ?? 0) - (r.Tax ?? 0));
+
+                        <tr class="deposit-grand-total">
+                            <td colspan="5" class="text-right"><strong>Grand Total</strong></td>
+                            <td class="text-right"><strong>@depositTotalInterest.ToString("N2")</strong></td>
+                            <td class="text-right"><strong>@depositTotalTax.ToString("N2")</strong></td>
                         </tr>
                     }
+
+                    <!-- Overall Grand Total -->
                     <tr class="grand-total">
-                        <td colspan="7" class="text-right"><strong>Total</strong></td>
+                        <td colspan="5" class="text-right"><strong>Overall Total</strong></td>
                         <td class="text-right"><strong>@totalInterest.ToString("N2")</strong></td>
                         <td class="text-right"><strong>@totalTax.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalNetAmount.ToString("N2")</strong></td>
                     </tr>
-                    <tr>
-                        <td colspan="7" class="text-right"><strong>Total Deposit Types</strong></td>
+                    <tr class="grand-total">
+                        <td colspan="5" class="text-right"><strong>Total Deposit Types</strong></td>
                         <td class="text-right"><strong>@totalDepositTypes</strong></td>
-                        <td colspan="2"></td>
+                        <td></td>
                     </tr>
-                    <tr>
-                        <td colspan="7" class="text-right"><strong>Total Records</strong></td>
+                    <tr class="grand-total">
+                        <td colspan="5" class="text-right"><strong>Total Records</strong></td>
                         <td class="text-right"><strong>@totalRecords</strong></td>
-                        <td colspan="2"></td>
+                        <td></td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="10" class="text-center">
-                            No interest and tax records found for the selected criteria
-                        </td>
+                        <td colspan="7" class="text-center">No interest and tax records found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

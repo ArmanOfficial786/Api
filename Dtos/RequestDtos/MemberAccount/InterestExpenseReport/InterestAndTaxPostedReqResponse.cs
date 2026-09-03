@@ -12,16 +12,16 @@
     }
     public class InterestAndTaxPostedRowDto
     {
-        public string? DepositTypeName { get; set; }
-        public string? MemberId { get; set; }
-        public string? MemberName { get; set; }
-        public string? AccountNo { get; set; }
-        public string? InterestDate { get; set; }
-        public string? InterestDateBs { get; set; }
-        public decimal? InterestRate { get; set; }
+        public string DepositTypeName { get; set; }
+        public string MemberId { get; set; }
+        public string MemberName { get; set; }
+        public string AccountNo { get; set; }
+        public string InterestDate { get; set; }
+        public string InterestRate { get; set; } // Changed to string to handle "11.0%" format
         public decimal? Interest { get; set; }
         public decimal? Tax { get; set; }
         public decimal? NetBalance { get; set; }
+        public decimal? NetInterest { get; set; }
     }
 
     public class InterestAndTaxPostedData

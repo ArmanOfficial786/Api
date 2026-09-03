@@ -1,27 +1,30 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestExpenseReport
-
 @model Dictionary<string, object>
 @{
     Layout = null;
+
     var rows = (Model["Rows"] as List<PayableInterestTransferredRowDto>) ?? new List<PayableInterestTransferredRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalInterest = Model["TotalInterest"] as decimal? ?? 0;
     var totalTax = Model["TotalTax"] as decimal? ?? 0;
-    var totalNetBalance = Model["TotalNetBalance"] as decimal? ?? 0;
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
-    var totalDepositTypes = Model["TotalDepositTypes"] as int? ?? 0;
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // Grouped by Deposit Type, matching the image: group label row, then member rows, then a subtotal row.
+    // No re-ordering here — groups/rows print in the order the repository already returned.
+    var depositTypeGroups = rows
+        .GroupBy(r => r.DepositTypeName ?? "")
+        .ToList();
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Payable Interest Transferred Report</title>
+    <title>Saving Interest Transfer To Payable Report</title>
     <style>
             * {
                 margin: 0;
@@ -33,6 +36,7 @@
                 font-family: Arial, sans-serif;
                 font-size: 9pt;
                 background: white;
+                color: #000;
             }
 
             .report-container {
@@ -40,33 +44,72 @@
                 overflow: visible;
             }
 
+            thead {
+                display: table-row-group;
+            }
+
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
                 font-size: 9pt;
+                table-layout: fixed;
             }
 
                 .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
                     padding: 4px 6px;
-                    border: 1px solid #ccc;
+                    vertical-align: middle;
                 }
 
-                .data-table th {
-                    background: #f2f2f2;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                }
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
 
-                .data-table thead {
-                    display: table-row-group;
-                }
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
 
-            .grand-total {
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .type-row td {
+                font-weight: bold;
+                padding-top: 8px;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .subtotal-row td {
+                border-top: 1px solid #000;
+                font-weight: bold;
+                padding-top: 5px;
+                padding-bottom: 5px;
+            }
+
+            .grand-total-row td {
                 border-top: 2px solid #000;
                 border-bottom: 2px solid #000;
                 font-weight: bold;
                 background: #f9f9f9;
+                padding: 5px 6px;
             }
 
             .text-right {
@@ -77,125 +120,114 @@
                 text-align: center !important;
             }
 
-            .filter-info {
-                margin-bottom: 4px;
-            }
-
-            .report-title {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-            }
-
-            .highlight-interest {
-                color: #2e7d32;
-                font-weight: bold;
-            }
-
-            .highlight-tax {
-                color: #c62828;
-                font-weight: bold;
-            }
-
-            .highlight-net {
-                color: #1565c0;
-                font-weight: bold;
-            }
-
-            .highlight-rate {
-                color: #f57f17;
-                font-weight: bold;
-            }
-
             @@media print {
-                .data-table thead {
+                thead {
                     display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
                 }
             }
     </style>
 </head>
 <body>
     <div class="report-container">
+
         @if (!isExcel)
         {
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th colspan="9" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
-                        Saving Interest Transfer To Payable Report
-                    </th>
+        <table class="data-table" data-sheet-name="PayableInterestTransferred">
+            <colgroup>
+                <col style="width:15%;" />
+                <col style="width:12%;" />
+                <col style="width:14%;" />
+                <col style="width:10%;" />
+                <col style="width:17%;" />
+                <col style="width:14%;" />
+                <col style="width:18%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="7">Saving Interest Transfer To Payable Report</td>
                 </tr>
-                <tr>
-                    <td colspan="9">
-                        <div class="filter-info">
-                            <strong>Branches:</strong> @branchNames &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Generated:</strong> @generatedOn
-                        </div>
+
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Branch Name :</strong> @branchNames</td>
+                    <td colspan="3"></td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="7"></td></tr>
+
+                <tr class="meta-row">
+                    <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="4" class="text-right">
+                        <strong>From Date :</strong> @fromDate
+                        &nbsp;&nbsp;&nbsp;
+                        <strong>To Date :</strong> @toDate
                     </td>
                 </tr>
+                <tr class="meta-spacer"><td colspan="7"></td></tr>
+
                 <tr>
-                    <th style="width:3%;">SN</th>
-                    <th style="width:12%;">Deposit Type</th>
-                    <th style="width:10%;">Member ID</th>
-                    <th style="width:15%;">Member Name</th>
-                    <th style="width:10%;">Account No</th>
-                    <th style="width:8%;">Interest Date</th>
-                    <th style="width:8%;" class="text-right">Rate (%)</th>
-                    <th style="width:12%;" class="text-right">Interest</th>
-                    <th style="width:10%;" class="text-right">Tax</th>
-                    <th style="width:12%;" class="text-right">Net Balance</th>
+                    <th>Deposit Type</th>
+                    <th>Member Id</th>
+                    <th>Account No</th>
+                    <th class="text-right">Interest Rate</th>
+                    <th class="text-right">Interest Amount</th>
+                    <th class="text-right">Tax Amount</th>
+                    <th>Interest Date</th>
                 </tr>
-            </thead>
-            <tbody>
-                @if (rows.Any())
+
+                @if (depositTypeGroups.Any())
                 {
-                    int sn = 0;
-                    foreach (var row in rows)
+                    foreach (var typeGroup in depositTypeGroups)
                     {
-                        sn++;
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@(row.DepositTypeName ?? "")</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td>@(row.InterestDate ?? "")</td>
-                            <td class="text-right highlight-rate">@(row.InterestRate.HasValue ? row.InterestRate.Value.ToString("N2") : "")</td>
-                            <td class="text-right highlight-interest">@(row.Interest.HasValue ? row.Interest.Value.ToString("N2") : "")</td>
-                            <td class="text-right highlight-tax">@(row.Tax.HasValue ? row.Tax.Value.ToString("N2") : "")</td>
-                            <td class="text-right highlight-net">@(row.NetBalance.HasValue ? row.NetBalance.Value.ToString("N2") : "")</td>
+                        <tr class="type-row">
+                            <td>@typeGroup.Key</td>
+                            <td colspan="6"></td>
+                        </tr>
+
+                        foreach (var row in typeGroup)
+                        {
+                            <tr class="detail-row">
+                                <td></td>
+                                <td>@(row.MemberId ?? "")</td>
+                                <td>@(row.AccountNo ?? "")</td>
+                                <td class="text-right">@(row.InterestRate.HasValue ? row.InterestRate.Value.ToString("N2") : "")</td>
+                                <td class="text-right">@(row.Interest.HasValue ? row.Interest.Value.ToString("N2") : "")</td>
+                                <td class="text-right">@(row.Tax.HasValue ? row.Tax.Value.ToString("N2") : "")</td>
+                                <td>@(row.InterestDate ?? "")</td>
+                            </tr>
+                        }
+
+                        <tr class="subtotal-row">
+                            <td colspan="3" class="text-right">@typeGroup.Key</td>
+                            <td></td>
+                            <td class="text-right">@typeGroup.Sum(r => r.Interest ?? 0).ToString("N2")</td>
+                            <td class="text-right">@typeGroup.Sum(r => r.Tax ?? 0).ToString("N2")</td>
+                            <td></td>
                         </tr>
                     }
-                    <tr class="grand-total">
-                        <td colspan="7" class="text-right"><strong>Total</strong></td>
-                        <td class="text-right"><strong>@totalInterest.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalTax.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalNetBalance.ToString("N2")</strong></td>
+
+                    <tr class="grand-total-row">
+                        <td colspan="4" class="text-right">Grand Total</td>
+                        <td class="text-right">@totalInterest.ToString("N2")</td>
+                        <td class="text-right">@totalTax.ToString("N2")</td>
+                        <td></td>
                     </tr>
-                    <tr>
-                        <td colspan="7" class="text-right"><strong>Total Deposit Types</strong></td>
-                        <td class="text-right"><strong>@totalDepositTypes</strong></td>
-                        <td colspan="2"></td>
-                    </tr>
-                    <tr>
-                        <td colspan="7" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-right"><strong>@totalRecords</strong></td>
+                    <tr class="grand-total-row">
+                        <td colspan="4" class="text-right">Total Records</td>
+                        <td class="text-right">@totalRecords</td>
                         <td colspan="2"></td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="10" class="text-center">
-                            No payable interest transferred records found for the selected criteria
-                        </td>
+                        <td colspan="7" class="text-center">No payable interest transferred records found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

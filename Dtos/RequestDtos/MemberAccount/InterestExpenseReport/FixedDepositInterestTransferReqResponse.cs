@@ -17,23 +17,19 @@
         public string? MemberName { get; set; }
         public string? AccountNo { get; set; }
         public string? DepositTypeName { get; set; }
-        public string? InterestDate { get; set; }
-        public string? InterestDateBs { get; set; }
-        public decimal? InterestRate { get; set; }
-        public decimal? InterestAmount { get; set; }
-        public decimal? TaxAmount { get; set; }
-        public decimal? NetAmount { get; set; }
+        public string? InterestDate { get; set; } // Nepali date
+        public decimal? Interest { get; set; }
+        public decimal? Tax { get; set; }
+        public decimal? NetAmount { get; set; } // Calculated
         public string? Remarks { get; set; }
-        public string? Operator { get; set; }
     }
 
     public class FixedDepositInterestTransferData
     {
         public List<FixedDepositInterestTransferRowDto> Rows { get; set; } = new();
         public int TotalRecords { get; set; }
-        public decimal TotalInterestAmount { get; set; }
-        public decimal TotalTaxAmount { get; set; }
-        public decimal TotalNetAmount { get; set; }
+        public decimal TotalInterest { get; set; }
+        public decimal TotalTax { get; set; }
         public string? FromDateBs { get; set; }
         public string? ToDateBs { get; set; }
         public string? BranchNames { get; set; }
