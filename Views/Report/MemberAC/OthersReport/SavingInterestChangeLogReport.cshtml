@@ -8,10 +8,10 @@
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var reportType = Model["ReportType"]?.ToString() ?? "1";
-    var reportTypeText = reportType == "1" ? "Account No" : "Deposit Type";
+    var reportTypeText = Model["ReportTypeText"]?.ToString() ?? (reportType == "1" ? "Account No" : "Deposit Type");
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+    var generatedOn = Model["GeneratedOn"]?.ToString() ?? DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
     var accountNo = Model["AccountNo"]?.ToString();
     var depositTypeName = Model["DepositTypeName"]?.ToString();
     var officeName = Model["OfficeName"]?.ToString() ?? "All";
@@ -33,21 +33,31 @@
                 font-family: Arial, sans-serif;
                 font-size: 9pt;
                 background: white;
+                color: #000;
             }
 
             .report-container {
                 width: 100%;
                 overflow: visible;
+                padding: 10px;
+            }
+
+            thead {
+                display: table-row-group;
             }
 
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 9pt;
+                font-size: 8.5pt;
+                table-layout: fixed;
             }
 
                 .data-table td, .data-table th {
-                    padding: 4px 6px;
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 4px 5px;
+                    vertical-align: middle;
                     border: 1px solid #ccc;
                 }
 
@@ -56,19 +66,35 @@
                     border-top: 2px solid #000;
                     border-bottom: 1px solid #000;
                     text-align: left;
+                    font-weight: bold;
+                    white-space: normal !important; /* Allow wrapping */
+                    vertical-align: middle;
+                    line-height: 1.3;
                 }
 
-                .data-table thead {
-                    display: table-row-group;
-                }
-
-            .grand-total {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
+            /* Report Title */
+            .report-title {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
                 font-weight: bold;
-                background: #f9f9f9;
+                text-decoration: underline;
+                padding: 8px 6px;
             }
 
+            /* Header meta rows */
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+                border: none;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+                border: none;
+            }
+
+            /* Data rows */
             .text-right {
                 text-align: right !important;
             }
@@ -77,22 +103,11 @@
                 text-align: center !important;
             }
 
-            .filter-info {
-                margin-bottom: 4px;
+            .text-left {
+                text-align: left !important;
             }
 
-            .report-title {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-            }
-
-            .highlight-change {
-                color: #1565c0;
-                font-weight: bold;
-            }
-
+            /* Interest Rate change styling */
             .rate-old {
                 color: #c62828;
             }
@@ -101,13 +116,64 @@
                 color: #2e7d32;
             }
 
-            .rate-arrow {
-                color: #f57f17;
+            .highlight-change {
+                color: #1565c0;
+                font-weight: bold;
             }
 
+            /* Grand total rows */
+            .grand-total td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            /* Member detail formatting */
+            .member-detail {
+                font-weight: normal;
+            }
+
+            .remarks-text {
+                color: #555;
+                font-size: 8pt;
+                word-wrap: break-word;
+            }
+
+            /* Office name at bottom */
+            .office-footer {
+                text-align: right;
+                font-weight: bold;
+                padding: 8px 6px;
+                border: none !important;
+            }
+
+            /* Header text with line breaks */
+            .header-line1 {
+                display: block;
+                font-size: 8pt;
+            }
+
+            .header-line2 {
+                display: block;
+                font-size: 8pt;
+                font-weight: bold;
+            }
+
+            /* Print styles */
             @@media print {
-                .data-table thead {
+                thead {
                     display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+
+                .no-print {
+                    display: none !important;
                 }
             }
     </style>
@@ -120,79 +186,133 @@
         }
 
         <table class="data-table">
-            <thead>
+            <!-- Column width definitions -->
+            <colgroup>
+                <col style="width:4%;" />    <!-- SN -->
+                <col style="width:18%;" />   <!-- Member Detail -->
+                <col style="width:12%;" />   <!-- Account No -->
+                <col style="width:8%;" />    <!-- Previous Rate -->
+                <col style="width:8%;" />    <!-- Current Rate -->
+                <col style="width:10%;" />   <!-- Activated Date -->
+                <col style="width:20%;" />   <!-- Remarks -->
+                <col style="width:10%;" />   <!-- Created Date -->
+                <col style="width:10%;" />   <!-- Created By -->
+            </colgroup>
+            <tbody>
+                <!-- Report Title -->
                 <tr>
-                    <th colspan="8" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
-                        Saving Interest Change Log Report
-                    </th>
-                </tr>
-                <tr>
-                    <td colspan="8">
-                        <div class="filter-info">
-                            <strong>Report Type:</strong> @reportTypeText &nbsp;&nbsp;|&nbsp;&nbsp;
-                            @if (!string.IsNullOrEmpty(accountNo))
-                            {
-                                <span><strong>Account No:</strong> @accountNo &nbsp;&nbsp;|&nbsp;&nbsp;</span>
-                            }
-                            @if (!string.IsNullOrEmpty(depositTypeName))
-                            {
-                                <span><strong>Deposit Type:</strong> @depositTypeName &nbsp;&nbsp;|&nbsp;&nbsp;</span>
-                            }
-                            <strong>Office:</strong> @officeName &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Generated:</strong> @generatedOn
-                        </div>
+                    <td colspan="9" class="report-title">
+                        Saving Interest Log Report By @(reportType == "1" ? "Account No" : "Deposit Type")
                     </td>
                 </tr>
-                <tr>
-                    <th style="width:3%;">SN</th>
-                    <th style="width:12%;">Account No</th>
-                    <th style="width:12%;">Member Id</th>
-                    <th style="width:18%;">Member Name</th>
-                    <th style="width:12%;">Deposit Type</th>
-                    <th style="width:15%;" class="text-center">Interest Rate Change</th>
-                    <th style="width:12%;">Changed Date</th>
-                    <th style="width:16%;">Changed By</th>
+
+                <!-- Meta Info -->
+                <tr class="meta-row">
+                    <td colspan="4">
+                        <strong>Report Generated On:</strong> @generatedOn
+                    </td>
+                    <td colspan="5" class="text-right">
+                        <strong>From Date:</strong> @fromDate &nbsp;|&nbsp; <strong>To Date:</strong> @toDate
+                    </td>
                 </tr>
-            </thead>
-            <tbody>
+
+                <!-- Filter info -->
+                @if (reportType == "1" && !string.IsNullOrEmpty(accountNo))
+                {
+                    <tr class="meta-row">
+                        <td colspan="9">
+                            <strong>Account No:</strong> @accountNo
+                        </td>
+                    </tr>
+                }
+                else if (reportType == "2" && !string.IsNullOrEmpty(depositTypeName))
+                {
+                    <tr class="meta-row">
+                        <td colspan="9">
+                            <strong>Deposit Type:</strong> @depositTypeName
+                        </td>
+                    </tr>
+                }
+
+                <tr class="meta-spacer"><td colspan="9"></td></tr>
+
+                <!-- Column Headers - with two-line text -->
+                <tr>
+                    <th class="text-center">SN</th>
+                    <th>Member Detail</th>
+                    <th>Account No</th>
+                    <th class="text-center">
+                        <span class="header-line1">Previous</span>
+                        <span class="header-line2">Rate</span>
+                    </th>
+                    <th class="text-center">
+                        <span class="header-line1">Current</span>
+                        <span class="header-line2">Rate</span>
+                    </th>
+                    <th class="text-center">
+                        <span class="header-line1">Activated</span>
+                        <span class="header-line2">Date</span>
+                    </th>
+                    <th>Remarks</th>
+                    <th class="text-center">
+                        <span class="header-line1">Created</span>
+                        <span class="header-line2">Date</span>
+                    </th>
+                    <th>
+                        <span class="header-line1">Created</span>
+                        <span class="header-line2">By</span>
+                    </th>
+                </tr>
+
+                <!-- Data Rows -->
                 @if (rows.Any())
                 {
                     int sn = 0;
                     foreach (var row in rows)
                     {
                         sn++;
-                        var oldRate = row.OldInterestRate.HasValue ? row.OldInterestRate.Value.ToString("N2") : "-";
-                        var newRate = row.NewInterestRate.HasValue ? row.NewInterestRate.Value.ToString("N2") : "-";
+                        var oldRate = row.PreviousInterestRate.HasValue ? row.PreviousInterestRate.Value.ToString("N2") : "-";
+                        var newRate = row.CurrentInterestRate.HasValue ? row.CurrentInterestRate.Value.ToString("N2") : "-";
+                        var memberDetail = $"{row.MemberId} ({row.MemberName})";
+                        var remarks = "Saving A/C Interest changed different from Deposit Type.";
+                        var createdDate = row.InterestActivationOnbs ?? "";
+
                         <tr>
                             <td class="text-center">@sn</td>
+                            <td class="member-detail">@memberDetail</td>
                             <td>@(row.AccountNo ?? "")</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.DepositTypeName ?? "")</td>
-                            <td class="text-center">
-                                <span class="rate-old">@oldRate</span>
-                                <span class="rate-arrow"> → </span>
-                                <span class="rate-new">@newRate</span>
-                            </td>
-                            <td class="highlight-change">@(row.ChangedDateBs ?? "")</td>
-                            <td>@(row.ChangedBy ?? "")</td>
+                            <td class="text-center rate-old">@oldRate</td>
+                            <td class="text-center rate-new">@newRate</td>
+                            <td class="text-center highlight-change">@(row.InterestActivationOnbs ?? "")</td>
+                            <td class="remarks-text">@remarks</td>
+                            <td class="text-center">@createdDate</td>
+                            <td>@(row.CreatedBy ?? "CoSys Software")</td>
                         </tr>
                     }
+
+                    <!-- Grand Total -->
                     <tr class="grand-total">
-                        <td colspan="7" class="text-right"><strong>Total Changes</strong></td>
+                        <td colspan="8" class="text-right"><strong>Total Changes</strong></td>
                         <td class="text-right"><strong>@totalChanges</strong></td>
                     </tr>
-                    <tr>
-                        <td colspan="7" class="text-right"><strong>Total Records</strong></td>
+                    <tr class="grand-total">
+                        <td colspan="8" class="text-right"><strong>Total Records</strong></td>
                         <td class="text-right"><strong>@totalRecords</strong></td>
                     </tr>
                 }
                 else
                 {
-                    <tr><td colspan="8" class="text-center">No interest change log found for the selected criteria</td></tr>
+                    <tr>
+                        <td colspan="9" class="text-center">No interest change log found for the selected criteria</td>
+                    </tr>
                 }
+
+                <!-- Office Name Footer -->
+                <tr>
+                    <td colspan="9" class="office-footer">
+                        <strong>Office Name:</strong> @officeName
+                    </td>
+                </tr>
             </tbody>
         </table>
     </div>

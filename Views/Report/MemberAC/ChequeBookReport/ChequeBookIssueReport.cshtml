@@ -1,0 +1,228 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.ChequeBookReport
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+    var rows = (Model["Rows"] as List<ChequeBookIssueRowDto>) ?? new List<ChequeBookIssueRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalChequesIssued = Model["TotalChequesIssued"] as int? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "";
+    var memberId = Model["MemberId"]?.ToString() ?? "";
+    var memberName = Model["MemberName"]?.ToString() ?? "";
+    var reportViewName = Model["ReportViewName"]?.ToString() ?? "Date Wise";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+    var hasRows = rows != null && rows.Count > 0;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Cheque Book Issue Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    border: 1px solid #ccc;
+                }
+
+                .data-table th {
+                    background: #f2f2f2;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                }
+
+                .data-table thead {
+                    display: table-row-group;
+                }
+
+            .grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .filter-info {
+                margin-bottom: 4px;
+            }
+
+            .report-title {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+            }
+
+            .highlight-cheque {
+                color: #1565c0;
+                font-weight: bold;
+            }
+
+            .highlight-status {
+                font-weight: bold;
+            }
+
+            .status-issued {
+                color: #2e7d32;
+            }
+
+            .status-cancelled {
+                color: #c62828;
+            }
+
+            .status-used {
+                color: #f57f17;
+            }
+
+            @@media print {
+                .data-table thead {
+                    display: table-row-group;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th colspan="8" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
+                        Cheque Book Issue Report - @reportViewName
+                    </th>
+                </tr>
+                <tr>
+                    <td colspan="8">
+                        <div class="filter-info">
+                            @if (reportViewName == "Member Wise")
+                            {
+                                <strong>Member:</strong> 
+                                @memberId
+                              
+                            }
+                            else
+                            {
+                                <strong>Branches:</strong> 
+                                @branchNames
+                               
+                                <strong>From:</strong> 
+                                @fromDate
+                            
+                                <strong>To:</strong> 
+                                @toDate
+                              
+                            }
+                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
+                            <strong>Generated:</strong> @generatedOn
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <th style="width:3%;">SN</th>
+                    <th style="width:12%;">Member ID</th>
+                    <th style="width:20%;">Member Name</th>
+                    <th style="width:12%;">Account No</th>
+                    <th style="width:10%;">Issue Date</th>
+                    <th style="width:12%;" class="highlight-cheque">Cheque No From</th>
+                    <th style="width:12%;" class="highlight-cheque">Cheque No To</th>
+                    <th style="width:8%;" class="text-center">Total</th>
+                    <th style="width:11%;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (hasRows)
+                {
+                    int sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        string statusClass = "";
+                        string statusLower = (row.Status ?? "").ToLower();
+                        if (statusLower == "issued")
+                        {
+                            statusClass = "status-issued";
+                        }
+                        else if (statusLower == "cancelled")
+                        {
+                            statusClass = "status-cancelled";
+                        }
+                        else if (statusLower == "used")
+                        {
+                            statusClass = "status-used";
+                        }
+                        <tr>
+                            <td class="text-center">@sn</td>
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.MemberName ?? "")</td>
+                            <td>@(row.AccountNo ?? "")</td>
+                            <td>@(row.ChequeIssueDateBs ?? "")</td>
+                            <td class="text-right highlight-cheque">@(row.ChequeNoFrom.HasValue ? row.ChequeNoFrom.Value.ToString() : "")</td>
+                            <td class="text-right highlight-cheque">@(row.ChequeNoTo.HasValue ? row.ChequeNoTo.Value.ToString() : "")</td>
+                            <td class="text-center">@(row.TotalCheques.HasValue ? row.TotalCheques.Value.ToString() : "")</td>
+                            <td class="text-center highlight-status @statusClass">@(row.Status ?? "")</td>
+                        </tr>
+                    }
+                    <tr class="grand-total">
+                        <td colspan="7" class="text-right"><strong>Total</strong></td>
+                        <td class="text-center"><strong>@totalChequesIssued</strong></td>
+                        <td></td>
+                    </tr>
+                    <tr>
+                        <td colspan="7" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-center"><strong>@totalRecords</strong></td>
+                        <td></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="9" class="text-center">
+                            No cheque book issue records found for the selected criteria
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

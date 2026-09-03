@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Interfaces.ServiceInterface.MemberAccount.SavingsAccountMaturityReport;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestPayableReport;
 using System.Data;
 using System.Text;
 

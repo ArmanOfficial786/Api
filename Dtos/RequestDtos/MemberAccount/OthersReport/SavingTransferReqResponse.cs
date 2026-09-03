@@ -4,9 +4,8 @@
     {
         public string FromDateBs { get; set; } = string.Empty;
         public string ToDateBs { get; set; } = string.Empty;
-        public List<long> BranchIds { get; set; } = [];
+        public string? BranchIds { get; set; }
         public string OrderBy { get; set; } = "Member Id";
-        public bool SameCompanyName { get; set; } = true;
         public bool VisualReport { get; set; } = false;
     }
 
@@ -30,7 +29,7 @@
         public string? FromDateBs { get; set; }
         public string? ToDateBs { get; set; }
         public string? BranchNames { get; set; }
-        public List<long> BranchIds { get; set; } = [];
+        public string? BranchIds { get; set; }
         public string? OrderBy { get; set; }
     }
     public class SavingTransferReqResponse

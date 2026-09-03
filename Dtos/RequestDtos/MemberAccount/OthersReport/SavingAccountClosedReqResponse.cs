@@ -16,18 +16,15 @@
     public class SavingAccountClosedRowDto
     {
         public string? MemberId { get; set; }
-        public string? MemberName { get; set; }
+        public string? Name { get; set; }              // was MemberName — SP column is "Name"
         public string? AccountNo { get; set; }
-        public string? AccountOpenOnBs { get; set; }
-        public string? AccountOpenDate { get; set; }
-        public string? AccountCloseOnBs { get; set; }
-        public string? CloseDate { get; set; }
+        public string? OpenedDate { get; set; }         // was AccountOpenOnBs — SP column is "OpenedDate"
         public string? DepositTypeName { get; set; }
-        public decimal? InterestRate { get; set; }
+        public string? ClosedDate { get; set; }         // was AccountCloseOnBs — SP column is "ClosedDate"
         public decimal? CloseAmount { get; set; }
-        public string? Operator { get; set; }
-        public string? Reason { get; set; }
-        public string? CollectorName { get; set; }
+        public decimal? ChargeAmount { get; set; }      // was Charge — SP column is "ChargeAmount"
+        public decimal? NetAmount { get; set; }
+        public string? Operator { get; set; }           // was CollectorName — SP column is "Operator" (FullName of the charge transaction's creator, not a collector)
     }
 
     public class SavingAccountClosedData

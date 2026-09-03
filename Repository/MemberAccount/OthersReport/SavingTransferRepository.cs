@@ -4,6 +4,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport;
+using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.OthersReport;
 using System.Data;
@@ -14,12 +15,18 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
     {
         private readonly AppDbContext _context;
         private readonly IDateConverterService _dateConverter;
+        private readonly IBranchNameResolverService _branchNameResolver;
         private readonly ILogger<SavingTransferRepository> _logger;
 
-        public SavingTransferRepository(AppDbContext context, IDateConverterService dateConverter, ILogger<SavingTransferRepository> logger)
+        public SavingTransferRepository(
+            AppDbContext context,
+            IDateConverterService dateConverter,
+            IBranchNameResolverService branchNameResolver,
+            ILogger<SavingTransferRepository> logger)
         {
             _context = context;
             _dateConverter = dateConverter;
+            _branchNameResolver = branchNameResolver;
             _logger = logger;
         }
 
@@ -34,22 +41,22 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
                 var fromDateStr = fromDateAd.ToString("yyyy-MM-dd");
                 var toDateStr = toDateAd.ToString("yyyy-MM-dd");
 
-                // Build branch filter string
+                // Build branch filter string (BranchIds is a nullable comma-separated string, e.g. "1,2,3" or "-1")
                 string branchIdsStr = "-1";
-                if (request.BranchIds.Count > 0)
+                if (!string.IsNullOrEmpty(request.BranchIds) &&
+                    request.BranchIds != "-1" &&
+                    request.BranchIds != "string")
                 {
-                    branchIdsStr = string.Join(",", request.BranchIds);
+                    branchIdsStr = request.BranchIds;
                 }
 
-                // Get branch names for header
-                var branchNames = await GetBranchNamesListAsync(request.BranchIds);
-                string branchNameDisplay = branchNames.Count > 0
-                    ? (branchNames.Count == 1 ? branchNames[0] : string.Join(", ", branchNames))
-                    : "All Branches";
+                // Get branch names for header via shared resolver
+                var branchNameDisplay = await _branchNameResolver.GetBranchNamesAsync(branchIdsStr);
 
                 var connectionString = _context.Database.GetConnectionString();
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
+
 
                 // Prepare parameters for the stored procedure
                 var parameters = new DynamicParameters();
@@ -59,11 +66,15 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
                 var orderByClause = BuildOrderByClause(request.OrderBy);
                 parameters.Add("@SqlFilterExpOrder", orderByClause, DbType.String, size: -1);
 
-                var rows = await connection.QueryAsync<SavingTransferRowDto>(
+                // Explicit, generous CommandTimeout as a safety net (default is 30s).
+                // Backstop only - snapshot isolation above is the actual fix.
+                var command = new CommandDefinition(
                     "sp_5_43_GetSavingTransfer",
                     parameters,
-                    commandType: CommandType.StoredProcedure
-                );
+                    commandType: CommandType.StoredProcedure,
+                    commandTimeout: 120);
+
+                var rows = await connection.QueryAsync<SavingTransferRowDto>(command);
 
                 var resultList = rows.AsList();
 
@@ -83,54 +94,6 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
             {
                 _logger.LogError(ex, "Error in GetReportDataAsync");
                 throw;
-            }
-        }
-
-        public async Task<string?> GetBranchNamesByIdsAsync(List<long> branchIds)
-        {
-            try
-            {
-                if (branchIds.Count == 0)
-                    return "All Branches";
-
-                var connectionString = _context.Database.GetConnectionString();
-                using var connection = new SqlConnection(connectionString);
-                await connection.OpenAsync();
-
-                var ids = string.Join(",", branchIds);
-                var sql = $"SELECT OfficeName FROM UsmOffice WHERE UsmOfficeId IN ({ids}) ORDER BY OfficeName";
-
-                var names = await connection.QueryAsync<string>(sql);
-                return string.Join(", ", names);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error in GetBranchNamesByIdsAsync");
-                return "All Branches";
-            }
-        }
-
-        public async Task<List<string>> GetBranchNamesListAsync(List<long> branchIds)
-        {
-            try
-            {
-                if (branchIds.Count == 0)
-                    return ["All Branches"];
-
-                var connectionString = _context.Database.GetConnectionString();
-                using var connection = new SqlConnection(connectionString);
-                await connection.OpenAsync();
-
-                var ids = string.Join(",", branchIds);
-                var sql = $"SELECT OfficeName FROM UsmOffice WHERE UsmOfficeId IN ({ids}) ORDER BY OfficeName";
-
-                var names = await connection.QueryAsync<string>(sql);
-                return names.AsList();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error in GetBranchNamesListAsync");
-                return ["All Branches"];
             }
         }
 

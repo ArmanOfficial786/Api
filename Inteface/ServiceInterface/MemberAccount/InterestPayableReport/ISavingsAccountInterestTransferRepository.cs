@@ -1,7 +1,7 @@
 ﻿// Interfaces/ServiceInterface/MemberAccount/SavingsAccountInterestTransfer/ISavingsAccountInterestTransferRepository.cs
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport;
 
-namespace NexgenCosysReport.Interfaces.ServiceInterface.MemberAccount.SavingsAccountInterestTransfer
+namespace NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestPayableReport
 {
     public interface ISavingsAccountInterestTransferRepository
     {

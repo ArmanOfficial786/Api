@@ -5,6 +5,6 @@ namespace NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.OthersReport
     public interface ILoanPaymentThroughSavingRepository
     {
         Task<LoanPaymentThroughSavingData> GetReportDataAsync(LoanPaymentThroughSavingRequestDto request);
-        Task<List<string>> GetBranchNamesListAsync(List<long> branchIds);
+        //Task<List<string>> GetBranchNamesListAsync(string branchIds);
     }
 }

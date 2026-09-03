@@ -17,6 +17,8 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
         private readonly IDateConverterService _dateConverter;
         private readonly ILogger<SavingDepositDateWiseRepository> _logger;
 
+        private const int CommandTimeoutSeconds = 120;
+
         public SavingDepositDateWiseRepository(
             AppDbContext context,
             IDateConverterService dateConverter,
@@ -31,79 +33,30 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
         {
             try
             {
-                // Build filter expression
-                var sqlFilterExp = new StringBuilder();
+                var transactionType = string.IsNullOrWhiteSpace(request.TransactionType)
+                    ? "Deposit"
+                    : request.TransactionType;
 
-                // Member filter
-                if (request.MemberId.HasValue && request.MemberId.Value != -1)
+                List<SavingDepositDateWiseRowDto> resultList;
+
+                if (transactionType.Equals("All", StringComparison.OrdinalIgnoreCase))
                 {
-                    sqlFilterExp.Append($" AND t.MemMemberRegistrationId = {request.MemberId.Value}");
+                    // Not a mode the original WebForms UI exposed (its radio buttons only ever
+                    // sent "Deposit" or "Withdrawl"), but the API needs it: run both stored
+                    // procedures and merge, mirroring the "All" pattern used elsewhere in the
+                    // same BLL (e.g. GetBranchToBranchCollection's "All" case).
+                    var depositRows = await QueryTransactionTypeAsync(request, "Deposit");
+                    var withdrawlRows = await QueryTransactionTypeAsync(request, "Withdrawl");
+
+                    resultList = depositRows.Concat(withdrawlRows).ToList();
+                    resultList = ApplyInMemoryOrderBy(resultList, request.OrderBy);
+                }
+                else
+                {
+                    resultList = await QueryTransactionTypeAsync(request, transactionType);
                 }
 
-                // Date filter - required for DateWise mode
-                if (request.ReportMode == "DateWise" &&
-                    !string.IsNullOrEmpty(request.FromDateBs) && request.FromDateBs != "-1" &&
-                    !string.IsNullOrEmpty(request.ToDateBs) && request.ToDateBs != "-1")
-                {
-                    var fromDateAd = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
-                    var toDateAd = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
-                    var fromDateStr = fromDateAd.ToString("yyyy-MM-dd");
-                    var toDateStr = toDateAd.ToString("yyyy-MM-dd");
-                    sqlFilterExp.Append($" AND t.TransactionOn BETWEEN '{fromDateStr}' AND '{toDateStr}'");
-                }
-
-                // Branch filter
-                if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
-                {
-                    sqlFilterExp.Append($" AND t.UsmOfficeId IN ({request.BranchIds})");
-                }
-
-                // Saving Type filter
-                if (request.SavingTypeId.HasValue && request.SavingTypeId.Value != -1)
-                {
-                    sqlFilterExp.Append($" AND a.SycDepositTypeId = {request.SavingTypeId.Value}");
-                }
-
-                // Cheque Detail filter
-                if (request.ChequeDetail == 1 && request.TransactionType == "Withdrawl")
-                {
-                    sqlFilterExp.Append(" AND t.MamChequeWithdrawId IS NOT NULL");
-                }
-                else if (request.ChequeDetail == 2)
-                {
-                    // Cash Only - requires additional logic in stored procedure
-                    // The stored procedure handles this via the @SqlChequeId parameter
-                }
-                else if (request.ChequeDetail == 3)
-                {
-                    // Bank Only - requires additional logic in stored procedure
-                }
-
-                // Build Order By clause
-                var orderByClause = BuildOrderByClause(request.OrderBy);
-
-                var parameters = new DynamicParameters();
-                parameters.Add("@SqlFilterExp", sqlFilterExp.ToString() + orderByClause, DbType.String, size: -1);
-                parameters.Add("@SqlChequeId", request.ChequeDetail.ToString(), DbType.String);
-
-                var connectionString = _context.Database.GetConnectionString();
-                using var connection = new SqlConnection(connectionString);
-                await connection.OpenAsync();
-
-                // Determine which stored procedure to use based on transaction type
-                string spName = request.TransactionType == "Deposit"
-                    ? "sp_5_43_GetSavingDepositDateWise"
-                    : "sp_5_43_GetSavingWithdrawlDateWise";
-
-                var rows = await connection.QueryAsync<SavingDepositDateWiseRowDto>(
-                    spName,
-                    parameters,
-                    commandType: CommandType.StoredProcedure
-                );
-
-                var resultList = rows.AsList();
-
-                // Get member details if specific member is selected
+                // Get member details if a specific member was selected
                 string? selectedMemberId = null;
                 string? selectedMemberName = null;
                 if (request.MemberId.HasValue && request.MemberId.Value != -1)
@@ -123,7 +76,7 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
                     savingTypeName = await GetSavingTypeNameAsync(request.SavingTypeId.Value);
                 }
 
-                // Calculate totals
+                // Totals
                 var totalDeposit = resultList
                     .Where(r => r.TransactionType == "Deposit")
                     .Sum(r => r.Amount ?? 0);
@@ -131,7 +84,6 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
                     .Where(r => r.TransactionType == "Withdrawl")
                     .Sum(r => r.Amount ?? 0);
 
-                // Get cheque detail text
                 var chequeDetailText = GetChequeDetailText(request.ChequeDetail);
 
                 return new SavingDepositDateWiseData
@@ -143,7 +95,7 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
                     ToDateBs = request.ToDateBs,
                     BranchNames = request.BranchName,
                     OrderBy = request.OrderBy,
-                    TransactionType = request.TransactionType,
+                    TransactionType = transactionType,
                     ReportMode = request.ReportMode,
                     SelectedMemberId = selectedMemberId,
                     SelectedMemberName = selectedMemberName,
@@ -161,17 +113,113 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
             }
         }
 
+        /// <summary>
+        /// Runs a single stored procedure for the given concrete transaction type
+        /// ("Deposit" or "Withdrawl" only). Order-by is intentionally NOT appended
+        /// here when called from the "All" merge path (see ApplyInMemoryOrderBy),
+        /// because two separately-sorted SP results can't be interleaved correctly -
+        /// the merge needs to sort the combined set as one list.
+        /// </summary>
+        private async Task<List<SavingDepositDateWiseRowDto>> QueryTransactionTypeAsync(
+            SavingDepositDateWiseRequestDto request, string concreteType)
+        {
+            var sqlFilterExp = new StringBuilder();
+
+            if (request.MemberId.HasValue && request.MemberId.Value != -1)
+            {
+                sqlFilterExp.Append($" And t.MemMemberRegistrationId = {request.MemberId.Value}");
+            }
+
+            if (request.ReportMode == "DateWise" &&
+                !string.IsNullOrEmpty(request.FromDateBs) && request.FromDateBs != "-1" &&
+                !string.IsNullOrEmpty(request.ToDateBs) && request.ToDateBs != "-1")
+            {
+                var fromDateAd = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
+                var toDateAd = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
+                var fromDateStr = fromDateAd.ToString("yyyy-MM-dd");
+                var toDateStr = toDateAd.ToString("yyyy-MM-dd");
+                sqlFilterExp.Append($" And t.TransactionOn between '{fromDateStr}' And '{toDateStr}'");
+            }
+
+            if (request.ReportMode == "DateWise" &&
+                !string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
+            {
+                sqlFilterExp.Append($" And t.UsmOfficeId in ({request.BranchIds})");
+            }
+
+            if (request.SavingTypeId.HasValue && request.SavingTypeId.Value != -1)
+            {
+                sqlFilterExp.Append($" And a.SycDepositTypeId = {request.SavingTypeId.Value}");
+            }
+
+            if (request.ChequeDetail == 1 && concreteType == "Withdrawl")
+            {
+                sqlFilterExp.Append(" And t.MamChequeWithdrawId is not null ");
+            }
+
+            // Only append ORDER BY for single-type calls (i.e. not part of an "All" merge).
+            // The "All" path sorts the merged list in-memory instead - see ApplyInMemoryOrderBy.
+            if (!request.TransactionType.Equals("All", StringComparison.OrdinalIgnoreCase))
+            {
+                sqlFilterExp.Append(BuildOrderByClause(request.OrderBy));
+            }
+
+            string spName = concreteType switch
+            {
+                "Deposit" => "sp_5_43_GetSavingDepositDateWise",
+                "Withdrawl" => "sp_5_43_GetSavingWithdrawlDateWise",
+                _ => throw new ArgumentException($"Unknown TransactionType '{concreteType}'. Expected 'Deposit' or 'Withdrawl'.")
+            };
+
+            var parameters = new DynamicParameters();
+            parameters.Add("@SqlFilterExp", sqlFilterExp.ToString(), DbType.String, size: -1);
+            parameters.Add("@SqlChequeId", request.ChequeDetail, DbType.Int32);
+
+            var connectionString = _context.Database.GetConnectionString();
+            using var connection = new SqlConnection(connectionString);
+            await connection.OpenAsync();
+
+            var rows = await connection.QueryAsync<SavingDepositDateWiseRowDto>(
+                spName,
+                parameters,
+                commandType: CommandType.StoredProcedure,
+                commandTimeout: CommandTimeoutSeconds
+            );
+
+            return rows.AsList();
+        }
+
+        /// <summary>
+        /// Sorts the merged Deposit+Withdrawl list in-memory when TransactionType == "All",
+        /// since each half was fetched from a different SP and can't share a single SQL
+        /// ORDER BY. Mirrors the same label set as BuildOrderByClause.
+        /// </summary>
+        private static List<SavingDepositDateWiseRowDto> ApplyInMemoryOrderBy(
+            List<SavingDepositDateWiseRowDto> rows, string orderBy)
+        {
+            return orderBy switch
+            {
+                "Date" => rows.OrderBy(r => r.Date).ToList(),
+                "Member Id" => rows.OrderBy(r => r.MemberId).ToList(),
+                "Member Name" => rows.OrderBy(r => r.MemberName).ToList(),
+                "Saving Type" => rows.OrderBy(r => r.SavingType).ToList(),
+                "Account No" => rows.OrderBy(r => r.AccountNo).ToList(),
+                "Amount" => rows.OrderByDescending(r => r.Amount).ToList(),
+                _ => rows
+            };
+        }
+
         private static string BuildOrderByClause(string orderBy)
         {
             return orderBy switch
             {
-                "Member Id" => " ORDER BY substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId",
-                "Member Name" => " ORDER BY MemberName",
-                "Account No" => " ORDER BY substring(AccountNo, 1,(len(AccountNo)-charindex('-', AccountNo))-1), AccountNo",
-                "Saving Type" => " ORDER BY savingType",
-                "Date" => " ORDER BY Date",
-                "Amount" => " ORDER BY Amount DESC",
-                _ => " ORDER BY MemberId"
+                "Date" => " order by Date ",
+                "Member Id" => " order by substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId",
+                "Member Name" => " order by MemberName ",
+                "Saving Type" => " order by savingType ",
+                "Account No" => " order by substring(AccountNo, 1,(len(AccountNo)-charindex('-', AccountNo))-1), AccountNo",
+                "Amount" => " order by Amount DESC",
+                _ => string.Empty
             };
         }
 

@@ -1,7 +1,7 @@
 ﻿// Interfaces/ServiceInterface/MemberAccount/InterestPayableReport/IInterestPayableRepository.cs
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport;
 
-namespace NexgenCosysReport.Interfaces.ServiceInterface.MemberAccount.InterestPayableReport
+namespace NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestPayableReport
 {
     public interface IInterestPayableRepository
     {

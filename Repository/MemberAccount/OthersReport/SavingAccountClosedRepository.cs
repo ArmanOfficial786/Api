@@ -31,16 +31,14 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
         {
             try
             {
-                // Build filter expression
                 var sqlFilterExp = new StringBuilder();
 
-                // Member filter
-                if (request.MemberId.HasValue && request.MemberId.Value != -1)
+                // Treat any non-positive value as "unfiltered", not just exactly -1.
+                if (request.MemberId.HasValue && request.MemberId.Value > 0)
                 {
                     sqlFilterExp.Append($" AND c.MemMemberRegistrationId = {request.MemberId.Value}");
                 }
 
-                // Date filter - for DateWise mode
                 if (request.ReportMode == "DateWise" &&
                     !string.IsNullOrEmpty(request.FromDateBs) && request.FromDateBs != "-1" &&
                     !string.IsNullOrEmpty(request.ToDateBs) && request.ToDateBs != "-1")
@@ -52,13 +50,13 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
                     sqlFilterExp.Append($" AND c.AccountCloseOn BETWEEN '{fromDateStr}' AND '{toDateStr}'");
                 }
 
-                // Branch filter
                 if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
                 {
                     sqlFilterExp.Append($" AND tc.UsmOfficeId IN ({request.BranchIds})");
                 }
 
-                // Build Order By clause
+                // Member is the primary sort key so rows arrive grouped by member first,
+                // then deposit type — matches the report's two-level visual grouping.
                 var orderByClause = BuildOrderByClause(request.OrderBy);
 
                 var parameters = new DynamicParameters();
@@ -76,10 +74,9 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
 
                 var resultList = rows.AsList();
 
-                // Get member details if specific member is selected
                 string? selectedMemberId = null;
                 string? selectedMemberName = null;
-                if (request.MemberId.HasValue && request.MemberId.Value != -1)
+                if (request.MemberId.HasValue && request.MemberId.Value > 0)
                 {
                     var member = await GetMemberDetailsAsync(request.MemberId.Value);
                     if (member != null)
@@ -89,6 +86,8 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
                     }
                 }
 
+                var branchNames = await GetBranchNamesByIdsAsync(request.BranchIds);
+
                 return new SavingAccountClosedData
                 {
                     Rows = resultList,
@@ -96,7 +95,7 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
                     TotalCloseAmount = resultList.Sum(r => r.CloseAmount ?? 0),
                     FromDateBs = request.FromDateBs,
                     ToDateBs = request.ToDateBs,
-                    BranchNames = request.BranchName,
+                    BranchNames = branchNames,
                     OrderBy = request.OrderBy,
                     ReportMode = request.ReportMode,
                     SelectedMemberId = selectedMemberId,
@@ -111,17 +110,54 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
             }
         }
 
+        private async Task<string> GetBranchNamesByIdsAsync(string? branchIdsCsv)
+        {
+            if (string.IsNullOrWhiteSpace(branchIdsCsv) || branchIdsCsv == "-1")
+            {
+                return "All";
+            }
+
+            try
+            {
+                var ids = branchIdsCsv
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(id => long.TryParse(id, out var parsed) ? parsed : (long?)null)
+                    .Where(id => id.HasValue)
+                    .Select(id => id!.Value)
+                    .ToList();
+
+                if (!ids.Any())
+                {
+                    return "All";
+                }
+
+                var connectionString = _context.Database.GetConnectionString();
+                using var connection = new SqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                const string sql = "SELECT OfficeName FROM UsmOffice WHERE UsmOfficeId IN @Ids";
+                var names = (await connection.QueryAsync<string>(sql, new { Ids = ids })).ToList();
+
+                return names.Any() ? string.Join(", ", names) : branchIdsCsv;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetBranchNamesByIdsAsync");
+                return branchIdsCsv;
+            }
+        }
+
         private static string BuildOrderByClause(string orderBy)
         {
             return orderBy switch
             {
+                "Member Name" => " ORDER BY m.MemberId, Name",
+                "Account No" => " ORDER BY m.MemberId, substring(a.AccountNo, 1,(len(a.AccountNo)-charindex('-', a.AccountNo))-1), a.AccountNo",
+                "A‎/‎C Open Date" => " ORDER BY m.MemberId, a.AccountOpenOnBs",
+                "A‎/‎C Close Date" => " ORDER BY m.MemberId, c.AccountCloseOnBs",
+                "Close Amount" => " ORDER BY m.MemberId, c.AccountCloseAmount DESC",
                 "Member Id" => " ORDER BY substring(m.MemberId, 1,(len(m.MemberId)-charindex('-', m.MemberId))-1), m.MemberId",
-                "Member Name" => " ORDER BY Name",
-                "Account No" => " ORDER BY substring(a.AccountNo, 1,(len(a.AccountNo)-charindex('-', a.AccountNo))-1), a.AccountNo",
-                "A‎/‎C Open Date" => " ORDER BY a.AccountOpenOnBs",
-                "A‎/‎C Close Date" => " ORDER BY c.AccountCloseOnBs",
-                "Close Amount" => " ORDER BY c.AccountCloseAmount DESC",
-                _ => " ORDER BY m.MemberId"
+                _ => " ORDER BY substring(m.MemberId, 1,(len(m.MemberId)-charindex('-', m.MemberId))-1), m.MemberId"
             };
         }
 

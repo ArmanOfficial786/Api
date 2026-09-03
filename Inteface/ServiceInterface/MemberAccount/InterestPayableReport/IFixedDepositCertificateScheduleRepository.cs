@@ -1,7 +1,7 @@
 ﻿// Interfaces/ServiceInterface/MemberAccount/FixedDepositCertificateSchedule/IFixedDepositCertificateScheduleRepository.cs
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport;
 
-namespace NexgenCosysReport.Interfaces.ServiceInterface.MemberAccount.FixedDepositCertificateSchedule
+namespace NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestPayableReport
 {
     public interface IFixedDepositCertificateScheduleRepository
     {

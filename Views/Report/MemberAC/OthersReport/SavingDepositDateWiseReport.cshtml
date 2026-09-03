@@ -4,29 +4,28 @@
 @{
     Layout = null;
     var rows = (Model["Rows"] as List<SavingDepositDateWiseRowDto>) ?? new List<SavingDepositDateWiseRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
+    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "";
-    var transactionType = Model["TransactionType"]?.ToString() ?? "Deposit";
-    var reportMode = Model["ReportMode"]?.ToString() ?? "DateWise";
+    var transactionType = Model["TransactionType"]?.ToString() ?? "Deposit"; // "Deposit" or "Withdrawl"
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
-    var selectedMemberId = Model["SelectedMemberId"]?.ToString();
-    var selectedMemberName = Model["SelectedMemberName"]?.ToString();
-    var savingTypeName = Model["SavingTypeName"]?.ToString();
-    var totalDepositAmount = Model["TotalDepositAmount"] as decimal? ?? 0;
-    var totalWithdrawalAmount = Model["TotalWithdrawalAmount"] as decimal? ?? 0;
-    var chequeDetailText = Model["ChequeDetailText"]?.ToString() ?? "All";
+
+    var generatedOn = Model.ContainsKey("ReportGeneratedOnBs") && Model["ReportGeneratedOnBs"] != null
+        ? Model["ReportGeneratedOnBs"].ToString()
+        : DateTime.Now.ToString("yyyy/MM/dd");
+
+    // Rows must arrive pre-sorted Date -> SavingType (repository enforces this for
+    // ReportMode == "DateWise" - GroupBy preserves first-seen order, it does not sort)
+    var dateGroups = rows.GroupBy(r => r.Date).ToList();
+
+    var reportTitle = $"Date Wise {transactionType} Report";
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Saving Deposit/Withdrawal Date Wise Report</title>
+    <title>@reportTitle</title>
     <style>
             * {
                 margin: 0;
@@ -36,8 +35,9 @@
 
             body {
                 font-family: Arial, sans-serif;
-                font-size: 9pt;
+                font-size: 9.5pt;
                 background: white;
+                color: #000;
             }
 
             .report-container {
@@ -45,34 +45,47 @@
                 overflow: visible;
             }
 
+            .report-title {
+                text-align: center;
+                font-size: 15pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 10px 0 12px 0;
+            }
+
+            .meta-table {
+                width: 100%;
+                margin-bottom: 6px;
+                font-size: 9.5pt;
+            }
+
+                .meta-table td {
+                    padding: 1px 4px;
+                }
+
+                .meta-table .label {
+                    font-weight: bold;
+                    white-space: nowrap;
+                }
+
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 9pt;
+                font-size: 9.5pt;
             }
 
                 .data-table td, .data-table th {
-                    padding: 4px 6px;
-                    border: 1px solid #ccc;
+                    padding: 3px 6px;
+                    border: none;
                 }
 
-                .data-table th {
-                    background: #f2f2f2;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
+                .data-table thead th {
                     text-align: left;
+                    font-weight: bold;
+                    border-top: 2px solid #000;
+                    border-bottom: 1.5px solid #000;
+                    padding: 5px 6px;
                 }
-
-                .data-table thead {
-                    display: table-row-group;
-                }
-
-            .grand-total {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-            }
 
             .text-right {
                 text-align: right !important;
@@ -82,51 +95,53 @@
                 text-align: center !important;
             }
 
-            .filter-info {
-                margin-bottom: 4px;
-            }
-
-            .report-title {
-                text-align: center;
-                font-size: 14pt;
+            /* Date group header row */
+            .date-row td {
                 font-weight: bold;
-                text-decoration: underline;
+                padding-top: 10px;
             }
 
-            .highlight-deposit {
-                color: green;
-            }
-
-            .highlight-withdrawal {
-                color: red;
-            }
-
-            .payment-mode-badge {
-                display: inline-block;
-                padding: 1px 6px;
-                border-radius: 3px;
-                font-size: 7pt;
+            /* Saving type sub-header under a date */
+            .savingtype-header td {
                 font-weight: bold;
+                padding-top: 4px;
+                padding-bottom: 1px;
             }
 
-            .payment-mode-cheque {
-                background: #e8f5e9;
-                color: #2e7d32;
+            /* Individual numbered transaction rows */
+            .txn-row td {
+                padding-top: 1px;
+                padding-bottom: 1px;
             }
 
-            .payment-mode-cash {
-                background: #fff3e0;
-                color: #e65100;
+            /* Saving type subtotal under its group */
+            .savingtype-total td {
+                font-weight: bold;
+                border-top: 1px solid #000;
+                padding-top: 3px;
+                padding-bottom: 3px;
             }
 
-            .payment-mode-bank {
-                background: #e3f2fd;
-                color: #0d47a1;
+            /* Per-date "Total Records" summary footer */
+            .date-total td {
+                font-weight: bold;
+                border-top: 1px solid #000;
+                border-bottom: 1px solid #000;
+                padding-top: 4px;
+                padding-bottom: 8px;
+            }
+
+            .grand-total td {
+                font-weight: bold;
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                padding-top: 6px;
+                padding-bottom: 6px;
             }
 
             @@media print {
                 .data-table thead {
-                    display: table-row-group;
+                    display: table-header-group;
                 }
             }
     </style>
@@ -138,115 +153,103 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
+        <div class="report-title">@reportTitle</div>
+
+        <table class="meta-table">
+            <tr>
+                <td class="label" style="width:15%;">Report Generated On :</td>
+                <td style="width:25%;">@generatedOn</td>
+                <td class="label" style="width:12%;">From Date :</td>
+                <td style="width:18%;">@(fromDate != "-1" ? fromDate : "")</td>
+                <td class="label" style="width:12%;">To Date :</td>
+                <td style="width:18%;">@(toDate != "-1" ? toDate : "")</td>
+            </tr>
+            <tr>
+                <td></td>
+                <td></td>
+                <td class="label">Branch Name :</td>
+                <td colspan="3">@branchNames</td>
+            </tr>
+        </table>
+
         <table class="data-table">
             <thead>
                 <tr>
-                    <th colspan="8" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
-                        Saving @transactionType Report - @reportMode Wise
-                    </th>
-                </tr>
-                <tr>
-                    <td colspan="8">
-                        <div class="filter-info">
-                            <strong>Branches:</strong> @branchNames &nbsp;&nbsp;|&nbsp;&nbsp;
-                            @if (!string.IsNullOrEmpty(fromDate) && fromDate != "-1")
-                            {
-                                <span><strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;</span>
-                            }
-                            @if (!string.IsNullOrEmpty(toDate) && toDate != "-1")
-                            {
-                                <span><strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;</span>
-                            }
-                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Transaction Type:</strong> @transactionType &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Payment Mode:</strong> @chequeDetailText &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Generated:</strong> @generatedOn
-                        </div>
-                        @if (!string.IsNullOrEmpty(selectedMemberId))
-                        {
-                            <div class="filter-info">
-                                <strong>Member ID:</strong> @selectedMemberId &nbsp;&nbsp;|&nbsp;&nbsp;
-                                <strong>Member Name:</strong> @selectedMemberName
-                            </div>
-                        }
-                        @if (!string.IsNullOrEmpty(savingTypeName))
-                        {
-                            <div class="filter-info">
-                                <strong>Saving Type:</strong> @savingTypeName
-                            </div>
-                        }
-                    </td>
-                </tr>
-                <tr>
-                    <th style="width:3%;">SN</th>
-                    <th style="width:12%;">Date</th>
+                    <th style="width:11%;">Date</th>
+                    <th style="width:16%;">Saving Type</th>
                     <th style="width:12%;">Member Id</th>
-                    <th style="width:18%;">Member Name</th>
-                    <th style="width:15%;">Account No</th>
-                    <th style="width:12%;">Saving Type</th>
+                    <th style="width:18%;">Name</th>
+                    <th style="width:10%;">Bill No.</th>
+                    <th style="width:20%;">Account No</th>
                     <th style="width:13%;" class="text-right">Amount</th>
-                    <th style="width:15%;">Payment Mode</th>
                 </tr>
             </thead>
             <tbody>
-                @if (rows.Any())
+                @if (dateGroups.Any())
                 {
-                    int sn = 0;
-                    foreach (var row in rows)
+                    foreach (var dateGroup in dateGroups)
                     {
-                        sn++;
-                        var isDeposit = row.TransactionType == "Deposit";
-                        var paymentClass = row.PaymentMode?.ToLower() switch
+                        <tr class="date-row">
+                            <td colspan="7">@dateGroup.Key</td>
+                        </tr>
+
+                        var savingTypeGroups = dateGroup.GroupBy(r => r.SavingType);
+                        decimal dateTotal = 0;
+                        int dateRecordCount = 0;
+
+                        foreach (var stGroup in savingTypeGroups)
                         {
-                            "cheque" => "payment-mode-cheque",
-                            "cash" => "payment-mode-cash",
-                            "bank" => "payment-mode-bank",
-                            _ => ""
-                        };
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@(row.Date ?? "")</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td>@(row.SavingType ?? "")</td>
-                            <td class="text-right @(isDeposit ? "highlight-deposit" : "highlight-withdrawal")">
-                                @(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")
-                            </td>
-                            <td>
-                                @if (!string.IsNullOrEmpty(row.PaymentMode))
-                                {
-                                    <span class="payment-mode-badge @paymentClass">@row.PaymentMode</span>
-                                }
-                            </td>
+                            <tr class="savingtype-header">
+                                <td></td>
+                                <td colspan="6">@stGroup.Key</td>
+                            </tr>
+
+                            decimal stTotal = 0;
+                            int sn = 0;
+                            foreach (var row in stGroup)
+                            {
+                                sn++;
+                                dateRecordCount++;
+                                stTotal += row.Amount ?? 0;
+                                dateTotal += row.Amount ?? 0;
+
+                                <tr class="txn-row">
+                                    <td></td>
+                                    <td></td>
+                                    <td>@sn</td>
+                                    <td>@row.MemberId</td>
+                                    <td>@row.MemberName</td>
+                                    @* Bill No. has no source field on SavingDepositDateWiseRowDto - left blank *@
+                                    <td></td>
+                                    <td>@row.AccountNo</td>
+                                </tr>
+                                <tr class="txn-row" style="display:none;"></tr>
+                            }
+
+                            <tr class="savingtype-total">
+                                <td></td>
+                                <td colspan="4"></td>
+                                <td class="text-right">@stGroup.Key</td>
+                                <td class="text-right">@stTotal.ToString("N2")</td>
+                            </tr>
+                        }
+
+                        <tr class="date-total">
+                            <td colspan="2" class="text-right">Total Records: @dateRecordCount</td>
+                            <td colspan="3" class="text-center">@dateGroup.Key</td>
+                            <td></td>
+                            <td class="text-right">@dateTotal.ToString("N2")</td>
                         </tr>
                     }
+
                     <tr class="grand-total">
-                        <td colspan="7" class="text-right"><strong>Total</strong></td>
-                        <td class="text-right"><strong>@totalAmount.ToString("N2")</strong></td>
-                    </tr>
-                    @if (totalDepositAmount > 0 && totalWithdrawalAmount > 0)
-                    {
-                        <tr>
-                            <td colspan="6" class="text-right"><strong>Total Deposit</strong></td>
-                            <td class="text-right highlight-deposit"><strong>@totalDepositAmount.ToString("N2")</strong></td>
-                            <td></td>
-                        </tr>
-                        <tr>
-                            <td colspan="6" class="text-right"><strong>Total Withdrawal</strong></td>
-                            <td class="text-right highlight-withdrawal"><strong>@totalWithdrawalAmount.ToString("N2")</strong></td>
-                            <td></td>
-                        </tr>
-                    }
-                    <tr>
-                        <td colspan="6" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-right"><strong>@totalRecords</strong></td>
-                        <td></td>
+                        <td colspan="6" class="text-right">Grand Total</td>
+                        <td class="text-right">@rows.Sum(r => r.Amount ?? 0).ToString("N2")</td>
                     </tr>
                 }
                 else
                 {
-                    <tr><td colspan="8" class="text-center">No @transactionType.ToLower() transactions found for the selected criteria</td></tr>
+                    <tr><td colspan="7" class="text-center">No @transactionType.ToLower() transactions found for the selected criteria</td></tr>
                 }
             </tbody>
         </table>

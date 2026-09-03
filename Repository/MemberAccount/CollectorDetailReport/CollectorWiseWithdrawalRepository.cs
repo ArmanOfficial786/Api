@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.CollectorDetailReport;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.CollectorDetailReport;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.CollectorDetRepInterface;
 using System.Data;
 using System.Text;
 

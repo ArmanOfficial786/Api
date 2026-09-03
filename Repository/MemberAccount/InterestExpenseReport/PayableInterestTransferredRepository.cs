@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestExpenseReport;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Interfaces.ServiceInterface.MemberAccount.InterestExpenseReport;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestExpenseReportInterface;
 using System.Data;
 using System.Text;
 

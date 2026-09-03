@@ -4,22 +4,26 @@
 @{
     Layout = null;
     var rows = (Model["Rows"] as List<SavingAccountDeletedRowDto>) ?? new List<SavingAccountDeletedRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
+    var totalDeletedAccounts = Model["TotalDeletedAccounts"] as int? ?? 0;
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "";
+    var branchNames = Model["BranchNames"]?.ToString() ?? "All";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
-    var totalDeletedAccounts = Model["TotalDeletedAccounts"] as int? ?? 0;
+
+    var generatedOn = Model.ContainsKey("ReportGeneratedOnBs") && Model["ReportGeneratedOnBs"] != null
+        ? Model["ReportGeneratedOnBs"].ToString()
+        : DateTime.Now.ToString("yyyy/MM/dd");
+
+    // Rows must arrive pre-sorted by DepositTypeName so GroupBy (which preserves
+    // first-seen order, not sorted order) produces contiguous per-type groups.
+    var typeGroups = rows.GroupBy(r => r.DepositTypeName).ToList();
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Saving Account Deleted Report</title>
+    <title>Savings Account Deleted Report</title>
     <style>
             * {
                 margin: 0;
@@ -29,8 +33,9 @@
 
             body {
                 font-family: Arial, sans-serif;
-                font-size: 9pt;
+                font-size: 9.5pt;
                 background: white;
+                color: #000;
             }
 
             .report-container {
@@ -38,34 +43,87 @@
                 overflow: visible;
             }
 
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
+            .report-title {
+                text-align: center;
+                font-size: 15pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 10px 0 12px 0;
             }
 
-                .data-table td, .data-table th {
-                    padding: 4px 6px;
-                    border: 1px solid #ccc;
+            /* Meta section: outer table has 2 cells side by side.
+                           LEFT cell holds Branch Name / Report Generated On stacked, left-aligned.
+                           RIGHT cell holds a nested table pinned to the RIGHT edge via
+                           margin-left:auto (not just text-align, which doesn't move block tables). */
+            .meta-table {
+                width: 100%;
+                margin-bottom: 10px;
+                font-size: 9.5pt;
+                border-bottom: 1.5px solid #000;
+                padding-bottom: 8px;
+            }
+
+                .meta-table > tbody > tr > td {
+                    vertical-align: top;
                 }
 
-                .data-table th {
-                    background: #f2f2f2;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
+            .meta-left {
+                width: 55%;
+            }
+
+                .meta-left table td {
+                    padding: 2px 4px;
+                }
+
+                .meta-left .label {
+                    font-weight: bold;
+                    white-space: nowrap;
+                    width: 150px;
+                }
+
+            .meta-right {
+                width: 45%;
+            }
+
+            .meta-right-table {
+                margin-left: auto;
+                margin-right: 0;
+            }
+
+                .meta-right-table td {
+                    padding: 2px 4px;
+                    white-space: nowrap;
+                }
+
+                .meta-right-table .label {
+                    font-weight: bold;
                     text-align: left;
                 }
 
-                .data-table thead {
-                    display: table-row-group;
+                .meta-right-table .value {
+                    text-align: left;
                 }
 
-            .grand-total {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
+            /* No cell grid - only rule lines, matching target design */
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9.5pt;
             }
+
+                .data-table td, .data-table th {
+                    padding: 3px 6px;
+                    border: none;
+                }
+
+                .data-table thead th {
+                    text-align: left;
+                    font-weight: bold;
+                    border-top: 2px solid #000;
+                    border-bottom: 1.5px solid #000;
+                    padding: 5px 6px;
+                    line-height: 1.3;
+                }
 
             .text-right {
                 text-align: right !important;
@@ -75,35 +133,45 @@
                 text-align: center !important;
             }
 
-            .filter-info {
-                margin-bottom: 4px;
+            /* Deposit type group header row - bold plain text, no border, no background,
+                                   extra top spacing before each new group to separate it from the previous
+                                   group's rule line, matching the target image exactly. */
+            .type-row td {
+                font-weight: bold;
+                padding-top: 14px;
+                padding-bottom: 4px;
+                border: none;
             }
 
-            .report-title {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
+            /* First group right under the column header needs less top spacing */
+            .type-row.first-group td {
+                padding-top: 6px;
             }
 
-            .highlight-deleted {
-                color: #c62828;
-                font-weight: bold;
+            /* Account rows under a deposit type - no borders except the closing rule */
+            .account-row td {
+                padding-top: 2px;
+                padding-bottom: 2px;
+                border: none;
             }
 
-            .deleted-badge {
-                display: inline-block;
-                padding: 1px 8px;
-                border-radius: 3px;
-                font-size: 7pt;
+            /* Rule line under ONLY the last account row of a group */
+            .account-row.last-in-group td {
+                border-bottom: 1px solid #000;
+                padding-bottom: 4px;
+            }
+
+            .grand-total td {
                 font-weight: bold;
-                background: #ffebee;
-                color: #c62828;
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                padding-top: 6px;
+                padding-bottom: 6px;
             }
 
             @@media print {
                 .data-table thead {
-                    display: table-row-group;
+                    display: table-header-group;
                 }
             }
     </style>
@@ -115,74 +183,83 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
+        <div class="report-title">Savings Account Deleted Report</div>
+
+        <table class="meta-table">
+            <tr>
+                <td class="meta-left">
+                    <table>
+                        <tr>
+                            <td class="label">Branch Name :</td>
+                            <td>@branchNames</td>
+                        </tr>
+                        <tr>
+                            <td class="label">Report Generated On :</td>
+                            <td>@generatedOn</td>
+                        </tr>
+                    </table>
+                </td>
+                <td class="meta-right">
+                    <table class="meta-right-table">
+                        <tr>
+                            <td class="label">From Date :</td>
+                            <td class="value">@fromDate</td>
+                        </tr>
+                        <tr>
+                            <td class="label">To Date :</td>
+                            <td class="value">@toDate</td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+
         <table class="data-table">
             <thead>
                 <tr>
-                    <th colspan="9" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
-                        Saving Account Deleted Report
-                    </th>
-                </tr>
-                <tr>
-                    <td colspan="9">
-                        <div class="filter-info">
-                            <strong>Branches:</strong> @branchNames &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Generated:</strong> @generatedOn
-                        </div>
-                    </td>
-                </tr>
-                <tr>
-                    <th style="width:3%;">SN</th>
-                    <th style="width:12%;">Member Id</th>
-                    <th style="width:18%;">Member Name</th>
-                    <th style="width:12%;">Account No</th>
-                    <th style="width:12%;">Account Open</th>
-                    <th style="width:10%;">Deposit Type</th>
-                    <th style="width:10%;" class="text-right">Balance</th>
-                    <th style="width:10%;">Deleted Date</th>
-                    <th style="width:13%;">Deleted By</th>
+                    <th style="width:22%;">Deposit Type</th>
+                    <th style="width:14%;">Member Id</th>
+                    <th style="width:24%;">Member Name</th>
+                    <th style="width:16%;">Account No</th>
+                    <th style="width:12%;">Opened<br />Date</th>
+                    <th style="width:12%;">Deleted<br />Date</th>
                 </tr>
             </thead>
             <tbody>
-                @if (rows.Any())
+                @if (typeGroups.Any())
                 {
-                    int sn = 0;
-                    foreach (var row in rows)
+                    bool isFirstGroup = true;
+                    foreach (var typeGroup in typeGroups)
                     {
-                        sn++;
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td>@(row.AccountOpenOnBs ?? "")</td>
-                            <td>@(row.DepositTypeName ?? "")</td>
-                            <td class="text-right">@(row.AccountBalance.HasValue ? row.AccountBalance.Value.ToString("N2") : "")</td>
-                            <td class="highlight-deleted">@(row.DeletedDate ?? "")</td>
-                            <td>@(row.DeletedBy ?? "")</td>
+                        <tr class="type-row @(isFirstGroup ? "first-group" : "")">
+                            <td colspan="6">@typeGroup.Key</td>
                         </tr>
+                        isFirstGroup = false;
+
+                        var accountsInGroup = typeGroup.ToList();
+                        for (int i = 0; i < accountsInGroup.Count; i++)
+                        {
+                            var row = accountsInGroup[i];
+                            var isLast = i == accountsInGroup.Count - 1;
+                            <tr class="account-row @(isLast ? "last-in-group" : "")">
+                                <td></td>
+                                <td>@row.MemberId</td>
+                                <td>@row.MemberName</td>
+                                <td>@row.AccountNo</td>
+                                <td>@row.AccountOpenOnBs</td>
+                                <td>@row.DeletedDate</td>
+                            </tr>
+                        }
                     }
+
                     <tr class="grand-total">
-                        <td colspan="6" class="text-right"><strong>Total</strong></td>
-                        <td class="text-right"><strong>@totalBalance.ToString("N2")</strong></td>
-                        <td colspan="2"></td>
-                    </tr>
-                    <tr>
-                        <td colspan="6" class="text-right"><strong>Total Deleted Accounts</strong></td>
-                        <td class="text-right"><strong>@totalDeletedAccounts</strong></td>
-                        <td colspan="2"></td>
-                    </tr>
-                    <tr>
-                        <td colspan="6" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-right"><strong>@totalRecords</strong></td>
-                        <td colspan="2"></td>
+                        <td colspan="5" class="text-right">Total Deleted Accounts</td>
+                        <td class="text-right">@totalDeletedAccounts</td>
                     </tr>
                 }
                 else
                 {
-                    <tr><td colspan="9" class="text-center">No deleted saving accounts found for the selected criteria</td></tr>
+                    <tr><td colspan="6" class="text-center">No deleted saving accounts found for the selected criteria</td></tr>
                 }
             </tbody>
         </table>

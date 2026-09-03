@@ -50,7 +50,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
             _dateConverter = dateConverter;
         }
 
-        [HttpPost("GenerateReport")]
+        [HttpPost()]
         public async Task<ActionResult<GeneralResponse<ReportResponseDtos>>> GenerateReport(
             [FromBody] SalaryTransactionRequestDto request,
             [FromQuery] string format = "VIEW")
@@ -173,7 +173,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VSalaryTransactionReport.cshtml"
-                    : "Views/Report/MemberAC/SalaryTransactionReport.cshtml";
+                    : "Views/Report/MemberAC/OthersReport/SalaryTransactionReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

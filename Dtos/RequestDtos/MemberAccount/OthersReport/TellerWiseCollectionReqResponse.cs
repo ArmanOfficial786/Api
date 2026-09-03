@@ -6,7 +6,6 @@
         public string ToDateBs { get; set; } = string.Empty;
         public long? TellerId { get; set; }
         public string OrderBy { get; set; } = "Account No";
-        public bool SameCompanyName { get; set; } = true;
         public bool VisualReport { get; set; } = false;
     }
     public class TellerWiseCollectionRowDto

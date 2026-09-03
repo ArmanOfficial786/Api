@@ -2,17 +2,30 @@
 @model Dictionary<string, object>
 @{
     Layout = null;
+
     var rows = (Model["Rows"] as List<LoanPaymentThroughSavingRowDto>) ?? new List<LoanPaymentThroughSavingRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "";
     var reportView = Model["ReportView"]?.ToString() ?? "Vertical";
+    var isHorizontal = reportView == "Horizontal";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // Vertical: SN, Date, Member Id, Member Name, Type, Account No, Net Amount, Operator      -> 8 cols
+    // Horizontal: SN, Member Id, Member Name, Saving, Loan, Fine, Interest, Principle, Net Amount, Date, Operator -> 11 cols
+    var colCount = isHorizontal ? 11 : 8;
+    var trailingCols = isHorizontal ? 2 : 1;       // Date+Operator (horizontal) vs Operator (vertical) trailing cells after the amount
+    var totalsLabelSpan = colCount - 1 - trailingCols;
+
+    // Horizontal grand-total row needs its own per-column sums (Fine, Interest, Principle, Net Amount).
+    var totalFine = rows.Sum(r => r.Fine ?? 0);
+    var totalInterest = rows.Sum(r => r.Interest ?? 0);
+    var totalPrincipal = rows.Sum(r => r.Principal ?? 0);
+    var grandTotalLabelSpan = 5; // spans S.NO, Member Id, Member Name, Saving, Loan
 }
 <!DOCTYPE html>
 <html>
@@ -30,6 +43,7 @@
                 font-family: Arial, sans-serif;
                 font-size: 9pt;
                 background: white;
+                color: #000;
             }
 
             .report-container {
@@ -37,33 +51,60 @@
                 overflow: visible;
             }
 
+            thead {
+                display: table-row-group;
+            }
+
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
                 font-size: 9pt;
+                table-layout: fixed;
             }
 
                 .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
                     padding: 4px 6px;
-                    border: 1px solid #ccc;
+                    vertical-align: middle;
                 }
 
-                .data-table th {
-                    background: #f2f2f2;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                }
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
 
-                .data-table thead {
-                    display: table-row-group;
-                }
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
 
-            .grand-total {
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
                 border-top: 2px solid #000;
                 border-bottom: 2px solid #000;
                 font-weight: bold;
                 background: #f9f9f9;
+                padding: 5px 6px;
             }
 
             .text-right {
@@ -74,94 +115,174 @@
                 text-align: center !important;
             }
 
-            .member-box {
-                margin-bottom: 6px;
-            }
-
             @@media print {
-                .data-table thead {
+                thead {
                     display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
                 }
             }
     </style>
 </head>
 <body>
     <div class="report-container">
+
         @if (!isExcel)
         {
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th colspan="@(reportView == "Horizontal" ? 9 : 8)" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
-                        Loan Payment Through Saving Report
-                    </th>
+        <table class="data-table" data-sheet-name="LoanPaymentThroughSaving">
+            @if (isHorizontal)
+            {
+                <colgroup>
+                    <col style="width:4%;" />
+                    <col style="width:9%;" />
+                    <col style="width:14%;" />
+                    <col style="width:9%;" />
+                    <col style="width:9%;" />
+                    <col style="width:8%;" />
+                    <col style="width:9%;" />
+                    <col style="width:9%;" />
+                    <col style="width:10%;" />
+                    <col style="width:9%;" />
+                    <col style="width:10%;" />
+                </colgroup>
+            }
+            else
+            {
+                <colgroup>
+                    <col style="width:4%;" />
+                    <col style="width:11%;" />
+                    <col style="width:11%;" />
+                    <col style="width:19%;" />
+                    <col style="width:11%;" />
+                    <col style="width:16%;" />
+                    <col style="width:13%;" />
+                    <col style="width:15%;" />
+                </colgroup>
+            }
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="@colCount">Loan Payment Through Saving Report</td>
                 </tr>
-                <tr>
-                    <td colspan="@(reportView == "Horizontal" ? 9 : 8)">
-                        <div class="member-box">
-                            <strong>Branches:</strong> @branchNames &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>View:</strong> @reportView &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Generated:</strong> @generatedOn
-                        </div>
+
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Branch Name :</strong> @branchNames</td>
+                    <td colspan="@(colCount - 4)"></td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
+
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="@(colCount - 4)" class="text-right">
+                        <strong>From Date :</strong> @fromDate
+                        &nbsp;&nbsp;&nbsp;
+                        <strong>To Date :</strong> @toDate
                     </td>
                 </tr>
-                <tr>
-                    <th style="width:3%;">SN</th>
-                    <th style="width:12%;">Date</th>
-                    <th style="width:10%;">Member Id</th>
-                    <th style="width:18%;">Member Name</th>
-                    <th style="width:10%;">Type</th>
-                    <th style="width:15%;">Account No</th>
-                    <th style="width:10%;" class="text-right">Net Amount</th>
-                    <th style="width:12%;">Operator</th>
-                    @if (reportView == "Horizontal")
-                    {
-                        <th style="width:10%;">Details</th>
-                    }
-                </tr>
-            </thead>
-            <tbody>
+                <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
+
+                @if (isHorizontal)
+                {
+                    <tr>
+                        <th class="text-center">S.NO.</th>
+                        <th>Member Id</th>
+                        <th>Member Name</th>
+                        <th>Saving</th>
+                        <th>Loan</th>
+                        <th class="text-right">Fine</th>
+                        <th class="text-right">Interest</th>
+                        <th class="text-right">Principle</th>
+                        <th class="text-right">Net Amount</th>
+                        <th>Date</th>
+                        <th>Operator</th>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <th class="text-center">S.NO.</th>
+                        <th>Date</th>
+                        <th>Member Id</th>
+                        <th>Member Name</th>
+                        <th>Type</th>
+                        <th>Account No</th>
+                        <th class="text-right">Net Amount</th>
+                        <th>Operator</th>
+                    </tr>
+                }
+
                 @if (rows.Any())
                 {
                     int sn = 0;
                     foreach (var row in rows)
                     {
                         sn++;
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@(row.Date ?? "")</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.Type ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td class="text-right">@(row.NetAmount.HasValue ? row.NetAmount.Value.ToString("N2") : "")</td>
-                            <td>@(row.Operator ?? "")</td>
-                            @if (reportView == "Horizontal")
-                            {
-                                <td>@(row.Details ?? "")</td>
-                            }
+                        if (isHorizontal)
+                        {
+                            <tr class="detail-row">
+                                <td class="text-center">@sn</td>
+                                <td>@(row.MemberId ?? "")</td>
+                                <td>@(row.MemberName ?? "")</td>
+                                <td>@(row.SavingAccountNo ?? "")</td>
+                                <td>@(row.LoanAccountNo ?? "")</td>
+                                <td class="text-right">@(row.Fine.HasValue ? row.Fine.Value.ToString("N2") : "")</td>
+                                <td class="text-right">@(row.Interest.HasValue ? row.Interest.Value.ToString("N2") : "")</td>
+                                <td class="text-right">@(row.Principal.HasValue ? row.Principal.Value.ToString("N2") : "")</td>
+                                <td class="text-right">@(row.NetAmount.HasValue ? row.NetAmount.Value.ToString("N2") : "")</td>
+                                <td>@(row.Date ?? "")</td>
+                                <td>@(row.Operator ?? "")</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            <tr class="detail-row">
+                                <td class="text-center">@sn</td>
+                                <td>@(row.Date ?? "")</td>
+                                <td>@(row.MemberId ?? "")</td>
+                                <td>@(row.MemberName ?? "")</td>
+                                <td>@(row.Type ?? "")</td>
+                                <td>@(row.AccountNo ?? "")</td>
+                                <td class="text-right">@(row.NetAmount.HasValue ? row.NetAmount.Value.ToString("N2") : "")</td>
+                                <td>@(row.Operator ?? "")</td>
+                            </tr>
+                        }
+                    }
+
+                    if (isHorizontal)
+                    {
+                        <tr class="grand-total-row">
+                            <td colspan="@grandTotalLabelSpan" class="text-right">Grand Total</td>
+                            <td class="text-right">@totalFine.ToString("N2")</td>
+                            <td class="text-right">@totalInterest.ToString("N2")</td>
+                            <td class="text-right">@totalPrincipal.ToString("N2")</td>
+                            <td class="text-right">@totalAmount.ToString("N2")</td>
+                            <td colspan="2"></td>
                         </tr>
                     }
-                    <tr class="grand-total">
-                        <td colspan="@(reportView == "Horizontal" ? 6 : 6)" class="text-right"><strong>Total</strong></td>
-                        <td class="text-right"><strong>@totalAmount.ToString("N2")</strong></td>
-                        <td colspan="@(reportView == "Horizontal" ? 2 : 1)"></td>
-                    </tr>
-                    <tr>
-                        <td colspan="@(reportView == "Horizontal" ? 6 : 6)" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-right"><strong>@totalRecords</strong></td>
-                        <td colspan="@(reportView == "Horizontal" ? 2 : 1)"></td>
+                    else
+                    {
+                        <tr class="grand-total-row">
+                            <td colspan="@totalsLabelSpan" class="text-right">Grand Total</td>
+                            <td class="text-right">@totalAmount.ToString("N2")</td>
+                            <td colspan="@trailingCols"></td>
+                        </tr>
+                    }
+                    <tr class="grand-total-row">
+                        <td colspan="@totalsLabelSpan" class="text-right">Total Records</td>
+                        <td class="text-right">@totalRecords</td>
+                        <td colspan="@trailingCols"></td>
                     </tr>
                 }
                 else
                 {
-                    <tr><td colspan="@(reportView == "Horizontal" ? 9 : 8)" class="text-center">No data found for the selected criteria</td></tr>
+                    <tr>
+                        <td colspan="@colCount" class="text-center">No data found for the selected criteria</td>
+                    </tr>
                 }
             </tbody>
         </table>

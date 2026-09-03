@@ -18,7 +18,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
     [ApiController]
     [Route("api/[controller]")]
     [Authorize]
-    public class SavingDepositMemberWiseController : ControllerBase
+    public class SavingDepositAmountMemberWiseController : ControllerBase
     {
         private readonly ISavingDepositMemberWiseRepository _repository;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
@@ -26,17 +26,17 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly ILogger<SavingDepositMemberWiseController> _logger;
+        private readonly ILogger<SavingDepositAmountMemberWiseController> _logger;
         private readonly IDateConverterService _dateConverter;
 
-        public SavingDepositMemberWiseController(
+        public SavingDepositAmountMemberWiseController(
             ISavingDepositMemberWiseRepository repository,
             ICommonHeaderRepository commonHeaderRepository,
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<SavingDepositMemberWiseController> logger,
+            ILogger<SavingDepositAmountMemberWiseController> logger,
             IDateConverterService dateConverter)
         {
             _repository = repository;
@@ -49,8 +49,8 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
             _dateConverter = dateConverter;
         }
 
-        [HttpPost("GenerateReport")]
-        public async Task<ActionResult<GeneralResponse<ReportResponseDtos>>> GenerateReport(
+        [HttpPost()]
+        public async Task<IActionResult> GenerateReport(
             [FromBody] SavingDepositMemberWiseRequestDto request,
             [FromQuery] string format = "VIEW")
         {
@@ -60,86 +60,34 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
                 var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
                 {
-                    return Unauthorized(new GeneralResponse<ReportResponseDtos>
-                    {
-                        isValid = false,
-                        statusCode = 401,
-                        message = "User not authenticated"
-                    });
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
                 }
-
-                // Validate request
-                if (request.ReportMode == "DateWise")
-                {
-                    if (string.IsNullOrEmpty(request.FromDateBs) || request.FromDateBs == "-1")
-                        return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "From date is required for Date Wise report" });
-                    if (string.IsNullOrEmpty(request.ToDateBs) || request.ToDateBs == "-1")
-                        return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "To date is required for Date Wise report" });
-
-                    var fromDate = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
-                    var toDate = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
-                    if (fromDate > toDate)
-                    {
-                        return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "From date cannot be greater than To date" });
-                    }
-                }
-
-                if (string.IsNullOrEmpty(request.BranchIds) || request.BranchIds == "-1")
-                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "Please select at least one branch" });
-
-                if (request.ReportMode == "MemberWise" && (!request.MemberId.HasValue || request.MemberId.Value == -1))
-                    return BadRequest(new GeneralResponse<ReportResponseDtos> { isValid = false, statusCode = 400, message = "Please select a member for Member Wise report" });
 
                 var reportName = $"SavingDepositMemberWise_{request.TransactionType}";
                 var upperFormat = format.ToUpper();
+                if (request == null || !ModelState.IsValid)
+                {
+                    return NotFound(new { success = false, StatusCode = 400, message = "Invalid request" });
+                }
                 var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
-
                 if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
                 {
-                    var cachedResult = await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, reportName,
+                    return await ReportExportHelper.ExportFromCacheAsync(
+                        reportKey, upperFormat,
+                        reportName,
                         _jsReportService, _logger);
-
-                    if (cachedResult is FileContentResult fileResult)
-                    {
-                        return Ok(new GeneralResponse<ReportResponseDtos>
-                        {
-                            isValid = true,
-                            statusCode = 200,
-                            message = "Report generated from cache",
-                            data = new ReportResponseDtos
-                            {
-                                pdfData = Convert.ToBase64String(fileResult.FileContents),
-                                reportName = $"{reportName}.{upperFormat.ToLower()}"
-                            }
-                        });
-                    }
                 }
 
                 var data = await _repository.GetReportDataAsync(request);
 
                 if (!data.Rows.Any())
                 {
-                    return NotFound(new GeneralResponse<ReportResponseDtos>
-                    {
-                        isValid = false,
-                        statusCode = 404,
-                        message = $"No {request.TransactionType.ToLower()} transactions found for the selected criteria"
-                    });
+                    return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
                 }
-
-                // Header data
-                var officeIdClaim = User.FindFirst("OfficeId")?.Value;
-                string? branchIdForHeader = null;
-                if (!string.IsNullOrEmpty(officeIdClaim) && long.TryParse(officeIdClaim, out var officeId))
-                {
-                    branchIdForHeader = officeId.ToString();
-                }
-
-                var headerData = await _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+                var headerData = await _commonHeaderRepository.GetCommonHeaders();
 
                 var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
                 await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
@@ -168,7 +116,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VSavingDepositMemberWiseReport.cshtml"
-                    : "Views/Report/MemberAC/SavingDepositMemberWiseReport.cshtml";
+                    : "Views/Report/MemberAC/OthersReport/SavingDepositMemberWiseReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -196,57 +144,19 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
 
                     return new FileContentResult(pdfBytes, "application/pdf");
                 }
-
-                var exportResult = await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, reportName,
-                    _jsReportService, _logger);
-
-                if (exportResult is FileContentResult fileResult2)
-                {
-                    return Ok(new GeneralResponse<ReportResponseDtos>
-                    {
-                        isValid = true,
-                        statusCode = 200,
-                        message = "Report generated successfully",
-                        data = new ReportResponseDtos
-                        {
-                            pdfData = Convert.ToBase64String(fileResult2.FileContents),
-                            reportName = $"{reportName}.{upperFormat.ToLower()}",
-                            pagination = new Pagination
-                            {
-                                currentPage = 1,
-                                totalPages = 1,
-                                pageSize = 1,
-                                totalRecord = data.Rows.Count
-                            }
-                        }
-                    });
-                }
-
-                return Ok(new GeneralResponse<ReportResponseDtos>
-                {
-                    isValid = true,
-                    statusCode = 200,
-                    message = "Report generated successfully"
-                });
+                return await ReportExportHelper.ExportFromCacheAsync(
+                                  reportKey, upperFormat,
+                                  reportName,
+                                  _jsReportService, _logger);
             }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new GeneralResponse<ReportResponseDtos>
-                {
-                    isValid = false,
-                    statusCode = 400,
-                    message = ex.Message
-                });
-            }
+
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Saving Deposit Member Wise report generation failed");
-                return StatusCode(500, new GeneralResponse<ReportResponseDtos>
+                return StatusCode(500, new
                 {
-                    isValid = false,
-                    statusCode = 500,
-                    message = "An error occurred while generating the report"
+                    message = ex.Message,
+                    inner = ex.InnerException?.Message,
+                    stack = ex.StackTrace
                 });
             }
         }

@@ -2,16 +2,16 @@
 @model Dictionary<string, object>
 @{
     Layout = null;
+
     var rows = (Model["Rows"] as List<SavingTransferRowDto>) ?? new List<SavingTransferRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 }
 <!DOCTYPE html>
 <html>
@@ -29,6 +29,7 @@
                 font-family: Arial, sans-serif;
                 font-size: 9pt;
                 background: white;
+                color: #000;
             }
 
             .report-container {
@@ -36,33 +37,60 @@
                 overflow: visible;
             }
 
+            thead {
+                display: table-row-group;
+            }
+
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
                 font-size: 9pt;
+                table-layout: fixed;
             }
 
                 .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
                     padding: 4px 6px;
-                    border: 1px solid #ccc;
+                    vertical-align: middle;
                 }
 
-                .data-table th {
-                    background: #f2f2f2;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                }
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
 
-                .data-table thead {
-                    display: table-row-group;
-                }
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
 
-            .grand-total {
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
                 border-top: 2px solid #000;
                 border-bottom: 2px solid #000;
                 font-weight: bold;
                 background: #f9f9f9;
+                padding: 5px 6px;
             }
 
             .text-right {
@@ -73,85 +101,96 @@
                 text-align: center !important;
             }
 
-            .member-box {
-                margin-bottom: 6px;
-            }
-
             @@media print {
-                .data-table thead {
+                thead {
                     display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
                 }
             }
     </style>
 </head>
 <body>
     <div class="report-container">
+
         @if (!isExcel)
         {
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th colspan="8" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
-                        Saving Transfer Report
-                    </th>
+        <table class="data-table" data-sheet-name="SavingTransfer">
+            <colgroup>
+                <col style="width:10%;" />
+                <col style="width:16%;" />
+                <col style="width:16%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:14%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="7">Saving Transfer Report</td>
                 </tr>
-                <tr>
-                    <td colspan="8">
-                        <div class="member-box">
-                            <strong>Branches:</strong> @branchNames &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Generated:</strong> @generatedOn
-                        </div>
+
+                <tr class="meta-row">
+                    <td colspan="3"><strong>Branch Name :</strong> @branchNames</td>
+                    <td colspan="4" class="text-right">
+                        <strong>From Date :</strong> @fromDate
+                        &nbsp;&nbsp;&nbsp;
+                        <strong>To Date :</strong> @toDate
                     </td>
                 </tr>
-                <tr>
-                    <th style="width:3%;">SN</th>
-                    <th style="width:12%;">Date</th>
-                    <th style="width:10%;">Member Id</th>
-                    <th style="width:18%;">Member Name</th>
-                    <th style="width:10%;">Type</th>
-                    <th style="width:15%;">Account No</th>
-                    <th style="width:10%;" class="text-right">Amount</th>
-                    <th style="width:12%;">Operator</th>
+                <tr class="meta-row">
+                    <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="4"></td>
                 </tr>
-            </thead>
-            <tbody>
+                <tr class="meta-spacer"><td colspan="7"></td></tr>
+
+                <tr>
+                    <th>Member Id</th>
+                    <th>Member Name</th>
+                    <th>Account No</th>
+                    <th>Type</th>
+                    <th class="text-right">Amount</th>
+                    <th>Date</th>
+                    <th>Operator</th>
+                </tr>
+
                 @if (rows.Any())
                 {
-                    int sn = 0;
                     foreach (var row in rows)
                     {
-                        sn++;
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@(row.Date ?? "")</td>
+                        <tr class="detail-row">
                             <td>@(row.MemberId ?? "")</td>
                             <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.Type ?? "")</td>
                             <td>@(row.AccountNo ?? "")</td>
+                            <td>@(row.Type ?? "")</td>
                             <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
+                            <td>@(row.Date ?? "")</td>
                             <td>@(row.Operator ?? "")</td>
                         </tr>
                     }
-                    <tr class="grand-total">
-                        <td colspan="6" class="text-right"><strong>Total</strong></td>
-                        <td class="text-right"><strong>@totalAmount.ToString("N2")</strong></td>
-                        <td></td>
+
+                    <tr class="grand-total-row">
+                        <td colspan="4" class="text-right">Grand Total</td>
+                        <td class="text-right">@totalAmount.ToString("N2")</td>
+                        <td colspan="2"></td>
                     </tr>
-                    <tr>
-                        <td colspan="6" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-right"><strong>@totalRecords</strong></td>
-                        <td></td>
+                    <tr class="grand-total-row">
+                        <td colspan="4" class="text-right">Total Records</td>
+                        <td class="text-right">@totalRecords</td>
+                        <td colspan="2"></td>
                     </tr>
                 }
                 else
                 {
-                    <tr><td colspan="8" class="text-center">No data found for the selected criteria</td></tr>
+                    <tr>
+                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
+                    </tr>
                 }
             </tbody>
         </table>

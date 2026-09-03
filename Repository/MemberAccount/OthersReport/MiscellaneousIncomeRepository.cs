@@ -1,5 +1,4 @@
-﻿
-using Dapper;
+﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
@@ -31,35 +30,28 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
         {
             try
             {
-                // Convert Nepali dates to English
                 var fromDateAd = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
                 var toDateAd = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
 
                 var fromDateStr = fromDateAd.ToString("yyyy-MM-dd");
                 var toDateStr = toDateAd.ToString("yyyy-MM-dd");
 
-                // Build filter expression
                 var sqlFilterExp = new StringBuilder();
 
-                // Branch filter
                 if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
                 {
                     sqlFilterExp.Append($" AND t.UsmOfficeId IN ({request.BranchIds})");
                 }
 
-                // Member filter
                 if (request.MemberId.HasValue && request.MemberId.Value != -1)
                 {
                     sqlFilterExp.Append($" AND t.MemMemberRegistrationId = {request.MemberId.Value}");
                 }
 
-                // Date filter
                 sqlFilterExp.Append($" AND t.TransactionOn BETWEEN '{fromDateStr}' AND '{toDateStr}'");
 
-                // Build Order By clause
                 var orderByClause = BuildOrderByClause(request.OrderBy);
 
-                // Determine stored procedure based on report type
                 string spName = request.ReportType == "Fund"
                     ? "sp_5_43_GetMiscellaneousFund"
                     : "sp_5_43_GetMiscellaneousIncome";
@@ -71,15 +63,38 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
-                var rows = await connection.QueryAsync<MiscellaneousIncomeRowDto>(
+                // Dynamic query (dictionary rows) so Type/AccountNo can be explicitly
+                // remapped to Particulars/Details below — a strict typed query would
+                // leave those two properties null since the SP's aliases don't match
+                // the DTO's property names.
+                var rawRows = await connection.QueryAsync(
                     spName,
                     parameters,
                     commandType: CommandType.StoredProcedure
                 );
 
-                var resultList = rows.AsList();
+                var resultList = new List<MiscellaneousIncomeRowDto>();
+                foreach (IDictionary<string, object> r in rawRows)
+                {
+                    resultList.Add(new MiscellaneousIncomeRowDto
+                    {
+                        Date = GetString(r, "Date"),
+                        MemberId = GetString(r, "MemberId"),
+                        MemberName = GetString(r, "MemberName"),
 
-                // Get member details if specific member is selected
+                        // Confirmed from sp_5_43_GetMiscellaneousIncome / sp_5_43_GetMiscellaneousFund:
+                        // "Type" is the charge/ledger-head label -> our group header (Particulars).
+                        Particulars = GetString(r, "Type"),
+
+                        // "AccountNo" is the per-transaction CASE-built description
+                        // (e.g. "Loan Issue Deposit (SL-01-17)", "Bank Deposit") -> Details.
+                        Details = GetString(r, "AccountNo"),
+
+                        Amount = GetDecimal(r, "Amount"),
+                        Operator = GetString(r, "Operator", "OperatorName")
+                    });
+                }
+
                 string? selectedMemberId = null;
                 string? selectedMemberName = null;
                 if (request.MemberId.HasValue && request.MemberId.Value != -1)
@@ -113,16 +128,51 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
             }
         }
 
+        // --------------------------------------------------------------
+        // Case-insensitive, multi-alias lookups into a Dapper dynamic row.
+        // --------------------------------------------------------------
+        private static string? GetString(IDictionary<string, object> row, params string[] keys)
+        {
+            foreach (var key in keys)
+            {
+                var match = row.Keys.FirstOrDefault(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase));
+                if (match != null && row[match] != null && row[match] != DBNull.Value)
+                    return row[match].ToString();
+            }
+            return null;
+        }
+
+        private static decimal? GetDecimal(IDictionary<string, object> row, params string[] keys)
+        {
+            foreach (var key in keys)
+            {
+                var match = row.Keys.FirstOrDefault(k => string.Equals(k, key, StringComparison.OrdinalIgnoreCase));
+                if (match != null && row[match] != null && row[match] != DBNull.Value &&
+                    decimal.TryParse(row[match].ToString(), out var val))
+                {
+                    return val;
+                }
+            }
+            return null;
+        }
+
         private static string BuildOrderByClause(string orderBy)
         {
+            // NOTE: these column names must match the SP's own SELECT aliases
+            // (Type, AccountNo, MemberIdFirst, MemberIdLast, MemberName, Date, Amount) —
+            // @SqlFilterExp is concatenated directly after the SP's WHERE clause and
+            // executed as part of that same SELECT, so ORDER BY sees the SP's aliases,
+            // not our C# DTO property names.
             return orderBy switch
             {
-                "Member Id" => " ORDER BY substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId",
+                // SP already exposes MemberIdFirst/MemberIdLast as numeric parts — use them directly
+                // instead of re-deriving via substring/charindex.
+                "Member Id" => " ORDER BY MemberIdFirst, MemberIdLast",
                 "Member Name" => " ORDER BY MemberName",
-                "Particulars" => " ORDER BY AccountNo",
+                "Particulars" => " ORDER BY Type",
                 "Date" => " ORDER BY Date",
                 "Amount" => " ORDER BY Amount DESC",
-                _ => " ORDER BY MemberId"
+                _ => " ORDER BY MemberIdFirst, MemberIdLast"
             };
         }
 

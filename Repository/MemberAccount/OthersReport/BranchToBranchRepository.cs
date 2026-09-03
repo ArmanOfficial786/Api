@@ -28,14 +28,12 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
         {
             try
             {
-                // Convert Nepali dates to English
                 var fromDateAd = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
                 var toDateAd = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
 
                 var fromDateStr = fromDateAd.ToString("yyyy-MM-dd");
                 var toDateStr = toDateAd.ToString("yyyy-MM-dd");
 
-                // Build @SqlFilterExp like the legacy BLL
                 var sqlFilterExp = new StringBuilder();
                 sqlFilterExp.Append(" And t.TransactionOn between '")
                             .Append(fromDateStr).Append("' And '")
@@ -51,7 +49,6 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
                     sqlFilterExp.Append(" And t.HurCollectorId = ").Append(request.CollectorId.Value);
                 }
 
-                // Build Account Expression based on Report Type
                 var sqlAccountExp = new StringBuilder();
                 switch (request.ReportType)
                 {
@@ -68,11 +65,9 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
                         sqlAccountExp.Append(" And m.UsmOfficeId = ").Append(request.BranchToId);
                         break;
                     default: // All
-                        // For All, we handle multiple joins
                         break;
                 }
 
-                // Build Order By
                 var sqlOrderBy = new StringBuilder();
                 switch (request.OrderBy)
                 {
@@ -103,19 +98,12 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
                 parameters.Add("@SqlFilterOrderBy", sqlOrderBy.ToString(), DbType.String, size: -1);
                 parameters.Add("@SqlCollectorExp", string.Empty, DbType.String, size: -1);
 
-                DataTable dt = new DataTable();
-
-                // Based on report type, call different SP or use different queries
                 if (request.ReportType == "All")
                 {
-                    // For "All", we need to merge data from multiple SPs
-                    // We'll call each SP and merge the results
-                    var allRows = await GetAllReportDataAsync(connection, parameters, request);
-                    return allRows;
+                    return await GetAllReportDataAsync(connection, parameters, request);
                 }
                 else
                 {
-                    // For specific types, call the corresponding SP
                     string spName = GetStoredProcedureName(request.ReportType);
                     var rows = await connection.QueryAsync<BranchToBranchCollectionRowDto>(
                         spName,
@@ -124,8 +112,8 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
                     );
 
                     var resultList = rows.AsList();
+                    NormalizeSavingType(resultList);
 
-                    // Get office and collector names
                     var branchFromName = await GetOfficeNameByIdAsync(request.BranchFromId);
                     var branchToName = await GetOfficeNameByIdAsync(request.BranchToId);
                     string? collectorName = null;
@@ -164,30 +152,32 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
             DynamicParameters baseParams,
             BranchToBranchCollectionRequestDto request)
         {
-            // For "All" type, we need to call multiple SPs and merge
             var allRows = new List<BranchToBranchCollectionRowDto>();
 
-            string[] spNames = {
-                "sp_5_43_GetBranchToBranchCollectionSaving",
-                "sp_5_43_GetBranchToBranchCollectionLoan",
-                "sp_5_43_GetBranchToBranchCollectionMiscellineous",
-                "sp_5_43_GetBranchToBranchCollectionShare"
+            // Each SP maps to a distinct report-type label — used as a fallback
+            // when the SP doesn't return SavingType/Type itself (see NormalizeSavingType).
+            var spNamesWithLabel = new (string SpName, string Label)[]
+            {
+                ("sp_5_43_GetBranchToBranchCollectionSaving", "Saving Wise"),
+                ("sp_5_43_GetBranchToBranchCollectionLoan", "Loan Wise"),
+                ("sp_5_43_GetBranchToBranchCollectionMiscellineous", "Miscellaneous Wise"),
+                ("sp_5_43_GetBranchToBranchCollectionShare", "Share Wise")
             };
 
-            foreach (var spName in spNames)
+            foreach (var (spName, label) in spNamesWithLabel)
             {
-                var rows = await connection.QueryAsync<BranchToBranchCollectionRowDto>(
+                var rows = (await connection.QueryAsync<BranchToBranchCollectionRowDto>(
                     spName,
                     baseParams,
                     commandType: CommandType.StoredProcedure
-                );
+                )).AsList();
+
+                NormalizeSavingType(rows, fallbackLabel: label);
                 allRows.AddRange(rows);
             }
 
-            // Apply sorting based on OrderBy
             var sortedRows = ApplySorting(allRows, request.OrderBy);
 
-            // Get office and collector names
             var branchFromName = await GetOfficeNameByIdAsync(request.BranchFromId);
             var branchToName = await GetOfficeNameByIdAsync(request.BranchToId);
             string? collectorName = null;
@@ -212,6 +202,24 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
                 ReportType = request.ReportType,
                 OrderBy = request.OrderBy
             };
+        }
+
+        /// <summary>
+        /// Root-cause fix: the SP returns the grouping column as SavingType, not Type.
+        /// Coalesce so the view's GroupBy(r => r.Type) always has a value to group on,
+        /// falling back to the SP's own report-type label when neither is populated.
+        /// </summary>
+        private static void NormalizeSavingType(List<BranchToBranchCollectionRowDto> rows, string? fallbackLabel = null)
+        {
+            foreach (var row in rows)
+            {
+                if (string.IsNullOrWhiteSpace(row.Type))
+                {
+                    row.Type = !string.IsNullOrWhiteSpace(row.SavingType)
+                        ? row.SavingType
+                        : fallbackLabel;
+                }
+            }
         }
 
         private List<BranchToBranchCollectionRowDto> ApplySorting(List<BranchToBranchCollectionRowDto> rows, string orderBy)

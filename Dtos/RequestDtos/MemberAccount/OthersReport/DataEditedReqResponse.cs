@@ -23,6 +23,7 @@
         public decimal? ActualAmount { get; set; }
         public string? EditedDate { get; set; }
         public string? EditedBy { get; set; }
+        public string? EntryBy { get; set; }
     }
 
     public class DataEditedReportData

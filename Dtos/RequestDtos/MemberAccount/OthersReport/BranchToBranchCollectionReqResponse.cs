@@ -9,7 +9,6 @@
         public long? CollectorId { get; set; }
         public string ReportType { get; set; } = "All";
         public string OrderBy { get; set; } = "Member Id";
-        public bool SameCompanyName { get; set; } = true;
         public bool VisualReport { get; set; } = false;
     }
     public class BranchToBranchCollectionRowDto
@@ -24,6 +23,7 @@
         public string? Operator { get; set; }
         public string? Details { get; set; }
         public string? SavingType { get; set; }
+        public string? BillNo { get; set; }
     }
 
     public class BranchToBranchCollectionData

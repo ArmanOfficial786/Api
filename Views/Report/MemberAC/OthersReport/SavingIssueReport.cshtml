@@ -6,24 +6,24 @@
     var rows = (Model["Rows"] as List<SavingIssueRowDto>) ?? new List<SavingIssueRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalOpeningBalance = Model["TotalOpeningBalance"] as decimal? ?? 0;
+    var totalAccounts = Model["TotalAccounts"] as int? ?? 0;
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "";
-    var reportMode = Model["ReportMode"]?.ToString() ?? "DateWise";
+    var branchNames = Model["BranchNames"]?.ToString() ?? "All";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
-    var depositTypeName = Model["DepositTypeName"]?.ToString();
-    var collectorName = Model["CollectorName"]?.ToString();
-    var memberGroupName = Model["MemberGroupName"]?.ToString();
-    var totalAccounts = Model["TotalAccounts"] as int? ?? 0;
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // Two-level grouping matching the image: Deposit Type -> Installment Type -> rows.
+    // Rows must arrive pre-sorted by DepositTypeName (see repository OrderBy) since
+    // GroupBy preserves first-seen order rather than sorting.
+    var depositTypeGroups = rows.GroupBy(r => r.DepositTypeName ?? "").ToList();
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Saving Issue Report</title>
+    <title>Savings Issue Report</title>
     <style>
             * {
                 margin: 0;
@@ -35,6 +35,7 @@
                 font-family: Arial, sans-serif;
                 font-size: 9pt;
                 background: white;
+                color: #000;
             }
 
             .report-container {
@@ -42,33 +43,81 @@
                 overflow: visible;
             }
 
+            thead {
+                display: table-row-group;
+            }
+
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 9pt;
+                font-size: 8.5pt;
+                table-layout: fixed;
             }
 
                 .data-table td, .data-table th {
-                    padding: 4px 6px;
-                    border: 1px solid #ccc;
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 3px 6px;
+                    vertical-align: middle;
                 }
 
-                .data-table th {
-                    background: #f2f2f2;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                }
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
 
-                .data-table thead {
-                    display: table-row-group;
-                }
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
 
-            .grand-total {
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f2f2f2;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .deposit-type-row td {
+                font-weight: bold;
+                padding-top: 12px;
+                padding-bottom: 2px;
+            }
+
+            .deposit-type-row.first-group td {
+                padding-top: 6px;
+            }
+
+            .installment-type-row td {
+                font-weight: bold;
+                padding-left: 20px;
+                padding-bottom: 2px;
+            }
+
+            .detail-row td:first-child {
+                padding-left: 32px;
+            }
+
+            .installment-subtotal-row td {
+                border-bottom: 1px solid #000;
+                padding-bottom: 4px;
+            }
+
+            .grand-total-row td {
                 border-top: 2px solid #000;
                 border-bottom: 2px solid #000;
                 font-weight: bold;
                 background: #f9f9f9;
+                padding: 5px 6px;
             }
 
             .text-right {
@@ -79,20 +128,14 @@
                 text-align: center !important;
             }
 
-            .filter-info {
-                margin-bottom: 4px;
-            }
-
-            .report-title {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-            }
-
             @@media print {
-                .data-table thead {
+                thead {
                     display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
                 }
             }
     </style>
@@ -104,99 +147,98 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th colspan="10" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
-                        Saving Issue Report - @reportMode Wise
-                    </th>
+        <table class="data-table" data-sheet-name="SavingIssue">
+            <colgroup>
+                <col style="width:12%;" />
+                <col style="width:14%;" />
+                <col style="width:12%;" />
+                <col style="width:18%;" />
+                <col style="width:16%;" />
+                <col style="width:8%;" />
+                <col style="width:12%;" />
+                <col style="width:8%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="8">Savings Issue Report</td>
                 </tr>
-                <tr>
-                    <td colspan="10">
-                        <div class="filter-info">
-                            <strong>Branches:</strong> @branchNames &nbsp;&nbsp;|&nbsp;&nbsp;
-                            @if (!string.IsNullOrEmpty(fromDate) && fromDate != "-1")
-                            {
-                                <span><strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;</span>
-                            }
-                            @if (!string.IsNullOrEmpty(toDate) && toDate != "-1")
-                            {
-                                <span><strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;</span>
-                            }
-                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Generated:</strong> @generatedOn
-                        </div>
-                        @if (!string.IsNullOrEmpty(depositTypeName))
-                        {
-                            <div class="filter-info">
-                                <strong>Deposit Type:</strong> @depositTypeName
-                            </div>
-                        }
-                        @if (!string.IsNullOrEmpty(collectorName))
-                        {
-                            <div class="filter-info">
-                                <strong>Collector:</strong> @collectorName
-                            </div>
-                        }
-                        @if (!string.IsNullOrEmpty(memberGroupName))
-                        {
-                            <div class="filter-info">
-                                <strong>Member Group:</strong> @memberGroupName
-                            </div>
-                        }
+
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Branch Name :</strong> @branchNames</td>
+                    <td colspan="4" class="text-right">
+                        <strong>From Date :</strong> @fromDate
+                        &nbsp;&nbsp;&nbsp;
+                        <strong>To Date :</strong> @toDate
                     </td>
                 </tr>
-                <tr>
-                    <th style="width:3%;">SN</th>
-                    <th style="width:12%;">Member Id</th>
-                    <th style="width:18%;">Member Name</th>
-                    <th style="width:12%;">Account No</th>
-                    <th style="width:10%;">Deposit Type</th>
-                    <th style="width:10%;">Open Date</th>
-                    <th style="width:8%;" class="text-right">Interest %</th>
-                    <th style="width:10%;">SMS Category</th>
-                    <th style="width:10%;">Collector</th>
-                    <th style="width:7%;" class="text-right">Balance</th>
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="4"></td>
                 </tr>
-            </thead>
-            <tbody>
-                @if (rows.Any())
+                <tr class="meta-spacer"><td colspan="8"></td></tr>
+
+                <tr>
+                    <th>Deposit Type</th>
+                    <th>A/C No</th>
+                    <th>Member ID</th>
+                    <th>Member Name</th>
+                    <th>SMS Category</th>
+                    <th>A/C Type</th>
+                    <th>A/C Open Date</th>
+                    <th class="text-right">Interest %</th>
+                </tr>
+
+                @if (depositTypeGroups.Any())
                 {
-                    int sn = 0;
-                    foreach (var row in rows)
+                    bool isFirstDepositGroup = true;
+                    foreach (var depositGroup in depositTypeGroups)
                     {
-                        sn++;
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td>@(row.DepositTypeName ?? "")</td>
-                            <td>@(row.AccountOpenOnBs ?? "")</td>
-                            <td class="text-right">@(row.InterestRate.HasValue ? row.InterestRate.Value.ToString("N2") : "")</td>
-                            <td>@(row.SmsCategory ?? "")</td>
-                            <td>@(row.CollectorName ?? "")</td>
-                            <td class="text-right">@(row.OpeningBalance.HasValue ? row.OpeningBalance.Value.ToString("N2") : "")</td>
+                        <tr class="deposit-type-row @(isFirstDepositGroup ? "first-group" : "")">
+                            <td colspan="8">@depositGroup.Key</td>
                         </tr>
+                        isFirstDepositGroup = false;
+
+                        var installmentGroups = depositGroup.GroupBy(r => r.InstallmentTypeName ?? "").ToList();
+
+                        foreach (var installmentGroup in installmentGroups)
+                        {
+                            <tr class="installment-type-row">
+                                <td colspan="8">@installmentGroup.Key</td>
+                            </tr>
+
+                            var accountsInGroup = installmentGroup.ToList();
+                            for (int i = 0; i < accountsInGroup.Count; i++)
+                            {
+                                var row = accountsInGroup[i];
+                                var isLast = i == accountsInGroup.Count - 1;
+                                <tr class="detail-row @(isLast ? "installment-subtotal-row" : "")">
+                                    <td></td>
+                                    <td>@(row.AccountNo ?? "")</td>
+                                    <td>@(row.MemberId ?? "")</td>
+                                    <td>@(row.MemberName ?? "")</td>
+                                    <td>@(row.SmsCategory ?? "")</td>
+                                    <td>@(row.AccountType ?? "")</td>
+                                    <td>@(row.AccountOpenOnBs ?? "")</td>
+                                    <td class="text-right">@(row.InterestRate.HasValue ? row.InterestRate.Value.ToString("N2") : "")</td>
+                                </tr>
+                            }
+                        }
                     }
-                    <tr class="grand-total">
-                        <td colspan="9" class="text-right"><strong>Total</strong></td>
-                        <td class="text-right"><strong>@totalOpeningBalance.ToString("N2")</strong></td>
+
+                    <tr class="grand-total-row">
+                        <td colspan="7" class="text-right">Total Accounts</td>
+                        <td class="text-right">@totalAccounts</td>
                     </tr>
-                    <tr>
-                        <td colspan="8" class="text-right"><strong>Total Accounts</strong></td>
-                        <td class="text-right"><strong>@totalAccounts</strong></td>
-                        <td></td>
-                    </tr>
-                    <tr>
-                        <td colspan="8" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-right"><strong>@totalRecords</strong></td>
-                        <td></td>
+                    <tr class="grand-total-row">
+                        <td colspan="7" class="text-right">Total Records</td>
+                        <td class="text-right">@totalRecords</td>
                     </tr>
                 }
                 else
                 {
-                    <tr><td colspan="10" class="text-center">No saving accounts found for the selected criteria</td></tr>
+                    <tr>
+                        <td colspan="8" class="text-center">No saving accounts found for the selected criteria</td>
+                    </tr>
                 }
             </tbody>
         </table>

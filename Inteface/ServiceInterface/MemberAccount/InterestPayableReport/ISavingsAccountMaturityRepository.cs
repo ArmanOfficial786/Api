@@ -1,7 +1,7 @@
 ﻿// Interfaces/ServiceInterface/MemberAccount/SavingsAccountMaturityReport/ISavingsAccountMaturityRepository.cs
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport;
 
-namespace NexgenCosysReport.Interfaces.ServiceInterface.MemberAccount.SavingsAccountMaturityReport
+namespace NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestPayableReport
 {
     public interface ISavingsAccountMaturityRepository
     {

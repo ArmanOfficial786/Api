@@ -5,24 +5,28 @@
     Layout = null;
     var rows = (Model["Rows"] as List<SavingAccountRenewedRowDto>) ?? new List<SavingAccountRenewedRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
+    var totalRenewedAccounts = Model["TotalRenewedAccounts"] as int? ?? 0;
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "";
-    var reportMode = Model["ReportMode"]?.ToString() ?? "DateWise";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
-    var selectedMemberId = Model["SelectedMemberId"]?.ToString();
-    var selectedMemberName = Model["SelectedMemberName"]?.ToString();
-    var totalRenewedAccounts = Model["TotalRenewedAccounts"] as int? ?? 0;
+
+    var generatedOn = Model.ContainsKey("ReportGeneratedOnBs") && Model["ReportGeneratedOnBs"] != null
+        ? Model["ReportGeneratedOnBs"].ToString()
+        : DateTime.Now.ToString("yyyy/MM/dd");
+
+    // Rows must arrive pre-sorted by MemberId so GroupBy (which preserves first-seen
+    // order, not sorted order) produces contiguous per-member groups.
+    var memberGroups = rows
+        .GroupBy(r => new { r.MemberId, r.MemberName })
+        .ToList();
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Saving Account Renewed Report</title>
+    <title>Savings Account Renewed Report</title>
     <style>
             * {
                 margin: 0;
@@ -32,8 +36,9 @@
 
             body {
                 font-family: Arial, sans-serif;
-                font-size: 9pt;
+                font-size: 9.5pt;
                 background: white;
+                color: #000;
             }
 
             .report-container {
@@ -41,34 +46,48 @@
                 overflow: visible;
             }
 
+            .report-title {
+                text-align: center;
+                font-size: 15pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 10px 0 12px 0;
+            }
+
+            .meta-table {
+                width: 100%;
+                margin-bottom: 6px;
+                font-size: 9.5pt;
+            }
+
+                .meta-table td {
+                    padding: 1px 4px;
+                }
+
+                .meta-table .label {
+                    font-weight: bold;
+                    white-space: nowrap;
+                }
+
+            /* No cell grid - only rule lines, matching the target design */
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 9pt;
+                font-size: 9.5pt;
             }
 
                 .data-table td, .data-table th {
-                    padding: 4px 6px;
-                    border: 1px solid #ccc;
+                    padding: 3px 6px;
+                    border: none;
                 }
 
-                .data-table th {
-                    background: #f2f2f2;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
+                .data-table thead th {
                     text-align: left;
+                    font-weight: bold;
+                    border-top: 2px solid #000;
+                    border-bottom: 1.5px solid #000;
+                    padding: 5px 6px;
                 }
-
-                .data-table thead {
-                    display: table-row-group;
-                }
-
-            .grand-total {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-            }
 
             .text-right {
                 text-align: right !important;
@@ -78,25 +97,35 @@
                 text-align: center !important;
             }
 
-            .filter-info {
-                margin-bottom: 4px;
+            /* Member header row: Member Id | Member Name */
+            .member-row td {
+                font-weight: bold;
+                padding-top: 10px;
             }
 
-            .report-title {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
+            /* Account rows under a member */
+            .account-row td {
+                padding-top: 2px;
+                padding-bottom: 2px;
             }
 
-            .highlight-renewed {
-                color: #1565c0;
+            /* Rule line under the last account row of a member group */
+            .account-row.last-in-group td {
+                border-bottom: 1px solid #000;
+                padding-bottom: 4px;
+            }
+
+            .grand-total td {
                 font-weight: bold;
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                padding-top: 6px;
+                padding-bottom: 6px;
             }
 
             @@media print {
                 .data-table thead {
-                    display: table-row-group;
+                    display: table-header-group;
                 }
             }
     </style>
@@ -108,87 +137,81 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
+        <div class="report-title">Savings Account Renewed Report</div>
+
+        <table class="meta-table">
+            <tr>
+                <td class="label" style="width:15%;">Branch Name :</td>
+                <td style="width:35%;">@branchNames</td>
+                <td class="label" style="width:15%;">Report Generated On:</td>
+                <td style="width:35%;">@generatedOn</td>
+            </tr>
+            @if (!string.IsNullOrEmpty(fromDate) && fromDate != "-1" && !string.IsNullOrEmpty(toDate) && toDate != "-1")
+            {
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td class="label">From Date :</td>
+                    <td>@fromDate</td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td class="label">To Date :</td>
+                    <td>@toDate</td>
+                </tr>
+            }
+        </table>
+
         <table class="data-table">
             <thead>
                 <tr>
-                    <th colspan="9" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
-                        Saving Account Renewed Report - @reportMode Wise
-                    </th>
-                </tr>
-                <tr>
-                    <td colspan="9">
-                        <div class="filter-info">
-                            <strong>Branches:</strong> @branchNames &nbsp;&nbsp;|&nbsp;&nbsp;
-                            @if (!string.IsNullOrEmpty(fromDate) && fromDate != "-1")
-                            {
-                                <span><strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;</span>
-                            }
-                            @if (!string.IsNullOrEmpty(toDate) && toDate != "-1")
-                            {
-                                <span><strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;</span>
-                            }
-                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Generated:</strong> @generatedOn
-                        </div>
-                        @if (!string.IsNullOrEmpty(selectedMemberId))
-                        {
-                            <div class="filter-info">
-                                <strong>Member ID:</strong> @selectedMemberId &nbsp;&nbsp;|&nbsp;&nbsp;
-                                <strong>Member Name:</strong> @selectedMemberName
-                            </div>
-                        }
-                    </td>
-                </tr>
-                <tr>
-                    <th style="width:3%;">SN</th>
-                    <th style="width:12%;">Member Id</th>
-                    <th style="width:18%;">Member Name</th>
-                    <th style="width:12%;">Account No</th>
-                    <th style="width:12%;">Account Open</th>
-                    <th style="width:12%;">Renewed Date</th>
-                    <th style="width:10%;">Deposit Type</th>
-                    <th style="width:10%;" class="text-right">Balance</th>
-                    <th style="width:11%;">Operator</th>
+                    <th style="width:14%;">Member Id</th>
+                    <th style="width:16%;">Account No</th>
+                    <th style="width:24%;">Deposit Type Name</th>
+                    <th style="width:14%;" class="text-right">Interest Rate</th>
+                    <th style="width:16%;">Open Date</th>
+                    <th style="width:16%;">Renewed Date</th>
                 </tr>
             </thead>
             <tbody>
-                @if (rows.Any())
+                @if (memberGroups.Any())
                 {
-                    int sn = 0;
-                    foreach (var row in rows)
+                    foreach (var memberGroup in memberGroups)
                     {
-                        sn++;
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td>@(row.AccountOpenOnBs ?? "")</td>
-                            <td class="highlight-renewed">@(row.MaturityOnBs ?? "")</td>
-                            <td>@(row.DepositTypeName ?? "")</td>
-                            <td class="text-right">@(row.AccountBalance.HasValue ? row.AccountBalance.Value.ToString("N2") : "")</td>
-                            <td>@(row.Operator ?? "")</td>
+                        <tr class="member-row">
+                            <td>@memberGroup.Key.MemberId</td>
+                            <td colspan="5">@memberGroup.Key.MemberName</td>
                         </tr>
+
+                        var accountsInGroup = memberGroup.ToList();
+                        for (int i = 0; i < accountsInGroup.Count; i++)
+                        {
+                            var row = accountsInGroup[i];
+                            var isLast = i == accountsInGroup.Count - 1;
+                            <tr class="account-row @(isLast ? "last-in-group" : "")">
+                                <td></td>
+                                <td>@row.AccountNo</td>
+                                <td>@row.DepositTypeName</td>
+                                <td class="text-right">@(row.InterestRate.HasValue ? row.InterestRate.Value.ToString("N2") : "")</td>
+                                <td>@row.AccountOpenOnBs</td>
+                                <td>@row.MaturityOnBs</td>
+                            </tr>
+                        }
                     }
+
                     <tr class="grand-total">
-                        <td colspan="7" class="text-right"><strong>Total</strong></td>
-                        <td class="text-right"><strong>@totalBalance.ToString("N2")</strong></td>
-                        <td></td>
+                        <td colspan="5" class="text-right">Total Renewed Accounts</td>
+                        <td class="text-right">@totalRenewedAccounts</td>
                     </tr>
-                    <tr>
-                        <td colspan="7" class="text-right"><strong>Total Renewed Accounts</strong></td>
-                        <td class="text-right"><strong>@totalRenewedAccounts</strong></td>
-                        <td></td>
-                    </tr>
-                    <tr>
-                        <td colspan="7" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-right"><strong>@totalRecords</strong></td>
-                        <td></td>
+                    <tr class="grand-total">
+                        <td colspan="5" class="text-right">Total Records</td>
+                        <td class="text-right">@totalRecords</td>
                     </tr>
                 }
                 else
                 {
-                    <tr><td colspan="9" class="text-center">No renewed saving accounts found for the selected criteria</td></tr>
+                    <tr><td colspan="6" class="text-center">No renewed saving accounts found for the selected criteria</td></tr>
                 }
             </tbody>
         </table>

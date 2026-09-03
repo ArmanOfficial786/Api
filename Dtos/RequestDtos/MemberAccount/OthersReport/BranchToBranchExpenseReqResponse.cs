@@ -9,7 +9,6 @@
         public long? CollectorId { get; set; }
         public string ReportType { get; set; } = "All";
         public string OrderBy { get; set; } = "Member Id";
-        public bool SameCompanyName { get; set; } = true;
         public bool VisualReport { get; set; } = false;
     }
     public class BranchToBranchExpenseRowDto
@@ -25,6 +24,7 @@
         public string? Details { get; set; }
         public string? SavingType { get; set; }
         public string? BillNo { get; set; }
+        public string? ChequeNo { get; set; }
     }
 
     public class BranchToBranchExpenseData

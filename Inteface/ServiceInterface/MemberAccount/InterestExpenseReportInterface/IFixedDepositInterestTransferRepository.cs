@@ -1,7 +1,7 @@
 ﻿// Inteface/ServiceInterface/MemberAccount/InterestExpenseReport/IFixedDepositInterestTransferRepository.cs
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestExpenseReport;
 
-namespace NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestExpenseReport
+namespace NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestExpenseReportInterface
 {
     public interface IFixedDepositInterestTransferRepository
     {

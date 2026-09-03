@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Interfaces.ServiceInterface.MemberAccount.FixedDepositCertificateSchedule;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestPayableReport;
 using System.Data;
 
 namespace NexgenCosysReport.Repositories.MemberAccount.FixedDepositCertificateSchedule

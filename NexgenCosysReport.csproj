@@ -54,7 +54,6 @@
 
 
   <ItemGroup>
-    <Folder Include="Controllers\MemberAccount\ChequeBookReport\" />
     <Folder Include="DbContext\" />
     <Folder Include="Views\VisualReport\MemberAC\" />
   </ItemGroup>

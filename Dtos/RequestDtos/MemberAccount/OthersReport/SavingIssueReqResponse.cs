@@ -23,6 +23,8 @@
         public string? AccountOpenOnBs { get; set; }
         public string? AccountOpenDate { get; set; }
         public string? DepositTypeName { get; set; }
+        public string? InstallmentTypeName { get; set; }
+        public string? AccountType { get; set; }
         public decimal? InterestRate { get; set; }
         public string? SmsCategory { get; set; }
         public string? CollectorName { get; set; }

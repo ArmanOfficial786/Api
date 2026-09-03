@@ -7,7 +7,7 @@ using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.CollectorDetailReport;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.CollectorDetailReport;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.CollectorDetRepInterface;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;

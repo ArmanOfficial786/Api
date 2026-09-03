@@ -115,12 +115,11 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
         {
             return orderBy switch
             {
-                "Member Id" => " ORDER BY substring(m.MemberId, 1,(len(m.MemberId)-charindex('-', m.MemberId))-1), m.MemberId",
                 "Member Name" => " ORDER BY Name",
-                "Account No" => " ORDER BY substring(a.AccountNo, 1,(len(a.AccountNo)-charindex('-', a.AccountNo))-1), a.AccountNo",
-                "A‎/‎C Open Date" => " ORDER BY a.AccountOpenOnBs",
-                "A‎/‎C Renewed Date" => " ORDER BY a.MaturityOnBs",
-                _ => " ORDER BY m.MemberId"
+                "A‎/‎C Open Date" => " ORDER BY m.MemberId, a.AccountOpenOnBs",
+                "A‎/‎C Renewed Date" => " ORDER BY m.MemberId, a.MaturityOnBs",
+                "Account No" => " ORDER BY m.MemberId, substring(a.AccountNo, 1,(len(a.AccountNo)-charindex('-', a.AccountNo))-1), a.AccountNo",
+                _ => " ORDER BY substring(m.MemberId, 1,(len(m.MemberId)-charindex('-', m.MemberId))-1), m.MemberId"
             };
         }
 

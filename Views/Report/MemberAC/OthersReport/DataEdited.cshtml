@@ -1,4 +1,5 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
+@* @using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
 @model Dictionary<string, object>
 @{
     Layout = null;
@@ -205,6 +206,276 @@
                 {
                     <tr>
                         <td colspan="8" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html> *@
+
+
+
+@model Dictionary<string, object>
+
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<DataEditedRowDto>) ?? new List<DataEditedRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalActualAmount = Model["TotalActualAmount"] as decimal? ?? 0;
+
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var entryByName = Model["EntryByName"]?.ToString() ?? "All";
+    var editedByName = Model["EditedByName"]?.ToString() ?? "All";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+
+    string FormatAmount(decimal? value) => value.HasValue ? value.Value.ToString("N2") : "0.00";
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Data Edited Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                margin: 0;
+                padding: 0;
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td,
+                .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    white-space: normal;
+                    vertical-align: middle;
+                    background: #FFFFFF;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 4px 8px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                padding: 5px 8px;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .detail-row td {
+                padding: 3px 8px;
+                background: #FFFFFF;
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row:nth-child(even) td {
+                background: #fafafa;
+            }
+
+            .grand-total td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                padding: 5px 8px;
+                background: #f9f9f9;
+            }
+
+            .no-data td {
+                text-align: center;
+                padding: 20px 8px;
+                font-style: italic;
+                color: #666;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .amount-positive {
+                color: #196f3d;
+            }
+
+            .amount-negative {
+                color: #b03a2e;
+            }
+
+            .footer-info {
+                padding-top: 6px;
+                font-size: 9pt;
+                font-weight: bold;
+            }
+
+                .footer-info td {
+                    padding: 4px 8px;
+                }
+
+            @@media print {
+                body {
+                    margin: 0;
+                    padding: 0;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+
+                tbody tr.detail-row {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+
+                .detail-row:nth-child(even) td {
+                    background: #fafafa !important;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="DataEditedReport">
+            <colgroup>
+                <col style="width:11%;" />
+                <col style="width:18%;" />
+                <col style="width:11%;" />
+                <col style="width:20%;" />
+                <col style="width:13%;" />
+                <col style="width:11%;" />
+                <col style="width:8%;" />
+                <col style="width:8%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="8">Data Edited Report</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Branch :</strong> @branchName</td>
+                    <td colspan="4" class="text-right"><strong>Report Generated On :</strong> @generatedOn</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Entry By :</strong> @entryByName</td>
+                    <td colspan="4" class="text-right"><strong>Order By :</strong> @orderBy</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Edited By :</strong> @editedByName</td>
+                    <td colspan="4" class="text-right">
+                        <strong>From Date :</strong> @fromDate
+                        &nbsp;&nbsp;&nbsp;
+                        <strong>To Date :</strong> @toDate
+                    </td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="8"></td></tr>
+
+                <tr>
+                    <th class="text-left">Date</th>
+                    <th class="text-left">Member</th>
+                    <th class="text-left">A/C No</th>
+                    <th class="text-left">Description</th>
+                    <th class="text-right">Amount</th>
+                    <th class="text-left">Edited Date</th>
+                    <th class="text-left">Edited By</th>
+                    <th class="text-left">Entry By</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    foreach (var row in rows)
+                    {
+                        var isNegative = row.ActualAmount < 0;
+                        <tr class="detail-row">
+                            <td>@(row.Date ?? "")</td>
+                            <td>
+                                @if (!string.IsNullOrEmpty(row.MemberId) && !string.IsNullOrEmpty(row.MemberName))
+                                {
+                                    @($"{row.MemberId} - {row.MemberName}")
+                                }
+                                else if (!string.IsNullOrEmpty(row.MemberName))
+                                {
+                                    @row.MemberName
+                                }
+                                else
+                                {
+                                    @(row.MemberId ?? "")
+                                }
+                            </td>
+                            <td>@(row.AccountNo ?? "")</td>
+                            <td>@(row.Description ?? "")</td>
+                            <td class="text-right @(isNegative ? "amount-negative" : "amount-positive")">
+                                @FormatAmount(row.ActualAmount)
+                            </td>
+                            <td>@(row.EditedDate ?? "")</td>
+                            <td>@(row.EditedBy ?? "")</td>
+                            <td>@(row.EntryBy ?? "")</td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr class="no-data">
+                        <td colspan="8">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>
