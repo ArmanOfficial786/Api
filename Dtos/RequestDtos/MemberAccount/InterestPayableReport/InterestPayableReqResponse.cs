@@ -4,10 +4,10 @@
     public class InterestPayableRequestDto
     {
         public string TillDateBs { get; set; } = string.Empty;
-        public string OfficeId { get; set; } = "-1";
+        public string? BranchIds { get; set; }
         public string OrderBy { get; set; } = "Member Id";
-        public string OfficeName { get; set; } = "All";
-        public string ReportView { get; set; } = "A"; // A=All, P=Only On Till Date
+        public string? BranchName { get; set; }
+        public string ReportView { get; set; } = "A";
         public bool VisualReport { get; set; } = false;
     }
 
@@ -23,6 +23,11 @@
         public decimal? InterestAmount { get; set; }
         public decimal? TaxAmount { get; set; }
         public decimal? Balance { get; set; }
+        public string? InterestCalculationType { get; set; }   // e.g. "Normal Flat Interest"
+        public string? BalanceType { get; set; }                // e.g. "DAILY MINIMUM BALANCE"
+        public string? MaturityDate { get; set; }
+        public string? Type { get; set; }
+        public string? IsActualOrProvisional { get; set; }
     }
 
     public class InterestPayableData

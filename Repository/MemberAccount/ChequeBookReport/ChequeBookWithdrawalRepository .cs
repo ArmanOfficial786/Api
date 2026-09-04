@@ -1,4 +1,4 @@
-﻿// Repositories/MemberAccount/ChequeBookReport/ChequeBookIssueRepository.cs
+﻿// Repositories/MemberAccount/ChequeBookReport/ChequeBookWithdrawalRepository.cs
 using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -11,49 +11,31 @@ using System.Text;
 
 namespace NexgenCosysReport.Repository.MemberAccount.ChequeBookReport
 {
-    public class ChequeBookIssueRepository : IChequeBookIssueRepository
+    public class ChequeBookWithdrawalRepository : IChequeBookWithdrawal
     {
         private readonly AppDbContext _context;
         private readonly IDateConverterService _dateConverter;
-        private readonly ILogger<ChequeBookIssueRepository> _logger;
+        private readonly ILogger<ChequeBookWithdrawalRepository> _logger;
 
-        public ChequeBookIssueRepository(
+        public ChequeBookWithdrawalRepository(
             AppDbContext context,
             IDateConverterService dateConverter,
-            ILogger<ChequeBookIssueRepository> logger)
+            ILogger<ChequeBookWithdrawalRepository> logger)
         {
             _context = context;
             _dateConverter = dateConverter;
             _logger = logger;
         }
 
-
-        public async Task<ChequeBookIssueData> GetReportDataAsync(ChequeBookIssueRequestDto request)
+        public async Task<ChequeBookWithdrawalData> GetReportDataAsync(ChequeBookWithdrawalRequestDto request)
         {
             try
             {
                 var sqlFilterExp = new StringBuilder();
 
-                if (request.MemberId != -1)
+                if (request.AccountId != -1)
                 {
-                    sqlFilterExp.Append($" AND m.MemMemberRegistrationId = {request.MemberId}");
-                }
-
-                if (request.ReportView == "Date" &&
-                    !string.IsNullOrEmpty(request.FromDateBs) && request.FromDateBs != "-1" &&
-                    !string.IsNullOrEmpty(request.ToDateBs) && request.ToDateBs != "-1")
-                {
-                    var fromDateAd = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
-                    var toDateAd = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
-                    var fromDateStr = fromDateAd.ToString("yyyy-MM-dd");
-                    var toDateStr = toDateAd.ToString("yyyy-MM-dd");
-
-                    sqlFilterExp.Append($" AND c.ChequeIssueOn BETWEEN '{fromDateStr}' AND '{toDateStr}'");
-                }
-
-                if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
-                {
-                    sqlFilterExp.Append($" AND c.UsmOfficeId IN ({request.BranchIds})");
+                    sqlFilterExp.Append($" AND c.MamAccountOpeningId = {request.AccountId}");
                 }
 
                 var orderByClause = BuildOrderByClause(request.OrderBy);
@@ -69,38 +51,35 @@ namespace NexgenCosysReport.Repository.MemberAccount.ChequeBookReport
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
-                var rows = await connection.QueryAsync<ChequeBookIssueRowDto>(
-                    "sp_5_43_GetChequeBookIssue",
+                var rows = await connection.QueryAsync<ChequeBookWithdrawalRowDto>(
+                    "sp_5_43_GetChequeWithdrawl",
                     parameters,
                     commandType: CommandType.StoredProcedure
                 );
 
                 var resultList = rows.AsList();
 
-                return new ChequeBookIssueData
+                return new ChequeBookWithdrawalData
                 {
                     Rows = resultList,
                     TotalRecords = resultList.Count,
-                    TotalChequesIssued = resultList.Sum(r => r.TotalCheques ?? 0),
-                    FromDateBs = request.FromDateBs,
-                    ToDateBs = request.ToDateBs,
-                    BranchNames = request.BranchName,
-                    OrderBy = request.OrderBy,
-                    MemberId = request.MemberIdText,
+                    TotalWithdrawals = resultList.Count,
+                    AccountNo = request.AccountNo,
+                    MemberId = request.MemberId,
                     MemberName = request.MemberName,
-                    ReportView = request.ReportView
+                    OrderBy = request.OrderBy
                 };
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in GetReportDataAsync for Cheque Book Issue Report");
+                _logger.LogError(ex, "Error in GetReportDataAsync for Cheque Book Withdrawal Report");
                 throw;
             }
         }
 
         private static string BuildOrderByClause(string orderBy)
         {
-            string result = " ORDER BY c.ChequeIssueOnBs";
+            string result = " ORDER BY c.ChequeNo";
 
             if (orderBy == "Member Name")
             {
@@ -114,13 +93,17 @@ namespace NexgenCosysReport.Repository.MemberAccount.ChequeBookReport
             {
                 result = " ORDER BY substring(a.AccountNo, 1,(len(a.AccountNo)-charindex('-', a.AccountNo))-1), a.AccountNo";
             }
-            else if (orderBy == "Cheque Issue Date")
+            else if (orderBy == "Cheque No")
             {
-                result = " ORDER BY c.ChequeIssueOnBs";
+                result = " ORDER BY c.ChequeNo";
             }
-            else if (orderBy == "Cheque No From")
+            else if (orderBy == "Date")
             {
-                result = " ORDER BY c.ChequeNoFrom";
+                result = " ORDER BY c.LastModifiedOn";
+            }
+            else if (orderBy == "Status")
+            {
+                result = " ORDER BY s.ChequeWithdrawStatus";
             }
 
             return result;

@@ -9,7 +9,7 @@ using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestPayableR
 using System.Data;
 using System.Text;
 
-namespace NexgenCosysReport.Repositories.MemberAccount.InterestPayableReport
+namespace NexgenCosysReport.Repository.MemberAccount.InterestPayableReport
 {
     public class InterestPayableRepository : IInterestPayableRepository
     {
@@ -31,29 +31,27 @@ namespace NexgenCosysReport.Repositories.MemberAccount.InterestPayableReport
         {
             try
             {
-                // Convert Nepali date to English
                 var tillDateAd = await _dateConverter.NepaliToEnglishAsync(request.TillDateBs);
                 var tillDateStr = tillDateAd.ToString("yyyy-MM-dd");
 
-                // Build filter expression
                 var sqlFilterExp = new StringBuilder();
 
-                // Office filter
-                if (!string.IsNullOrEmpty(request.OfficeId) && request.OfficeId != "-1")
+                if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
                 {
-                    sqlFilterExp.Append($" AND a.UsmOfficeId = {request.OfficeId}");
+                    sqlFilterExp.Append($" AND a.UsmOfficeId IN ({request.BranchIds})");
                 }
 
-                // Build Order By clause
+                // DepositTypeName is the primary sort key so rows arrive grouped by deposit
+                // type first, matching the report's visual grouping (view's GroupBy
+                // preserves first-seen order, does not sort).
                 var orderByClause = BuildOrderByClause(request.OrderBy);
 
-                // Determine which stored procedure to use based on report view
                 string spName;
-                if (request.ReportView == "P") // Only On Till Date
+                if (request.ReportView == "P")
                 {
                     spName = "sp_5_43_GetInterestCalculationDailyReceivableOnlyPayableOnTillDate";
                 }
-                else // All (default)
+                else
                 {
                     spName = "sp_5_43_GetInterestCalculationDailyReceivable";
                 }
@@ -61,9 +59,9 @@ namespace NexgenCosysReport.Repositories.MemberAccount.InterestPayableReport
                 var parameters = new DynamicParameters();
                 parameters.Add("@SqlInterestDate", tillDateStr, DbType.String);
                 parameters.Add("@SqlInterestDateBS", request.TillDateBs, DbType.String);
-                parameters.Add("@SqlOfficeId", request.OfficeId, DbType.String);
-                parameters.Add("@SqlUserId", "-1", DbType.String); // UserId filter (optional)
-                parameters.Add("@SqlFilterExp", sqlFilterExp.ToString(), DbType.String, size: -1);
+                parameters.Add("@SqlOfficeId", request.BranchIds, DbType.String);
+                parameters.Add("@SqlUserId", "-1", DbType.String);
+                parameters.Add("@SqlFilterExp", sqlFilterExp.ToString() + orderByClause, DbType.String, size: -1);
 
                 var connectionString = _context.Database.GetConnectionString();
                 using var connection = new SqlConnection(connectionString);
@@ -77,14 +75,17 @@ namespace NexgenCosysReport.Repositories.MemberAccount.InterestPayableReport
 
                 var resultList = rows.AsList();
 
-                // Get unique deposit types count
                 var totalDepositTypes = resultList
                     .Select(r => r.DepositTypeName)
                     .Distinct()
                     .Count();
 
-                // Determine report view name
                 var reportViewName = request.ReportView == "P" ? "Only On Till Date" : "All";
+
+                // Root-cause fix: resolve the real office name from OfficeId instead of
+                // echoing request.BranchName back — same pattern as DataEditedReport,
+                // SavingAccountDeleted, SavingIssue, SavingAccountClosed.
+                var branchName = await GetOfficeNameByIdAsync(request.BranchIds);
 
                 return new InterestPayableData
                 {
@@ -94,7 +95,7 @@ namespace NexgenCosysReport.Repositories.MemberAccount.InterestPayableReport
                     TotalTax = resultList.Sum(r => r.TaxAmount ?? 0),
                     TotalBalance = resultList.Sum(r => r.Balance ?? 0),
                     TillDateBs = request.TillDateBs,
-                    OfficeName = request.OfficeName,
+                    OfficeName = branchName,
                     OrderBy = request.OrderBy,
                     ReportView = request.ReportView,
                     ReportViewName = reportViewName,
@@ -108,21 +109,61 @@ namespace NexgenCosysReport.Repositories.MemberAccount.InterestPayableReport
             }
         }
 
+        /// <summary>
+        /// Resolves a UsmOfficeId (or comma-separated list) into office name(s).
+        /// Falls back to "All" when unfiltered. Same pattern used across the project.
+        /// </summary>
+        private async Task<string> GetOfficeNameByIdAsync(string? officeIdCsv)
+        {
+            if (string.IsNullOrWhiteSpace(officeIdCsv) || officeIdCsv == "-1")
+            {
+                return "All";
+            }
+
+            try
+            {
+                var ids = officeIdCsv
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(id => long.TryParse(id, out var parsed) ? parsed : (long?)null)
+                    .Where(id => id.HasValue)
+                    .Select(id => id!.Value)
+                    .ToList();
+
+                if (!ids.Any())
+                {
+                    return officeIdCsv;
+                }
+
+                var connectionString = _context.Database.GetConnectionString();
+                using var connection = new SqlConnection(connectionString);
+                await connection.OpenAsync();
+
+                const string sql = "SELECT OfficeName FROM UsmOffice WHERE UsmOfficeId IN @Ids";
+                var names = (await connection.QueryAsync<string>(sql, new { Ids = ids })).ToList();
+
+                return names.Any() ? string.Join(", ", names) : officeIdCsv;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error in GetOfficeNameByIdAsync");
+                return officeIdCsv;
+            }
+        }
+
         private static string BuildOrderByClause(string orderBy)
         {
-            // Converted from legacy switch in GetPayableInterestCalculation
             return orderBy switch
             {
                 "Deposit Type" => " ORDER BY DepositTypeName",
-                "Member Id" => " ORDER BY substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId",
-                "Member Name" => " ORDER BY MemberName",
-                "Account No" => " ORDER BY substring(AccountNo, 1,(len(AccountNo)-charindex('-', AccountNo))-1), AccountNo",
-                "Interest Rate" => " ORDER BY InterestRate DESC",
-                "Interest Date From" => " ORDER BY InterestFrom",
-                "Interest" => " ORDER BY InterestAmount DESC",
-                "Tax" => " ORDER BY TaxAmount DESC",
-                "Balance" => " ORDER BY Balance DESC",
-                _ => " ORDER BY MemberId"
+                "Member Id" => " ORDER BY DepositTypeName, substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId",
+                "Member Name" => " ORDER BY DepositTypeName, MemberName",
+                "Account No" => " ORDER BY DepositTypeName, substring(AccountNo, 1,(len(AccountNo)-charindex('-', AccountNo))-1), AccountNo",
+                "Interest Rate" => " ORDER BY DepositTypeName, InterestRate DESC",
+                "Interest Date From" => " ORDER BY DepositTypeName, InterestFrom",
+                "Interest" => " ORDER BY DepositTypeName, InterestAmount DESC",
+                "Tax" => " ORDER BY DepositTypeName, TaxAmount DESC",
+                "Balance" => " ORDER BY DepositTypeName, Balance DESC",
+                _ => " ORDER BY DepositTypeName, substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId"
             };
         }
     }

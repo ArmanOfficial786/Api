@@ -1,4 +1,5 @@
 ﻿// Repositories/MemberAccount/SavingsAccountMaturityReport/SavingsAccountMaturityRepository.cs
+
 using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +10,7 @@ using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestPayableR
 using System.Data;
 using System.Text;
 
-namespace NexgenCosysReport.Repositories.MemberAccount.SavingsAccountMaturityReport
+namespace NexgenCosysReport.Repository.MemberAccount.SavingsAccountMaturityReport
 {
     public class SavingsAccountMaturityRepository : ISavingsAccountMaturityRepository
     {
@@ -31,32 +32,26 @@ namespace NexgenCosysReport.Repositories.MemberAccount.SavingsAccountMaturityRep
         {
             try
             {
-                // Convert Nepali dates to English
                 var fromDateAd = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
                 var toDateAd = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
                 var fromDateStr = fromDateAd.ToString("yyyy-MM-dd");
                 var toDateStr = toDateAd.ToString("yyyy-MM-dd");
 
-                // Build filter expression
                 var sqlFilterExp = new StringBuilder();
 
-                // Date filter
                 sqlFilterExp.Append($" AND Ao.MaturityOn BETWEEN '{fromDateStr}' AND '{toDateStr}'");
 
-                // Branch filter
                 if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
                 {
                     sqlFilterExp.Append($" AND Ao.UsmOfficeId IN ({request.BranchIds})");
                 }
 
-                // Deposit Type filter
                 if (request.DepositTypeId != -1)
                 {
                     sqlFilterExp.Append($" AND Ao.SycDepositTypeId = {request.DepositTypeId}");
                 }
 
-                // Build Order By clause (converted from legacy switch in GetSavingAcMaturity)
-                var orderByClause = BuildOrderByClause(request.OrderBy);
+                sqlFilterExp.Append(BuildOrderByClause(request.OrderBy));
 
                 var parameters = new DynamicParameters();
                 parameters.Add("@SqlFilterExp", sqlFilterExp.ToString(), DbType.String, size: -1);
@@ -65,36 +60,55 @@ namespace NexgenCosysReport.Repositories.MemberAccount.SavingsAccountMaturityRep
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
-                var rows = await connection.QueryAsync<SavingsAccountMaturityRowDto>(
+                var rows = await connection.QueryAsync<dynamic>(
                     "sp_5_43_GetSavingAcMaturityAndInterestTransfer",
                     parameters,
                     commandType: CommandType.StoredProcedure
                 );
 
-                var resultList = rows.AsList();
+                // ---------------------------------------------------------------
+                // Column mapping matches the SP's actual SELECT list exactly:
+                //   MemberId, Name, ContactNo (PhoneNo;MobileNo), AccountNo,
+                //   DepositTypeName, InterestRate, AccountOpenOnBs,
+                //   NextInterestDateOnBs, MaturityOnBs, LedgerBalance, AccountStatus
+                // There is no DepositAmount / MaturityAmount / Balance / Remarks
+                // column in this SP — those were incorrect guesses in the
+                // previous mapping, which is why Balance always came back 0.00.
+                // ---------------------------------------------------------------
+                var resultList = rows.Select(r => new SavingsAccountMaturityRowDto
+                {
+                    DepositTypeName = r.DepositTypeName,
+                    MemberId = r.MemberId,
+                    MemberName = r.Name,
+                    Phone = r.ContactNo,
+                    AccountNo = r.AccountNo,
+                    AccountOpenOnBs = r.AccountOpenOnBs,
+                    MaturityOnBs = r.MaturityOnBs,
+                    Balance = r.LedgerBalance,
+                    InterestRate = r.InterestRate
+                }).ToList();
 
-                // Get unique deposit types count
                 var totalDepositTypes = resultList
                     .Select(r => r.DepositTypeName)
                     .Distinct()
                     .Count();
 
-                // Get deposit type name if a specific type is selected
                 string depositTypeName = string.Empty;
                 if (request.DepositTypeId != -1 && resultList.Any())
                 {
                     depositTypeName = resultList.First().DepositTypeName ?? string.Empty;
                 }
 
+                //var branchName = await GetOfficeNameByIdAsync(request.BranchIds);
+
                 return new SavingsAccountMaturityData
                 {
                     Rows = resultList,
                     TotalRecords = resultList.Count,
-                    TotalDepositAmount = resultList.Sum(r => r.DepositAmount ?? 0),
-                    TotalMaturityAmount = resultList.Sum(r => r.MaturityAmount ?? 0),
+                    TotalDepositAmount = resultList.Sum(r => r.Balance ?? 0),
+                    TotalMaturityAmount = resultList.Sum(r => r.Balance ?? 0),
                     FromDateBs = request.FromDateBs,
                     ToDateBs = request.ToDateBs,
-                    BranchNames = request.BranchName,
                     OrderBy = request.OrderBy,
                     DepositTypeName = depositTypeName,
                     TotalDepositTypes = totalDepositTypes
@@ -106,10 +120,11 @@ namespace NexgenCosysReport.Repositories.MemberAccount.SavingsAccountMaturityRep
                 throw;
             }
         }
-
         private static string BuildOrderByClause(string orderBy)
         {
-            // Converted from legacy switch in GetSavingAcMaturity
+            // Converted from the legacy switch in GetSavingAcMaturity. Note the
+            // SP's SELECT list uses "Name" (not MemberName) for the member's
+            // display name, so "Member Name" sorts by Name to match.
             return orderBy switch
             {
                 "Deposit Type" or "Savings Type" => " ORDER BY DepositTypeName",

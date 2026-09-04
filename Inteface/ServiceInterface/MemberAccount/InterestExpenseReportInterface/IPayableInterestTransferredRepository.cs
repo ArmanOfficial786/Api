@@ -1,5 +1,5 @@
 ﻿// Interfaces/ServiceInterface/MemberAccount/InterestExpenseReport/IPayableInterestTransferredRepository.cs
-using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestExpenseReport;
+using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport;
 
 namespace NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestExpenseReportInterface
 {

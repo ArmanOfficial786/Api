@@ -9,7 +9,7 @@ using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestPayableR
 using System.Data;
 using System.Text;
 
-namespace NexgenCosysReport.Repositories.MemberAccount.SavingsAccountInterestTransfer
+namespace NexgenCosysReport.Repository.MemberAccount.SavingsAccountInterestTransfer
 {
     public class SavingsAccountInterestTransferRepository : ISavingsAccountInterestTransferRepository
     {
@@ -31,32 +31,27 @@ namespace NexgenCosysReport.Repositories.MemberAccount.SavingsAccountInterestTra
         {
             try
             {
-                // Convert Nepali dates to English
                 var fromDateAd = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
                 var toDateAd = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
                 var fromDateStr = fromDateAd.ToString("yyyy-MM-dd");
                 var toDateStr = toDateAd.ToString("yyyy-MM-dd");
 
-                // Build filter expression
                 var sqlFilterExp = new StringBuilder();
 
                 // Date filter - using NextInterestDateOn
                 sqlFilterExp.Append($" AND Ao.NextInterestDateOn BETWEEN '{fromDateStr}' AND '{toDateStr}'");
 
-                // Branch filter
                 if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
                 {
                     sqlFilterExp.Append($" AND Ao.UsmOfficeId IN ({request.BranchIds})");
                 }
 
-                // Deposit Type filter
                 if (request.DepositTypeId != -1)
                 {
                     sqlFilterExp.Append($" AND Ao.SycDepositTypeId = {request.DepositTypeId}");
                 }
 
-                // Build Order By clause (converted from legacy switch in GetSavingAcInterestTransfer)
-                var orderByClause = BuildOrderByClause(request.OrderBy);
+                sqlFilterExp.Append(BuildOrderByClause(request.OrderBy));
 
                 var parameters = new DynamicParameters();
                 parameters.Add("@SqlFilterExp", sqlFilterExp.ToString(), DbType.String, size: -1);
@@ -65,21 +60,43 @@ namespace NexgenCosysReport.Repositories.MemberAccount.SavingsAccountInterestTra
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
-                var rows = await connection.QueryAsync<SavingsAccountInterestTransferRowDto>(
+                var rows = await connection.QueryAsync<dynamic>(
                     "sp_5_43_GetSavingAcMaturityAndInterestTransfer",
                     parameters,
                     commandType: CommandType.StoredProcedure
                 );
 
-                var resultList = rows.AsList();
+                // ---------------------------------------------------------------
+                // Map explicitly from the SP's actual SELECT list — it returns
+                // MemberId, Name, ContactNo, AccountNo, DepositTypeName,
+                // InterestRate, AccountOpenOnBs, NextInterestDateOnBs,
+                // MaturityOnBs, LedgerBalance, AccountStatus.
+                //
+                // The previous code ran a *typed* Dapper query straight into
+                // SavingsAccountInterestTransferRowDto, whose properties are
+                // named AccountOpenDate / NextInterestDate (no "OnBs" suffix).
+                // Dapper only maps on an exact column-name match, so those two
+                // properties were always null — hence the empty date columns.
+                // ---------------------------------------------------------------
+                var resultList = rows.Select(r => new SavingsAccountInterestTransferRowDto
+                {
+                    DepositTypeName = r.DepositTypeName,
+                    MemberId = r.MemberId,
+                    MemberName = r.Name,
+                    AccountNo = r.AccountNo,
+                    AccountOpenDate = r.AccountOpenOnBs,
+                    AccountOpenDateBs = r.AccountOpenOnBs,
+                    NextInterestDate = r.NextInterestDateOnBs,
+                    NextInterestDateBs = r.NextInterestDateOnBs,
+                    InterestRate = r.InterestRate,
+                    Balance = r.LedgerBalance
+                }).ToList();
 
-                // Get unique deposit types count
                 var totalDepositTypes = resultList
                     .Select(r => r.DepositTypeName)
                     .Distinct()
                     .Count();
 
-                // Get deposit type name if a specific type is selected
                 string depositTypeName = string.Empty;
                 if (request.DepositTypeId != -1 && resultList.Any())
                 {
@@ -90,6 +107,8 @@ namespace NexgenCosysReport.Repositories.MemberAccount.SavingsAccountInterestTra
                 {
                     Rows = resultList,
                     TotalRecords = resultList.Count,
+                    // The SP has no separate interest-amount column — Balance
+                    // (LedgerBalance) is the only monetary figure it returns.
                     TotalBalance = resultList.Sum(r => r.Balance ?? 0),
                     TotalInterestAmount = resultList.Sum(r => r.InterestAmount ?? 0),
                     FromDateBs = request.FromDateBs,
@@ -109,7 +128,8 @@ namespace NexgenCosysReport.Repositories.MemberAccount.SavingsAccountInterestTra
 
         private static string BuildOrderByClause(string orderBy)
         {
-            // Converted from legacy switch in GetSavingAcInterestTransfer
+            // Note the SP's SELECT list aliases the member's display name as
+            // "Name" (not MemberName), so "Member Name" sorts by Name.
             return orderBy switch
             {
                 "Deposit Type" or "Savings Type" => " ORDER BY DepositTypeName",

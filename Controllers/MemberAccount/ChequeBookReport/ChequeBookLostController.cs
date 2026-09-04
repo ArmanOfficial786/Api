@@ -1,42 +1,42 @@
-﻿// Controllers/MemberAccount/InterestPayableReport/InterestPayableController.cs
+﻿// Controllers/MemberAccount/ChequeBookReport/ChequeBookLostController.cs
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
-using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport;
+using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.ChequeBookReport;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestPayableReport;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.ChequeBookReport;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
+namespace NexgenCosysReport.Controllers.MemberAccount.ChequeBookReport
 {
     [ApiController]
     [Route("api/[controller]")]
     [Authorize]
-    public class InterestPayableController : ControllerBase
+    public class ChequeBookLostController : ControllerBase
     {
-        private readonly IInterestPayableRepository _repository;
+        private readonly IChequeBookLost _repository;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly ILogger<InterestPayableController> _logger;
+        private readonly ILogger<ChequeBookLostController> _logger;
         private readonly IDateConverterService _dateConverter;
 
-        public InterestPayableController(
-            IInterestPayableRepository repository,
+        public ChequeBookLostController(
+            IChequeBookLost repository,
             ICommonHeaderRepository commonHeaderRepository,
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<InterestPayableController> logger,
+            ILogger<ChequeBookLostController> logger,
             IDateConverterService dateConverter)
         {
             _repository = repository;
@@ -51,29 +51,27 @@ namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
 
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
-            [FromBody] InterestPayableRequestDto request,
+            [FromBody] ChequeBookLostRequestDto request,
             [FromQuery] string format = "VIEW")
         {
             try
             {
                 if (request == null || !ModelState.IsValid)
                 {
-                    return NotFound(new { success = false, StatusCode = 400, message = "Invalid request" });
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
                 }
-
 
                 var userIdClaim = User.FindFirst("UserId")?.Value
                                   ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
                 {
-                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                    return Unauthorized(new { success = false, StatusCode = 401, message = "Unauthorized" });
                 }
 
-                var reportName = $"InterestPayable_{request.ReportView}";
+                var reportName = $"ChequeBookLost_{request.ReportView}";
                 var upperFormat = format.ToUpper();
                 var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
-                // Check cache
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
 
@@ -85,18 +83,22 @@ namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
                         _jsReportService, _logger);
                 }
 
-                // Get report data
+                var officeIdClaim = User.FindFirst("OfficeId")?.Value;
+                string? branchIdForHeader = null;
+                if (!string.IsNullOrEmpty(officeIdClaim) && long.TryParse(officeIdClaim, out var officeId))
+                {
+                    branchIdForHeader = officeId.ToString();
+                }
+
                 var dataTask = _repository.GetReportDataAsync(request);
-
-
-                var headerTask = _commonHeaderRepository.GetCommonHeaders();
+                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
 
                 await Task.WhenAll(dataTask, headerTask);
 
                 var data = await dataTask;
                 var headerData = await headerTask;
 
-                if (!data.Rows.Any())
+                if (data.Rows == null || data.Rows.Count == 0)
                 {
                     return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
                 }
@@ -105,29 +107,27 @@ namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
                 await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
                     headerData, nameof(CommonHeader.CompanyLogo), webRoot));
 
-                // Build report data
                 var reportData = new Dictionary<string, object>
                 {
                     { "Rows", data.Rows },
                     { "TotalRecords", data.TotalRecords },
-                    { "TotalInterest", data.TotalInterest },
-                    { "TotalTax", data.TotalTax },
-                    { "TotalBalance", data.TotalBalance },
+                    { "TotalChequesLost", data.TotalChequesLost },
                     { "HeaderDataSet", headerData },
-                    { "TillDate", request.TillDateBs },
-                    { "BranchName", request.BranchName },
+                    { "FromDate", request.FromDateBs },
+                    { "ToDate", request.ToDateBs },
+                    { "BranchNames", request.BranchName },
                     { "OrderBy", request.OrderBy },
+                    { "MemberId", request.MemberIdText },
+                    { "MemberName", request.MemberName },
                     { "ReportView", request.ReportView },
-                    { "ReportViewName", data.ReportViewName ?? "All" },
+                    { "ReportViewName", request.ReportView == "Member" ? "Member Wise" : "Date Wise" },
                     { "Format", upperFormat },
-                    { "VisualReport", request.VisualReport },
-                    { "TotalDepositTypes", data.TotalDepositTypes }
+                    { "VisualReport", request.VisualReport }
                 };
 
-                // Render view
                 string viewPath = request.VisualReport
-                    ? "Views/VisualReport/VInterestPayableReport.cshtml"
-                    : "Views/Report/MemberAC/InterestPayableReport/InterestPayableReport.cshtml";
+                    ? "Views/VisualReport/VChequeBookLostReport.cshtml"
+                    : "Views/Report/MemberAC/ChequeBookLostReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -157,11 +157,10 @@ namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
                 }
 
                 return await ReportExportHelper.ExportFromCacheAsync(
-                reportKey, upperFormat,
-                reportName,
-                _jsReportService, _logger);
+                             reportKey, upperFormat,
+                             reportName,
+                             _jsReportService, _logger);
             }
-
             catch (Exception ex)
             {
                 return StatusCode(500, new

@@ -6,13 +6,7 @@ namespace NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.ChequeBookRe
     public interface IChequeBookIssueRepository
     {
         Task<ChequeBookIssueData> GetReportDataAsync(ChequeBookIssueRequestDto request);
-        Task<MemberInfoDto?> GetMemberByMemberIdAsync(string memberId);
     }
 
-    public class MemberInfoDto
-    {
-        public long MemberRegistrationId { get; set; }
-        public string? MemberId { get; set; }
-        public string? FullName { get; set; }
-    }
+
 }

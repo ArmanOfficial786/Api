@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
-using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestExpenseReport;
+using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestExpenseReportInterface;
@@ -13,7 +13,7 @@ using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.MemberAccount.InterestExpenseReport
+namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
 {
     [ApiController]
     [Route("api/[controller]")]
@@ -119,7 +119,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.InterestExpenseReport
                 // Render view
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VPayableInterestTransferredReport.cshtml"
-                    : "Views/Report/MemberAC/InterestExpenseReport/PayableInterestTransferredReport.cshtml";
+                    : "Views/Report/MemberAC/InterestPayableReport/PayableInterestTransferredReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

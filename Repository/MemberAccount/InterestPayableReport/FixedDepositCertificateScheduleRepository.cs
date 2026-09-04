@@ -1,5 +1,4 @@
-﻿// Repositories/MemberAccount/FixedDepositCertificateSchedule/FixedDepositCertificateScheduleRepository.cs
-using Dapper;
+﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
@@ -8,7 +7,7 @@ using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestPayableReport;
 using System.Data;
 
-namespace NexgenCosysReport.Repositories.MemberAccount.FixedDepositCertificateSchedule
+namespace NexgenCosysReport.Repository.MemberAccount.FixedDepositCertificateSchedule
 {
     public class FixedDepositCertificateScheduleRepository : IFixedDepositCertificateScheduleRepository
     {
@@ -26,51 +25,16 @@ namespace NexgenCosysReport.Repositories.MemberAccount.FixedDepositCertificateSc
             _logger = logger;
         }
 
-        public async Task<List<FixedDepositAccountListDto>> GetFixedDepositAccountsAsync(long userId)
+        public async Task<FixedDepositCertificateScheduleData> GetCertificateDataAsync(
+            FixedDepositCertificateScheduleRequestDto request, long userId)
         {
             try
             {
-                var sql = @"EXEC sp_5_43_GetFixedDepositAccounts @UserId";
+                _logger.LogInformation(
+                    "GetCertificateDataAsync requested by UserId: {UserId} for AccountId: {AccountId}",
+                    userId, request.AccountId);
 
-                var parameters = new DynamicParameters();
-                parameters.Add("@UserId", userId, DbType.Int64);
-
-                var connectionString = _context.Database.GetConnectionString();
-                using var connection = new SqlConnection(connectionString);
-                await connection.OpenAsync();
-
-                var result = await connection.QueryAsync<FixedDepositAccountListDto>(
-                    sql,
-                    parameters,
-                    commandType: CommandType.Text
-                );
-
-                return result.AsList();
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error in GetFixedDepositAccountsAsync");
-                throw;
-            }
-        }
-
-        public async Task<FixedDepositCertificateScheduleData> GetCertificateDataAsync(FixedDepositCertificateScheduleRequestDto request)
-        {
-            try
-            {
-                var parameters = new DynamicParameters();
-                parameters.Add("@AccountId", request.AccountId, DbType.Int64);
-
-                var connectionString = _context.Database.GetConnectionString();
-                using var connection = new SqlConnection(connectionString);
-                await connection.OpenAsync();
-
-                // Get certificate details
-                var certificateDetail = await connection.QueryFirstOrDefaultAsync<FixedDepositCertificateDetailDto>(
-                    "sp_5_43_GetFixedDepositCertificateDetails",
-                    parameters,
-                    commandType: CommandType.StoredProcedure
-                );
+                var certificateDetail = await GetCertificateDetailInternalAsync(request.AccountId);
 
                 return new FixedDepositCertificateScheduleData
                 {
@@ -85,33 +49,34 @@ namespace NexgenCosysReport.Repositories.MemberAccount.FixedDepositCertificateSc
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in GetCertificateDataAsync for AccountId: {AccountId}", request.AccountId);
+                _logger.LogError(ex, "Error in GetCertificateDataAsync for AccountId: {AccountId}, UserId: {UserId}",
+                    request.AccountId, userId);
                 throw;
             }
         }
 
-        public async Task<FixedDepositCertificateScheduleData> GetScheduleDataAsync(FixedDepositCertificateScheduleRequestDto request)
+        public async Task<FixedDepositCertificateScheduleData> GetScheduleDataAsync(
+            FixedDepositCertificateScheduleRequestDto request, long userId)
         {
             try
             {
-                var parameters = new DynamicParameters();
-                parameters.Add("@AccountId", request.AccountId, DbType.Int64);
+                _logger.LogInformation(
+                    "GetScheduleDataAsync requested by UserId: {UserId} for AccountId: {AccountId}",
+                    userId, request.AccountId);
+
+                var certificateDetail = await GetCertificateDetailInternalAsync(request.AccountId);
+
+                // sp_5_43_GetFixedDepositSchedule expects @SqlFilterAccountId (nvarchar)
+                var scheduleParameters = new DynamicParameters();
+                scheduleParameters.Add("@SqlFilterAccountId", request.AccountId.ToString(), DbType.String, size: -1);
 
                 var connectionString = _context.Database.GetConnectionString();
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
-                // Get certificate details
-                var certificateDetail = await connection.QueryFirstOrDefaultAsync<FixedDepositCertificateDetailDto>(
-                    "sp_5_43_GetFixedDepositCertificateDetails",
-                    parameters,
-                    commandType: CommandType.StoredProcedure
-                );
-
-                // Get schedule rows
                 var scheduleRows = await connection.QueryAsync<FixedDepositScheduleRowDto>(
                     "sp_5_43_GetFixedDepositSchedule",
-                    parameters,
+                    scheduleParameters,
                     commandType: CommandType.StoredProcedure
                 );
 
@@ -127,16 +92,37 @@ namespace NexgenCosysReport.Repositories.MemberAccount.FixedDepositCertificateSc
                     ShowHeader = request.ShowHeader,
                     ReportType = request.ReportType,
                     TotalRecords = scheduleList.Count,
-                    TotalPrincipal = scheduleList.Sum(r => r.PrincipalAmount ?? 0),
-                    TotalInterest = scheduleList.Sum(r => r.InterestAmount ?? 0),
-                    TotalAmount = scheduleList.Sum(r => r.TotalAmount ?? 0)
+                    TotalInterest = scheduleList.Sum(r => r.Interest ?? 0),
+                    TotalTax = scheduleList.Sum(r => r.Tax ?? 0),
+                    TotalNetAmount = scheduleList.Sum(r => r.NetAmount ?? 0)
                 };
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in GetScheduleDataAsync for AccountId: {AccountId}", request.AccountId);
+                _logger.LogError(ex, "Error in GetScheduleDataAsync for AccountId: {AccountId}, UserId: {UserId}",
+                    request.AccountId, userId);
                 throw;
             }
+        }
+
+        /// <summary>
+        /// sp_5_43_GetFixedDepositCertificateDetails requires @SqlFilterExpDetails (nvarchar(max)),
+        /// which the SP concatenates directly into a dynamic SQL WHERE clause as the account id.
+        /// </summary>
+        private async Task<FixedDepositCertificateDetailDto?> GetCertificateDetailInternalAsync(long accountId)
+        {
+            var parameters = new DynamicParameters();
+            parameters.Add("@SqlFilterExpDetails", accountId.ToString(), DbType.String, size: -1);
+
+            var connectionString = _context.Database.GetConnectionString();
+            using var connection = new SqlConnection(connectionString);
+            await connection.OpenAsync();
+
+            return await connection.QueryFirstOrDefaultAsync<FixedDepositCertificateDetailDto>(
+                "sp_5_43_GetFixedDepositCertificateDetails",
+                parameters,
+                commandType: CommandType.StoredProcedure
+            );
         }
     }
 }

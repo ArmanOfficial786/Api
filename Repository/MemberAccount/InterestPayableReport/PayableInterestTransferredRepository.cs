@@ -3,13 +3,13 @@ using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
-using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestExpenseReport;
+using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestExpenseReportInterface;
 using System.Data;
 using System.Text;
 
-namespace NexgenCosysReport.Repository.MemberAccount.InterestExpenseReport
+namespace NexgenCosysReport.Repository.MemberAccount.InterestPayableReport
 {
     public class PayableInterestTransferredRepository : IPayableInterestTransferredRepository
     {

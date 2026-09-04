@@ -49,159 +49,38 @@ namespace NexgenCosysReport.Controllers.MemberAccount.ChequeBookReport
             _dateConverter = dateConverter;
         }
 
-        [HttpGet("GetMember")]
-        public async Task<IActionResult> GetMember([FromQuery] string memberId)
-        {
-            try
-            {
-                if (string.IsNullOrEmpty(memberId))
-                {
-                    return BadRequest(new GeneralResponse<MemberInfoDto>
-                    {
-                        isValid = false,
-                        statusCode = 400,
-                        message = "Member ID is required"
-                    });
-                }
-
-                var member = await _repository.GetMemberByMemberIdAsync(memberId);
-
-                if (member == null)
-                {
-                    return NotFound(new GeneralResponse<MemberInfoDto>
-                    {
-                        isValid = false,
-                        statusCode = 404,
-                        message = "Member not found"
-                    });
-                }
-
-                return Ok(new GeneralResponse<MemberInfoDto>
-                {
-                    isValid = true,
-                    statusCode = 200,
-                    message = "Member found",
-                    data = member
-                });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Failed to get member: {MemberId}", memberId);
-                return StatusCode(500, new GeneralResponse<MemberInfoDto>
-                {
-                    isValid = false,
-                    statusCode = 500,
-                    message = "An error occurred while retrieving member"
-                });
-            }
-        }
-
         [HttpPost()]
-        public async Task<ActionResult<GeneralResponse<ReportResponseDtos>>> GenerateReport(
+        public async Task<IActionResult> GenerateReport(
             [FromBody] ChequeBookIssueRequestDto request,
             [FromQuery] string format = "VIEW")
         {
             try
             {
+                if (request == null || !ModelState.IsValid)
+                {
+                    return NotFound(new { success = false, StatusCode = 400, message = "Invalid request" });
+                }
                 var userIdClaim = User.FindFirst("UserId")?.Value
                                   ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
                 {
-                    return Unauthorized(new GeneralResponse<ReportResponseDtos>
-                    {
-                        isValid = false,
-                        statusCode = 401,
-                        message = "User not authenticated"
-                    });
-                }
-
-                if (request.ReportView == "Member")
-                {
-                    if (request.MemberId == -1)
-                    {
-                        return BadRequest(new GeneralResponse<ReportResponseDtos>
-                        {
-                            isValid = false,
-                            statusCode = 400,
-                            message = "Please select a valid member"
-                        });
-                    }
-                }
-                else
-                {
-                    if (string.IsNullOrEmpty(request.FromDateBs) || request.FromDateBs == "-1")
-                    {
-                        return BadRequest(new GeneralResponse<ReportResponseDtos>
-                        {
-                            isValid = false,
-                            statusCode = 400,
-                            message = "From date is required"
-                        });
-                    }
-
-                    if (string.IsNullOrEmpty(request.ToDateBs) || request.ToDateBs == "-1")
-                    {
-                        return BadRequest(new GeneralResponse<ReportResponseDtos>
-                        {
-                            isValid = false,
-                            statusCode = 400,
-                            message = "To date is required"
-                        });
-                    }
-
-                    var fromDate = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
-                    var toDate = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
-                    if (fromDate > toDate)
-                    {
-                        return BadRequest(new GeneralResponse<ReportResponseDtos>
-                        {
-                            isValid = false,
-                            statusCode = 400,
-                            message = "From date cannot be greater than To date"
-                        });
-                    }
-
-                    if (string.IsNullOrEmpty(request.BranchIds) || request.BranchIds == "-1")
-                    {
-                        return BadRequest(new GeneralResponse<ReportResponseDtos>
-                        {
-                            isValid = false,
-                            statusCode = 400,
-                            message = "Please select at least one branch"
-                        });
-                    }
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
                 }
 
                 var reportName = $"ChequeBookIssue_{request.ReportView}";
                 var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
 
                 if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
                 {
-                    var cachedResult = await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, reportName,
+                    return await ReportExportHelper.ExportFromCacheAsync(
+                        reportKey, upperFormat,
+                        reportName,
                         _jsReportService, _logger);
-
-                    if (cachedResult is FileContentResult fileResult)
-                    {
-                        return Ok(new GeneralResponse<ReportResponseDtos>
-                        {
-                            isValid = true,
-                            statusCode = 200,
-                            message = "Report generated from cache",
-                            data = new ReportResponseDtos
-                            {
-                                pdfData = Convert.ToBase64String(fileResult.FileContents),
-                                reportName = $"{reportName}.{upperFormat.ToLower()}"
-                            }
-                        });
-                    }
                 }
-
-                var dataTask = _repository.GetReportDataAsync(request);
 
                 var officeIdClaim = User.FindFirst("OfficeId")?.Value;
                 string? branchIdForHeader = null;
@@ -209,6 +88,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.ChequeBookReport
                 {
                     branchIdForHeader = officeId.ToString();
                 }
+                var dataTask = _repository.GetReportDataAsync(request);
 
                 var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
 
@@ -219,12 +99,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.ChequeBookReport
 
                 if (data.Rows == null || data.Rows.Count == 0)
                 {
-                    return NotFound(new GeneralResponse<ReportResponseDtos>
-                    {
-                        isValid = false,
-                        statusCode = 404,
-                        message = "No cheque book issue records found for the selected criteria"
-                    });
+                    return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
                 }
 
                 var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
@@ -280,56 +155,18 @@ namespace NexgenCosysReport.Controllers.MemberAccount.ChequeBookReport
                     return new FileContentResult(pdfBytes, "application/pdf");
                 }
 
-                var exportResult = await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, reportName,
-                    _jsReportService, _logger);
-
-                if (exportResult is FileContentResult fileResult2)
-                {
-                    return Ok(new GeneralResponse<ReportResponseDtos>
-                    {
-                        isValid = true,
-                        statusCode = 200,
-                        message = "Report generated successfully",
-                        data = new ReportResponseDtos
-                        {
-                            pdfData = Convert.ToBase64String(fileResult2.FileContents),
-                            reportName = $"{reportName}.{upperFormat.ToLower()}",
-                            pagination = new Pagination
-                            {
-                                currentPage = 1,
-                                totalPages = 1,
-                                pageSize = 1,
-                                totalRecord = data.Rows.Count
-                            }
-                        }
-                    });
-                }
-
-                return Ok(new GeneralResponse<ReportResponseDtos>
-                {
-                    isValid = true,
-                    statusCode = 200,
-                    message = "Report generated successfully"
-                });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new GeneralResponse<ReportResponseDtos>
-                {
-                    isValid = false,
-                    statusCode = 400,
-                    message = ex.Message
-                });
+                return await ReportExportHelper.ExportFromCacheAsync(
+                             reportKey, upperFormat,
+                             reportName,
+                             _jsReportService, _logger);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Cheque Book Issue report generation failed");
-                return StatusCode(500, new GeneralResponse<ReportResponseDtos>
+                return StatusCode(500, new
                 {
-                    isValid = false,
-                    statusCode = 500,
-                    message = "An error occurred while generating the report"
+                    message = ex.Message,
+                    inner = ex.InnerException?.Message,
+                    stack = ex.StackTrace
                 });
             }
         }

@@ -1,4 +1,4 @@
-﻿namespace NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestExpenseReport
+﻿namespace NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport
 {
 
     public class PayableInterestTransferredRequestDto

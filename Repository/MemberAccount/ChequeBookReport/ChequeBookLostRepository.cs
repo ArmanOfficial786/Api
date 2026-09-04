@@ -1,4 +1,4 @@
-﻿// Repositories/MemberAccount/ChequeBookReport/ChequeBookIssueRepository.cs
+﻿// Repositories/MemberAccount/ChequeBookReport/ChequeBookLostRepository.cs
 using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
@@ -11,24 +11,23 @@ using System.Text;
 
 namespace NexgenCosysReport.Repository.MemberAccount.ChequeBookReport
 {
-    public class ChequeBookIssueRepository : IChequeBookIssueRepository
+    public class ChequeBookLostRepository : IChequeBookLost
     {
         private readonly AppDbContext _context;
         private readonly IDateConverterService _dateConverter;
-        private readonly ILogger<ChequeBookIssueRepository> _logger;
+        private readonly ILogger<ChequeBookLostRepository> _logger;
 
-        public ChequeBookIssueRepository(
+        public ChequeBookLostRepository(
             AppDbContext context,
             IDateConverterService dateConverter,
-            ILogger<ChequeBookIssueRepository> logger)
+            ILogger<ChequeBookLostRepository> logger)
         {
             _context = context;
             _dateConverter = dateConverter;
             _logger = logger;
         }
 
-
-        public async Task<ChequeBookIssueData> GetReportDataAsync(ChequeBookIssueRequestDto request)
+        public async Task<ChequeBookLostData> GetReportDataAsync(ChequeBookLostRequestDto request)
         {
             try
             {
@@ -48,12 +47,12 @@ namespace NexgenCosysReport.Repository.MemberAccount.ChequeBookReport
                     var fromDateStr = fromDateAd.ToString("yyyy-MM-dd");
                     var toDateStr = toDateAd.ToString("yyyy-MM-dd");
 
-                    sqlFilterExp.Append($" AND c.ChequeIssueOn BETWEEN '{fromDateStr}' AND '{toDateStr}'");
+                    sqlFilterExp.Append($" AND i.ChequeIssueOn BETWEEN '{fromDateStr}' AND '{toDateStr}'");
                 }
 
                 if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
                 {
-                    sqlFilterExp.Append($" AND c.UsmOfficeId IN ({request.BranchIds})");
+                    sqlFilterExp.Append($" AND i.UsmOfficeId IN ({request.BranchIds})");
                 }
 
                 var orderByClause = BuildOrderByClause(request.OrderBy);
@@ -69,19 +68,19 @@ namespace NexgenCosysReport.Repository.MemberAccount.ChequeBookReport
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
-                var rows = await connection.QueryAsync<ChequeBookIssueRowDto>(
-                    "sp_5_43_GetChequeBookIssue",
+                var rows = await connection.QueryAsync<ChequeBookLostRowDto>(
+                    "sp_5_43_GetChequeLost",
                     parameters,
                     commandType: CommandType.StoredProcedure
                 );
 
                 var resultList = rows.AsList();
 
-                return new ChequeBookIssueData
+                return new ChequeBookLostData
                 {
                     Rows = resultList,
                     TotalRecords = resultList.Count,
-                    TotalChequesIssued = resultList.Sum(r => r.TotalCheques ?? 0),
+                    TotalChequesLost = resultList.Sum(r => 1), // Each row represents a lost cheque
                     FromDateBs = request.FromDateBs,
                     ToDateBs = request.ToDateBs,
                     BranchNames = request.BranchName,
@@ -93,7 +92,7 @@ namespace NexgenCosysReport.Repository.MemberAccount.ChequeBookReport
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in GetReportDataAsync for Cheque Book Issue Report");
+                _logger.LogError(ex, "Error in GetReportDataAsync for Cheque Book Lost Report");
                 throw;
             }
         }
@@ -114,13 +113,21 @@ namespace NexgenCosysReport.Repository.MemberAccount.ChequeBookReport
             {
                 result = " ORDER BY substring(a.AccountNo, 1,(len(a.AccountNo)-charindex('-', a.AccountNo))-1), a.AccountNo";
             }
-            else if (orderBy == "Cheque Issue Date")
+            else if (orderBy == "Cheque No")
             {
-                result = " ORDER BY c.ChequeIssueOnBs";
+                result = " ORDER BY c.ChequeNo";
             }
-            else if (orderBy == "Cheque No From")
+            else if (orderBy == "Issue Date")
             {
-                result = " ORDER BY c.ChequeNoFrom";
+                result = " ORDER BY i.ChequeIssueOnBs";
+            }
+            else if (orderBy == "Operator")
+            {
+                result = " ORDER BY c.LastModifiedBy";
+            }
+            else if (orderBy == "Lost Date")
+            {
+                result = " ORDER BY c.LastModifiedOn";
             }
 
             return result;

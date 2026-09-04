@@ -118,7 +118,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingsAccountMaturityRepo
                 // Render view
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VSavingsAccountMaturityReport.cshtml"
-                    : "Views/Report/MemberAC/SavingsAccountMaturityReport.cshtml";
+                    : "Views/Report/MemberAC/InterestPayableReport/SavingsAccountMaturityReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

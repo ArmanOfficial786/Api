@@ -1,42 +1,42 @@
-﻿// Controllers/MemberAccount/SavingsAccountInterestTransfer/SavingsAccountInterestTransferController.cs
+﻿// Controllers/MemberAccount/ChequeBookReport/ChequeBookWithdrawalController.cs
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
-using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport;
+using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.ChequeBookReport;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestPayableReport;
+using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.ChequeBookReport;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.MemberAccount.SavingsAccountInterestTransfer
+namespace NexgenCosysReport.Controllers.MemberAccount.ChequeBookReport
 {
     [ApiController]
     [Route("api/[controller]")]
     [Authorize]
-    public class SavingsAccountInterestTransferController : ControllerBase
+    public class ChequeBookWithdrawalController : ControllerBase
     {
-        private readonly ISavingsAccountInterestTransferRepository _repository;
+        private readonly IChequeBookWithdrawal _repository;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly ILogger<SavingsAccountInterestTransferController> _logger;
+        private readonly ILogger<ChequeBookWithdrawalController> _logger;
         private readonly IDateConverterService _dateConverter;
 
-        public SavingsAccountInterestTransferController(
-            ISavingsAccountInterestTransferRepository repository,
+        public ChequeBookWithdrawalController(
+            IChequeBookWithdrawal repository,
             ICommonHeaderRepository commonHeaderRepository,
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<SavingsAccountInterestTransferController> logger,
+            ILogger<ChequeBookWithdrawalController> logger,
             IDateConverterService dateConverter)
         {
             _repository = repository;
@@ -51,25 +51,28 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingsAccountInterestTran
 
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
-            [FromBody] SavingsAccountInterestTransferRequestDto request,
+            [FromBody] ChequeBookWithdrawalRequestDto request,
             [FromQuery] string format = "VIEW")
         {
             try
             {
                 if (request == null || !ModelState.IsValid)
                 {
-                    return NotFound(new { success = false, StatusCode = 400, message = "Invalid request" });
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
                 }
+
                 var userIdClaim = User.FindFirst("UserId")?.Value
                                   ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
                 {
-                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                    return Unauthorized(new { success = false, StatusCode = 401, message = "Unauthorized" });
                 }
-                var reportName = "SavingsAccountInterestTransfer";
-                var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 
+
+
+                var reportName = $"ChequeBookWithdrawal";
+                var upperFormat = format.ToUpper();
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -82,41 +85,47 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingsAccountInterestTran
                         _jsReportService, _logger);
                 }
 
-                // Get report data
-                var data = await _repository.GetReportDataAsync(request);
+                var officeIdClaim = User.FindFirst("OfficeId")?.Value;
+                string? branchIdForHeader = null;
+                if (!string.IsNullOrEmpty(officeIdClaim) && long.TryParse(officeIdClaim, out var officeId))
+                {
+                    branchIdForHeader = officeId.ToString();
+                }
 
-                if (!data.Rows.Any())
+                var dataTask = _repository.GetReportDataAsync(request);
+                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+
+                await Task.WhenAll(dataTask, headerTask);
+
+                var data = await dataTask;
+                var headerData = await headerTask;
+
+                if (data.Rows == null || data.Rows.Count == 0)
                 {
                     return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
                 }
-                var headerData = await _commonHeaderRepository.GetCommonHeaders();
 
                 var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
                 await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
                     headerData, nameof(CommonHeader.CompanyLogo), webRoot));
 
-                // Build report data
                 var reportData = new Dictionary<string, object>
                 {
                     { "Rows", data.Rows },
                     { "TotalRecords", data.TotalRecords },
-                    { "TotalBalance", data.TotalBalance },
-                    { "TotalInterestAmount", data.TotalInterestAmount },
+                    { "TotalWithdrawals", data.TotalWithdrawals },
                     { "HeaderDataSet", headerData },
-                    { "FromDate", request.FromDateBs },
-                    { "ToDate", request.ToDateBs },
-                    { "BranchNames", request.BranchName },
+                    { "AccountNo", request.AccountNo },
+                    { "MemberId", request.MemberId },
+                    { "MemberName", request.MemberName },
                     { "OrderBy", request.OrderBy },
-                    { "DepositTypeName", string.IsNullOrEmpty(data.DepositTypeName) ? "All" : data.DepositTypeName },
                     { "Format", upperFormat },
-                    { "VisualReport", request.VisualReport },
-                    { "TotalDepositTypes", data.TotalDepositTypes }
+                    { "VisualReport", request.VisualReport }
                 };
 
-                // Render view
                 string viewPath = request.VisualReport
-                    ? "Views/VisualReport/VSavingsAccountInterestTransferReport.cshtml"
-                    : "Views/Report/MemberAC/SavingsAccountInterestTransferReport.cshtml";
+                    ? "Views/VisualReport/VChequeBookWithdrawalReport.cshtml"
+                    : "Views/Report/MemberAC/ChequeBookWithdrawalReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -146,11 +155,10 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingsAccountInterestTran
                 }
 
                 return await ReportExportHelper.ExportFromCacheAsync(
-                   reportKey, upperFormat,
-                   reportName,
-                   _jsReportService, _logger);
+                             reportKey, upperFormat,
+                             reportName,
+                             _jsReportService, _logger);
             }
-
             catch (Exception ex)
             {
                 return StatusCode(500, new
@@ -161,5 +169,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingsAccountInterestTran
                 });
             }
         }
+
+
     }
 }

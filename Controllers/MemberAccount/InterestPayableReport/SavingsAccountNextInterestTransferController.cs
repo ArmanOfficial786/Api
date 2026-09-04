@@ -1,4 +1,4 @@
-﻿// Controllers/MemberAccount/InterestPayableReport/InterestPayableController.cs
+﻿// Controllers/MemberAccount/SavingsAccountInterestTransfer/SavingsAccountInterestTransferController.cs
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -13,30 +13,30 @@ using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
+namespace NexgenCosysReport.Controllers.MemberAccount.SavingsAccountInterestTransfer
 {
     [ApiController]
     [Route("api/[controller]")]
     [Authorize]
-    public class InterestPayableController : ControllerBase
+    public class SavingsAccountNextInterestTransferController : ControllerBase
     {
-        private readonly IInterestPayableRepository _repository;
+        private readonly ISavingsAccountInterestTransferRepository _repository;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly ILogger<InterestPayableController> _logger;
+        private readonly ILogger<SavingsAccountNextInterestTransferController> _logger;
         private readonly IDateConverterService _dateConverter;
 
-        public InterestPayableController(
-            IInterestPayableRepository repository,
+        public SavingsAccountNextInterestTransferController(
+            ISavingsAccountInterestTransferRepository repository,
             ICommonHeaderRepository commonHeaderRepository,
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<InterestPayableController> logger,
+            ILogger<SavingsAccountNextInterestTransferController> logger,
             IDateConverterService dateConverter)
         {
             _repository = repository;
@@ -51,7 +51,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
 
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
-            [FromBody] InterestPayableRequestDto request,
+            [FromBody] SavingsAccountInterestTransferRequestDto request,
             [FromQuery] string format = "VIEW")
         {
             try
@@ -60,20 +60,17 @@ namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
                 {
                     return NotFound(new { success = false, StatusCode = 400, message = "Invalid request" });
                 }
-
-
                 var userIdClaim = User.FindFirst("UserId")?.Value
                                   ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
                 {
                     return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
                 }
-
-                var reportName = $"InterestPayable_{request.ReportView}";
+                var reportName = "SavingsAccountInterestTransfer";
                 var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 
-                // Check cache
+
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
 
@@ -86,20 +83,13 @@ namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
                 }
 
                 // Get report data
-                var dataTask = _repository.GetReportDataAsync(request);
-
-
-                var headerTask = _commonHeaderRepository.GetCommonHeaders();
-
-                await Task.WhenAll(dataTask, headerTask);
-
-                var data = await dataTask;
-                var headerData = await headerTask;
+                var data = await _repository.GetReportDataAsync(request);
 
                 if (!data.Rows.Any())
                 {
                     return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
                 }
+                var headerData = await _commonHeaderRepository.GetCommonHeaders();
 
                 var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
                 await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
@@ -110,15 +100,14 @@ namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
                 {
                     { "Rows", data.Rows },
                     { "TotalRecords", data.TotalRecords },
-                    { "TotalInterest", data.TotalInterest },
-                    { "TotalTax", data.TotalTax },
                     { "TotalBalance", data.TotalBalance },
+                    { "TotalInterestAmount", data.TotalInterestAmount },
                     { "HeaderDataSet", headerData },
-                    { "TillDate", request.TillDateBs },
-                    { "BranchName", request.BranchName },
+                    { "FromDate", request.FromDateBs },
+                    { "ToDate", request.ToDateBs },
+                    { "BranchNames", request.BranchName },
                     { "OrderBy", request.OrderBy },
-                    { "ReportView", request.ReportView },
-                    { "ReportViewName", data.ReportViewName ?? "All" },
+                    { "DepositTypeName", string.IsNullOrEmpty(data.DepositTypeName) ? "All" : data.DepositTypeName },
                     { "Format", upperFormat },
                     { "VisualReport", request.VisualReport },
                     { "TotalDepositTypes", data.TotalDepositTypes }
@@ -126,8 +115,8 @@ namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
 
                 // Render view
                 string viewPath = request.VisualReport
-                    ? "Views/VisualReport/VInterestPayableReport.cshtml"
-                    : "Views/Report/MemberAC/InterestPayableReport/InterestPayableReport.cshtml";
+                    ? "Views/VisualReport/VSavingsAccountInterestTransferReport.cshtml"
+                    : "Views/Report/MemberAC/InterestPayableReport/SavingsAccountInterestTransferReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -157,9 +146,9 @@ namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
                 }
 
                 return await ReportExportHelper.ExportFromCacheAsync(
-                reportKey, upperFormat,
-                reportName,
-                _jsReportService, _logger);
+                   reportKey, upperFormat,
+                   reportName,
+                   _jsReportService, _logger);
             }
 
             catch (Exception ex)

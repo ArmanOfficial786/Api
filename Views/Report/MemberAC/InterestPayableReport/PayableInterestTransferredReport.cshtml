@@ -1,4 +1,5 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestExpenseReport
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport
+
 @model Dictionary<string, object>
 @{
     Layout = null;
@@ -14,17 +15,21 @@
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Grouped by Deposit Type, matching the image: group label row, then member rows, then a subtotal row.
-    // No re-ordering here — groups/rows print in the order the repository already returned.
+    // Grouped by Deposit Type, matching the image: group label + subtotal row first,
+    // then that group's member rows. No re-ordering — groups/rows print in the order
+    // the repository already returned.
     var depositTypeGroups = rows
         .GroupBy(r => r.DepositTypeName ?? "")
         .ToList();
+
+    // Running S.N. counter across all groups (not reset per group)
+    var serialNo = 0;
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Saving Interest Transfer To Payable Report</title>
+    <title>Payable Interest Transfer to Account</title>
     <style>
             * {
                 margin: 0;
@@ -90,18 +95,14 @@
 
             .type-row td {
                 font-weight: bold;
-                padding-top: 8px;
+                border-top: 1px solid #000;
+                border-bottom: 1px solid #000;
+                padding-top: 5px;
+                padding-bottom: 5px;
             }
 
             .detail-row td {
                 border-bottom: 1px solid #eee;
-            }
-
-            .subtotal-row td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-                padding-top: 5px;
-                padding-bottom: 5px;
             }
 
             .grand-total-row td {
@@ -142,17 +143,17 @@
 
         <table class="data-table" data-sheet-name="PayableInterestTransferred">
             <colgroup>
+                <col style="width:6%;" />
+                <col style="width:13%;" />
+                <col style="width:20%;" />
                 <col style="width:15%;" />
-                <col style="width:12%;" />
+                <col style="width:15%;" />
                 <col style="width:14%;" />
-                <col style="width:10%;" />
                 <col style="width:17%;" />
-                <col style="width:14%;" />
-                <col style="width:18%;" />
             </colgroup>
             <tbody>
                 <tr class="meta-title">
-                    <td colspan="7">Saving Interest Transfer To Payable Report</td>
+                    <td colspan="7">Payable Interest Transfer to Account</td>
                 </tr>
 
                 <tr class="meta-row">
@@ -172,13 +173,13 @@
                 <tr class="meta-spacer"><td colspan="7"></td></tr>
 
                 <tr>
-                    <th>Deposit Type</th>
+                    <th>S.N.</th>
                     <th>Member Id</th>
+                    <th>Name</th>
                     <th>Account No</th>
-                    <th class="text-right">Interest Rate</th>
                     <th class="text-right">Interest Amount</th>
                     <th class="text-right">Tax Amount</th>
-                    <th>Interest Date</th>
+                    <th>Date</th>
                 </tr>
 
                 @if (depositTypeGroups.Any())
@@ -186,30 +187,26 @@
                     foreach (var typeGroup in depositTypeGroups)
                     {
                         <tr class="type-row">
-                            <td>@typeGroup.Key</td>
-                            <td colspan="6"></td>
+                            <td></td>
+                            <td colspan="3">@typeGroup.Key</td>
+                            <td class="text-right">@typeGroup.Sum(r => r.Interest ?? 0).ToString("N2")</td>
+                            <td class="text-right">@typeGroup.Sum(r => r.Tax ?? 0).ToString("N2")</td>
+                            <td></td>
                         </tr>
 
                         foreach (var row in typeGroup)
                         {
+                            serialNo++;
                             <tr class="detail-row">
-                                <td></td>
+                                <td>@serialNo</td>
                                 <td>@(row.MemberId ?? "")</td>
+                                <td>@(row.MemberName ?? "")</td>
                                 <td>@(row.AccountNo ?? "")</td>
-                                <td class="text-right">@(row.InterestRate.HasValue ? row.InterestRate.Value.ToString("N2") : "")</td>
                                 <td class="text-right">@(row.Interest.HasValue ? row.Interest.Value.ToString("N2") : "")</td>
                                 <td class="text-right">@(row.Tax.HasValue ? row.Tax.Value.ToString("N2") : "")</td>
                                 <td>@(row.InterestDate ?? "")</td>
                             </tr>
                         }
-
-                        <tr class="subtotal-row">
-                            <td colspan="3" class="text-right">@typeGroup.Key</td>
-                            <td></td>
-                            <td class="text-right">@typeGroup.Sum(r => r.Interest ?? 0).ToString("N2")</td>
-                            <td class="text-right">@typeGroup.Sum(r => r.Tax ?? 0).ToString("N2")</td>
-                            <td></td>
-                        </tr>
                     }
 
                     <tr class="grand-total-row">

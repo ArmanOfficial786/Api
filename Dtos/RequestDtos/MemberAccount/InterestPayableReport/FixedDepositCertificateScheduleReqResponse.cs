@@ -1,6 +1,5 @@
 ﻿namespace NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport
 {
-
     public class FixedDepositCertificateScheduleRequestDto
     {
         public long AccountId { get; set; } = -1;
@@ -13,34 +12,33 @@
 
     public class FixedDepositCertificateDetailDto
     {
-        public string? AccountNo { get; set; }
         public string? MemberId { get; set; }
         public string? MemberName { get; set; }
-        public string? FatherName { get; set; }
-        public string? GrandFatherName { get; set; }
-        public string? SpouseName { get; set; }
+        public string? InterestRate { get; set; }        // string, e.g. "10.5 %"
+        public string? AccountNo { get; set; }
+        public string? AccountOpenOnBS { get; set; }      // Bs date, only version SP returns
+        public string? MaturityOnBs { get; set; }         // Bs date, only version SP returns
+        public string? AccountType { get; set; }          // aliased DepositTypeName in SP
         public string? Address { get; set; }
         public string? PhoneNo { get; set; }
-        public string? DepositTypeName { get; set; }
-        public string? AccountOpenDate { get; set; }
-        public string? AccountOpenDateBs { get; set; }
-        public string? MaturityDate { get; set; }
-        public string? MaturityDateBs { get; set; }
-        public decimal? DepositAmount { get; set; }
-        public decimal? InterestRate { get; set; }
-        public decimal? MaturityAmount { get; set; }
-        public string? Remarks { get; set; }
+        public string? InterestTransfer { get; set; }
+        public string? InterestCalculation { get; set; }
+        public decimal? DealAmount { get; set; }          // net balance: deposits - withdrawals
+        public long? SycDepositCategoryId { get; set; }
     }
 
+    // Matches #FixedDepositSchedule columns exactly: SN, Interest, Tax, NetAmount,
+    // InterestDateOnBs, InterestDateOn, DaysNo, IsGenerated
     public class FixedDepositScheduleRowDto
     {
-        public int? InstallmentNo { get; set; }
-        public string? PaymentDate { get; set; }
-        public string? PaymentDateBs { get; set; }
-        public decimal? PrincipalAmount { get; set; }
-        public decimal? InterestAmount { get; set; }
-        public decimal? TotalAmount { get; set; }
-        public string? Remarks { get; set; }
+        public int? SN { get; set; }
+        public decimal? Interest { get; set; }
+        public decimal? Tax { get; set; }
+        public decimal? NetAmount { get; set; }
+        public string? InterestDateOnBs { get; set; }
+        public DateTime? InterestDateOn { get; set; }
+        public int? DaysNo { get; set; }
+        public string? IsGenerated { get; set; }
     }
 
     public class FixedDepositCertificateScheduleData
@@ -48,9 +46,9 @@
         public FixedDepositCertificateDetailDto? CertificateDetail { get; set; }
         public List<FixedDepositScheduleRowDto> ScheduleRows { get; set; } = new();
         public int TotalRecords { get; set; }
-        public decimal TotalPrincipal { get; set; }
         public decimal TotalInterest { get; set; }
-        public decimal TotalAmount { get; set; }
+        public decimal TotalTax { get; set; }
+        public decimal TotalNetAmount { get; set; }
         public string? AccountNo { get; set; }
         public string? MemberId { get; set; }
         public string? MemberName { get; set; }
