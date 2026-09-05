@@ -127,7 +127,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.ChequeBookReport
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VChequeBookLostReport.cshtml"
-                    : "Views/Report/MemberAC/ChequeBookLostReport.cshtml";
+                    : "Views/Report/MemberAC/ChequeBookReport/ChequeBookLostReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

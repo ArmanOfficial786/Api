@@ -116,7 +116,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.ChequeBookReport
                     { "ToDate", request.ToDateBs },
                     { "BranchNames", request.BranchName },
                     { "OrderBy", request.OrderBy },
-                    { "MemberId", request.MemberIdText },
+                    { "MemberId", request.MemberIdText ?? "" },
                     { "MemberName", request.MemberName },
                     { "ReportView", request.ReportView },
                     { "ReportViewName", request.ReportView == "Member" ? "Member Wise" : "Date Wise" },
@@ -126,7 +126,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.ChequeBookReport
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VChequeBookIssueReport.cshtml"
-                    : "Views/Report/MemberAC/ChequeBookIssueReport.cshtml";
+                    : "Views/Report/MemberAC/ChequeBookReport/ChequeBookIssueReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

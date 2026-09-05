@@ -1,4 +1,4 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.ChequeBookReport
+﻿@* @using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.ChequeBookReport
 
 @model Dictionary<string, object>
 @{
@@ -217,6 +217,200 @@
                 {
                     <tr>
                         <td colspan="9" class="text-center">
+                            No cheque book issue records found for the selected criteria
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
+ *@
+
+
+
+
+
+
+
+
+@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.ChequeBookReport
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+    var rows = (Model["Rows"] as List<ChequeBookIssueRowDto>) ?? new List<ChequeBookIssueRowDto>();
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
+    var memberId = Model["MemberId"]?.ToString() ?? "";
+    var memberName = Model["MemberName"]?.ToString() ?? "";
+    var reportView = Model["ReportView"]?.ToString() ?? "Date";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var hasRows = rows != null && rows.Count > 0;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Cheque Book Issue Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9.5pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9.5pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    vertical-align: top;
+                }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            /* -------- Title row -------- */
+            .report-title td {
+                text-align: center;
+                font-size: 15pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 10px 6px 12px 6px;
+            }
+
+            /* -------- Meta rows -------- */
+            .meta-row td {
+                padding: 2px 6px;
+                font-size: 9.5pt;
+            }
+
+            .meta-right {
+                text-align: right;
+            }
+
+            /* -------- Column header row -------- */
+            .column-header-row th {
+                text-align: left;
+                font-weight: bold;
+                border-top: none;
+                border-bottom: 1.5px solid #000;
+                white-space: nowrap;
+                padding: 4px 6px 6px 6px;
+            }
+
+            /* -------- Detail rows -------- */
+            .detail-row td {
+                border-bottom: 1px solid #000;
+                padding: 5px 6px;
+            }
+
+            @@media print {
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <colgroup>
+                <col style="width:16%;" />
+                <col style="width:22%;" />
+                <col style="width:16%;" />
+                <col style="width:15%;" />
+                <col style="width:15%;" />
+                <col style="width:16%;" />
+            </colgroup>
+            <tbody>
+                <tr class="report-title">
+                    <td colspan="6">Cheque Book Issue Report</td>
+                </tr>
+
+                @if (reportView == "Member")
+                {
+                    <tr class="meta-row">
+                        <td colspan="6"><strong>Member Id :</strong> @memberId &nbsp;&nbsp;&nbsp;&nbsp; <strong>Member Name :</strong> @memberName</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="3"><strong>Report Generated On:</strong> @generatedOn</td>
+                        <td colspan="3"></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr class="meta-row">
+                        <td colspan="6"><strong>Branch Name :</strong> @branchNames</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="3"><strong>Report Generated On:</strong> @generatedOn</td>
+                        <td colspan="3" class="meta-right">
+                            <strong>From Date :</strong> @fromDate
+                            &nbsp;&nbsp;&nbsp;&nbsp;
+                            <strong>To Date :</strong> @toDate
+                        </td>
+                    </tr>
+                }
+
+                <tr class="column-header-row">
+                    <th>Member ID</th>
+                    <th>Member Name</th>
+                    <th>A/C No.</th>
+                    <th>Issue Date</th>
+                    <th>Cheque No. From</th>
+                    <th>Cheque No. To</th>
+                </tr>
+
+                @if (hasRows)
+                {
+                    foreach (var row in rows)
+                    {
+                        <tr class="detail-row">
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.MemberName ?? "")</td>
+                            <td>@(row.AccountNo ?? "")</td>
+                            <td>@(row.ChequeIssueDateBs ?? "")</td>
+                            <td>@(row.ChequeNoFrom.HasValue ? row.ChequeNoFrom.Value.ToString() : "")</td>
+                            <td>@(row.ChequeNoTo.HasValue ? row.ChequeNoTo.Value.ToString() : "")</td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="6" class="text-center">
                             No cheque book issue records found for the selected criteria
                         </td>
                     </tr>

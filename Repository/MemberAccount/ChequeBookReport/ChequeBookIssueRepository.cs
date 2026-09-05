@@ -27,6 +27,51 @@ namespace NexgenCosysReport.Repository.MemberAccount.ChequeBookReport
             _logger = logger;
         }
 
+        private static T SafeGetValue<T>(dynamic obj, string propertyName)
+        {
+            try
+            {
+                if (obj is IDictionary<string, object> dict)
+                {
+                    if (dict.TryGetValue(propertyName, out var value))
+                    {
+                        if (value == null)
+                            return default;
+
+                        if (typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(Nullable<>))
+                        {
+                            var underlyingType = Nullable.GetUnderlyingType(typeof(T));
+                            return (T)Convert.ChangeType(value, underlyingType);
+                        }
+
+                        return (T)Convert.ChangeType(value, typeof(T));
+                    }
+                }
+                else
+                {
+                    var property = obj.GetType().GetProperty(propertyName);
+                    if (property != null)
+                    {
+                        var value = property.GetValue(obj);
+                        if (value == null)
+                            return default;
+
+                        if (typeof(T).IsGenericType && typeof(T).GetGenericTypeDefinition() == typeof(Nullable<>))
+                        {
+                            var underlyingType = Nullable.GetUnderlyingType(typeof(T));
+                            return (T)Convert.ChangeType(value, underlyingType);
+                        }
+
+                        return (T)Convert.ChangeType(value, typeof(T));
+                    }
+                }
+                return default;
+            }
+            catch
+            {
+                return default;
+            }
+        }
 
         public async Task<ChequeBookIssueData> GetReportDataAsync(ChequeBookIssueRequestDto request)
         {
@@ -69,13 +114,36 @@ namespace NexgenCosysReport.Repository.MemberAccount.ChequeBookReport
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
-                var rows = await connection.QueryAsync<ChequeBookIssueRowDto>(
+                var rows = await connection.QueryAsync<dynamic>(
                     "sp_5_43_GetChequeBookIssue",
                     parameters,
                     commandType: CommandType.StoredProcedure
                 );
 
-                var resultList = rows.AsList();
+                // ---------------------------------------------------------------
+                // Confirmed against the real sp_5_43_GetChequeBookIssue SELECT list:
+                // the date column comes back aliased as "IssueDate"
+                // (c.ChequeIssueOnBs As IssueDate) — not "ChequeIssueOnBs" or
+                // "ChequeIssueOn", which is what this mapping was previously
+                // looking for. That mismatch is why Issue Date was always empty.
+                // The SP also never returns Status/Remarks/BranchName/TotalCheques
+                // columns at all, so those stay null/blank here — that's expected
+                // given this SELECT list, not a mapping bug.
+                // ---------------------------------------------------------------
+                var resultList = rows.Select(r => new ChequeBookIssueRowDto
+                {
+                    MemberId = SafeGetValue<string>(r, "MemberId"),
+                    MemberName = SafeGetValue<string>(r, "Name"),
+                    AccountNo = SafeGetValue<string>(r, "AccountNo"),
+                    ChequeIssueDate = SafeGetValue<string>(r, "IssueDate"),
+                    ChequeIssueDateBs = SafeGetValue<string>(r, "IssueDate"),
+                    ChequeNoFrom = SafeGetValue<long?>(r, "ChequeNoFrom"),
+                    ChequeNoTo = SafeGetValue<long?>(r, "ChequeNoTo"),
+                    TotalCheques = SafeGetValue<int?>(r, "TotalCheques"),
+                    Status = SafeGetValue<string>(r, "Status"),
+                    Remarks = SafeGetValue<string>(r, "Remarks"),
+                    BranchName = SafeGetValue<string>(r, "BranchName")
+                }).ToList();
 
                 return new ChequeBookIssueData
                 {
@@ -100,27 +168,28 @@ namespace NexgenCosysReport.Repository.MemberAccount.ChequeBookReport
 
         private static string BuildOrderByClause(string orderBy)
         {
-            string result = " ORDER BY c.ChequeIssueOnBs";
+            string result;
 
-            if (orderBy == "Member Name")
+            switch (orderBy)
             {
-                result = " ORDER BY Name";
-            }
-            else if (orderBy == "Member Id")
-            {
-                result = " ORDER BY substring(m.MemberId, 1,(len(m.MemberId)-charindex('-', m.MemberId))-1), m.MemberId";
-            }
-            else if (orderBy == "Account No")
-            {
-                result = " ORDER BY substring(a.AccountNo, 1,(len(a.AccountNo)-charindex('-', a.AccountNo))-1), a.AccountNo";
-            }
-            else if (orderBy == "Cheque Issue Date")
-            {
-                result = " ORDER BY c.ChequeIssueOnBs";
-            }
-            else if (orderBy == "Cheque No From")
-            {
-                result = " ORDER BY c.ChequeNoFrom";
+                case "Member Name":
+                    result = " ORDER BY Name";
+                    break;
+                case "Member Id":
+                    result = " ORDER BY substring(m.MemberId, 1,(len(m.MemberId)-charindex('-', m.MemberId))-1), m.MemberId";
+                    break;
+                case "Account No":
+                    result = " ORDER BY substring(a.AccountNo, 1,(len(a.AccountNo)-charindex('-', a.AccountNo))-1), a.AccountNo";
+                    break;
+                case "Cheque Issue Date":
+                    result = " ORDER BY c.ChequeIssueOnBs";
+                    break;
+                case "Cheque No From":
+                    result = " ORDER BY c.ChequeNoFrom";
+                    break;
+                default:
+                    result = " ORDER BY c.ChequeIssueOnBs";
+                    break;
             }
 
             return result;

@@ -4,22 +4,21 @@
 @{
     Layout = null;
     var rows = (Model["Rows"] as List<ChequeBookWithdrawalRowDto>) ?? new List<ChequeBookWithdrawalRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalWithdrawals = Model["TotalWithdrawals"] as int? ?? 0;
-    var accountNo = Model["AccountNo"]?.ToString() ?? "";
-    var memberId = Model["MemberId"]?.ToString() ?? "";
-    var memberName = Model["MemberName"]?.ToString() ?? "";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
     var hasRows = rows != null && rows.Count > 0;
+
+    // Two-level grouping matching the image: Member -> Account No -> cheque rows.
+    // Rows must arrive pre-sorted by MemberId, then AccountNo (see repository's default
+    // OrderBy) since GroupBy preserves first-seen order rather than sorting.
+    var memberGroups = rows.GroupBy(r => new { r.MemberId, r.MemberName }).ToList();
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Cheque Book Withdrawal Report</title>
+    <title>Cheque Withdrawal Report</title>
     <style>
             * {
                 margin: 0;
@@ -31,6 +30,7 @@
                 font-family: Arial, sans-serif;
                 font-size: 9pt;
                 background: white;
+                color: #000;
             }
 
             .report-container {
@@ -38,33 +38,71 @@
                 overflow: visible;
             }
 
+            thead {
+                display: table-row-group;
+            }
+
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
                 font-size: 9pt;
+                table-layout: fixed;
             }
 
                 .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
                     padding: 4px 6px;
-                    border: 1px solid #ccc;
+                    vertical-align: middle;
                 }
 
-                .data-table th {
-                    background: #f2f2f2;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                }
-
-                .data-table thead {
-                    display: table-row-group;
-                }
-
-            .grand-total {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
                 font-weight: bold;
-                background: #f9f9f9;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                border-top: 2px solid #000;
+                border-bottom: 1.5px solid #000;
+                text-align: left;
+                white-space: nowrap;
+                font-weight: bold;
+            }
+
+            .member-row td {
+                font-weight: bold;
+                padding-top: 12px;
+                padding-bottom: 2px;
+                border: none;
+            }
+
+            .member-row.first-group td {
+                padding-top: 6px;
+            }
+
+            .account-row td {
+                font-weight: bold;
+                padding-left: 20px;
+                padding-bottom: 2px;
+                border: none;
+            }
+
+            .cheque-row td {
+                border: none;
+                border-bottom: 1px solid #eee;
             }
 
             .text-right {
@@ -75,91 +113,14 @@
                 text-align: center !important;
             }
 
-            .filter-info {
-                margin-bottom: 4px;
-            }
-
-            .report-title {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-            }
-
-            .highlight-cheque {
-                color: #1565c0;
-                font-weight: bold;
-            }
-
-            .highlight-status {
-                font-weight: bold;
-            }
-
-            .status-withdrawn {
-                color: #c62828;
-            }
-
-            .status-cancelled {
-                color: #f57f17;
-            }
-
-            .status-issued {
-                color: #2e7d32;
-            }
-
-            .status-cleared {
-                color: #1565c0;
-            }
-
-            .status-returned {
-                color: #e65100;
-            }
-
-            .status-pending {
-                color: #6a1b9a;
-            }
-
-            .badge {
-                padding: 2px 8px;
-                border-radius: 10px;
-                font-size: 8pt;
-                font-weight: bold;
-                display: inline-block;
-            }
-
-            .badge-withdrawn {
-                background: #ffcdd2;
-                color: #c62828;
-            }
-
-            .badge-cancelled {
-                background: #fff3e0;
-                color: #f57f17;
-            }
-
-            .badge-issued {
-                background: #c8e6c9;
-                color: #2e7d32;
-            }
-
-            .badge-cleared {
-                background: #bbdefb;
-                color: #1565c0;
-            }
-
-            .badge-returned {
-                background: #ffe0b2;
-                color: #e65100;
-            }
-
-            .badge-pending {
-                background: #e1bee7;
-                color: #6a1b9a;
-            }
-
             @@media print {
-                .data-table thead {
+                thead {
                     display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
                 }
             }
     </style>
@@ -171,106 +132,75 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th colspan="10" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
-                        Cheque Book Withdrawal Report
-                    </th>
-                </tr>
-                <tr>
-                    <td colspan="10">
-                        <div class="filter-info">
-                            <strong>Account No:</strong> @accountNo &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Member ID:</strong> @memberId &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Member Name:</strong> @memberName &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Generated:</strong> @generatedOn
-                        </div>
-                    </td>
-                </tr>
-                <tr>
-                    <th style="width:3%;">SN</th>
-                    <th style="width:12%;">Member ID</th>
-                    <th style="width:20%;">Member Name</th>
-                    <th style="width:12%;">Account No</th>
-                    <th style="width:10%;" class="highlight-cheque">Cheque No</th>
-                    <th style="width:10%;">Cheque Date</th>
-                    <th style="width:10%;">Withdrawal Date</th>
-                    <th style="width:8%;" class="text-right">Amount</th>
-                    <th style="width:10%;">Status</th>
-                    <th style="width:5%;">Branch</th>
-                </tr>
-            </thead>
+        <table class="data-table" data-sheet-name="ChequeWithdrawal">
+            <colgroup>
+                <col style="width:14%;" />
+                <col style="width:20%;" />
+                <col style="width:18%;" />
+                <col style="width:16%;" />
+                <col style="width:16%;" />
+                <col style="width:16%;" />
+            </colgroup>
             <tbody>
+                <tr class="meta-title">
+                    <td colspan="6">Cheque Withdrawal Report</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="6"><strong>Report Generated On :</strong> @generatedOn</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="6"></td></tr>
+
+                <tr>
+                    <th>Member ID</th>
+                    <th>Member Name</th>
+                    <th>A/C No.</th>
+                    <th>Cheque No</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                </tr>
+
                 @if (hasRows)
                 {
-                    int sn = 0;
-                    foreach (var row in rows)
+                    bool isFirstMemberGroup = true;
+                    foreach (var memberGroup in memberGroups)
                     {
-                        sn++;
-                        string badgeClass = "badge";
-                        string statusLower = (row.Status ?? "").ToLower();
-
-                        if (statusLower.Contains("withdrawn") || statusLower.Contains("withdraw"))
-                        {
-                            badgeClass += " badge-withdrawn";
-                        }
-                        else if (statusLower.Contains("cancelled"))
-                        {
-                            badgeClass += " badge-cancelled";
-                        }
-                        else if (statusLower.Contains("issued"))
-                        {
-                            badgeClass += " badge-issued";
-                        }
-                        else if (statusLower.Contains("cleared"))
-                        {
-                            badgeClass += " badge-cleared";
-                        }
-                        else if (statusLower.Contains("returned"))
-                        {
-                            badgeClass += " badge-returned";
-                        }
-                        else if (statusLower.Contains("pending"))
-                        {
-                            badgeClass += " badge-pending";
-                        }
-                        else
-                        {
-                            badgeClass += " badge-issued";
-                        }
-
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td class="text-right highlight-cheque">@(row.ChequeNo.HasValue ? row.ChequeNo.Value.ToString() : "")</td>
-                            <td>@(row.ChequeDateBs ?? "")</td>
-                            <td>@(row.WithdrawalDateBs ?? "")</td>
-                            <td class="text-right">@(row.WithdrawalAmount.HasValue ? row.WithdrawalAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-center"><span class="@badgeClass">@(row.Status ?? "N/A")</span></td>
-                            <td>@(row.BranchName ?? "")</td>
+                        <tr class="member-row @(isFirstMemberGroup ? "first-group" : "")">
+                            <td>@memberGroup.Key.MemberId</td>
+                            <td>@memberGroup.Key.MemberName</td>
+                            <td colspan="4"></td>
                         </tr>
+                        isFirstMemberGroup = false;
+
+                        var accountGroups = memberGroup.GroupBy(r => r.AccountNo ?? "").ToList();
+
+                        foreach (var accountGroup in accountGroups)
+                        {
+                            <tr class="account-row">
+                                <td></td>
+                                <td></td>
+                                <td>@accountGroup.Key</td>
+                                <td colspan="3"></td>
+                            </tr>
+
+                            foreach (var row in accountGroup)
+                            {
+                                <tr class="cheque-row">
+                                    <td></td>
+                                    <td></td>
+                                    <td></td>
+                                    <td>@(row.ChequeNo.HasValue ? row.ChequeNo.Value.ToString("D6") : "")</td>
+                                    <td>@(row.WithdrawalDateBs ?? "")</td>
+                                    <td>@(row.Status ?? "")</td>
+                                </tr>
+                            }
+                        }
                     }
-                    <tr class="grand-total">
-                        <td colspan="8" class="text-right"><strong>Total Withdrawals</strong></td>
-                        <td class="text-center"><strong>@totalWithdrawals</strong></td>
-                        <td></td>
-                    </tr>
-                    <tr>
-                        <td colspan="8" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
-                        <td></td>
-                    </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="10" class="text-center">
-                            No cheque withdrawal records found for the selected account
-                        </td>
+                        <td colspan="6" class="text-center">No cheque withdrawal records found for the selected account</td>
                     </tr>
                 }
             </tbody>
