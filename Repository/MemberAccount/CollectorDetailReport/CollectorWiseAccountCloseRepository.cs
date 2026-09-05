@@ -62,6 +62,14 @@ namespace NexgenCosysReport.Repository.MemberAccount.CollectorDetailReport
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
+                // NOTE: Charge / NetAmount are mapped here on a best-effort
+                // basis (NetAmount = CloseAmount - Charge) because the SP
+                // behind sp_5_43_GetCollectorWiseAccountClose hasn't been
+                // provided. If the SP actually returns its own Charge /
+                // NetAmount columns, switch this back to a typed
+                // QueryAsync<CollectorWiseAccountCloseRowDto>(...) call and
+                // Dapper will map them directly by column name — same fix
+                // pattern used for the Maturity and Interest Transfer reports.
                 var rows = await connection.QueryAsync<CollectorWiseAccountCloseRowDto>(
                     "sp_5_43_GetCollectorWiseAccountClose",
                     parameters,
@@ -69,6 +77,14 @@ namespace NexgenCosysReport.Repository.MemberAccount.CollectorDetailReport
                 );
 
                 var resultList = rows.AsList();
+
+                foreach (var row in resultList)
+                {
+                    if (row.NetAmount is null)
+                    {
+                        row.NetAmount = (row.CloseAmount ?? 0) - (row.Charge ?? 0);
+                    }
+                }
 
                 // Get collector name
                 string? collectorName = null;
@@ -82,6 +98,8 @@ namespace NexgenCosysReport.Repository.MemberAccount.CollectorDetailReport
                     Rows = resultList,
                     TotalRecords = resultList.Count,
                     TotalCloseAmount = resultList.Sum(r => r.CloseAmount ?? 0),
+                    TotalCharge = resultList.Sum(r => r.Charge ?? 0),
+                    TotalNetAmount = resultList.Sum(r => r.NetAmount ?? 0),
                     FromDateBs = request.FromDateBs,
                     ToDateBs = request.ToDateBs,
                     OrderBy = request.OrderBy,

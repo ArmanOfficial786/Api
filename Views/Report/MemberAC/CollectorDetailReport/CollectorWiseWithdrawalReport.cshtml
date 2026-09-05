@@ -3,6 +3,7 @@
 @model Dictionary<string, object>
 @{
     Layout = null;
+
     var rows = (Model["Rows"] as List<CollectorWiseWithdrawalRowDto>) ?? new List<CollectorWiseWithdrawalRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
@@ -12,7 +13,23 @@
     var collectorName = Model["CollectorName"]?.ToString() ?? "";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // Company / letterhead details - wire these up to your settings/config source
+    var regNo = Model.ContainsKey("RegNo") ? Model["RegNo"]?.ToString() : "3535345345345";
+    var orgName = Model.ContainsKey("OrgName") ? Model["OrgName"]?.ToString() : "Cosys SACCOS";
+    var address = Model.ContainsKey("Address") ? Model["Address"]?.ToString() : "Pulchwok, Lalitpur";
+    var phoneNo = Model.ContainsKey("PhoneNo") ? Model["PhoneNo"]?.ToString() : "9803391696";
+    var faxNo = Model.ContainsKey("FaxNo") ? Model["FaxNo"]?.ToString() : "01-4243466 , 01-4243466";
+    var email = Model.ContainsKey("Email") ? Model["Email"]?.ToString() : "cosyssoftwareprivate@gmail.com";
+    var website = Model.ContainsKey("Website") ? Model["Website"]?.ToString() : "www.cosys.com.np";
+    var panNo = Model.ContainsKey("PanNo") ? Model["PanNo"]?.ToString() : "4324235325235";
+    var logoUrl = Model.ContainsKey("LogoUrl") ? Model["LogoUrl"]?.ToString() : "/images/logo.png";
+
+    // Group rows by collector, matching the "Collector Name" section layout in the report
+    var grouped = rows
+        .GroupBy(r => string.IsNullOrEmpty(r.CollectoreName) ? collectorName : r.CollectoreName)
+        .ToList();
 }
 <!DOCTYPE html>
 <html>
@@ -28,42 +45,111 @@
 
             body {
                 font-family: Arial, sans-serif;
-                font-size: 9pt;
+                font-size: 9.5pt;
+                color: #000;
                 background: white;
             }
 
             .report-container {
                 width: 100%;
                 overflow: visible;
+                padding: 10px 20px;
             }
 
+            /* ---------- Letterhead ---------- */
+            .letterhead-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 6px;
+            }
+
+                .letterhead-table td {
+                    padding: 1px 4px;
+                    vertical-align: top;
+                    font-size: 9.5pt;
+                }
+
+            .logo-cell {
+                width: 14%;
+                text-align: left;
+            }
+
+                .logo-cell img {
+                    height: 55px;
+                    margin-right: 2px;
+                }
+
+            .reg-no {
+                text-align: right;
+                font-size: 9.5pt;
+            }
+
+            .org-name {
+                text-align: center;
+                font-size: 17pt;
+                font-weight: bold;
+            }
+
+            .org-address {
+                text-align: center;
+                font-size: 10.5pt;
+                font-weight: bold;
+            }
+
+            .info-left {
+                width: 43%;
+            }
+
+            .info-right {
+                width: 43%;
+            }
+
+            /* ---------- Title ---------- */
+            .report-title {
+                text-align: center;
+                font-size: 15pt;
+                font-weight: bold;
+                text-decoration: underline;
+                margin: 10px 0 8px 0;
+            }
+
+            /* ---------- Filter / meta info ---------- */
+            .meta-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 10px;
+            }
+
+                .meta-table td {
+                    padding: 2px 4px;
+                    font-size: 9.5pt;
+                }
+
+            .meta-right {
+                text-align: right;
+            }
+
+            /* ---------- Data table ---------- */
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 9pt;
+                font-size: 9.5pt;
             }
 
-                .data-table td, .data-table th {
-                    padding: 4px 6px;
-                    border: 1px solid #ccc;
-                }
-
                 .data-table th {
-                    background: #f2f2f2;
+                    text-align: left;
+                    font-weight: bold;
                     border-top: 2px solid #000;
                     border-bottom: 1px solid #000;
-                    text-align: left;
+                    padding: 4px 6px;
                 }
 
-                .data-table thead {
-                    display: table-row-group;
+                .data-table td {
+                    padding: 3px 6px;
                 }
 
-            .grand-total {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
+            .col-sn {
+                width: 6%;
             }
 
             .text-right {
@@ -74,95 +160,130 @@
                 text-align: center !important;
             }
 
-            .filter-info {
-                margin-bottom: 4px;
-            }
-
-            .report-title {
-                text-align: center;
-                font-size: 14pt;
+            .collector-row td {
                 font-weight: bold;
-                text-decoration: underline;
+                padding-top: 8px;
             }
 
-            .highlight-withdrawal {
-                color: #c62828;
+            .data-row td {
+                padding-left: 18px;
+            }
+
+                .data-row td:first-child {
+                    padding-left: 24px;
+                }
+
+            .subtotal-row td {
+                border-top: 1px solid #000;
+                font-weight: bold;
+            }
+
+            .record-count-row td {
+                padding-left: 24px;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
                 font-weight: bold;
             }
 
             @@media print {
                 .data-table thead {
-                    display: table-row-group;
+                    display: table-header-group;
                 }
             }
     </style>
 </head>
 <body>
     <div class="report-container">
+
         @if (!isExcel)
         {
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
+        <div class="report-title">Collector Wise Withdrawl Report</div>
+
+        <table class="meta-table">
+            <tr>
+                <td></td>
+                <td class="meta-right">
+                    <strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp;&nbsp;
+                    <strong>To Date :</strong> @toDate
+                </td>
+            </tr>
+            <tr>
+                <td><strong>Report Generated On:</strong> @generatedOn</td>
+                <td class="meta-right"><strong>Collector Name :</strong> @collectorName</td>
+            </tr>
+        </table>
+
         <table class="data-table">
             <thead>
                 <tr>
-                    <th colspan="7" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
-                        Collector Wise Withdrawal Report
-                    </th>
-                </tr>
-                <tr>
-                    <td colspan="7">
-                        <div class="filter-info">
-                            <strong>Collector:</strong> @collectorName &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Generated:</strong> @generatedOn
-                        </div>
-                    </td>
-                </tr>
-                <tr>
-                    <th style="width:3%;">SN</th>
-                    <th style="width:12%;">Date</th>
-                    <th style="width:15%;">Member Id</th>
-                    <th style="width:20%;">Member Name</th>
-                    <th style="width:15%;">Account No</th>
-                    <th style="width:15%;" class="text-right">Amount</th>
-                    <th style="width:20%;">Operator</th>
+                    <th class="col-sn">Collector Name</th>
+                    <th>Member Id</th>
+                    <th>Member Name</th>
+                    <th>Account No</th>
+                    <th class="text-right">Amount</th>
+                    <th>Date</th>
                 </tr>
             </thead>
             <tbody>
-                @if (rows.Any())
+                @if (grouped.Any())
                 {
-                    int sn = 0;
-                    foreach (var row in rows)
+                    foreach (var group in grouped)
                     {
-                        sn++;
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@(row.Date ?? "")</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td class="text-right highlight-withdrawal">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
-                            <td>@(row.Operator ?? "")</td>
+                        var groupAmount = group.Sum(r => r.Amount ?? 0);
+                        int sn = 0;
+
+                        <tr class="collector-row">
+                            <td colspan="6">@group.Key</td>
+                        </tr>
+
+                        foreach (var row in group)
+                        {
+                            sn++;
+                            <tr class="data-row">
+                                <td>@sn</td>
+                                <td>@(row.MemberId ?? "")</td>
+                                <td>@(row.MemberName ?? "")</td>
+                                <td>@(row.AccountNo ?? "")</td>
+                                <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
+                                <td>@(row.Date ?? "")</td>
+                            </tr>
+                        }
+
+                        <tr class="subtotal-row">
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td class="text-right"><strong>Total Amount :</strong></td>
+                            <td class="text-right"><strong>@groupAmount.ToString("N2")</strong></td>
+                            <td></td>
+                        </tr>
+                        <tr class="record-count-row">
+                            <td>@group.Count()</td>
+                            <td colspan="5"></td>
                         </tr>
                     }
-                    <tr class="grand-total">
-                        <td colspan="5" class="text-right"><strong>Total</strong></td>
-                        <td class="text-right"><strong>@totalAmount.ToString("N2")</strong></td>
-                        <td></td>
-                    </tr>
-                    <tr>
-                        <td colspan="5" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-right"><strong>@totalRecords</strong></td>
-                        <td></td>
-                    </tr>
+
+                    @if (grouped.Count > 1)
+                    {
+                        <tr class="grand-total-row">
+                            <td colspan="3" class="text-right">Grand Total</td>
+                            <td class="text-right">Total Records: @totalRecords</td>
+                            <td class="text-right">@totalAmount.ToString("N2")</td>
+                            <td></td>
+                        </tr>
+                    }
                 }
                 else
                 {
-                    <tr><td colspan="7" class="text-center">No withdrawal transactions found for the selected criteria</td></tr>
+                    <tr>
+                        <td colspan="6" class="text-center">No withdrawal transactions found for the selected criteria</td>
+                    </tr>
                 }
             </tbody>
         </table>

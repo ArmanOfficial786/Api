@@ -101,11 +101,15 @@ namespace NexgenCosysReport.Controllers.MemberAccount.CollectorDetailReport
                     { "Rows", data.Rows },
                     { "TotalRecords", data.TotalRecords },
                     { "TotalCloseAmount", data.TotalCloseAmount },
+                    { "TotalCharge", data.TotalCharge },
+                    { "TotalNetAmount", data.TotalNetAmount },
                     { "HeaderDataSet", headerData },
                     { "FromDate", request.FromDateBs },
                     { "ToDate", request.ToDateBs },
                     { "OrderBy", request.OrderBy },
-                    { "CollectorName", data.CollectorName },
+                    // data.CollectorName is nullable (string?); Dictionary<string, object>
+                    // requires a non-null value, hence the CS8604 warning — fixed with ?? string.Empty.
+                    { "CollectorName", data.CollectorName ?? string.Empty },
                     { "CollectorId", data.CollectorId },
                     { "Format", upperFormat },
                     { "VisualReport", request.VisualReport },
@@ -114,7 +118,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.CollectorDetailReport
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VCollectorWiseAccountCloseReport.cshtml"
-                    : "Views/Report/MemberAC/CollectorWiseAccountCloseReport.cshtml";
+                    : "Views/Report/MemberAC/CollectorDetailReport/CollectorWiseAccountCloseReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

@@ -21,6 +21,21 @@
         public string? CloseDate { get; set; }
         public string? DepositTypeName { get; set; }
         public decimal? InterestRate { get; set; }
+
+        /// <summary>
+        /// Deduction charged on closure — shown in its own column in the
+        /// report. Map this from whatever column the SP actually returns
+        /// for the closure charge (name unconfirmed — the SP script for
+        /// this report hasn't been provided yet).
+        /// </summary>
+        public decimal? Charge { get; set; }
+
+        /// <summary>
+        /// Amount actually paid out after charges (CloseAmount - Charge,
+        /// or its own SP column if one exists). Same caveat as Charge above.
+        /// </summary>
+        public decimal? NetAmount { get; set; }
+
         public decimal? CloseAmount { get; set; }
         public string? Operator { get; set; }
         public string? Reason { get; set; }
@@ -32,6 +47,13 @@
         public List<CollectorWiseAccountCloseRowDto> Rows { get; set; } = new();
         public int TotalRecords { get; set; }
         public decimal TotalCloseAmount { get; set; }
+
+        /// <summary>Sum of Charge across all rows.</summary>
+        public decimal TotalCharge { get; set; }
+
+        /// <summary>Sum of NetAmount across all rows.</summary>
+        public decimal TotalNetAmount { get; set; }
+
         public string? FromDateBs { get; set; }
         public string? ToDateBs { get; set; }
         public string? OrderBy { get; set; }

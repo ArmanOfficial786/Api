@@ -16,6 +16,7 @@
         public string? Date { get; set; }
         public string? MemberId { get; set; }
         public string? MemberName { get; set; }
+        public string? CollectoreName { get; set; }
         public string? AccountNo { get; set; }
         public decimal? Amount { get; set; }
         public string? Operator { get; set; }

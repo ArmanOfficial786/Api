@@ -117,7 +117,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.CollectorDetailReport
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VCollectorWiseCommissionReport.cshtml"
-                    : "Views/Report/MemberAC/CollectorWiseCommissionReport.cshtml";
+                    : "Views/Report/MemberAC/CollectorDetailReport/CollectorWiseCommissionReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

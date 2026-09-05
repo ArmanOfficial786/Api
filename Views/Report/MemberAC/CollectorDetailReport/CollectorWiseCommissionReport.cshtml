@@ -4,16 +4,14 @@
 @{
     Layout = null;
     var rows = (Model["Rows"] as List<CollectorWiseCommissionRowDto>) ?? new List<CollectorWiseCommissionRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalCollectedAmount = Model["TotalCollectedAmount"] as decimal? ?? 0;
     var totalCommissionAmount = Model["TotalCommissionAmount"] as decimal? ?? 0;
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "";
     var collectorName = Model["CollectorName"]?.ToString() ?? "";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 }
 <!DOCTYPE html>
 <html>
@@ -21,21 +19,94 @@
     <meta charset="utf-8" />
     <title>Collector Wise Commission Report</title>
     <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { font-family: Arial, sans-serif; font-size: 9pt; background: white; }
-            .report-container { width: 100%; overflow: visible; }
-            .data-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
-            .data-table td, .data-table th { padding: 4px 6px; border: 1px solid #ccc; }
-            .data-table th { background: #f2f2f2; border-top: 2px solid #000; border-bottom: 1px solid #000; text-align: left; }
-            .data-table thead { display: table-row-group; }
-            .grand-total { border-top: 2px solid #000; border-bottom: 2px solid #000; font-weight: bold; background: #f9f9f9; }
-            .text-right { text-align: right !important; }
-            .text-center { text-align: center !important; }
-            .filter-info { margin-bottom: 4px; }
-            .report-title { text-align: center; font-size: 14pt; font-weight: bold; text-decoration: underline; }
-            .highlight-collected { color: #2e7d32; font-weight: bold; }
-            .highlight-commission { color: #1565c0; font-weight: bold; }
-            @@media print { .data-table thead { display: table-row-group; } }
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .report-title {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 10px 0;
+            }
+
+            .meta-row {
+                width: 100%;
+                padding: 2px 0;
+            }
+
+                .meta-row td {
+                    padding: 2px 0;
+                    border: none;
+                }
+
+            .meta-right {
+                text-align: right;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                margin-top: 6px;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 4px 6px;
+                    border: 1px solid #ccc;
+                }
+
+                .data-table th {
+                    background: #f2f2f2;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                }
+
+                .data-table thead {
+                    display: table-row-group;
+                }
+
+            .grand-total {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .highlight-collected {
+                color: #2e7d32;
+                font-weight: bold;
+            }
+
+            .highlight-commission {
+                color: #1565c0;
+                font-weight: bold;
+            }
+
+            @@media print {
+                .data-table thead {
+                    display: table-row-group;
+                }
+            }
     </style>
 </head>
 <body>
@@ -45,68 +116,60 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
+        <div class="report-title">Collector Wise Commission Report</div>
+
+        <table class="meta-row" style="width:100%;">
+            <tr>
+                <td></td>
+                <td class="meta-right">
+                    <strong>From Date :</strong>&nbsp;&nbsp;@fromDate&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                    <strong>To Date :</strong>&nbsp;&nbsp;@toDate
+                </td>
+            </tr>
+            <tr>
+                <td><strong>Report Generated On:</strong>&nbsp;&nbsp;@generatedOn</td>
+                <td class="meta-right"><strong>Collector Name :</strong>&nbsp;&nbsp;@collectorName</td>
+            </tr>
+        </table>
+
         <table class="data-table">
             <thead>
                 <tr>
-                    <th colspan="8" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
-                        Collector Wise Commission Report
-                    </th>
-                </tr>
-                <tr>
-                    <td colspan="8">
-                        <div class="filter-info">
-                            <strong>Collector:</strong> @collectorName &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Generated:</strong> @generatedOn
-                        </div>
-                    </td>
-                </tr>
-                <tr>
-                    <th style="width:3%;">SN</th>
-                    <th style="width:12%;">Date</th>
                     <th style="width:12%;">Member Id</th>
-                    <th style="width:18%;">Member Name</th>
-                    <th style="width:10%;">Type</th>
-                    <th style="width:15%;" class="text-right">Collected Amount</th>
-                    <th style="width:15%;" class="text-right">Commission Amount</th>
-                    <th style="width:15%;">Operator</th>
+                    <th style="width:22%;">Member Name</th>
+                    <th style="width:16%;">Type</th>
+                    <th style="width:12%;">Account No</th>
+                    <th style="width:13%;" class="text-right">Collected Amount</th>
+                    <th style="width:13%;" class="text-right">Commission Amount</th>
+                    <th style="width:12%;">Date</th>
                 </tr>
             </thead>
             <tbody>
                 @if (rows.Any())
                 {
-                    int sn = 0;
                     foreach (var row in rows)
                     {
-                        sn++;
                         <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@(row.Date ?? "")</td>
                             <td>@(row.MemberId ?? "")</td>
                             <td>@(row.MemberName ?? "")</td>
                             <td>@(row.Type ?? "")</td>
+                            <td>@(row.AccountNo ?? "")</td>
                             <td class="text-right highlight-collected">@(row.CollectedAmount.HasValue ? row.CollectedAmount.Value.ToString("N2") : "")</td>
                             <td class="text-right highlight-commission">@(row.CommissionAmount.HasValue ? row.CommissionAmount.Value.ToString("N2") : "")</td>
-                            <td>@(row.Operator ?? "")</td>
+                            <td>@(row.Date ?? "")</td>
                         </tr>
                     }
                     <tr class="grand-total">
-                        <td colspan="5" class="text-right"><strong>Total</strong></td>
+                        <td colspan="3"></td>
+                        <td class="text-right"><strong>Total Amount :</strong></td>
                         <td class="text-right"><strong>@totalCollectedAmount.ToString("N2")</strong></td>
                         <td class="text-right"><strong>@totalCommissionAmount.ToString("N2")</strong></td>
                         <td></td>
                     </tr>
-                    <tr>
-                        <td colspan="5" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-right"><strong>@totalRecords</strong></td>
-                        <td colspan="2"></td>
-                    </tr>
                 }
                 else
                 {
-                    <tr><td colspan="8" class="text-center">No commission transactions found for the selected criteria</td></tr>
+                    <tr><td colspan="7" style="text-align:center;">No commission transactions found for the selected criteria</td></tr>
                 }
             </tbody>
         </table>
