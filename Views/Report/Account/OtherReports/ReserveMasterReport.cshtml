@@ -1,0 +1,261 @@
+﻿@* Views/Report/Account/OthersReport/ReserveMasterReport.cshtml *@
+@using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<ReserveMasterRowDto>) ?? new List<ReserveMasterRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalReserveAmount = Model["TotalReserveAmount"] as decimal? ?? 0;
+
+    decimal accountedLoss = 0;
+    if (Model.TryGetValue("AccountedLoss", out object? lossValue))
+    {
+        accountedLoss = lossValue as decimal? ?? 0;
+    }
+
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "Title";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var totalPercentage = rows.Sum(r => r.Percentage ?? 0);
+    var grandTotal = rows.Sum(r => r.Amount ?? 0);
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Reserve Master Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            /* Accumulated loss box */
+            .accounted-loss-wrap {
+                text-align: center;
+                padding: 6px 0;
+            }
+
+            .accounted-loss-box {
+                display: inline-block;
+                border: 1px solid #000;
+                padding: 8px 24px;
+                font-size: 10pt;
+                font-weight: bold;
+            }
+
+                .accounted-loss-box .loss-value {
+                    margin-left: 40px;
+                }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+                padding: 3px 6px;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+                padding: 3px 6px;
+            }
+
+            .total-row td {
+                border-top: 2px solid #000;
+                font-weight: bold;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            /* Header company info style */
+            .header-company td {
+                text-align: center;
+                font-size: 10pt;
+                padding: 2px 6px;
+            }
+
+            .header-company .company-name {
+                font-size: 12pt;
+                font-weight: bold;
+            }
+
+            .header-company .company-details {
+                font-size: 9pt;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="ReserveMaster">
+            <colgroup>
+                <col style="width:60%;" />
+                <col style="width:20%;" />
+                <col style="width:20%;" />
+            </colgroup>
+            <tbody>
+                <!-- Report Title -->
+                <tr class="meta-title">
+                    <td colspan="3">Reserve Master Report</td>
+                </tr>
+
+                <!-- Metadata: Report Generated On (left) | From Date | To Date (right) -->
+                <tr class="meta-row">
+                    <td><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td><strong>From Date :</strong> @fromDate</td>
+                    <td class="text-right"><strong>To Date :</strong> @toDate</td>
+                </tr>
+                <tr class="meta-row">
+                    <td></td>
+                    <td colspan="2"><strong>Branch Name :</strong> @branchNames</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="3"></td></tr>
+
+                <!-- Accumulated Loss -->
+                <tr>
+                    <td colspan="3" class="accounted-loss-wrap">
+                        <span class="accounted-loss-box">
+                            ACCUMULATED LOSS
+                            <span class="loss-value">@accountedLoss.ToString("N2")</span>
+                        </span>
+                    </td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="3"></td></tr>
+
+                <!-- Table Header -->
+                <tr>
+                    <th>Title</th>
+                    <th class="text-right">Percentage</th>
+                    <th class="text-right">Amount</th>
+                </tr>
+
+                <!-- Data Rows -->
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td>@(row.Title ?? "")</td>
+                            <td class="text-right">@(row.Percentage.HasValue ? row.Percentage.Value.ToString("N2") : "0.00")</td>
+                            <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "0.00")</td>
+                        </tr>
+                    }
+
+                    <!-- Single Total Row -->
+                    <tr class="total-row">
+                        <td class="text-right"><strong>Total :</strong></td>
+                        <td class="text-right"><strong>@totalPercentage.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@grandTotal.ToString("N2")</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="3" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

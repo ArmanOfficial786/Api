@@ -111,7 +111,7 @@ namespace NexgenCosysReport.Controllers.Account.AccountingReports
                         reportKey: reportKey,
                         reportPath: request.VisualReport
                             ? "Views/VisualReport/Account/VBalanceSheetReport.cshtml"
-                            : "Views/Report/Account/BalanceSheetReport.cshtml",
+                            : "Views/Report/Account/AccountingReport/BalanceSheetReport.cshtml",
                         data: reportData));
                 if (upperFormat == "VIEW")
                 {

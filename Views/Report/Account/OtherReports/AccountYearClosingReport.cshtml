@@ -1,0 +1,247 @@
+﻿<!-- Views/Report/Account/OthersReport/AccountYearClosingReport.cshtml -->
+@using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<AccountYearClosingRowDto>) ?? new List<AccountYearClosingRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "Branch Name";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Account Year Closing Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+                padding: 3px 6px;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+                padding: 3px 6px;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+
+            .badge {
+                display: inline-block;
+                padding: 2px 10px;
+                border-radius: 3px;
+                font-size: 8pt;
+                font-weight: bold;
+            }
+
+            .badge-closed {
+                background: #d4edda;
+                color: #155724;
+            }
+
+            .badge-deleted {
+                background: #f8d7da;
+                color: #721c24;
+            }
+
+            .badge-pending {
+                background: #fff3cd;
+                color: #856404;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+
+                .grand-total-row td {
+                    background: #f9f9f9 !important;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="AccountYearClosing">
+            <colgroup>
+                <col style="width:8%;" />
+                <col style="width:17%;" />
+                <col style="width:17%;" />
+                <col style="width:17%;" />
+                <col style="width:17%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="7">Account Year Closing Report</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="3"><strong>Branch Name :</strong> @branchNames</td>
+                    <td colspan="4" class="text-right">
+                        <strong>Order By :</strong> @orderBy
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="7"><strong>Report Generated On :</strong> @generatedOn</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="7"></td></tr>
+
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Branch Name</th>
+                    <th>Account Year</th>
+                    <th>Closed Date (BS)</th>
+                    <th>Voucher No</th>
+                    <th>Status</th>
+                    <th>Closed By</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        var badgeClass = "badge-pending";
+                        if (!string.IsNullOrEmpty(row.Status))
+                        {
+                            var statusLower = row.Status.ToLower();
+                            if (statusLower.Contains("closed"))
+                            {
+                                badgeClass = "badge-closed";
+                            }
+                            else if (statusLower.Contains("deleted"))
+                            {
+                                badgeClass = "badge-deleted";
+                            }
+                        }
+
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.BranchName ?? "")</td>
+                            <td>@(row.AccountYear ?? "")</td>
+                            <td>@(row.ClosedOnBs ?? "")</td>
+                            <td>@(row.VoucherNo ?? "")</td>
+                            <td>
+                                <span class="badge @badgeClass">@(row.Status ?? "N/A")</span>
+                            </td>
+                            <td>@(row.ClosedBy ?? "")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="6" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-center"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

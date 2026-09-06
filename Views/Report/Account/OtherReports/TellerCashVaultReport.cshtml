@@ -1,0 +1,284 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<TellerCashVaultRowDto>) ?? new List<TellerCashVaultRowDto>();
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var reportType = Model["ReportType"]?.ToString() ?? "FromVault";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var reportTitle = reportType.Equals("ToVault", StringComparison.OrdinalIgnoreCase)
+        ? "Teller Cash (To Vault) Report"
+        : "Teller Cash (From Vault) Report";
+
+    var groupedByTeller = rows
+        .GroupBy(r => r.TellerName ?? "")
+        .OrderBy(g => g.Key);
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>@reportTitle</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: "Times New Roman", Times, serif;
+                font-size: 9.5pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .report-title {
+                text-align: center;
+                font-size: 15pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 6px 0 12px 0;
+            }
+
+            .meta-table {
+                width: 100%;
+                border-collapse: collapse;
+                border-bottom: 1px solid #000;
+                margin-bottom: 4px;
+            }
+
+                .meta-table td {
+                    padding: 3px 4px 8px 4px;
+                    font-size: 9.5pt;
+                    vertical-align: top;
+                }
+
+            .meta-label {
+                font-weight: bold;
+            }
+
+            .col-header-table {
+                width: 100%;
+                border-collapse: collapse;
+                border-bottom: 1px solid #000;
+                margin-bottom: 4px;
+            }
+
+                .col-header-table th {
+                    text-align: left;
+                    font-weight: bold;
+                    padding: 3px 4px 6px 4px;
+                    font-size: 9.5pt;
+                }
+
+            .teller-name-row td {
+                font-weight: bold;
+                padding: 10px 4px 2px 4px;
+                font-size: 9.5pt;
+            }
+
+            .branch-row-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+
+                .branch-row-table td {
+                    padding: 2px 4px;
+                    font-size: 9.5pt;
+                }
+
+            .denom-table {
+                border-collapse: collapse;
+                border: 1px solid #000;
+                margin: 2px 0 10px 30px;
+                width: calc(100% - 30px);
+            }
+
+                .denom-table td {
+                    border: 1px solid #000;
+                    padding: 3px 8px;
+                    font-size: 9.5pt;
+                }
+
+            .denom-label {
+                font-weight: bold;
+                width: 12%;
+            }
+
+            .denom-x {
+                width: 3%;
+                font-weight: bold;
+            }
+
+            .denom-count {
+                width: 12%;
+            }
+
+            .denom-amount {
+                width: 23%;
+                text-align: right;
+            }
+
+            .text-right {
+                text-align: right;
+            }
+
+            .text-center {
+                text-align: center;
+            }
+
+            @@media print {
+                .teller-name-row {
+                    page-break-after: avoid;
+                }
+
+                .denom-table {
+                    page-break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <div class="report-title">@reportTitle</div>
+
+        <table class="meta-table">
+            <tr>
+                <td width="30%"><span class="meta-label">Report Generated On :</span> @generatedOn</td>
+                <td width="35%"><span class="meta-label">From Date :</span> @fromDate</td>
+                <td width="35%"><span class="meta-label">To Date :</span> @toDate</td>
+            </tr>
+        </table>
+
+        <table class="col-header-table">
+            <colgroup>
+                <col style="width:30%;" />
+                <col style="width:25%;" />
+                <col style="width:25%;" />
+                <col style="width:20%;" />
+            </colgroup>
+            <tr>
+                <th>Teller Name</th>
+                <th>Date</th>
+                <th>Amount</th>
+                <th>Issued By</th>
+            </tr>
+        </table>
+
+        @if (rows.Any())
+        {
+            foreach (var tellerGroup in groupedByTeller)
+            {
+                <table style="width:100%; border-collapse: collapse;">
+                    <tr class="teller-name-row">
+                        <td colspan="4">@tellerGroup.Key</td>
+                    </tr>
+                </table>
+
+                foreach (var row in tellerGroup)
+                {
+                    <table class="branch-row-table">
+                        <colgroup>
+                            <col style="width:30%;" />
+                            <col style="width:25%;" />
+                            <col style="width:25%;" />
+                            <col style="width:20%;" />
+                        </colgroup>
+                        <tr>
+                            <td style="padding-left: 20px;">@(row.OfficeName ?? "")</td>
+                            <td>@(row.Date ?? "")</td>
+                            <td>@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
+                            <td>@(row.FromVaultBy ?? "")</td>
+                        </tr>
+                    </table>
+
+                    <table class="denom-table">
+                        <tr>
+                            <td class="denom-label">Rs 1</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs1 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs1 ?? 0) * 1m).ToString("N2"))</td>
+                            <td class="denom-label">Rs 50</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs50 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs50 ?? 0) * 50m).ToString("N2"))</td>
+                        </tr>
+                        <tr>
+                            <td class="denom-label">Rs 2</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs2 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs2 ?? 0) * 2m).ToString("N2"))</td>
+                            <td class="denom-label">Rs 100</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs100 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs100 ?? 0) * 100m).ToString("N2"))</td>
+                        </tr>
+                        <tr>
+                            <td class="denom-label">Rs 5</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs5 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs5 ?? 0) * 5m).ToString("N2"))</td>
+                            <td class="denom-label">Rs 250</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs250 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs250 ?? 0) * 250m).ToString("N2"))</td>
+                        </tr>
+                        <tr>
+                            <td class="denom-label">Rs 10</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs10 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs10 ?? 0) * 10m).ToString("N2"))</td>
+                            <td class="denom-label">Rs 500</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs500 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs500 ?? 0) * 500m).ToString("N2"))</td>
+                        </tr>
+                        <tr>
+                            <td class="denom-label">Rs 20</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs20 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs20 ?? 0) * 20m).ToString("N2"))</td>
+                            <td class="denom-label">Rs 1000</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs1000 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs1000 ?? 0) * 1000m).ToString("N2"))</td>
+                        </tr>
+                        <tr>
+                            <td class="denom-label">Rs 25</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs25 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs25 ?? 0) * 25m).ToString("N2"))</td>
+                            <td class="denom-label">Paisa</td>
+                            <td></td>
+                            <td class="denom-count">@(row.Paisa ?? 0)</td>
+                            <td class="denom-amount">0</td>
+                        </tr>
+                    </table>
+                }
+            }
+        }
+        else
+        {
+            <p class="text-center">No data found for the selected criteria</p>
+        }
+    </div>
+</body>
+</html>

@@ -103,7 +103,7 @@ namespace NexgenCosysReport.Controllers.Account.AccountingReports
                         reportKey: reportKey,
                         reportPath: request.VisualReport
                             ? "Views/VisualReport/VCashFlowDetailsReport.cshtml"
-                            : "Views/Report/Account/CashFlowDetailReport.cshtml",
+                            : "Views/Report/Account/AccountingReport/CashFlowDetailReport.cshtml",
                         data: reportData));
 
                 if (upperFormat == "VIEW")

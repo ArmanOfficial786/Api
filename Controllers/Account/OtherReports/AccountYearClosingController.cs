@@ -1,40 +1,41 @@
-﻿// Controllers/AccountOperation/CostOfFundController.cs
+﻿// Controllers/Account/OthersReport/AccountYearClosingController.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Account.AccountingReport;
+using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Account.AccountingReport;
+using NexgenCosysReport.Inteface.ServiceInterface.Account.OtherReports;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.Account.AccountingReports
+namespace NexgenCosysReport.Controllers.Account.OthersReport
 {
     [ApiController]
-    [Route("api/[controller]")]
-    public class CostOfFundController : ControllerBase
+    [Route("api/account/[controller]")]
+    //[Authorize]
+    public class AccountYearClosingController : ControllerBase
     {
-        private readonly ICostofFund _costOfFundService;
+        private readonly IAccountYearClosingRepository _repository;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly ILogger<CostOfFundController> _logger;
+        private readonly ILogger<AccountYearClosingController> _logger;
 
-        public CostOfFundController(
-            ICostofFund costOfFundService,
+        public AccountYearClosingController(
+            IAccountYearClosingRepository repository,
             ICommonHeaderRepository commonHeaderRepository,
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<CostOfFundController> logger)
+            ILogger<AccountYearClosingController> logger)
         {
-            _costOfFundService = costOfFundService;
+            _repository = repository;
             _commonHeaderRepository = commonHeaderRepository;
             _jsReportService = jsReportService;
             _webHostEnvironment = webHostEnvironment;
@@ -43,16 +44,28 @@ namespace NexgenCosysReport.Controllers.Account.AccountingReports
             _logger = logger;
         }
 
-        [HttpPost()]
+        [HttpPost]
         public async Task<IActionResult> GenerateReport(
-            [FromBody] CostOfFundRequest request,
+            [FromBody] AccountYearClosingRequestDto request,
             [FromQuery] string format = "VIEW")
         {
             try
             {
-                var reportName = "CostOfFund";
+                //var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                //if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                //{
+                //    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                //}
+
+                var reportName = "AccountYearClosing";
                 var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+
+                if (request == null || !ModelState.IsValid)
+                {
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
+                }
+
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -60,49 +73,54 @@ namespace NexgenCosysReport.Controllers.Account.AccountingReports
                 if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
                 {
                     return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, reportName,
+                        reportKey, upperFormat,
+                        reportName,
                         _jsReportService, _logger);
                 }
 
-                // Fetch data and header
-                var dataTask = _costOfFundService.GetCostOfFund(request);
+                // Get report data
+                var data = await _repository.GetAccountYearClosingDataAsync(request);
+
+                if (!data.Rows.Any())
+                {
+                    return NotFound(new { success = false, StatusCode = 404, message = "No data found" });
+                }
+
+                // Get header data
                 string? branchIdForHeader = null;
-                if (!request.SameCompanyName && request.BranchId >= 0)
+                if (!string.IsNullOrEmpty(request.BranchIds) &&
+                    request.BranchIds != "-1" && !request.BranchIds.Contains(','))
                 {
-                    branchIdForHeader = request.BranchId.ToString();
+                    branchIdForHeader = request.BranchIds;
                 }
-                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
 
-                await Task.WhenAll(dataTask, headerTask);
-
-                var data = await dataTask;
-                var headerData = await headerTask;
-
-                if (!data.DepositRows.Any() && !data.LoanRows.Any())
-                {
-                    return NotFound(new { success = false, message = "No data found" });
-                }
+                var headerData = await _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
 
                 var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-                await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData, nameof(CommonHeader.CompanyLogo), webRoot));
 
+                await ReportUtils.ConvertUniqueImagesToBase64Async(
+                    headerData, nameof(CommonHeader.CompanyLogo), webRoot);
+
+                // Prepare report data
                 var reportData = new Dictionary<string, object>
                 {
-                    { "CostOfFundData", data },
+                    { "Rows", data.Rows },
+                    { "TotalRecords", data.TotalRecords },
+                    { "BranchNames", data.BranchNames ?? "All Branches" },
+                    { "OrderBy", data.OrderBy },
                     { "HeaderDataSet", headerData },
-                    { "TillDate", request.TillDate },
-                    { "BranchName", request.BranchName },
-                    { "OrderBy", request.OrderBy },
-                    { "Format", upperFormat }
+                    { "Format", upperFormat },
+                    { "VisualReport", request.VisualReport }
                 };
+
+                string viewPath = request.VisualReport
+                    ? "Views/VisualReport/VAccountYearClosingReport.cshtml"
+                    : "Views/Report/Account/OthersReport/AccountYearClosingReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
                         reportKey: reportKey,
-                        reportPath: request.VisualReport
-                            ? "Views/VisualReport/VCostOfFundReport.cshtml"
-                            : "Views/Report/Account/AccountingReport/CostOfFund.cshtml",
+                        reportPath: viewPath,
                         data: reportData));
 
                 if (upperFormat == "VIEW")
@@ -116,7 +134,7 @@ namespace NexgenCosysReport.Controllers.Account.AccountingReports
                         pageSize = 1,
                         hasNextPage = totalPages > 1,
                         hasPreviousPage = false,
-                        totalRecord = data.DepositRows.Count + data.LoanRows.Count
+                        totalRecord = data.Rows.Count
                     };
 
                     _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
@@ -127,13 +145,19 @@ namespace NexgenCosysReport.Controllers.Account.AccountingReports
                 }
 
                 return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, reportName,
+                    reportKey, upperFormat,
+                    reportName,
                     _jsReportService, _logger);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "CostOfFund report failed");
-                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
+                _logger.LogError(ex, "Error generating Account Year Closing Report");
+                return StatusCode(500, new
+                {
+                    message = ex.Message,
+                    inner = ex.InnerException?.Message,
+                    stack = ex.StackTrace
+                });
             }
         }
     }

@@ -1,0 +1,278 @@
+﻿<!-- Views/Report/Account/OthersReport/DailyIncomeReport.cshtml -->
+@using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<DailyIncomeRowDto>) ?? new List<DailyIncomeRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalDebitAmount = Model["TotalDebitAmount"] as decimal? ?? 0;
+    var totalCreditAmount = Model["TotalCreditAmount"] as decimal? ?? 0;
+    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "Sub Ledger";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // Group by MainLedger
+    var groupedRows = rows.GroupBy(r => r.MainLedger ?? "Unknown").ToList();
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Daily Income Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+                padding: 3px 6px;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+                padding: 3px 6px;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            .main-ledger-header td {
+                background: #e8e8e8;
+                font-weight: bold;
+                font-size: 10pt;
+                padding: 5px 6px;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+            }
+
+            .padding-left-1 {
+                padding-left: 15px !important;
+            }
+
+            .padding-left-2 {
+                padding-left: 30px !important;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+
+                .grand-total-row td {
+                    background: #f9f9f9 !important;
+                }
+
+                .main-ledger-header td {
+                    background: #e8e8e8 !important;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="DailyIncome">
+            <colgroup>
+                <col style="width:28%;" />
+                <col style="width:28%;" />
+                <col style="width:15%;" />
+                <col style="width:15%;" />
+                <col style="width:14%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="5">Daily Income Report</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="2"><strong>Branch Name :</strong> @branchNames</td>
+                    <td colspan="3" class="text-right">
+                        <strong>From Date :</strong> @fromDate
+                        &nbsp;&nbsp;&nbsp;
+                        <strong>To Date :</strong> @toDate
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="2"><strong>Order By :</strong> @orderBy</td>
+                    <td colspan="3" class="text-right">
+                        <strong>Report Generated On :</strong> @generatedOn
+                    </td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="5"></td></tr>
+
+                <tr>
+                    <th>Main Ledger</th>
+                    <th>Sub Ledger</th>
+                    <th class="text-right">Debit Amount</th>
+                    <th class="text-right">Credit Amount</th>
+                    <th class="text-right">Balance</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var rowCounter = 0;
+                    var currentMainLedger = string.Empty;
+
+                    foreach (var row in rows)
+                    {
+                        var isNewMainLedger = currentMainLedger != row.MainLedger;
+                        currentMainLedger = row.MainLedger;
+
+                        if (isNewMainLedger && !string.IsNullOrEmpty(currentMainLedger))
+                        {
+                            <tr class="main-ledger-header">
+                                <td colspan="5"><strong>@currentMainLedger</strong></td>
+                            </tr>
+                        }
+
+                        var paddingClass = string.Empty;
+                        if (row.NodeLevel > 1)
+                        {
+                            paddingClass = $"padding-left-{Math.Min(row.NodeLevel ?? 0, 2)}";
+                        }
+
+                        <tr class="@(rowCounter % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td>
+                                @if (row.NodeLevel <= 1)
+                                {
+                                    @(row.MainLedger ?? "")
+                                }
+                            </td>
+                            <td class="@paddingClass">@(row.SubLedger ?? "")</td>
+                            <td class="text-right">@(row.DebitAmount.HasValue ? row.DebitAmount.Value.ToString("N2") : "0.00")</td>
+                            <td class="text-right">@(row.CreditAmount.HasValue ? row.CreditAmount.Value.ToString("N2") : "0.00")</td>
+                            <td class="text-right @(row.Balance.HasValue && row.Balance.Value < 0 ? "negative" : "positive")">
+                                @(row.Balance.HasValue ? row.Balance.Value.ToString("N2") : "0.00")
+                            </td>
+                        </tr>
+                        rowCounter++;
+                    }
+
+                    <!-- Grand Total Row -->
+                    <tr class="grand-total-row">
+                        <td colspan="2" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-right"><strong>@totalDebitAmount.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalCreditAmount.ToString("N2")</strong></td>
+                        <td class="text-right @(totalBalance < 0 ? "negative" : "positive")">
+                            <strong>@totalBalance.ToString("N2")</strong>
+                        </td>
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="2" class="text-right"><strong>Total Records</strong></td>
+                        <td colspan="3" class="text-center"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="5" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

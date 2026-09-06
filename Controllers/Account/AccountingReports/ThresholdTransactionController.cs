@@ -109,7 +109,7 @@ namespace NexgenCosysReport.Controllers.Account.AccountingReports
                         reportKey: reportKey,
                         reportPath: request.VisualReport
                             ? "Views/VisualReport/VThresholdTransactionReport.cshtml"
-                            : "Views/Report/ThresholdTransactionReport.cshtml",
+                            : "Views/Report/AccountingReport/ThresholdTransactionReport.cshtml",
                         data: reportData));
 
                 if (upperFormat == "VIEW")

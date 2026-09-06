@@ -1,0 +1,208 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<AccountDayOpenAndCloseRowDto>) ?? new List<AccountDayOpenAndCloseRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Account Day Open And Close Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .status-open {
+                color: #006600;
+                font-weight: bold;
+            }
+
+            .status-closed {
+                color: #CC0000;
+                font-weight: bold;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="AccountDayOpenAndClose">
+            <colgroup>
+                <col style="width:16%;" />
+                <col style="width:12%;" />
+                <col style="width:10%;" />
+                <col style="width:14%;" />
+                <col style="width:16%;" />
+                <col style="width:16%;" />
+                <col style="width:16%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="7">Account Day Open And Close Report</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="3"><strong>Branch Name :</strong> @branchNames</td>
+                    <td colspan="4" class="text-right">
+                        <strong>From Date :</strong> @fromDate
+                        &nbsp;&nbsp;&nbsp;
+                        <strong>To Date :</strong> @toDate
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="4"></td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="7"></td></tr>
+
+                <tr>
+                    <th>Office Name</th>
+                    <th>Opened Date</th>
+                    <th>Status</th>
+                    <th>Counter Type</th>
+                    <th>Opened On</th>
+                    <th>Closed On</th>
+                    <th>Opened By / Closed By</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    foreach (var row in rows)
+                    {
+                        var statusClass = (row.Status ?? "").Equals("Opened", StringComparison.OrdinalIgnoreCase)
+                            ? "status-open"
+                            : (row.Status ?? "").Equals("Closed", StringComparison.OrdinalIgnoreCase)
+                                ? "status-closed"
+                                : "";
+                        <tr class="detail-row">
+                            <td>@(row.OfficeName ?? "")</td>
+                            <td>@(row.OpenedDateOnBs ?? "")</td>
+                            <td class="@statusClass">@(row.Status ?? "")</td>
+                            <td>@(row.EveningCounter ?? "")</td>
+                            <td>@(row.OpenedOn.HasValue ? row.OpenedOn.Value.ToString("yyyy/MM/dd HH:mm") : "")</td>
+                            <td>@(row.ClosedOn.HasValue ? row.ClosedOn.Value.ToString("yyyy/MM/dd HH:mm") : "")</td>
+                            <td>@(row.OpenedBy ?? "")@(!string.IsNullOrEmpty(row.ClosedBy) ? " / " + row.ClosedBy : "")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="6" class="text-right">Total Records</td>
+                        <td class="text-right">@totalRecords</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

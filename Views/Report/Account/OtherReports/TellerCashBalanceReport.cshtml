@@ -1,0 +1,213 @@
+﻿@* Views/Report/MemberAccount/OthersReport/TellerCashBalanceReport.cshtml *@
+@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<TellerCashBalanceRowDto>) ?? new List<TellerCashBalanceRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalClosingBalance = Model["TotalClosingBalance"] as decimal? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var officeName = Model["OfficeName"]?.ToString() ?? "All";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Teller Cash Balance Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 8.5pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8.5pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 4px 5px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: right;
+                white-space: nowrap;
+            }
+
+                .data-table th:nth-child(-n+2) {
+                    text-align: left;
+                }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+                text-align: right;
+            }
+
+                .detail-row td:nth-child(-n+2) {
+                    text-align: left;
+                }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="TellerCashBalance">
+            <colgroup>
+                <col style="width:10%;" />
+                <col style="width:12%;" />
+                <col style="width:10%;" />
+                <col style="width:10%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:10%;" />
+                <col style="width:10%;" />
+                <col style="width:14%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="9">Teller Cash Balance Report</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Office Name :</strong> @officeName</td>
+                    <td colspan="5" class="text-right">
+                        <strong>From Date :</strong> @fromDate
+                        &nbsp;&nbsp;&nbsp;
+                        <strong>To Date :</strong> @toDate
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="5"></td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="9"></td></tr>
+
+                <tr>
+                    <th>Date</th>
+                    <th>Teller Name</th>
+                    <th>Cash From Vault</th>
+                    <th>Teller From</th>
+                    <th>Cash Collection</th>
+                    <th>Cash Expense</th>
+                    <th>Teller To</th>
+                    <th>Cash To Vault</th>
+                    <th>Closing Balance</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    foreach (var row in rows)
+                    {
+                        <tr class="detail-row">
+                            <td>@(row.Date ?? "")</td>
+                            <td>@(row.TellerName ?? "")</td>
+                            <td>@(row.TellerCashFromVault.HasValue ? row.TellerCashFromVault.Value.ToString("N2") : "")</td>
+                            <td>@(row.TellerFrom.HasValue ? row.TellerFrom.Value.ToString("N2") : "")</td>
+                            <td>@(row.CashCollection.HasValue ? row.CashCollection.Value.ToString("N2") : "")</td>
+                            <td>@(row.CashExpense.HasValue ? row.CashExpense.Value.ToString("N2") : "")</td>
+                            <td>@(row.TellerTo.HasValue ? row.TellerTo.Value.ToString("N2") : "")</td>
+                            <td>@(row.TellerCashToVault.HasValue ? row.TellerCashToVault.Value.ToString("N2") : "")</td>
+                            <td>@(row.ClosingBalance.HasValue ? row.ClosingBalance.Value.ToString("N2") : "")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="8" class="text-right">Grand Total (Closing Balance)</td>
+                        <td class="text-right">@totalClosingBalance.ToString("N2")</td>
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="8" class="text-right">Total Records</td>
+                        <td class="text-right">@totalRecords</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

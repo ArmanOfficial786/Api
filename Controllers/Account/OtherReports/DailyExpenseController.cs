@@ -1,40 +1,41 @@
-﻿
+﻿// Controllers/Account/OthersReport/DailyExpenseController.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Account.AccountingReport;
+using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Account.AccountingReport;
+using NexgenCosysReport.Inteface.ServiceInterface.Account.OtherReports;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.Account.AccountingReports
+namespace NexgenCosysReport.Controllers.Account.OthersReport
 {
     [ApiController]
-    [Route("api/[controller]")]
-    public class DetailTrialBalanceController : ControllerBase
+    [Route("api/account/[controller]")]
+    //[Authorize]
+    public class DailyExpenseController : ControllerBase
     {
-        private readonly IDetailTrailBalance _detailService;
+        private readonly IDailyExpenseRepository _repository;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly ILogger<DetailTrialBalanceController> _logger;
+        private readonly ILogger<DailyExpenseController> _logger;
 
-        public DetailTrialBalanceController(
-            IDetailTrailBalance detailService,
+        public DailyExpenseController(
+            IDailyExpenseRepository repository,
             ICommonHeaderRepository commonHeaderRepository,
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<DetailTrialBalanceController> logger)
+            ILogger<DailyExpenseController> logger)
         {
-            _detailService = detailService;
+            _repository = repository;
             _commonHeaderRepository = commonHeaderRepository;
             _jsReportService = jsReportService;
             _webHostEnvironment = webHostEnvironment;
@@ -43,16 +44,29 @@ namespace NexgenCosysReport.Controllers.Account.AccountingReports
             _logger = logger;
         }
 
-        [HttpPost()]
+        [HttpPost]
         public async Task<IActionResult> GenerateReport(
-            [FromBody] DetailTrialBalanceRequest request,
+            [FromBody] DailyExpenseRequestDto request,
             [FromQuery] string format = "VIEW")
         {
             try
             {
-                var reportName = "DetailTrialBalance";
+
+                //var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                //if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                //{
+                //    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                //}
+
+                var reportName = "DailyExpense";
                 var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+
+                if (request == null || !ModelState.IsValid)
+                {
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
+                }
+
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -60,55 +74,59 @@ namespace NexgenCosysReport.Controllers.Account.AccountingReports
                 if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
                 {
                     return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, reportName,
+                        reportKey, upperFormat,
+                        reportName,
                         _jsReportService, _logger);
                 }
 
-                // Fetch data
-                var dataTask = _detailService.GetDetailTrialBalance(request);
-                string? branchIdForHeader = null;
-                if (!request.SameCompanyName && !string.IsNullOrEmpty(request.BranchId) &&
-                    request.BranchId != "-1" && !request.BranchId.Contains(','))
-                {
-                    branchIdForHeader = request.BranchId;
-                }
-                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
-
-                await Task.WhenAll(dataTask, headerTask);
-
-                var data = await dataTask;
-                var headerData = await headerTask;
+                // Get report data
+                var data = await _repository.GetDailyExpenseDataAsync(request);
 
                 if (!data.Rows.Any())
                 {
-                    return NotFound(new { success = false, message = "No data found" });
+                    return NotFound(new { success = false, StatusCode = 404, message = "No data found" });
                 }
 
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-                await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData, nameof(CommonHeader.CompanyLogo), webRoot));
+                // Get header data
+                string? branchIdForHeader = null;
+                if (!string.IsNullOrEmpty(request.BranchIds) &&
+                    request.BranchIds != "-1" && !request.BranchIds.Contains(','))
+                {
+                    branchIdForHeader = request.BranchIds;
+                }
 
+                var headerData = await _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+
+                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
+
+                await ReportUtils.ConvertUniqueImagesToBase64Async(
+                    headerData, nameof(CommonHeader.CompanyLogo), webRoot);
+
+                // Prepare report data
                 var reportData = new Dictionary<string, object>
                 {
                     { "Rows", data.Rows },
-                    { "TotalDebit", data.TotalDebit },
-                    { "TotalCredit", data.TotalCredit },
-                    { "TotalAssetExpenses", data.TotalAssetExpenses },
-                    { "TotalLiabilitiesIncome", data.TotalLiabilitiesIncome },
+                    { "TotalRecords", data.TotalRecords },
+                    { "TotalDebitAmount", data.TotalDebitAmount },
+                    { "TotalCreditAmount", data.TotalCreditAmount },
+                    { "TotalBalance", data.TotalBalance },
+                    { "FromDate", data.FromDateBs },
+                    { "ToDate", data.ToDateBs },
+                    { "BranchNames", data.BranchNames ?? "All Branches" },
+                    { "OrderBy", data.OrderBy },
                     { "HeaderDataSet", headerData },
-                    { "FromDate", request.FromDate },
-                    { "ToDate", request.ToDate },
-                    { "BranchName", request.BranchName },
-                    { "OrderBy", request.OrderBy },
-                    { "Format", upperFormat }
+                    { "Format", upperFormat },
+                    { "VisualReport", request.VisualReport }
                 };
+
+                string viewPath = request.VisualReport
+                    ? "Views/VisualReport/VDailyExpenseReport.cshtml"
+                    : "Views/Report/Account/OthersReport/DailyExpenseReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
                         reportKey: reportKey,
-                        reportPath: request.VisualReport
-                            ? "Views/VisualReport/VDetailTrialBalanceReport.cshtml"
-                            : "Views/Report/Account/AccountingReport/DetailTrailBalance.cshtml",
+                        reportPath: viewPath,
                         data: reportData));
 
                 if (upperFormat == "VIEW")
@@ -133,13 +151,19 @@ namespace NexgenCosysReport.Controllers.Account.AccountingReports
                 }
 
                 return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, reportName,
+                    reportKey, upperFormat,
+                    reportName,
                     _jsReportService, _logger);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "DetailTrialBalance report failed");
-                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
+                _logger.LogError(ex, "Error generating Daily Expense Report");
+                return StatusCode(500, new
+                {
+                    message = ex.Message,
+                    inner = ex.InnerException?.Message,
+                    stack = ex.StackTrace
+                });
             }
         }
     }
