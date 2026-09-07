@@ -54,22 +54,27 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
 
         private string BuildSqlOrderBy(VoucherDetailsRequestDto request)
         {
+            // VoucherNo always leads so rows for the same voucher arrive contiguous —
+            // required for the view's GroupBy (which preserves first-seen order, does
+            // not sort) to group correctly into the per-voucher blocks shown in the image.
+            // The previous default ("ORDER BY MainLedger" with no VoucherNo at all) would
+            // scatter a single voucher's debit/credit legs across the whole report.
             if (string.IsNullOrEmpty(request.OrderBy) ||
                 request.OrderBy == "-1" ||
                 request.OrderBy == "string")
             {
-                return " ORDER BY MainLedger";
+                return " ORDER BY VoucherNo, MainLedger";
             }
 
             return request.OrderBy.Trim().ToLower() switch
             {
                 "voucher no" => " ORDER BY VoucherNo",
-                "voucher date" => " ORDER BY VoucherOnBs",
-                "main ledger" => " ORDER BY MainLedger",
-                "sub ledger" => " ORDER BY SubLedger1",
-                "debit amount" => " ORDER BY DebitAmount DESC",
-                "credit amount" => " ORDER BY CreditAmount DESC",
-                _ => " ORDER BY MainLedger"
+                "voucher date" => " ORDER BY VoucherNo, VoucherOnBs",
+                "main ledger" => " ORDER BY VoucherNo, MainLedger",
+                "sub ledger" => " ORDER BY VoucherNo, SubLedger1",
+                "debit amount" => " ORDER BY VoucherNo, DebitAmount DESC",
+                "credit amount" => " ORDER BY VoucherNo, CreditAmount DESC",
+                _ => " ORDER BY VoucherNo, MainLedger"
             };
         }
 
@@ -116,12 +121,36 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 data.VoucherNo = voucherNo;
             }
 
-            // Get branch names if applicable
+            // Root-cause fix: STRING_AGG needs compat level 140 (SQL Server 2017+), which
+            // this database doesn't have (same fix as DailyExpenseRepository, DailyIncomeRepository,
+            // DayBookLedgerWiseRepository, PEARLSAnalysisRepository). Split the CSV in C# and let
+            // Dapper parameterize the IN clause instead — works on any SQL Server version.
             if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
             {
-                var branchNames = await connection.QueryFirstOrDefaultAsync<string>(
-                    "SELECT STRING_AGG(OfficeName, ', ') FROM UsmOffice WHERE UsmOfficeId IN (" + request.BranchIds + ")");
-                data.BranchNames = branchNames ?? "All Branches";
+                var branchIdList = request.BranchIds
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(id => long.TryParse(id, out var parsed) ? parsed : (long?)null)
+                    .Where(id => id.HasValue)
+                    .Select(id => id!.Value)
+                    .ToList();
+
+                if (branchIdList.Any())
+                {
+                    const string sql = @"
+                        SELECT OfficeName
+                        FROM UsmOffice
+                        WHERE UsmOfficeId IN @Ids
+                        ORDER BY OfficeName";
+
+                    var names = (await connection.QueryAsync<string>(
+                        sql, new { Ids = branchIdList })).ToList();
+
+                    data.BranchNames = names.Any() ? string.Join(", ", names) : "All Branches";
+                }
+                else
+                {
+                    data.BranchNames = "All Branches";
+                }
             }
             else
             {

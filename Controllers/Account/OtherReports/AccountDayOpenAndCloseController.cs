@@ -82,12 +82,12 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
                 }
 
                 string? officeIdForHeader = null;
-                if (!string.IsNullOrEmpty(request.OfficeId) &&
-                    request.OfficeId != "-1" &&
-                    request.OfficeId != "string" &&
-                    long.TryParse(request.OfficeId, out _))
+                if (!string.IsNullOrEmpty(request.branchId) &&
+                    request.branchId != "-1" &&
+                    request.branchId != "string" &&
+                    long.TryParse(request.branchId, out _))
                 {
-                    officeIdForHeader = request.OfficeId;
+                    officeIdForHeader = request.branchId;
                 }
 
                 var dataTask = _repository.GetReportDataAsync(request);
@@ -123,7 +123,7 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VAccountDayOpenAndCloseReport.cshtml"
-                    : "Views/Report/AccountOperation/OthersReport/AccountDayOpenAndCloseReport.cshtml";
+                    : "Views/Report/Account/OtherReports/AccountDayOpenAndCloseReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

@@ -62,21 +62,24 @@ namespace NexgenCosysReport.Repository.AccountOperation.OthersReport
         // --------------------------------------------------------------
         private string BuildSqlOrderBy(TellerToTellerCashTransferRequestDto request)
         {
+            // TellerFrom always leads so rows for the same "from" teller arrive
+            // contiguous — required for the view's GroupBy (preserves first-seen
+            // order, does not sort) to group correctly, matching the image.
             if (string.IsNullOrEmpty(request.OrderBy) ||
                 request.OrderBy == "-1" ||
                 request.OrderBy == "string")
             {
-                return " order by Date"; // default — matches legacy BLL
+                return " order by TellerFrom, Date";
             }
 
             return request.OrderBy.Trim().ToLower() switch
             {
                 "tellerfrom" => " order by TellerFrom",
-                "tellerto" => " order by TellerTo",
-                "date" => " order by Date",
-                "amount" => " order by Amount",
-                "issued by" => " order by IssuedBy",
-                _ => " order by Date"
+                "tellerto" => " order by TellerFrom, TellerTo",
+                "date" => " order by TellerFrom, Date",
+                "amount" => " order by TellerFrom, Amount",
+                "issued by" => " order by TellerFrom, IssuedBy",
+                _ => " order by TellerFrom, Date"
             };
         }
 

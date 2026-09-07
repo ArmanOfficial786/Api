@@ -73,24 +73,26 @@ namespace NexgenCosysReport.Repository.Account.OtherReports
         // --------------------------------------------------------------
         private static string BuildSqlOrderBy(DayBookVoucherWiseRequestDto request)
         {
+            // Default now explicitly orders by VoucherDate so grouping in the view is
+            // always contiguous — previously this returned empty, relying on whatever
+            // order the SP happened to return rows in.
             if (string.IsNullOrEmpty(request.OrderBy) ||
                 request.OrderBy == "-1" ||
                 request.OrderBy == "string")
             {
-                return string.Empty; // legacy default — no explicit ORDER BY when nothing selected
+                return " order by VoucherDate";
             }
 
             return request.OrderBy.Trim().ToLower() switch
             {
                 "voucher date" => " order by VoucherDate",
-                "voucher no" => " order by VoucherNo",
-                "narration" => " order by Narration",
-                "type" => " order by Type",
-                "amount" => " order by Amount DESC",
-                _ => string.Empty
+                "voucher no" => " order by VoucherDate, VoucherNo",
+                "narration" => " order by VoucherDate, Narration",
+                "type" => " order by VoucherDate, Type",
+                "amount" => " order by VoucherDate, Amount DESC",
+                _ => " order by VoucherDate"
             };
         }
-
         public async Task<DayBookVoucherWiseData> GetReportDataAsync(DayBookVoucherWiseRequestDto request)
         {
             try

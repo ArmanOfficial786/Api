@@ -13,22 +13,22 @@
     {
         public string? TellerFrom { get; set; }
         public string? TellerTo { get; set; }
+        public string? OfficeName { get; set; }
         public string? Date { get; set; }
         public decimal? Amount { get; set; }
         public string? IssuedBy { get; set; }
-        public string? OfficeName { get; set; }
-        public decimal? Rs1 { get; set; }
-        public decimal? Rs2 { get; set; }
-        public decimal? Rs5 { get; set; }
-        public decimal? Rs10 { get; set; }
-        public decimal? Rs20 { get; set; }
-        public decimal? Rs25 { get; set; }
-        public decimal? Rs50 { get; set; }
-        public decimal? Rs100 { get; set; }
-        public decimal? Rs250 { get; set; }
-        public decimal? Rs500 { get; set; }
-        public decimal? Rs1000 { get; set; }
-        public decimal? Paisa { get; set; }
+        public int? Rs1 { get; set; }
+        public int? Rs2 { get; set; }
+        public int? Rs5 { get; set; }
+        public int? Rs10 { get; set; }
+        public int? Rs20 { get; set; }
+        public int? Rs25 { get; set; }
+        public int? Rs50 { get; set; }
+        public int? Rs100 { get; set; }
+        public int? Rs250 { get; set; }
+        public int? Rs500 { get; set; }
+        public int? Rs1000 { get; set; }
+        public int? Paisa { get; set; }
     }
 
     public class TellerToTellerCashTransferData

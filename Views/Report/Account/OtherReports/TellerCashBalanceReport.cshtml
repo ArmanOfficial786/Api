@@ -13,6 +13,14 @@
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    string Fmt(decimal? v) => (v ?? 0m).ToString("N2");
+
+    // Grouped by Date — teller rows listed under each date (Date column left blank
+    // on detail rows), then a bold subtotal row per date repeating the date and
+    // summing every numeric column. Rows must arrive pre-sorted by Date (see
+    // repository's ORDER BY) since GroupBy preserves first-seen order, not sorted order.
+    var dateGroups = rows.GroupBy(r => r.Date ?? "").ToList();
 }
 <!DOCTYPE html>
 <html>
@@ -56,15 +64,6 @@
                     vertical-align: middle;
                 }
 
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
             .meta-row td {
                 padding: 3px 6px;
                 font-size: 9pt;
@@ -74,12 +73,19 @@
                 height: 6px;
             }
 
+            /* FIX: headers were overlapping into neighboring columns because
+                           white-space: nowrap forced single-line text while table-layout: fixed
+                           kept the narrow colgroup widths — text overflowed past its own cell.
+                           Switching to white-space: normal lets long labels (e.g. "Closing Cash
+                           Balance") wrap onto two lines within their own column instead. */
             .data-table th {
-                background: #f9f9f9;
                 border-top: 2px solid #000;
                 border-bottom: 1px solid #000;
                 text-align: right;
-                white-space: nowrap;
+                white-space: normal;
+                font-weight: bold;
+                font-size: 8pt;
+                line-height: 1.2;
             }
 
                 .data-table th:nth-child(-n+2) {
@@ -87,11 +93,26 @@
                 }
 
             .detail-row td {
-                border-bottom: 1px solid #eee;
                 text-align: right;
+                border: none;
             }
 
                 .detail-row td:nth-child(-n+2) {
+                    text-align: left;
+                }
+
+            .date-group-row td {
+                font-weight: bold;
+                padding-top: 2px;
+            }
+
+            .subtotal-row td {
+                border-top: 1px solid #000;
+                font-weight: bold;
+                text-align: right;
+            }
+
+                .subtotal-row td:nth-child(-n+2) {
                     text-align: left;
                 }
 
@@ -133,77 +154,98 @@
 
         <table class="data-table" data-sheet-name="TellerCashBalance">
             <colgroup>
-                <col style="width:10%;" />
-                <col style="width:12%;" />
-                <col style="width:10%;" />
-                <col style="width:10%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:10%;" />
-                <col style="width:10%;" />
-                <col style="width:14%;" />
+                <col style="width:8%;" />   <!-- Date -->
+                <col style="width:11%;" />  <!-- Teller Name -->
+                <col style="width:10%;" />  <!-- Cash From Vault -->
+                <col style="width:10%;" />  <!-- Cash From Teller -->
+                <col style="width:10%;" />  <!-- Cash Collection -->
+                <col style="width:9%;" />   <!-- Cash Expense -->
+                <col style="width:10%;" />  <!-- Cash Balance -->
+                <col style="width:9%;" />   <!-- Cash to Teller -->
+                <col style="width:9%;" />   <!-- Cash To Vault -->
+                <col style="width:14%;" />  <!-- Closing Cash Balance -->
             </colgroup>
             <tbody>
-                <tr class="meta-title">
-                    <td colspan="9">Teller Cash Balance Report</td>
-                </tr>
-
                 <tr class="meta-row">
-                    <td colspan="4"><strong>Office Name :</strong> @officeName</td>
-                    <td colspan="5" class="text-right">
+                    <td colspan="4"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="6" class="text-right">
                         <strong>From Date :</strong> @fromDate
                         &nbsp;&nbsp;&nbsp;
                         <strong>To Date :</strong> @toDate
                     </td>
                 </tr>
                 <tr class="meta-row">
-                    <td colspan="4"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="5"></td>
+                    <td colspan="4"></td>
+                    <td colspan="6" class="text-right"><strong>Branch Name :</strong> @officeName</td>
                 </tr>
-                <tr class="meta-spacer"><td colspan="9"></td></tr>
+                <tr class="meta-spacer"><td colspan="10"></td></tr>
 
                 <tr>
                     <th>Date</th>
                     <th>Teller Name</th>
                     <th>Cash From Vault</th>
-                    <th>Teller From</th>
+                    <th>Cash From Teller</th>
                     <th>Cash Collection</th>
                     <th>Cash Expense</th>
-                    <th>Teller To</th>
+                    <th>Cash Balance</th>
+                    <th>Cash to Teller</th>
                     <th>Cash To Vault</th>
-                    <th>Closing Balance</th>
+                    <th>Closing Cash Balance</th>
                 </tr>
 
-                @if (rows.Any())
+                @if (dateGroups.Any())
                 {
-                    foreach (var row in rows)
+                    foreach (var group in dateGroups)
                     {
-                        <tr class="detail-row">
-                            <td>@(row.Date ?? "")</td>
-                            <td>@(row.TellerName ?? "")</td>
-                            <td>@(row.TellerCashFromVault.HasValue ? row.TellerCashFromVault.Value.ToString("N2") : "")</td>
-                            <td>@(row.TellerFrom.HasValue ? row.TellerFrom.Value.ToString("N2") : "")</td>
-                            <td>@(row.CashCollection.HasValue ? row.CashCollection.Value.ToString("N2") : "")</td>
-                            <td>@(row.CashExpense.HasValue ? row.CashExpense.Value.ToString("N2") : "")</td>
-                            <td>@(row.TellerTo.HasValue ? row.TellerTo.Value.ToString("N2") : "")</td>
-                            <td>@(row.TellerCashToVault.HasValue ? row.TellerCashToVault.Value.ToString("N2") : "")</td>
-                            <td>@(row.ClosingBalance.HasValue ? row.ClosingBalance.Value.ToString("N2") : "")</td>
+                        var groupRows = group.ToList();
+
+                        <tr class="date-group-row">
+                            <td colspan="10">@group.Key</td>
+                        </tr>
+
+                        foreach (var row in groupRows)
+                        {
+                            <tr class="detail-row">
+                                <td></td>
+                                <td>@(row.TellerName ?? "")</td>
+                                <td>@Fmt(row.TellerCashFromVault)</td>
+                                <td>@Fmt(row.TellerFrom)</td>
+                                <td>@Fmt(row.CashCollection)</td>
+                                <td>@Fmt(row.CashExpense)</td>
+                                <td>@Fmt(row.CashBalance)</td>
+                                <td>@Fmt(row.TellerTo)</td>
+                                <td>@Fmt(row.TellerCashToVault)</td>
+                                <td>@Fmt(row.ClosingBalance)</td>
+                            </tr>
+                        }
+
+                        <tr class="subtotal-row">
+                            <td></td>
+                            <td>@group.Key</td>
+                            <td>@Fmt(groupRows.Sum(r => r.TellerCashFromVault))</td>
+                            <td>@Fmt(groupRows.Sum(r => r.TellerFrom))</td>
+                            <td>@Fmt(groupRows.Sum(r => r.CashCollection))</td>
+                            <td>@Fmt(groupRows.Sum(r => r.CashExpense))</td>
+                            <td>@Fmt(groupRows.Sum(r => r.CashBalance))</td>
+                            <td>@Fmt(groupRows.Sum(r => r.TellerTo))</td>
+                            <td>@Fmt(groupRows.Sum(r => r.TellerCashToVault))</td>
+                            <td>@Fmt(groupRows.Sum(r => r.ClosingBalance))</td>
                         </tr>
                     }
 
                     <tr class="grand-total-row">
-                        <td colspan="8" class="text-right">Grand Total (Closing Balance)</td>
+                        <td colspan="9" class="text-right">Grand Total (Closing Balance)</td>
                         <td class="text-right">@totalClosingBalance.ToString("N2")</td>
                     </tr>
                     <tr class="grand-total-row">
-                        <td colspan="8" class="text-right">Total Records</td>
+                        <td colspan="9" class="text-right">Total Records</td>
                         <td class="text-right">@totalRecords</td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="10" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

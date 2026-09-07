@@ -17,15 +17,6 @@ namespace NexgenCosysReport.Repository.Account.OtherReports
         private readonly IDateConverterService _dateConverter;
         private readonly ILogger<TellerCashVaultRepository> _logger;
 
-        private const string DefaultReportType = "FromVault";
-
-        // Both SPs take an identical single @SqlFilterExp parameter, filtered on t.* columns
-        private static readonly Dictionary<string, string> ProcedureMap = new(StringComparer.OrdinalIgnoreCase)
-        {
-            { "FromVault", "sp_6_56_GetTellerCashFromVault" },
-            { "ToVault", "sp_6_56_GetTellerCashToVault" }
-        };
-
         public TellerCashVaultRepository(
             AppDbContext context,
             IDateConverterService dateConverter,
@@ -37,27 +28,19 @@ namespace NexgenCosysReport.Repository.Account.OtherReports
         }
 
         // --------------------------------------------------------------
-        // Resolves the SP name for request.Type. Falls back to the
-        // default ("FromVault") SP if Type is missing/unrecognized,
-        // rather than throwing — logs a warning so misconfigured callers
-        // are still visible in telemetry. resolvedType reflects what
-        // actually ran, for accurate reporting back to the caller/view.
+        // request.Type is a bool on the actual DTO (matching the controller's
+        // own "request.Type ? ToVault : FromVault" logic) — NOT a string, so
+        // the previous string-keyed ProcedureMap/ResolveProcedureName(string)
+        // could never have compiled against this DTO. Resolve directly off
+        // the bool instead, and report back the same "ToVault"/"FromVault"
+        // label the controller computes locally, so data.ReportType matches
+        // what the controller expects to hand to the view.
         // --------------------------------------------------------------
-        private string ResolveProcedureName(string? reportType, out string resolvedType)
-        {
-            if (!string.IsNullOrWhiteSpace(reportType) && ProcedureMap.TryGetValue(reportType, out var procedureName))
-            {
-                resolvedType = reportType;
-                return procedureName;
-            }
+        private static string ResolveProcedureName(bool type) =>
+            type ? "sp_6_56_GetTellerCashToVault" : "sp_6_56_GetTellerCashFromVault";
 
-            _logger.LogWarning(
-                "Unrecognized report type '{ReportType}' — falling back to default '{DefaultType}'.",
-                reportType, DefaultReportType);
-
-            resolvedType = DefaultReportType;
-            return ProcedureMap[DefaultReportType];
-        }
+        private static string ResolveReportTypeLabel(bool type) =>
+            type ? "ToVault" : "FromVault";
 
         // --------------------------------------------------------------
         // @SqlFilterExp
@@ -143,7 +126,8 @@ namespace NexgenCosysReport.Repository.Account.OtherReports
         {
             try
             {
-                var procedureName = ResolveProcedureName(request.Type, out var resolvedType);
+                var procedureName = ResolveProcedureName(request.Type);
+                var resolvedType = ResolveReportTypeLabel(request.Type);
 
                 var sqlFilterExp = await BuildSqlFilterExp(request);
 
@@ -180,12 +164,12 @@ namespace NexgenCosysReport.Repository.Account.OtherReports
                         ? "All"
                         : (branchNames.Count > 0 ? string.Join(", ", branchNames) : "All Branches"),
                     OrderBy = request.OrderBy,
-                    ReportType = resolvedType // reflects what actually ran, not the raw requested value
+                    ReportType = resolvedType // matches the controller's own "ToVault"/"FromVault" label
                 };
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error in GetReportDataAsync for reportType {ReportType}", request.Type);
+                _logger.LogError(ex, "Error in GetReportDataAsync for Type={Type}", request.Type);
                 throw;
             }
         }

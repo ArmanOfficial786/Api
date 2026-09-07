@@ -29,7 +29,9 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 filter += $" AND a.UsmOfficeId IN ({request.BranchIds})";
             }
 
-            // Build ORDER BY clause
+            // Branch Name always leads the ORDER BY so rows from the same branch arrive
+            // contiguous — required for the view's GroupBy (which preserves first-seen
+            // order, does not sort) to group correctly, matching the report's visual grouping.
             if (string.IsNullOrEmpty(request.OrderBy) ||
                 request.OrderBy == "-1" ||
                 request.OrderBy == "string")
@@ -41,11 +43,11 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 filter += request.OrderBy.Trim().ToLower() switch
                 {
                     "branch name" => " ORDER BY BranchName",
-                    "account year" => " ORDER BY AccountYear",
-                    "closed date" => " ORDER BY ClosedOnBs",
-                    "voucher no" => " ORDER BY VoucherNo",
-                    "status" => " ORDER BY Status",
-                    "closed by" => " ORDER BY ClosedBy",
+                    "account year" => " ORDER BY BranchName, AccountYear",
+                    "closed date" => " ORDER BY BranchName, ClosedOnBs",
+                    "voucher no" => " ORDER BY BranchName, VoucherNo",
+                    "status" => " ORDER BY BranchName, Status",
+                    "closed by" => " ORDER BY BranchName, ClosedBy",
                     _ => " ORDER BY BranchName"
                 };
             }
@@ -79,12 +81,37 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 OrderBy = request.OrderBy
             };
 
-            // Get branch names if applicable
+            // Root-cause fix: neither STRING_AGG (needs compat level 140) nor STRING_SPLIT
+            // (needs compat level 130) is available on this database. Split the CSV in C#
+            // instead of SQL, and let Dapper parameterize the resulting list into an IN
+            // clause — works on any SQL Server version with zero dependency on
+            // compatibility level.
             if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
             {
-                var branchNames = await connection.QueryFirstOrDefaultAsync<string>(
-                    "SELECT STRING_AGG(OfficeName, ', ') FROM UsmOffice WHERE UsmOfficeId IN (" + request.BranchIds + ")");
-                data.BranchNames = branchNames ?? "All Branches";
+                var branchIdList = request.BranchIds
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(id => long.TryParse(id, out var parsed) ? parsed : (long?)null)
+                    .Where(id => id.HasValue)
+                    .Select(id => id!.Value)
+                    .ToList();
+
+                if (branchIdList.Any())
+                {
+                    const string sql = @"
+                        SELECT OfficeName
+                        FROM UsmOffice
+                        WHERE UsmOfficeId IN @Ids
+                        ORDER BY OfficeName";
+
+                    var names = (await connection.QueryAsync<string>(
+                        sql, new { Ids = branchIdList })).ToList();
+
+                    data.BranchNames = names.Any() ? string.Join(", ", names) : "All Branches";
+                }
+                else
+                {
+                    data.BranchNames = "All Branches";
+                }
             }
             else
             {

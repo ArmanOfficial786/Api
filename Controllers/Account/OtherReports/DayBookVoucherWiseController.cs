@@ -7,9 +7,13 @@ using global::NexgenCosysReport.Inteface.ServiceInterface.AccountOperation.Other
 using global::NexgenCosysReport.Inteface.ServiceInterface.Common;
 using global::NexgenCosysReport.Services.ReportService;
 using global::NexgenCosysReport.Utils.Report;
+using Microsoft.AspNetCore.Authorization;
+
 // Controllers/AccountOperation/OthersReport/DayBookVoucherWiseController.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using System.Security.Claims;
+
 //using NexgenCosysReport.Dtos.RequestDtos.AccountOperation.OthersReport;
 using System.Text.Json;
 
@@ -17,7 +21,7 @@ namespace NexgenCosysReport.Controllers.Account.OtherReports
 {
     [ApiController]
     [Route("api/[controller]")]
-    //[Authorize]
+    [Authorize]
     public class DayBookVoucherWiseController : ControllerBase
     {
         private readonly IDayBookVoucherWiseRepository _repository;
@@ -57,11 +61,11 @@ namespace NexgenCosysReport.Controllers.Account.OtherReports
         {
             try
             {
-                //var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                //if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                //{
-                //    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                //}
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                {
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                }
 
                 if (request == null || !ModelState.IsValid)
                 {
@@ -124,7 +128,9 @@ namespace NexgenCosysReport.Controllers.Account.OtherReports
                     { "Format", upperFormat }
                 };
 
-                string viewPath = "Views/Report/AccountOperation/OthersReport/DayBookVoucherWiseReport.cshtml";
+                string viewPath = request.VisualReport
+                 ? "Views/VisualReport/VDailyIncomeReport.cshtml"
+                 : "Views/Report/Account/OtherReports/DayBookVoucherWiseReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

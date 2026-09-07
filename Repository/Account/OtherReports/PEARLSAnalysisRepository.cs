@@ -96,6 +96,8 @@ namespace NexgenCosysReport.Repository.Account.OtherReports
             return data;
         }
 
+
+
         private static async Task<string> ResolveBranchNamesAsync(SqlConnection connection, string? branchId)
         {
             if (string.IsNullOrEmpty(branchId) || branchId == "-1")
@@ -113,19 +115,15 @@ namespace NexgenCosysReport.Repository.Account.OtherReports
             if (validIds.Count == 0)
                 return "All Branches";
 
-            // Build a fully parameterized IN clause — no string concatenation of user input into SQL
-            var paramNames = validIds.Select((_, i) => $"@BranchId{i}").ToList();
-            var sql = $"SELECT STRING_AGG(OfficeName, ', ') FROM UsmOffice WHERE UsmOfficeId IN ({string.Join(",", paramNames)})";
+            const string sql = @"
+        SELECT OfficeName
+        FROM UsmOffice
+        WHERE UsmOfficeId IN @Ids
+        ORDER BY OfficeName";
 
-            var parameters = new DynamicParameters();
-            for (int i = 0; i < validIds.Count; i++)
-            {
-                parameters.Add(paramNames[i], validIds[i], DbType.Int64);
-            }
+            var names = (await connection.QueryAsync<string>(sql, new { Ids = validIds })).ToList();
 
-            var branchNames = await connection.QueryFirstOrDefaultAsync<string>(sql, parameters);
-
-            return string.IsNullOrEmpty(branchNames) ? "All Branches" : branchNames;
+            return names.Any() ? string.Join(", ", names) : "All Branches";
         }
     }
 }

@@ -49,21 +49,26 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
 
         private string BuildSqlOrderBy(DailyExpenseRequestDto request)
         {
+            // LedgerHead then MainLedger always lead the sort (matches the webform's
+            // SortGroupHeader3 — three grouping levels: LedgerHead -> MainLedger ->
+            // SubLedger) so rows for the same group arrive contiguous. The view's
+            // GroupBy preserves first-seen order, it does not sort, so this ordering
+            // is required for correct nested grouping.
             if (string.IsNullOrEmpty(request.OrderBy) ||
                 request.OrderBy == "-1" ||
                 request.OrderBy == "string")
             {
-                return " ORDER BY SubLedger";
+                return " ORDER BY LedgerHead, MainLedger, SubLedger";
             }
 
             return request.OrderBy.Trim().ToLower() switch
             {
-                "main ledger" => " ORDER BY MainLedger",
-                "sub ledger" => " ORDER BY SubLedger",
-                "debit amount" => " ORDER BY DebitAmount DESC",
-                "credit amount" => " ORDER BY CreditAmount DESC",
-                "balance" => " ORDER BY Balance DESC",
-                _ => " ORDER BY SubLedger"
+                "main ledger" => " ORDER BY LedgerHead, MainLedger",
+                "sub ledger" => " ORDER BY LedgerHead, MainLedger, SubLedger",
+                "debit amount" => " ORDER BY LedgerHead, MainLedger, DebitAmount DESC",
+                "credit amount" => " ORDER BY LedgerHead, MainLedger, CreditAmount DESC",
+                "balance" => " ORDER BY LedgerHead, MainLedger, Balance DESC",
+                _ => " ORDER BY LedgerHead, MainLedger, SubLedger"
             };
         }
 
@@ -100,16 +105,39 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 OrderBy = request.OrderBy
             };
 
-            // Get branch names if applicable
+            // STRING_AGG needs compat level 140 (SQL Server 2017+), unavailable on this
+            // database — same fix as AccountYearClosingRepository: split the CSV in C#
+            // and let Dapper parameterize the IN clause.
             if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
             {
-                var branchNames = await connection.QueryFirstOrDefaultAsync<string>(
-                    "SELECT STRING_AGG(OfficeName, ', ') FROM UsmOffice WHERE UsmOfficeId IN (" + request.BranchIds + ")");
-                data.BranchNames = branchNames ?? "All Branches";
+                var branchIdList = request.BranchIds
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(id => long.TryParse(id, out var parsed) ? parsed : (long?)null)
+                    .Where(id => id.HasValue)
+                    .Select(id => id!.Value)
+                    .ToList();
+
+                if (branchIdList.Any())
+                {
+                    const string sql = @"
+                        SELECT OfficeName
+                        FROM UsmOffice
+                        WHERE UsmOfficeId IN @Ids
+                        ORDER BY OfficeName";
+
+                    var names = (await connection.QueryAsync<string>(
+                        sql, new { Ids = branchIdList })).ToList();
+
+                    data.BranchNames = names.Any() ? string.Join(", ", names) : "All";
+                }
+                else
+                {
+                    data.BranchNames = "All";
+                }
             }
             else
             {
-                data.BranchNames = "All Branches";
+                data.BranchNames = "All";
             }
 
             return data;

@@ -13,6 +13,13 @@
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // Grouped by Voucher Date — the date is shown once as a bold header, with all
+    // vouchers on that date listed underneath (Voucher Date column left blank on
+    // detail rows since the header already states it). Rows must arrive pre-sorted
+    // by VoucherDate (see repository's ORDER BY) since GroupBy preserves first-seen
+    // order, not sorted order.
+    var dateGroups = rows.GroupBy(r => r.VoucherDate ?? "").ToList();
 }
 <!DOCTYPE html>
 <html>
@@ -75,15 +82,27 @@
             }
 
             .data-table th {
-                background: #f9f9f9;
                 border-top: 2px solid #000;
                 border-bottom: 1px solid #000;
                 text-align: left;
                 white-space: nowrap;
+                font-weight: bold;
+            }
+
+            .date-header-row td {
+                font-weight: bold;
+                padding-top: 10px;
+                padding-bottom: 2px;
+                border: none;
+            }
+
+            .date-header-row.first-group td {
+                padding-top: 4px;
             }
 
             .detail-row td {
-                border-bottom: 1px solid #eee;
+                border: none;
+                padding: 3px 6px;
             }
 
             .grand-total-row td {
@@ -124,10 +143,10 @@
 
         <table class="data-table" data-sheet-name="DayBookVoucherWise">
             <colgroup>
-                <col style="width:14%;" />
+                <col style="width:12%;" />
                 <col style="width:14%;" />
                 <col style="width:38%;" />
-                <col style="width:16%;" />
+                <col style="width:18%;" />
                 <col style="width:18%;" />
             </colgroup>
             <tbody>
@@ -136,7 +155,7 @@
                 </tr>
 
                 <tr class="meta-row">
-                    <td colspan="2"><strong>Branch Name :</strong> @branchName</td>
+                    <td colspan="2"><strong>Report Generated On :</strong> @generatedOn</td>
                     <td colspan="3" class="text-right">
                         <strong>From Date :</strong> @fromDate
                         &nbsp;&nbsp;&nbsp;
@@ -144,30 +163,39 @@
                     </td>
                 </tr>
                 <tr class="meta-row">
-                    <td colspan="2"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="3"></td>
+                    <td colspan="2"></td>
+                    <td colspan="3" class="text-right"><strong>Branch Name :</strong> @branchName</td>
                 </tr>
                 <tr class="meta-spacer"><td colspan="5"></td></tr>
 
                 <tr>
-                    <th>Voucher No</th>
                     <th>Voucher Date</th>
+                    <th>Voucher No</th>
                     <th>Narration</th>
-                    <th>Type</th>
+                    <th>Voucher Type</th>
                     <th class="text-right">Amount</th>
                 </tr>
 
-                @if (rows.Any())
+                @if (dateGroups.Any())
                 {
-                    foreach (var row in rows)
+                    bool isFirstGroup = true;
+                    foreach (var group in dateGroups)
                     {
-                        <tr class="detail-row">
-                            <td>@(row.VoucherNo ?? "")</td>
-                            <td>@(row.VoucherDate ?? "")</td>
-                            <td>@(row.Narration ?? "")</td>
-                            <td>@(row.Type ?? "")</td>
-                            <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
+                        <tr class="date-header-row @(isFirstGroup ? "first-group" : "")">
+                            <td colspan="5">@group.Key</td>
                         </tr>
+                        isFirstGroup = false;
+
+                        foreach (var row in group)
+                        {
+                            <tr class="detail-row">
+                                <td></td>
+                                <td>@(row.VoucherNo ?? "")</td>
+                                <td>@(row.Narration ?? "")</td>
+                                <td>@(row.Type ?? "")</td>
+                                <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
+                            </tr>
+                        }
                     }
 
                     <tr class="grand-total-row">

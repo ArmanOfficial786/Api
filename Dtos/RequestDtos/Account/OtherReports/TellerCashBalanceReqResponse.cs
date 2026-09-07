@@ -7,7 +7,8 @@ namespace NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
         public string ToDateBs { get; set; } = string.Empty;
         public string? BranchId { get; set; }          // "-1" = All; SP only supports a single office id
         public string OrderBy { get; set; } = "-1";     // "TellerName" or "Date"
-        public bool NepaliReport { get; set; } = false;
+        public bool NepaliReport { get; set; }
+        public bool VisualReport { get; set; }
     }
 
     public class TellerCashBalanceRowDto

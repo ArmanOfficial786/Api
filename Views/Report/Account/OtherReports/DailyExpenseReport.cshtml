@@ -6,20 +6,22 @@
     Layout = null;
 
     var rows = (Model["Rows"] as List<DailyExpenseRowDto>) ?? new List<DailyExpenseRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalDebitAmount = Model["TotalDebitAmount"] as decimal? ?? 0;
     var totalCreditAmount = Model["TotalCreditAmount"] as decimal? ?? 0;
     var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "Sub Ledger";
+    var branchNames = Model["BranchNames"]?.ToString() ?? "All";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Group by MainLedger
-    var groupedRows = rows.GroupBy(r => r.MainLedger ?? "Unknown").ToList();
+    // Two-level grouping matching the image exactly: MainLedger (bold header) ->
+    // SubLedger rows -> a subtotal line ALWAYS shown, repeating the group name,
+    // even when the group has only one sub-ledger row.
+    // Rows must arrive pre-sorted by MainLedger, SubLedger (see repository ORDER BY)
+    // since GroupBy preserves first-seen order, not sorted order.
+    var mainLedgerGroups = rows.GroupBy(r => r.MainLedger ?? "").ToList();
 }
 
 <!DOCTYPE html>
@@ -83,22 +85,33 @@
             }
 
             .data-table th {
-                background: #f9f9f9;
                 border-top: 2px solid #000;
                 border-bottom: 1px solid #000;
                 text-align: left;
                 white-space: nowrap;
+                font-weight: bold;
             }
 
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-                padding: 3px 6px;
+            .main-ledger-row td {
+                font-weight: bold;
+                padding-top: 10px;
+                padding-bottom: 2px;
+                border: none;
             }
 
-            .detail-row-alt td {
-                background: #f9f9f9;
-                border-bottom: 1px solid #eee;
-                padding: 3px 6px;
+            .main-ledger-row.first-group td {
+                padding-top: 4px;
+            }
+
+            .sub-ledger-row td {
+                color: #1565c0;
+                padding-left: 20px;
+                border: none;
+            }
+
+            .subtotal-row td {
+                border-top: 1px solid #000;
+                font-weight: bold;
             }
 
             .grand-total-row td {
@@ -117,35 +130,6 @@
                 text-align: center !important;
             }
 
-            .text-left {
-                text-align: left !important;
-            }
-
-            .positive {
-                color: #006600;
-            }
-
-            .negative {
-                color: #CC0000;
-            }
-
-            .main-ledger-header td {
-                background: #e8e8e8;
-                font-weight: bold;
-                font-size: 10pt;
-                padding: 5px 6px;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-            }
-
-            .padding-left-1 {
-                padding-left: 15px !important;
-            }
-
-            .padding-left-2 {
-                padding-left: 30px !important;
-            }
-
             @@media print {
                 thead {
                     display: table-row-group;
@@ -154,14 +138,6 @@
                 tr {
                     page-break-inside: avoid;
                     break-inside: avoid;
-                }
-
-                .grand-total-row td {
-                    background: #f9f9f9 !important;
-                }
-
-                .main-ledger-header td {
-                    background: #e8e8e8 !important;
                 }
             }
     </style>
@@ -176,99 +152,80 @@
 
         <table class="data-table" data-sheet-name="DailyExpense">
             <colgroup>
-                <col style="width:28%;" />
-                <col style="width:28%;" />
-                <col style="width:15%;" />
-                <col style="width:15%;" />
-                <col style="width:14%;" />
+                <col style="width:40%;" />
+                <col style="width:20%;" />
+                <col style="width:20%;" />
+                <col style="width:20%;" />
             </colgroup>
             <tbody>
                 <tr class="meta-title">
-                    <td colspan="5">Daily Expense Report</td>
+                    <td colspan="4">Daily Expense Report</td>
                 </tr>
 
                 <tr class="meta-row">
-                    <td colspan="2"><strong>Branch Name :</strong> @branchNames</td>
-                    <td colspan="3" class="text-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
+                    <td></td>
+                    <td colspan="2"><strong>From Date :</strong> @fromDate</td>
+                    <td class="text-right"><strong>To Date :</strong> @toDate</td>
                 </tr>
                 <tr class="meta-row">
-                    <td colspan="2"><strong>Order By :</strong> @orderBy</td>
-                    <td colspan="3" class="text-right">
-                        <strong>Report Generated On :</strong> @generatedOn
-                    </td>
+                    <td><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="2"><strong>Branch Name :</strong> @branchNames</td>
+                    <td></td>
                 </tr>
-                <tr class="meta-spacer"><td colspan="5"></td></tr>
+                <tr class="meta-spacer"><td colspan="4"></td></tr>
 
                 <tr>
-                    <th>Main Ledger</th>
-                    <th>Sub Ledger</th>
+                    <th>Particulars</th>
                     <th class="text-right">Debit Amount</th>
                     <th class="text-right">Credit Amount</th>
                     <th class="text-right">Balance</th>
                 </tr>
 
-                @if (rows.Any())
+                @if (mainLedgerGroups.Any())
                 {
-                    var rowCounter = 0;
-                    var currentMainLedger = string.Empty;
-
-                    foreach (var row in rows)
+                    bool isFirstGroup = true;
+                    foreach (var group in mainLedgerGroups)
                     {
-                        var isNewMainLedger = currentMainLedger != row.MainLedger;
-                        currentMainLedger = row.MainLedger;
+                        var groupRows = group.ToList();
 
-                        if (isNewMainLedger && !string.IsNullOrEmpty(currentMainLedger))
+                        <tr class="main-ledger-row @(isFirstGroup ? "first-group" : "")">
+                            <td colspan="4">@group.Key</td>
+                        </tr>
+                        isFirstGroup = false;
+
+                        foreach (var row in groupRows)
                         {
-                            <tr class="main-ledger-header">
-                                <td colspan="5"><strong>@currentMainLedger</strong></td>
+                            <tr class="sub-ledger-row">
+                                <td>@(row.SubLedger ?? "")</td>
+                                <td class="text-right">@(row.DebitAmount.HasValue ? row.DebitAmount.Value.ToString("N2") : "0.00")</td>
+                                <td class="text-right">@(row.CreditAmount.HasValue ? row.CreditAmount.Value.ToString("N2") : "0.00")</td>
+                                <td class="text-right">@(row.Balance.HasValue ? row.Balance.Value.ToString("N2") : "0.00")</td>
                             </tr>
                         }
 
-                        var paddingClass = string.Empty;
-                        if (row.NodeLevel > 1)
-                        {
-                            paddingClass = $"padding-left-{Math.Min(row.NodeLevel ?? 0, 2)}";
-                        }
-
-                        <tr class="@(rowCounter % 2 == 0 ? "detail-row" : "detail-row-alt")">
-                            <td>
-                                @if (row.NodeLevel <= 1)
-                                {
-                                    @(row.MainLedger ?? "")
-                                }
-                            </td>
-                            <td class="@paddingClass">@(row.SubLedger ?? "")</td>
-                            <td class="text-right">@(row.DebitAmount.HasValue ? row.DebitAmount.Value.ToString("N2") : "0.00")</td>
-                            <td class="text-right">@(row.CreditAmount.HasValue ? row.CreditAmount.Value.ToString("N2") : "0.00")</td>
-                            <td class="text-right @(row.Balance.HasValue && row.Balance.Value < 0 ? "negative" : "positive")">
-                                @(row.Balance.HasValue ? row.Balance.Value.ToString("N2") : "0.00")
-                            </td>
+                        <!-- Subtotal ALWAYS shown per group, regardless of how many
+                             sub-ledger rows it has — matches the image, where even a
+                             single-row group (FINANCIAL EXPENSE / INTEREST EXPENSES)
+                             still gets its own totals line. -->
+                        <tr class="subtotal-row">
+                            <td class="text-right">@group.Key</td>
+                            <td class="text-right">@groupRows.Sum(r => r.DebitAmount ?? 0).ToString("N2")</td>
+                            <td class="text-right">@groupRows.Sum(r => r.CreditAmount ?? 0).ToString("N2")</td>
+                            <td class="text-right">@groupRows.Sum(r => r.Balance ?? 0).ToString("N2")</td>
                         </tr>
-                        rowCounter++;
                     }
 
-                    <!-- Grand Total Row -->
                     <tr class="grand-total-row">
-                        <td colspan="2" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalDebitAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalCreditAmount.ToString("N2")</strong></td>
-                        <td class="text-right @(totalBalance < 0 ? "negative" : "positive")">
-                            <strong>@totalBalance.ToString("N2")</strong>
-                        </td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="2" class="text-right"><strong>Total Records</strong></td>
-                        <td colspan="3" class="text-center"><strong>@totalRecords</strong></td>
+                        <td class="text-right">Grand Total</td>
+                        <td class="text-right">@totalDebitAmount.ToString("N2")</td>
+                        <td class="text-right">@totalCreditAmount.ToString("N2")</td>
+                        <td class="text-right">@totalBalance.ToString("N2")</td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="5" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="4" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

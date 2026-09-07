@@ -49,21 +49,24 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
 
         private string BuildSqlOrderBy(DailyIncomeRequestDto request)
         {
+            // MainLedger always leads so rows for the same main ledger arrive contiguous
+            // — required for the view's GroupBy (which preserves first-seen order, does
+            // not sort) to group correctly, matching the report's visual grouping.
             if (string.IsNullOrEmpty(request.OrderBy) ||
                 request.OrderBy == "-1" ||
                 request.OrderBy == "string")
             {
-                return " ORDER BY SubLedger";
+                return " ORDER BY MainLedger, SubLedger";
             }
 
             return request.OrderBy.Trim().ToLower() switch
             {
                 "main ledger" => " ORDER BY MainLedger",
-                "sub ledger" => " ORDER BY SubLedger",
-                "debit amount" => " ORDER BY DebitAmount DESC",
-                "credit amount" => " ORDER BY CreditAmount DESC",
-                "balance" => " ORDER BY Balance DESC",
-                _ => " ORDER BY SubLedger"
+                "sub ledger" => " ORDER BY MainLedger, SubLedger",
+                "debit amount" => " ORDER BY MainLedger, DebitAmount DESC",
+                "credit amount" => " ORDER BY MainLedger, CreditAmount DESC",
+                "balance" => " ORDER BY MainLedger, Balance DESC",
+                _ => " ORDER BY MainLedger, SubLedger"
             };
         }
 
@@ -100,16 +103,40 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 OrderBy = request.OrderBy
             };
 
-            // Get branch names if applicable
+            // Root-cause fix: STRING_AGG needs compat level 140 (SQL Server 2017+), which
+            // this database doesn't have (see AccountYearClosingRepository / DailyExpenseRepository
+            // fix). Split the CSV in C# and let Dapper parameterize the IN clause instead —
+            // works on any SQL Server version, and avoids string-concatenating BranchIds into SQL.
             if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
             {
-                var branchNames = await connection.QueryFirstOrDefaultAsync<string>(
-                    "SELECT STRING_AGG(OfficeName, ', ') FROM UsmOffice WHERE UsmOfficeId IN (" + request.BranchIds + ")");
-                data.BranchNames = branchNames ?? "All Branches";
+                var branchIdList = request.BranchIds
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Select(id => long.TryParse(id, out var parsed) ? parsed : (long?)null)
+                    .Where(id => id.HasValue)
+                    .Select(id => id!.Value)
+                    .ToList();
+
+                if (branchIdList.Any())
+                {
+                    const string sql = @"
+                        SELECT OfficeName
+                        FROM UsmOffice
+                        WHERE UsmOfficeId IN @Ids
+                        ORDER BY OfficeName";
+
+                    var names = (await connection.QueryAsync<string>(
+                        sql, new { Ids = branchIdList })).ToList();
+
+                    data.BranchNames = names.Any() ? string.Join(", ", names) : "All";
+                }
+                else
+                {
+                    data.BranchNames = "All";
+                }
             }
             else
             {
-                data.BranchNames = "All Branches";
+                data.BranchNames = "All";
             }
 
             return data;

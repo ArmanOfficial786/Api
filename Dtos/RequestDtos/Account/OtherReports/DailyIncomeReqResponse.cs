@@ -7,7 +7,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
         public string ToDate { get; set; } = string.Empty;
         public string? BranchIds { get; set; }
         public string OrderBy { get; set; } = "Sub Ledger";
-        public bool VisualReport { get; set; } = false;
+        public bool VisualReport { get; set; }
     }
 
     public class DailyIncomeRowDto

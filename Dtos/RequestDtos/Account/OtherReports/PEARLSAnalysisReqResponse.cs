@@ -5,7 +5,7 @@
         public string TillDate { get; set; } = string.Empty;
         public string? BranchId { get; set; }
         public string OrderBy { get; set; } = "Title";
-        public bool VisualReport { get; set; } = false;
+        public bool VisualReport { get; set; }
     }
 
     // Matches the SP output columns exactly, one row per indicator
