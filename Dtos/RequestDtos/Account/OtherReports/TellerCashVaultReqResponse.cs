@@ -4,7 +4,7 @@
     {
         public string FromDateBs { get; set; } = string.Empty;
         public string ToDateBs { get; set; } = string.Empty;
-        public string? BranchIds { get; set; }
+        public string? BranchId { get; set; }
         public bool SameCompanyName { get; set; } = true;
         public string OrderBy { get; set; } = "-1";
         public bool Type { get; set; }

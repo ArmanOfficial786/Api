@@ -44,11 +44,11 @@ namespace NexgenCosysReport.Repository.AccountOperation.OthersReport
                 }
             }
 
-            if (!string.IsNullOrEmpty(request.BranchIds) &&
-                request.BranchIds != "-1" &&
-                request.BranchIds != "string")
+            if (!string.IsNullOrEmpty(request.BranchId) &&
+                request.BranchId != "-1" &&
+                request.BranchId != "string")
             {
-                filter += $" AND t.UsmOfficeId IN ({request.BranchIds})";
+                filter += $" AND t.UsmOfficeId IN ({request.BranchId})";
             }
 
             filter += BuildSqlOrderBy(request);

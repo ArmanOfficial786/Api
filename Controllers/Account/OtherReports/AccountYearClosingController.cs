@@ -90,10 +90,10 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
 
                 // Get header data
                 string? branchIdForHeader = null;
-                if (!string.IsNullOrEmpty(request.BranchIds) &&
-                    request.BranchIds != "-1" && !request.BranchIds.Contains(','))
+                if (!string.IsNullOrEmpty(request.BranchId) &&
+                    request.BranchId != "-1" && !request.BranchId.Contains(','))
                 {
-                    branchIdForHeader = request.BranchIds;
+                    branchIdForHeader = request.BranchId;
                 }
 
                 var headerData = await _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");

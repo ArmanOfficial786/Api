@@ -1,5 +1,4 @@
-﻿// Repository/Account/OthersReport/VoucherDetailsRepository.cs
-using Dapper;
+﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
@@ -21,6 +20,13 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
             _dateConverter = dateConverter;
         }
 
+        // Legacy webform sentinel for "no voucher selected" is -1; some JSON clients
+        // (Swagger's default nullable-numeric autofill, some frontends) send 0 instead
+        // of omitting the field / sending null. Treat both as "no filter" so date-only
+        // queries aren't silently narrowed to AcoVoucherId = 0 (which never exists).
+        private static bool IsVoucherIdSpecified(long? voucherId) =>
+            voucherId.HasValue && voucherId.Value > 0;
+
         private async Task<string> BuildSqlFilterExp(VoucherDetailsRequestDto request)
         {
             var filter = string.Empty;
@@ -33,7 +39,9 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
 
                 if (!string.IsNullOrEmpty(fromDateAd) && !string.IsNullOrEmpty(toDateAd))
                 {
-                    filter += $" AND v.VoucherOn BETWEEN '{fromDateAd}' AND '{toDateAd}'";
+                    // Upper bound made exclusive-of-next-day so same-day transactions
+                    // with a time component aren't excluded by a bare date BETWEEN.
+                    filter += $" AND v.VoucherOn >= '{fromDateAd}' AND v.VoucherOn < DATEADD(day, 1, '{toDateAd}')";
                 }
             }
 
@@ -44,9 +52,9 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 filter += $" AND v.UsmOfficeId IN ({request.BranchIds})";
             }
 
-            if (request.VoucherId.HasValue && request.VoucherId.Value != -1)
+            if (IsVoucherIdSpecified(request.VoucherId))
             {
-                filter += $" AND v.AcoVoucherId = {request.VoucherId.Value}";
+                filter += $" AND v.AcoVoucherId = {request.VoucherId!.Value}";
             }
 
             return filter;
@@ -54,11 +62,6 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
 
         private string BuildSqlOrderBy(VoucherDetailsRequestDto request)
         {
-            // VoucherNo always leads so rows for the same voucher arrive contiguous —
-            // required for the view's GroupBy (which preserves first-seen order, does
-            // not sort) to group correctly into the per-voucher blocks shown in the image.
-            // The previous default ("ORDER BY MainLedger" with no VoucherNo at all) would
-            // scatter a single voucher's debit/credit legs across the whole report.
             if (string.IsNullOrEmpty(request.OrderBy) ||
                 request.OrderBy == "-1" ||
                 request.OrderBy == "string")
@@ -87,8 +90,8 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
             await using var connection = new SqlConnection(connectionString);
 
             var parameters = new DynamicParameters();
-            parameters.Add("@SqlFilterExp", sqlFilterExp);
-            parameters.Add("@SqlFilterExpOrderBy", sqlOrderBy);
+            parameters.Add("@SqlFilterExp", sqlFilterExp, DbType.String, size: -1);
+            parameters.Add("@SqlFilterExpOrderBy", sqlOrderBy, DbType.String, size: -1);
 
             var result = await connection.QueryAsync<VoucherDetailsRowDto>(
                 "sp_6_56_GetVoucherDetails",
@@ -112,49 +115,13 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 VoucherId = request.VoucherId
             };
 
-            // Get voucher number if voucher ID is provided
-            if (request.VoucherId.HasValue && request.VoucherId.Value != -1)
+            // Get voucher number only if a real voucher was actually filtered on
+            if (IsVoucherIdSpecified(request.VoucherId))
             {
                 var voucherNo = await connection.QueryFirstOrDefaultAsync<string>(
                     "SELECT VoucherNo FROM AcoVoucher WHERE AcoVoucherId = @VoucherId",
-                    new { VoucherId = request.VoucherId.Value });
+                    new { VoucherId = request.VoucherId!.Value });
                 data.VoucherNo = voucherNo;
-            }
-
-            // Root-cause fix: STRING_AGG needs compat level 140 (SQL Server 2017+), which
-            // this database doesn't have (same fix as DailyExpenseRepository, DailyIncomeRepository,
-            // DayBookLedgerWiseRepository, PEARLSAnalysisRepository). Split the CSV in C# and let
-            // Dapper parameterize the IN clause instead — works on any SQL Server version.
-            if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
-            {
-                var branchIdList = request.BranchIds
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Select(id => long.TryParse(id, out var parsed) ? parsed : (long?)null)
-                    .Where(id => id.HasValue)
-                    .Select(id => id!.Value)
-                    .ToList();
-
-                if (branchIdList.Any())
-                {
-                    const string sql = @"
-                        SELECT OfficeName
-                        FROM UsmOffice
-                        WHERE UsmOfficeId IN @Ids
-                        ORDER BY OfficeName";
-
-                    var names = (await connection.QueryAsync<string>(
-                        sql, new { Ids = branchIdList })).ToList();
-
-                    data.BranchNames = names.Any() ? string.Join(", ", names) : "All Branches";
-                }
-                else
-                {
-                    data.BranchNames = "All Branches";
-                }
-            }
-            else
-            {
-                data.BranchNames = "All Branches";
             }
 
             return data;

@@ -71,7 +71,7 @@ namespace NexgenCosysReport.Repository.Account.OtherReports
             // matching the legacy WebForm: chkSameCompanyName.Checked == true -> branchId = -1
             if (!request.SameCompanyName)
             {
-                var branchIds = SanitizeBranchIds(request.BranchIds);
+                var branchIds = SanitizeBranchIds(request.BranchId);
                 if (branchIds != "-1")
                 {
                     filter.Append(" And t.UsmOfficeId in (").Append(branchIds).Append(") ");

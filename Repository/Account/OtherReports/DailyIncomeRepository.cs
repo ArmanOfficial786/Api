@@ -37,11 +37,11 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 }
             }
 
-            if (!string.IsNullOrEmpty(request.BranchIds) &&
-                request.BranchIds != "-1" &&
-                request.BranchIds != "string")
+            if (!string.IsNullOrEmpty(request.BranchId) &&
+                request.BranchId != "-1" &&
+                request.BranchId != "string")
             {
-                filter += $" AND v.UsmOfficeId IN ({request.BranchIds})";
+                filter += $" AND v.UsmOfficeId IN ({request.BranchId})";
             }
 
             return filter;
@@ -102,42 +102,6 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 ToDateBs = request.ToDate,
                 OrderBy = request.OrderBy
             };
-
-            // Root-cause fix: STRING_AGG needs compat level 140 (SQL Server 2017+), which
-            // this database doesn't have (see AccountYearClosingRepository / DailyExpenseRepository
-            // fix). Split the CSV in C# and let Dapper parameterize the IN clause instead —
-            // works on any SQL Server version, and avoids string-concatenating BranchIds into SQL.
-            if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
-            {
-                var branchIdList = request.BranchIds
-                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                    .Select(id => long.TryParse(id, out var parsed) ? parsed : (long?)null)
-                    .Where(id => id.HasValue)
-                    .Select(id => id!.Value)
-                    .ToList();
-
-                if (branchIdList.Any())
-                {
-                    const string sql = @"
-                        SELECT OfficeName
-                        FROM UsmOffice
-                        WHERE UsmOfficeId IN @Ids
-                        ORDER BY OfficeName";
-
-                    var names = (await connection.QueryAsync<string>(
-                        sql, new { Ids = branchIdList })).ToList();
-
-                    data.BranchNames = names.Any() ? string.Join(", ", names) : "All";
-                }
-                else
-                {
-                    data.BranchNames = "All";
-                }
-            }
-            else
-            {
-                data.BranchNames = "All";
-            }
 
             return data;
         }
