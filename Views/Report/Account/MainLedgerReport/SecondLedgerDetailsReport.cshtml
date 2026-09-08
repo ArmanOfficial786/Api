@@ -1,0 +1,306 @@
+﻿<!-- Views/Report/Account/SecondLedgerDetailsReport/SecondLedgerDetailsReport.cshtml -->
+@using NexgenCosysReport.Dtos.RequestDtos.Account.SecondLedgerDetailsReport
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<SecondLedgerDetailsRowDto>) ?? new List<SecondLedgerDetailsRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalDebitAmount = Model["TotalDebitAmount"] as decimal? ?? 0;
+    var totalCreditAmount = Model["TotalCreditAmount"] as decimal? ?? 0;
+    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
+    var openingBalance = Model["OpeningBalance"] as decimal? ?? 0;
+    var closingBalance = Model["ClosingBalance"] as decimal? ?? 0;
+    var accountType = Model["AccountType"]?.ToString() ?? "";
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
+    var ledgerName = Model["LedgerName"]?.ToString() ?? "";
+    var subLedgerName = Model["SubLedgerName"]?.ToString() ?? "";
+    var secondSubLedgerName = Model["SecondSubLedgerName"]?.ToString() ?? "";
+    var voucherType = Model["VoucherType"]?.ToString() ?? "All";
+    var reportType = Model["ReportType"]?.ToString() ?? "Detail";
+    var showOpeningBalance = Model["ShowOpeningBalance"] as bool? ?? false;
+    var orderBy = Model["OrderBy"]?.ToString() ?? "Voucher Date";
+    var ledgerHeadName = Model["LedgerHeadName"]?.ToString() ?? "";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var title = "Second Sub Ledger Report";
+    if (!string.IsNullOrEmpty(secondSubLedgerName))
+    {
+        title = $"Second Sub Ledger Report - {secondSubLedgerName}";
+    }
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Second Ledger Details Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+                padding: 3px 6px;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+                padding: 3px 6px;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .summary-header td {
+                background: #e8e8e8;
+                font-weight: bold;
+                padding: 5px 6px;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            .opening-balance-row td {
+                background: #e8f0f8;
+                font-weight: bold;
+                padding: 4px 6px;
+                border-top: 1px solid #999;
+                border-bottom: 1px solid #999;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+
+                .grand-total-row td {
+                    background: #f9f9f9 !important;
+                }
+
+                .opening-balance-row td {
+                    background: #e8f0f8 !important;
+                }
+
+                .summary-header td {
+                    background: #e8e8e8 !important;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="SecondLedgerDetails">
+            <colgroup>
+                <col style="width:10%;" />
+                <col style="width:10%;" />
+                <col style="width:13%;" />
+                <col style="width:13%;" />
+                <col style="width:13%;" />
+                <col style="width:18%;" />
+                <col style="width:11%;" />
+                <col style="width:12%;" />
+            </colgroup>
+            <tbody>
+                <!-- Report Title -->
+                <tr class="meta-title">
+                    <td colspan="8">@title</td>
+                </tr>
+
+                <!-- Metadata -->
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Branch Name :</strong> @branchNames</td>
+                    <td colspan="4" class="text-right">
+                        <strong>From Date :</strong> @fromDate
+                        &nbsp;&nbsp;&nbsp;
+                        <strong>To Date :</strong> @toDate
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Ledger Head :</strong> @ledgerHeadName</td>
+                    <td colspan="4" class="text-right">
+                        <strong>Voucher Type :</strong> @voucherType
+                        &nbsp;&nbsp;&nbsp;
+                        <strong>Report Generated On :</strong> @generatedOn
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Report Type :</strong> @reportType</td>
+                    <td colspan="4" class="text-right">
+                        <strong>Order By :</strong> @orderBy
+                    </td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="8"></td></tr>
+
+                <!-- Opening Balance (if applicable) -->
+                @if (showOpeningBalance && openingBalance != 0)
+                {
+                    <tr class="opening-balance-row">
+                        <td colspan="7" class="text-right"><strong>Opening Balance</strong></td>
+                        <td class="text-right"><strong>@openingBalance.ToString("N2")</strong></td>
+                    </tr>
+                }
+
+                <!-- Table Header -->
+                <tr>
+                    <th>Voucher No</th>
+                    <th>Voucher Date</th>
+                    <th>Main Ledger</th>
+                    <th>Sub Ledger</th>
+                    <th>2nd Sub Ledger</th>
+                    <th>Narration</th>
+                    <th class="text-right">Debit Amount</th>
+                    <th class="text-right">Credit Amount</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td>@(row.VoucherNo ?? "")</td>
+                            <td>@(row.VoucherOnBs ?? "")</td>
+                            <td>@(row.MainLedger ?? "")</td>
+                            <td>@(row.SubLedger1 ?? "")</td>
+                            <td>@(row.SubLedger2 ?? "")</td>
+                            <td>@(row.Narration ?? "")</td>
+                            <td class="text-right">@(row.DebitAmount.HasValue ? row.DebitAmount.Value.ToString("N2") : "0.00")</td>
+                            <td class="text-right">@(row.CreditAmount.HasValue ? row.CreditAmount.Value.ToString("N2") : "0.00")</td>
+                        </tr>
+                    }
+
+                    <!-- Grand Total Row -->
+                    <tr class="grand-total-row">
+                        <td colspan="6" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-right"><strong>@totalDebitAmount.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalCreditAmount.ToString("N2")</strong></td>
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="6" class="text-right"><strong>Total Records</strong></td>
+                        <td colspan="2" class="text-center"><strong>@totalRecords</strong></td>
+                    </tr>
+
+                    <!-- Closing Balance -->
+                    @if (closingBalance != 0)
+                    {
+                        <tr class="opening-balance-row">
+                            <td colspan="7" class="text-right"><strong>Closing Balance</strong></td>
+                            <td class="text-right @(closingBalance < 0 ? "negative" : "positive")">
+                                <strong>@closingBalance.ToString("N2")</strong>
+                            </td>
+                        </tr>
+                    }
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="8" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
