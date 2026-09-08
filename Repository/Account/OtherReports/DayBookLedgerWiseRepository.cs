@@ -37,11 +37,11 @@ namespace NexgenCosysReport.Repository.AccountOperation.OthersReport
                 }
             }
 
-            if (!string.IsNullOrEmpty(request.BranchIds) &&
-                request.BranchIds != "-1" &&
-                request.BranchIds != "string")
+            if (!string.IsNullOrEmpty(request.BranchId) &&
+                request.BranchId != "-1" &&
+                request.BranchId != "string")
             {
-                filter += $" AND v.UsmOfficeId IN ({request.BranchIds})";
+                filter += $" AND v.UsmOfficeId IN ({request.BranchId})";
             }
 
             return filter;
@@ -101,18 +101,6 @@ namespace NexgenCosysReport.Repository.AccountOperation.OthersReport
                 ToDateBs = request.ToDate,
                 OrderBy = request.OrderBy
             };
-
-            // Get branch names if applicable
-            if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
-            {
-                var branchNames = await connection.QueryFirstOrDefaultAsync<string>(
-                    "SELECT STRING_AGG(OfficeName, ', ') FROM UsmOffice WHERE UsmOfficeId IN (" + request.BranchIds + ")");
-                data.BranchNames = branchNames ?? "All Branches";
-            }
-            else
-            {
-                data.BranchNames = "All Branches";
-            }
 
             return data;
         }

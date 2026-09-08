@@ -37,11 +37,11 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 }
             }
 
-            if (!string.IsNullOrEmpty(request.BranchIds) &&
-                request.BranchIds != "-1" &&
-                request.BranchIds != "string")
+            if (!string.IsNullOrEmpty(request.BranchId) &&
+                request.BranchId != "-1" &&
+                request.BranchId != "string")
             {
-                filter += $" AND v.UsmOfficeId IN ({request.BranchIds})";
+                filter += $" AND v.UsmOfficeId IN ({request.BranchId})";
             }
 
             return filter;
@@ -49,21 +49,26 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
 
         private string BuildSqlOrderBy(DailyExpenseRequestDto request)
         {
+            // LedgerHead then MainLedger always lead the sort (matches the webform's
+            // SortGroupHeader3 — three grouping levels: LedgerHead -> MainLedger ->
+            // SubLedger) so rows for the same group arrive contiguous. The view's
+            // GroupBy preserves first-seen order, it does not sort, so this ordering
+            // is required for correct nested grouping.
             if (string.IsNullOrEmpty(request.OrderBy) ||
                 request.OrderBy == "-1" ||
                 request.OrderBy == "string")
             {
-                return " ORDER BY SubLedger";
+                return " ORDER BY LedgerHead, MainLedger, SubLedger";
             }
 
             return request.OrderBy.Trim().ToLower() switch
             {
-                "main ledger" => " ORDER BY MainLedger",
-                "sub ledger" => " ORDER BY SubLedger",
-                "debit amount" => " ORDER BY DebitAmount DESC",
-                "credit amount" => " ORDER BY CreditAmount DESC",
-                "balance" => " ORDER BY Balance DESC",
-                _ => " ORDER BY SubLedger"
+                "main ledger" => " ORDER BY LedgerHead, MainLedger",
+                "sub ledger" => " ORDER BY LedgerHead, MainLedger, SubLedger",
+                "debit amount" => " ORDER BY LedgerHead, MainLedger, DebitAmount DESC",
+                "credit amount" => " ORDER BY LedgerHead, MainLedger, CreditAmount DESC",
+                "balance" => " ORDER BY LedgerHead, MainLedger, Balance DESC",
+                _ => " ORDER BY LedgerHead, MainLedger, SubLedger"
             };
         }
 
@@ -99,18 +104,6 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 ToDateBs = request.ToDate,
                 OrderBy = request.OrderBy
             };
-
-            // Get branch names if applicable
-            if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
-            {
-                var branchNames = await connection.QueryFirstOrDefaultAsync<string>(
-                    "SELECT STRING_AGG(OfficeName, ', ') FROM UsmOffice WHERE UsmOfficeId IN (" + request.BranchIds + ")");
-                data.BranchNames = branchNames ?? "All Branches";
-            }
-            else
-            {
-                data.BranchNames = "All Branches";
-            }
 
             return data;
         }

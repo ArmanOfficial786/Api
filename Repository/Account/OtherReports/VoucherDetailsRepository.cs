@@ -1,5 +1,4 @@
-﻿// Repository/Account/OthersReport/VoucherDetailsRepository.cs
-using Dapper;
+﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
@@ -21,6 +20,13 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
             _dateConverter = dateConverter;
         }
 
+        // Legacy webform sentinel for "no voucher selected" is -1; some JSON clients
+        // (Swagger's default nullable-numeric autofill, some frontends) send 0 instead
+        // of omitting the field / sending null. Treat both as "no filter" so date-only
+        // queries aren't silently narrowed to AcoVoucherId = 0 (which never exists).
+        private static bool IsVoucherIdSpecified(long? voucherId) =>
+            voucherId.HasValue && voucherId.Value > 0;
+
         private async Task<string> BuildSqlFilterExp(VoucherDetailsRequestDto request)
         {
             var filter = string.Empty;
@@ -33,7 +39,9 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
 
                 if (!string.IsNullOrEmpty(fromDateAd) && !string.IsNullOrEmpty(toDateAd))
                 {
-                    filter += $" AND v.VoucherOn BETWEEN '{fromDateAd}' AND '{toDateAd}'";
+                    // Upper bound made exclusive-of-next-day so same-day transactions
+                    // with a time component aren't excluded by a bare date BETWEEN.
+                    filter += $" AND v.VoucherOn >= '{fromDateAd}' AND v.VoucherOn < DATEADD(day, 1, '{toDateAd}')";
                 }
             }
 
@@ -44,9 +52,9 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 filter += $" AND v.UsmOfficeId IN ({request.BranchIds})";
             }
 
-            if (request.VoucherId.HasValue && request.VoucherId.Value != -1)
+            if (IsVoucherIdSpecified(request.VoucherId))
             {
-                filter += $" AND v.AcoVoucherId = {request.VoucherId.Value}";
+                filter += $" AND v.AcoVoucherId = {request.VoucherId!.Value}";
             }
 
             return filter;
@@ -58,18 +66,18 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 request.OrderBy == "-1" ||
                 request.OrderBy == "string")
             {
-                return " ORDER BY MainLedger";
+                return " ORDER BY VoucherNo, MainLedger";
             }
 
             return request.OrderBy.Trim().ToLower() switch
             {
                 "voucher no" => " ORDER BY VoucherNo",
-                "voucher date" => " ORDER BY VoucherOnBs",
-                "main ledger" => " ORDER BY MainLedger",
-                "sub ledger" => " ORDER BY SubLedger1",
-                "debit amount" => " ORDER BY DebitAmount DESC",
-                "credit amount" => " ORDER BY CreditAmount DESC",
-                _ => " ORDER BY MainLedger"
+                "voucher date" => " ORDER BY VoucherNo, VoucherOnBs",
+                "main ledger" => " ORDER BY VoucherNo, MainLedger",
+                "sub ledger" => " ORDER BY VoucherNo, SubLedger1",
+                "debit amount" => " ORDER BY VoucherNo, DebitAmount DESC",
+                "credit amount" => " ORDER BY VoucherNo, CreditAmount DESC",
+                _ => " ORDER BY VoucherNo, MainLedger"
             };
         }
 
@@ -82,8 +90,8 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
             await using var connection = new SqlConnection(connectionString);
 
             var parameters = new DynamicParameters();
-            parameters.Add("@SqlFilterExp", sqlFilterExp);
-            parameters.Add("@SqlFilterExpOrderBy", sqlOrderBy);
+            parameters.Add("@SqlFilterExp", sqlFilterExp, DbType.String, size: -1);
+            parameters.Add("@SqlFilterExpOrderBy", sqlOrderBy, DbType.String, size: -1);
 
             var result = await connection.QueryAsync<VoucherDetailsRowDto>(
                 "sp_6_56_GetVoucherDetails",
@@ -107,25 +115,13 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 VoucherId = request.VoucherId
             };
 
-            // Get voucher number if voucher ID is provided
-            if (request.VoucherId.HasValue && request.VoucherId.Value != -1)
+            // Get voucher number only if a real voucher was actually filtered on
+            if (IsVoucherIdSpecified(request.VoucherId))
             {
                 var voucherNo = await connection.QueryFirstOrDefaultAsync<string>(
                     "SELECT VoucherNo FROM AcoVoucher WHERE AcoVoucherId = @VoucherId",
-                    new { VoucherId = request.VoucherId.Value });
+                    new { VoucherId = request.VoucherId!.Value });
                 data.VoucherNo = voucherNo;
-            }
-
-            // Get branch names if applicable
-            if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
-            {
-                var branchNames = await connection.QueryFirstOrDefaultAsync<string>(
-                    "SELECT STRING_AGG(OfficeName, ', ') FROM UsmOffice WHERE UsmOfficeId IN (" + request.BranchIds + ")");
-                data.BranchNames = branchNames ?? "All Branches";
-            }
-            else
-            {
-                data.BranchNames = "All Branches";
             }
 
             return data;

@@ -37,11 +37,11 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 }
             }
 
-            if (!string.IsNullOrEmpty(request.BranchIds) &&
-                request.BranchIds != "-1" &&
-                request.BranchIds != "string")
+            if (!string.IsNullOrEmpty(request.BranchId) &&
+                request.BranchId != "-1" &&
+                request.BranchId != "string")
             {
-                filter += $" AND v.UsmOfficeId IN ({request.BranchIds})";
+                filter += $" AND v.UsmOfficeId IN ({request.BranchId})";
             }
 
             return filter;
@@ -137,18 +137,6 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 // Net Profit = Total Reserve Amount * 100 / Reserve Percentage (approx)
                 // But this is approximate since different reserves have different percentages
                 data.NetProfit = totalReserveAmount;
-            }
-
-            // Get branch names if applicable
-            if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
-            {
-                var branchNames = await connection.QueryFirstOrDefaultAsync<string>(
-                    "SELECT STRING_AGG(OfficeName, ', ') FROM UsmOffice WHERE UsmOfficeId IN (" + request.BranchIds + ")");
-                data.BranchNames = branchNames ?? "All Branches";
-            }
-            else
-            {
-                data.BranchNames = "All Branches";
             }
 
             return data;

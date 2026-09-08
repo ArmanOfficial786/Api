@@ -22,14 +22,16 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
         {
             var filter = string.Empty;
 
-            if (!string.IsNullOrEmpty(request.BranchIds) &&
-                request.BranchIds != "-1" &&
-                request.BranchIds != "string")
+            if (!string.IsNullOrEmpty(request.BranchId) &&
+                request.BranchId != "-1" &&
+                request.BranchId != "string")
             {
-                filter += $" AND a.UsmOfficeId IN ({request.BranchIds})";
+                filter += $" AND a.UsmOfficeId IN ({request.BranchId})";
             }
 
-            // Build ORDER BY clause
+            // Branch Name always leads the ORDER BY so rows from the same branch arrive
+            // contiguous — required for the view's GroupBy (which preserves first-seen
+            // order, does not sort) to group correctly, matching the report's visual grouping.
             if (string.IsNullOrEmpty(request.OrderBy) ||
                 request.OrderBy == "-1" ||
                 request.OrderBy == "string")
@@ -41,11 +43,11 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 filter += request.OrderBy.Trim().ToLower() switch
                 {
                     "branch name" => " ORDER BY BranchName",
-                    "account year" => " ORDER BY AccountYear",
-                    "closed date" => " ORDER BY ClosedOnBs",
-                    "voucher no" => " ORDER BY VoucherNo",
-                    "status" => " ORDER BY Status",
-                    "closed by" => " ORDER BY ClosedBy",
+                    "account year" => " ORDER BY BranchName, AccountYear",
+                    "closed date" => " ORDER BY BranchName, ClosedOnBs",
+                    "voucher no" => " ORDER BY BranchName, VoucherNo",
+                    "status" => " ORDER BY BranchName, Status",
+                    "closed by" => " ORDER BY BranchName, ClosedBy",
                     _ => " ORDER BY BranchName"
                 };
             }
@@ -78,18 +80,6 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 TotalRecords = rows.Count,
                 OrderBy = request.OrderBy
             };
-
-            // Get branch names if applicable
-            if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
-            {
-                var branchNames = await connection.QueryFirstOrDefaultAsync<string>(
-                    "SELECT STRING_AGG(OfficeName, ', ') FROM UsmOffice WHERE UsmOfficeId IN (" + request.BranchIds + ")");
-                data.BranchNames = branchNames ?? "All Branches";
-            }
-            else
-            {
-                data.BranchNames = "All Branches";
-            }
 
             return data;
         }

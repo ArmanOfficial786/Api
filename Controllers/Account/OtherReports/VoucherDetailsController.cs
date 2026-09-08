@@ -1,5 +1,4 @@
-﻿// Controllers/Account/OthersReport/VoucherDetailsController.cs
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports;
@@ -26,6 +25,9 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
         private readonly IOptions<ReportSettings> _reportSettings;
         private readonly ILogger<VoucherDetailsController> _logger;
 
+        private const string ViewPath = "Views/Report/Account/OtherReports/VoucherDetailsReport.cshtml";
+        private const string VisualViewPath = "Views/VisualReport/VVoucherDetailsReport.cshtml";
+
         public VoucherDetailsController(
             IVoucherDetailsRepository repository,
             ICommonHeaderRepository commonHeaderRepository,
@@ -51,22 +53,14 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
         {
             try
             {
-
-                //var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                //if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                //{
-                //    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                //}
-
-                var reportName = "VoucherDetails";
-                var upperFormat = format.ToUpper();
-
                 if (request == null || !ModelState.IsValid)
                 {
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
                 }
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var reportName = "VoucherDetails";
+                var upperFormat = format.ToUpper();
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -79,62 +73,50 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
                         _jsReportService, _logger);
                 }
 
-                // Get report data
-                var data = await _repository.GetVoucherDetailsDataAsync(request);
+                // -- DB: parallel calls -------------------------------------------------
+                var dataTask = _repository.GetVoucherDetailsDataAsync(request);
 
-                if (!data.Rows.Any())
-                {
-                    return NotFound(new { success = false, StatusCode = 404, message = "No data found" });
-                }
-
-                // Get header data
                 string? branchIdForHeader = null;
                 if (!string.IsNullOrEmpty(request.BranchIds) &&
                     request.BranchIds != "-1" && !request.BranchIds.Contains(','))
                 {
                     branchIdForHeader = request.BranchIds;
                 }
+                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
 
-                var headerData = await _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+                await Task.WhenAll(dataTask, headerTask);
+
+                var data = await dataTask;
+                var headerData = await headerTask;
+
+                if (!data.Rows.Any())
+                {
+                    return NotFound(new { success = false, StatusCode = 404, message = "No data found" });
+                }
 
                 var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-
                 await ReportUtils.ConvertUniqueImagesToBase64Async(
                     headerData, nameof(CommonHeader.CompanyLogo), webRoot);
 
-                // Prepare report data
                 var reportData = new Dictionary<string, object>
                 {
                     { "Rows", data.Rows },
                     { "TotalRecords", data.TotalRecords },
                     { "TotalDebitAmount", data.TotalDebitAmount },
                     { "TotalCreditAmount", data.TotalCreditAmount },
-                    { "FromDate", data.FromDateBs },
-                    { "ToDate", data.ToDateBs },
+                    { "FromDate", data.FromDateBs ?? string.Empty },
+                    { "ToDate", data.ToDateBs ?? string.Empty },
                     { "BranchNames", data.BranchNames ?? "All Branches" },
-                    { "OrderBy", data.OrderBy },
+                    { "OrderBy", data.OrderBy ?? string.Empty },
                     { "ViewType", data.ViewType ?? "None" },
-                    { "VoucherId", data.VoucherId },
-                    { "VoucherNo", data.VoucherNo },
+                    { "VoucherId", data.VoucherId ?? -1 },
+                    { "VoucherNo", data.VoucherNo ?? string.Empty },
                     { "HeaderDataSet", headerData },
                     { "Format", upperFormat },
                     { "VisualReport", request.VisualReport }
                 };
 
-                // Choose view based on ViewType
-                string viewPath;
-                if (request.VisualReport)
-                {
-                    viewPath = "Views/VisualReport/VVoucherDetailsReport.cshtml";
-                }
-                else if (request.ViewType == "Grouping")
-                {
-                    viewPath = "Views/Report/Account/OthersReport/VoucherDetailsGroupWiseReport.cshtml";
-                }
-                else
-                {
-                    viewPath = "Views/Report/Account/OthersReport/VoucherDetailsReport.cshtml";
-                }
+                var viewPath = request.VisualReport ? VisualViewPath : ViewPath;
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

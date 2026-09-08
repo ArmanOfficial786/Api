@@ -9,9 +9,12 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
         public long? VoucherId { get; set; }
         public string OrderBy { get; set; } = "Main Ledger";
         public string ViewType { get; set; } = "None"; // "None" or "Grouping"
-        public bool VisualReport { get; set; } = false;
+        public bool VisualReport { get; set; }
     }
 
+    // Was previously nested inside VoucherDetailsRequestDto — moved to top level
+    // since both the repository and view reference it directly (List<VoucherDetailsRowDto>),
+    // which would not have compiled against the nested form.
     public class VoucherDetailsRowDto
     {
         public string? VoucherNo { get; set; }
@@ -33,6 +36,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
         public long? UsmOfficeId { get; set; }
     }
 
+    // Same fix — moved to top level to match repository/view usage.
     public class VoucherDetailsData
     {
         public List<VoucherDetailsRowDto> Rows { get; set; } = new List<VoucherDetailsRowDto>();

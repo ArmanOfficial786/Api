@@ -4,10 +4,10 @@
     {
         public string FromDateBs { get; set; } = string.Empty;
         public string ToDateBs { get; set; } = string.Empty;
-        public string? BranchIds { get; set; }
+        public string? BranchId { get; set; }
         public bool SameCompanyName { get; set; } = true;
         public string OrderBy { get; set; } = "-1";
-        public string Type { get; set; } = "FromVault";
+        public bool Type { get; set; }
     }
 
     // Columns match sp_6_56_GetTellerCashFromVault / sp_6_56_GetTellerCashToVault SELECT aliases exactly

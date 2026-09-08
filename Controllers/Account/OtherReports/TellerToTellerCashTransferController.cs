@@ -1,4 +1,5 @@
 ﻿// Controllers/AccountOperation/OthersReport/TellerToTellerCashTransferController.cs
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -9,13 +10,14 @@ using NexgenCosysReport.Inteface.ServiceInterface.Account.OtherReports;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Account.OthersReport
 {
     [ApiController]
     [Route("api/[controller]")]
-    //[Authorize]
+    [Authorize]
     public class TellerToTellerCashTransferController : ControllerBase
     {
         private readonly ITellerToTellerCashTransfer _repository;
@@ -54,11 +56,11 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
         {
             try
             {
-                //var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                //if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                //{
-                //    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                //}
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                {
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                }
 
                 var reportName = "TellerToTellerCashTransfer";
                 var upperFormat = format.ToUpper();
@@ -82,10 +84,10 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
                 }
 
                 string? branchIdForHeader = null;
-                if (!string.IsNullOrEmpty(request.BranchIds) &&
-                   request.BranchIds != "-1" && !request.BranchIds.Contains(','))
+                if (!string.IsNullOrEmpty(request.BranchId) &&
+                   request.BranchId != "-1" && !request.BranchId.Contains(','))
                 {
-                    branchIdForHeader = request.BranchIds;
+                    branchIdForHeader = request.BranchId;
                 }
 
                 var dataTask = _repository.GetReportDataAsync(request);
@@ -122,7 +124,7 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VTellerToTellerCashTransferReport.cshtml"
-                    : "Views/Report/AccountOperation/OthersReport/TellerToTellerCashTransferReport.cshtml";
+                    : "Views/Report/Account/OtherReports/TellerToTellerCashTransferReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

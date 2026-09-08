@@ -3,7 +3,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
 {
     public class AccountYearClosingRequestDto
     {
-        public string? BranchIds { get; set; }
+        public string? BranchId { get; set; }
         public string OrderBy { get; set; } = "Branch Name";
         public bool VisualReport { get; set; } = false;
     }

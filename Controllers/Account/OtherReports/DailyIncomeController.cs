@@ -1,4 +1,5 @@
 ﻿// Controllers/Account/OthersReport/DailyIncomeController.cs
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -9,13 +10,14 @@ using NexgenCosysReport.Inteface.ServiceInterface.Account.OtherReports;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Account.OthersReport
 {
     [ApiController]
     [Route("api/account/[controller]")]
-    //[Authorize]
+    [Authorize]
     public class DailyIncomeController : ControllerBase
     {
         private readonly IDailyIncomeRepository _repository;
@@ -52,11 +54,11 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
             try
             {
 
-                //var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                //if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                //{
-                //    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                //}
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                {
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                }
 
                 var reportName = "DailyIncome";
                 var upperFormat = format.ToUpper();
@@ -89,10 +91,10 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
 
                 // Get header data
                 string? branchIdForHeader = null;
-                if (!string.IsNullOrEmpty(request.BranchIds) &&
-                    request.BranchIds != "-1" && !request.BranchIds.Contains(','))
+                if (!string.IsNullOrEmpty(request.BranchId) &&
+                    request.BranchId != "-1" && !request.BranchId.Contains(','))
                 {
-                    branchIdForHeader = request.BranchIds;
+                    branchIdForHeader = request.BranchId;
                 }
 
                 var headerData = await _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
@@ -121,7 +123,7 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VDailyIncomeReport.cshtml"
-                    : "Views/Report/Account/OthersReport/DailyIncomeReport.cshtml";
+                    : "Views/Report/Account/OtherReports/DailyIncomeReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

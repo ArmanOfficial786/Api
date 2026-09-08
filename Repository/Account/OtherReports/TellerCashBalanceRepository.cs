@@ -99,18 +99,21 @@ namespace NexgenCosysReport.Repository.MemberAccount.OthersReport
         // --------------------------------------------------------------
         private static string BuildSqlOrderBy(TellerCashBalanceRequestDto request)
         {
+            // Default now explicitly orders by Date so the view's date-grouping is always
+            // contiguous — previously this returned empty, relying on whatever order the
+            // SP happened to return rows in.
             if (string.IsNullOrEmpty(request.OrderBy) ||
                 request.OrderBy == "-1" ||
                 request.OrderBy == "string")
             {
-                return string.Empty; // legacy default — no explicit ORDER BY when nothing selected
+                return " order by Date ";
             }
 
             return request.OrderBy.Trim().ToLower() switch
             {
-                "tellername" => " order by TellerName ",
+                "tellername" => " order by Date, TellerName ",
                 "date" => " order by Date ",
-                _ => string.Empty
+                _ => " order by Date "
             };
         }
 

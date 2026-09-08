@@ -37,11 +37,11 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 }
             }
 
-            if (!string.IsNullOrEmpty(request.BranchIds) &&
-                request.BranchIds != "-1" &&
-                request.BranchIds != "string")
+            if (!string.IsNullOrEmpty(request.BranchId) &&
+                request.BranchId != "-1" &&
+                request.BranchId != "string")
             {
-                filter += $" AND v.UsmOfficeId IN ({request.BranchIds})";
+                filter += $" AND v.UsmOfficeId IN ({request.BranchId})";
             }
 
             return filter;
@@ -49,21 +49,24 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
 
         private string BuildSqlOrderBy(DailyIncomeRequestDto request)
         {
+            // MainLedger always leads so rows for the same main ledger arrive contiguous
+            // — required for the view's GroupBy (which preserves first-seen order, does
+            // not sort) to group correctly, matching the report's visual grouping.
             if (string.IsNullOrEmpty(request.OrderBy) ||
                 request.OrderBy == "-1" ||
                 request.OrderBy == "string")
             {
-                return " ORDER BY SubLedger";
+                return " ORDER BY MainLedger, SubLedger";
             }
 
             return request.OrderBy.Trim().ToLower() switch
             {
                 "main ledger" => " ORDER BY MainLedger",
-                "sub ledger" => " ORDER BY SubLedger",
-                "debit amount" => " ORDER BY DebitAmount DESC",
-                "credit amount" => " ORDER BY CreditAmount DESC",
-                "balance" => " ORDER BY Balance DESC",
-                _ => " ORDER BY SubLedger"
+                "sub ledger" => " ORDER BY MainLedger, SubLedger",
+                "debit amount" => " ORDER BY MainLedger, DebitAmount DESC",
+                "credit amount" => " ORDER BY MainLedger, CreditAmount DESC",
+                "balance" => " ORDER BY MainLedger, Balance DESC",
+                _ => " ORDER BY MainLedger, SubLedger"
             };
         }
 
@@ -99,18 +102,6 @@ namespace NexgenCosysReport.Repository.Account.OthersReport
                 ToDateBs = request.ToDate,
                 OrderBy = request.OrderBy
             };
-
-            // Get branch names if applicable
-            if (!string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1")
-            {
-                var branchNames = await connection.QueryFirstOrDefaultAsync<string>(
-                    "SELECT STRING_AGG(OfficeName, ', ') FROM UsmOffice WHERE UsmOfficeId IN (" + request.BranchIds + ")");
-                data.BranchNames = branchNames ?? "All Branches";
-            }
-            else
-            {
-                data.BranchNames = "All Branches";
-            }
 
             return data;
         }

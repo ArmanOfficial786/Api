@@ -6,8 +6,10 @@
     {
         public string FromDateBs { get; set; } = string.Empty;
         public string ToDateBs { get; set; } = string.Empty;
-        public string? BranchId { get; set; }       // single office id, "-1" = All (dropdown, not checkbox list)
+        public string? BranchId { get; set; }
         public string OrderBy { get; set; } = "-1";
+        public bool VisualReport { get; set; }
+
     }
 
     public class DayBookVoucherWiseRowDto

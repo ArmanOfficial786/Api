@@ -5,14 +5,19 @@
     Layout = null;
 
     var rows = (Model["Rows"] as List<TellerToTellerCashTransferRowDto>) ?? new List<TellerToTellerCashTransferRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // Grouped by Teller From — each transaction under the group shows
+    // Teller To / Branch / Date / Amount / Issued By plus a denomination
+    // breakdown table, then a subtotal row per Teller From group. Rows must
+    // arrive pre-sorted by TellerFrom (see repository's ORDER BY) since
+    // GroupBy preserves first-seen order, not sorted order.
+    var tellerFromGroups = rows.GroupBy(r => r.TellerFrom ?? "").ToList();
 }
 <!DOCTYPE html>
 <html>
@@ -27,8 +32,8 @@
             }
 
             body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 9.5pt;
                 background: white;
                 color: #000;
             }
@@ -38,78 +43,120 @@
                 overflow: visible;
             }
 
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
+            .meta-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
+                margin-bottom: 4px;
             }
 
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
+                .meta-table td {
+                    padding: 3px 4px;
+                    font-size: 9.5pt;
+                    vertical-align: top;
                 }
 
-            .meta-title td {
+            .report-title {
                 text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
+                font-size: 15pt;
                 font-weight: bold;
                 text-decoration: underline;
-                padding: 8px 6px;
+                padding: 6px 0 12px 0;
             }
 
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
+            .meta-label {
                 font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
             }
+
+            .col-header-table {
+                width: 100%;
+                border-collapse: collapse;
+                border-bottom: 1px solid #000;
+                margin-bottom: 4px;
+            }
+
+                .col-header-table th {
+                    text-align: left;
+                    font-weight: bold;
+                    padding: 3px 4px 6px 4px;
+                    font-size: 9.5pt;
+                }
+
+            .teller-from-row td {
+                font-weight: bold;
+                padding: 10px 4px 2px 4px;
+                font-size: 9.5pt;
+            }
+
+            .txn-row-table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+
+                .txn-row-table td {
+                    padding: 2px 4px;
+                    font-size: 9.5pt;
+                }
+
+            .denom-table {
+                border-collapse: collapse;
+                border: 1px solid #000;
+                margin: 2px 0 10px 20px;
+                width: calc(100% - 20px);
+            }
+
+                .denom-table td {
+                    border: 1px solid #000;
+                    padding: 3px 8px;
+                    font-size: 9.5pt;
+                }
+
+            .denom-label {
+                font-weight: bold;
+                width: 12%;
+            }
+
+            .denom-x {
+                width: 3%;
+                font-weight: bold;
+            }
+
+            .denom-count {
+                width: 12%;
+            }
+
+            .denom-amount {
+                width: 23%;
+                text-align: right;
+            }
+
+            .subtotal-row-table {
+                width: 100%;
+                border-collapse: collapse;
+                border-top: 2px solid #000;
+                margin-top: 4px;
+            }
+
+                .subtotal-row-table td {
+                    padding: 6px 4px;
+                    font-weight: bold;
+                    font-size: 9.5pt;
+                }
 
             .text-right {
-                text-align: right !important;
+                text-align: right;
             }
 
             .text-center {
-                text-align: center !important;
+                text-align: center;
             }
 
             @@media print {
-                thead {
-                    display: table-row-group;
+                .teller-from-row {
+                    page-break-after: avoid;
                 }
 
-                tr {
+                .denom-table {
                     page-break-inside: avoid;
-                    break-inside: avoid;
                 }
             }
     </style>
@@ -122,76 +169,150 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        <table class="data-table" data-sheet-name="TellerToTellerCashTransfer">
+        <div class="report-title">Teller To Teller Cash Transfer Report</div>
+
+        <table class="meta-table">
+            <tr>
+                <td width="30%"><span class="meta-label">Report Generated On :</span> @generatedOn</td>
+                <td width="35%"><span class="meta-label">From Date :</span> @fromDate</td>
+                <td width="35%"><span class="meta-label">To Date :</span> @toDate</td>
+            </tr>
+        </table>
+
+        <table class="col-header-table">
             <colgroup>
-                <col style="width:16%;" />
-                <col style="width:16%;" />
-                <col style="width:16%;" />
-                <col style="width:14%;" />
-                <col style="width:14%;" />
-                <col style="width:24%;" />
+                <col style="width:22%;" />
+                <col style="width:22%;" />
+                <col style="width:22%;" />
+                <col style="width:17%;" />
+                <col style="width:17%;" />
             </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="6">Teller To Teller Cash Transfer Report</td>
-                </tr>
+            <tr>
+                <th>Teller From</th>
+                <th>Teller To</th>
+                <th>Date</th>
+                <th class="text-right">Amount</th>
+                <th>Issued By</th>
+            </tr>
+        </table>
 
-                <tr class="meta-row">
-                    <td colspan="3"><strong>Branch Name :</strong> @branchNames</td>
-                    <td colspan="3" class="text-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="3"></td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="6"></td></tr>
+        @if (tellerFromGroups.Any())
+        {
+            foreach (var group in tellerFromGroups)
+            {
+                var groupRows = group.ToList();
 
-                <tr>
-                    <th>Teller From</th>
-                    <th>Teller To</th>
-                    <th>Branch</th>
-                    <th>Date</th>
-                    <th class="text-right">Amount</th>
-                    <th>Issued By</th>
-                </tr>
+                <table style="width:100%; border-collapse: collapse;">
+                    <tr class="teller-from-row">
+                        <td colspan="5">@group.Key</td>
+                    </tr>
+                </table>
 
-                @if (rows.Any())
+                foreach (var row in groupRows)
                 {
-                    foreach (var row in rows)
-                    {
-                        <tr class="detail-row">
-                            <td>@(row.TellerFrom ?? "")</td>
-                            <td>@(row.TellerTo ?? "")</td>
+                    <table class="txn-row-table">
+                        <colgroup>
+                            <col style="width:22%;" />
+                            <col style="width:22%;" />
+                            <col style="width:22%;" />
+                            <col style="width:17%;" />
+                            <col style="width:17%;" />
+                        </colgroup>
+                        <tr>
+                            <td style="padding-left: 20px;">@(row.TellerTo ?? "")</td>
                             <td>@(row.OfficeName ?? "")</td>
                             <td>@(row.Date ?? "")</td>
                             <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
                             <td>@(row.IssuedBy ?? "")</td>
                         </tr>
-                    }
+                    </table>
 
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">Grand Total</td>
-                        <td class="text-right">@totalAmount.ToString("N2")</td>
-                        <td></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">Total Records</td>
-                        <td class="text-right">@totalRecords</td>
-                        <td></td>
-                    </tr>
+                    <table class="denom-table">
+                        <tr>
+                            <td class="denom-label">Rs 1</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs1 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs1 ?? 0) * 1m).ToString("N2"))</td>
+                            <td class="denom-label">Rs 50</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs50 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs50 ?? 0) * 50m).ToString("N2"))</td>
+                        </tr>
+                        <tr>
+                            <td class="denom-label">Rs 2</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs2 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs2 ?? 0) * 2m).ToString("N2"))</td>
+                            <td class="denom-label">Rs 100</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs100 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs100 ?? 0) * 100m).ToString("N2"))</td>
+                        </tr>
+                        <tr>
+                            <td class="denom-label">Rs 5</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs5 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs5 ?? 0) * 5m).ToString("N2"))</td>
+                            <td class="denom-label">Rs 250</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs250 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs250 ?? 0) * 250m).ToString("N2"))</td>
+                        </tr>
+                        <tr>
+                            <td class="denom-label">Rs 10</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs10 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs10 ?? 0) * 10m).ToString("N2"))</td>
+                            <td class="denom-label">Rs 500</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs500 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs500 ?? 0) * 500m).ToString("N2"))</td>
+                        </tr>
+                        <tr>
+                            <td class="denom-label">Rs 20</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs20 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs20 ?? 0) * 20m).ToString("N2"))</td>
+                            <td class="denom-label">Rs 1000</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs1000 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs1000 ?? 0) * 1000m).ToString("N2"))</td>
+                        </tr>
+                        <tr>
+                            <td class="denom-label">Rs 25</td>
+                            <td class="denom-x">X</td>
+                            <td class="denom-count">@(row.Rs25 ?? 0)</td>
+                            <td class="denom-amount">@(((row.Rs25 ?? 0) * 25m).ToString("N2"))</td>
+                            <td class="denom-label">Paisa</td>
+                            <td></td>
+                            <td class="denom-count">@(row.Paisa ?? 0)</td>
+                            <td class="denom-amount">0.00</td>
+                        </tr>
+                    </table>
                 }
-                else
-                {
+
+                <table class="subtotal-row-table">
+                    <colgroup>
+                        <col style="width:22%;" />
+                        <col style="width:22%;" />
+                        <col style="width:22%;" />
+                        <col style="width:17%;" />
+                        <col style="width:17%;" />
+                    </colgroup>
                     <tr>
-                        <td colspan="6" class="text-center">No data found for the selected criteria</td>
+                        <td></td>
+                        <td></td>
+                        <td class="text-center">@group.Key</td>
+                        <td class="text-right">@groupRows.Sum(r => r.Amount ?? 0m).ToString("N2")</td>
+                        <td></td>
                     </tr>
-                }
-            </tbody>
-        </table>
+                </table>
+            }
+        }
+        else
+        {
+            <p class="text-center">No data found for the selected criteria</p>
+        }
     </div>
 </body>
 </html>

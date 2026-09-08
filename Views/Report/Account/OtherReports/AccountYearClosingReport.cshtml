@@ -8,10 +8,13 @@
     var rows = (Model["Rows"] as List<AccountYearClosingRowDto>) ?? new List<AccountYearClosingRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "Branch Name";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // Grouped by branch — rows must arrive pre-sorted by BranchName (see repository's
+    // ORDER BY) since GroupBy preserves first-seen order, not sorted order.
+    var branchGroups = rows.GroupBy(r => r.BranchName ?? "").ToList();
 }
 
 <!DOCTYPE html>
@@ -75,22 +78,27 @@
             }
 
             .data-table th {
-                background: #f9f9f9;
                 border-top: 2px solid #000;
                 border-bottom: 1px solid #000;
                 text-align: left;
                 white-space: nowrap;
+                font-weight: bold;
+            }
+
+            .branch-row td {
+                font-weight: bold;
+                text-decoration: underline;
+                padding-top: 8px;
+                padding-bottom: 4px;
+                border: none;
+            }
+
+            .branch-row.first-group td {
+                padding-top: 4px;
             }
 
             .detail-row td {
                 border-bottom: 1px solid #eee;
-                padding: 3px 6px;
-            }
-
-            .detail-row-alt td {
-                background: #f9f9f9;
-                border-bottom: 1px solid #eee;
-                padding: 3px 6px;
             }
 
             .grand-total-row td {
@@ -109,33 +117,6 @@
                 text-align: center !important;
             }
 
-            .text-left {
-                text-align: left !important;
-            }
-
-            .badge {
-                display: inline-block;
-                padding: 2px 10px;
-                border-radius: 3px;
-                font-size: 8pt;
-                font-weight: bold;
-            }
-
-            .badge-closed {
-                background: #d4edda;
-                color: #155724;
-            }
-
-            .badge-deleted {
-                background: #f8d7da;
-                color: #721c24;
-            }
-
-            .badge-pending {
-                background: #fff3cd;
-                color: #856404;
-            }
-
             @@media print {
                 thead {
                     display: table-row-group;
@@ -144,10 +125,6 @@
                 tr {
                     page-break-inside: avoid;
                     break-inside: avoid;
-                }
-
-                .grand-total-row td {
-                    background: #f9f9f9 !important;
                 }
             }
     </style>
@@ -162,82 +139,62 @@
 
         <table class="data-table" data-sheet-name="AccountYearClosing">
             <colgroup>
-                <col style="width:8%;" />
-                <col style="width:17%;" />
-                <col style="width:17%;" />
-                <col style="width:17%;" />
-                <col style="width:17%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
+                <col style="width:20%;" />
+                <col style="width:18%;" />
+                <col style="width:18%;" />
+                <col style="width:22%;" />
+                <col style="width:22%;" />
             </colgroup>
             <tbody>
                 <tr class="meta-title">
-                    <td colspan="7">Account Year Closing Report</td>
+                    <td colspan="5">Account Year Closing Report</td>
                 </tr>
 
                 <tr class="meta-row">
-                    <td colspan="3"><strong>Branch Name :</strong> @branchNames</td>
-                    <td colspan="4" class="text-right">
-                        <strong>Order By :</strong> @orderBy
-                    </td>
+                    <td colspan="2"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="3" class="text-right"><strong>Branch Name :</strong> @branchNames</td>
                 </tr>
-                <tr class="meta-row">
-                    <td colspan="7"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="7"></td></tr>
+                <tr class="meta-spacer"><td colspan="5"></td></tr>
 
                 <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Branch Name</th>
-                    <th>Account Year</th>
-                    <th>Closed Date (BS)</th>
+                    <th>Accounting Year</th>
+                    <th>Closed Date</th>
                     <th>Voucher No</th>
                     <th>Status</th>
                     <th>Closed By</th>
                 </tr>
 
-                @if (rows.Any())
+                @if (branchGroups.Any())
                 {
-                    var sn = 0;
-                    foreach (var row in rows)
+                    bool isFirstGroup = true;
+                    foreach (var branchGroup in branchGroups)
                     {
-                        sn++;
-                        var badgeClass = "badge-pending";
-                        if (!string.IsNullOrEmpty(row.Status))
-                        {
-                            var statusLower = row.Status.ToLower();
-                            if (statusLower.Contains("closed"))
-                            {
-                                badgeClass = "badge-closed";
-                            }
-                            else if (statusLower.Contains("deleted"))
-                            {
-                                badgeClass = "badge-deleted";
-                            }
-                        }
-
-                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
-                            <td class="text-center">@sn</td>
-                            <td>@(row.BranchName ?? "")</td>
-                            <td>@(row.AccountYear ?? "")</td>
-                            <td>@(row.ClosedOnBs ?? "")</td>
-                            <td>@(row.VoucherNo ?? "")</td>
-                            <td>
-                                <span class="badge @badgeClass">@(row.Status ?? "N/A")</span>
-                            </td>
-                            <td>@(row.ClosedBy ?? "")</td>
+                        <tr class="branch-row @(isFirstGroup ? "first-group" : "")">
+                            <td colspan="5">@branchGroup.Key</td>
                         </tr>
+                        isFirstGroup = false;
+
+                        foreach (var row in branchGroup)
+                        {
+                            <tr class="detail-row">
+                                <td>@(row.AccountYear ?? "")</td>
+                                <td>@(row.ClosedOnBs ?? "")</td>
+                                <td>@(row.VoucherNo ?? "")</td>
+                                <td>@(row.Status ?? "")</td>
+                                <td>@(row.ClosedBy ?? "")</td>
+                            </tr>
+                        }
                     }
 
                     <tr class="grand-total-row">
-                        <td colspan="6" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
+                        <td colspan="4" class="text-right">Total Records</td>
+                        <td class="text-right">@totalRecords</td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="5" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

@@ -8,16 +8,19 @@
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // Grouped by branch (OfficeName) — rows must arrive pre-sorted by OfficeName
+    // (see repository's ORDER BY) since GroupBy preserves first-seen order, not sorted order.
+    var branchGroups = rows.GroupBy(r => r.OfficeName ?? "").ToList();
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Account Day Open And Close Report</title>
+    <title>Account Date Opened And Closed Report</title>
     <style>
             * {
                 margin: 0;
@@ -74,11 +77,22 @@
             }
 
             .data-table th {
-                background: #f9f9f9;
                 border-top: 2px solid #000;
                 border-bottom: 1px solid #000;
                 text-align: left;
                 white-space: nowrap;
+                font-weight: bold;
+            }
+
+            .branch-row td {
+                font-weight: bold;
+                padding-top: 12px;
+                padding-bottom: 4px;
+                border: none;
+            }
+
+            .branch-row.first-group td {
+                padding-top: 6px;
             }
 
             .detail-row td {
@@ -99,16 +113,6 @@
 
             .text-center {
                 text-align: center !important;
-            }
-
-            .status-open {
-                color: #006600;
-                font-weight: bold;
-            }
-
-            .status-closed {
-                color: #CC0000;
-                font-weight: bold;
             }
 
             @@media print {
@@ -133,61 +137,61 @@
 
         <table class="data-table" data-sheet-name="AccountDayOpenAndClose">
             <colgroup>
-                <col style="width:16%;" />
                 <col style="width:12%;" />
-                <col style="width:10%;" />
                 <col style="width:14%;" />
                 <col style="width:16%;" />
+                <col style="width:12%;" />
                 <col style="width:16%;" />
-                <col style="width:16%;" />
+                <col style="width:10%;" />
+                <col style="width:10%;" />
             </colgroup>
             <tbody>
                 <tr class="meta-title">
-                    <td colspan="7">Account Day Open And Close Report</td>
+                    <td colspan="7">Account Date Opened And Closed Report</td>
                 </tr>
 
                 <tr class="meta-row">
-                    <td colspan="3"><strong>Branch Name :</strong> @branchNames</td>
-                    <td colspan="4" class="text-right">
+                    <td colspan="2"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="5" class="text-right">
                         <strong>From Date :</strong> @fromDate
                         &nbsp;&nbsp;&nbsp;
                         <strong>To Date :</strong> @toDate
                     </td>
                 </tr>
-                <tr class="meta-row">
-                    <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="4"></td>
-                </tr>
                 <tr class="meta-spacer"><td colspan="7"></td></tr>
 
                 <tr>
-                    <th>Office Name</th>
                     <th>Opened Date</th>
-                    <th>Status</th>
-                    <th>Counter Type</th>
+                    <th>Opened By</th>
                     <th>Opened On</th>
+                    <th>Closed By</th>
                     <th>Closed On</th>
-                    <th>Opened By / Closed By</th>
+                    <th>Status</th>
+                    <th>Type</th>
                 </tr>
 
-                @if (rows.Any())
+                @if (branchGroups.Any())
                 {
-                    foreach (var row in rows)
+                    bool isFirstGroup = true;
+                    foreach (var branchGroup in branchGroups)
                     {
-                        var statusClass = (row.Status ?? "").Equals("Opened", StringComparison.OrdinalIgnoreCase)
-                            ? "status-open"
-                            : (row.Status ?? "").Equals("Closed", StringComparison.OrdinalIgnoreCase)
-                                ? "status-closed"
-                                : "";
-                        <tr class="detail-row">
-                            <td>@(row.OfficeName ?? "")</td>
-                            <td>@(row.OpenedDateOnBs ?? "")</td>
-                            <td class="@statusClass">@(row.Status ?? "")</td>
-                            <td>@(row.EveningCounter ?? "")</td>
-                            <td>@(row.OpenedOn.HasValue ? row.OpenedOn.Value.ToString("yyyy/MM/dd HH:mm") : "")</td>
-                            <td>@(row.ClosedOn.HasValue ? row.ClosedOn.Value.ToString("yyyy/MM/dd HH:mm") : "")</td>
-                            <td>@(row.OpenedBy ?? "")@(!string.IsNullOrEmpty(row.ClosedBy) ? " / " + row.ClosedBy : "")</td>
+                        <tr class="branch-row @(isFirstGroup ? "first-group" : "")">
+                            <td colspan="7">@branchGroup.Key</td>
                         </tr>
+                        isFirstGroup = false;
+
+                        foreach (var row in branchGroup)
+                        {
+                            <tr class="detail-row">
+                                <td>@(row.OpenedDateOnBs ?? "")</td>
+                                <td>@(row.OpenedBy ?? "")</td>
+                                <td>@(row.OpenedOn.HasValue ? row.OpenedOn.Value.ToString("M/d/yyyy h:mm:ss tt") : "")</td>
+                                <td>@(row.ClosedBy ?? "")</td>
+                                <td>@(row.ClosedOn.HasValue ? row.ClosedOn.Value.ToString("M/d/yyyy h:mm:ss tt") : "")</td>
+                                <td>@(row.Status ?? "")</td>
+                                <td>@(row.EveningCounter ?? "")</td>
+                            </tr>
+                        }
                     }
 
                     <tr class="grand-total-row">

@@ -94,10 +94,10 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
 
                 // Get header data
                 string? branchIdForHeader = null;
-                if (!string.IsNullOrEmpty(request.BranchIds) &&
-                    request.BranchIds != "-1" && !request.BranchIds.Contains(','))
+                if (!string.IsNullOrEmpty(request.BranchId) &&
+                    request.BranchId != "-1" && !request.BranchId.Contains(','))
                 {
-                    branchIdForHeader = request.BranchIds;
+                    branchIdForHeader = request.BranchId;
                 }
 
                 var headerData = await _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
@@ -126,7 +126,7 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VDayBookLedgerWiseReport.cshtml"
-                    : "Views/Report/Account/OthersReport/DayBookLedgerWiseReport.cshtml";
+                    : "Views/Report/Account/OtherReports/DayBookLedgerWiseReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

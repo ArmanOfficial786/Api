@@ -56,6 +56,8 @@ public partial class AppDbContext : Microsoft.EntityFrameworkCore.DbContext
 
     public virtual DbSet<UsmRelationUserToOfficeLogin> UsmRelationUserToOfficeLogins { get; set; }
 
+    public virtual DbSet<AcoVoucher> AcoVouchers { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -652,6 +654,27 @@ public partial class AppDbContext : Microsoft.EntityFrameworkCore.DbContext
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FK_UsmRelationUserToOfficeLogin_UsmOffice");
         });
+
+        modelBuilder.Entity<AcoVoucher>(entity =>
+        {
+            entity.ToTable("AcoVoucher");
+
+            entity.HasIndex(e => e.VoucherNo, "IX_AcoVoucher");
+
+            entity.HasIndex(e => e.VoucherOn, "NonClusteredIndex-20220306-155441");
+
+            entity.HasIndex(e => e.VoucherOn, "NonClusteredIndex-VoucherOn");
+
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.FiscalYear).HasMaxLength(10);
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.VoucherNo).HasMaxLength(50);
+            entity.Property(e => e.VoucherOn).HasColumnType("datetime");
+            entity.Property(e => e.VoucherOnBs).HasMaxLength(50);
+        });
+
+
+
 
         OnModelCreatingPartial(modelBuilder);
     }

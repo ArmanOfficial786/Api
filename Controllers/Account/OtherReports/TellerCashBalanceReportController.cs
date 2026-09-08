@@ -1,4 +1,5 @@
 ﻿// Controllers/MemberAccount/OthersReport/TellerCashBalanceController.cs
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -9,13 +10,14 @@ using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.OthersReport;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
 {
     [ApiController]
     [Route("api/[controller]")]
-    //[Authorize]
+    [Authorize]
     public class TellerCashBalanceController : ControllerBase
     {
         private readonly ITellerCashBalanceRepository _repository;
@@ -55,11 +57,11 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
         {
             try
             {
-                //var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                //if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                //{
-                //    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                //}
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                {
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                }
 
                 if (request == null || !ModelState.IsValid)
                 {
@@ -124,9 +126,9 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
                     { "Format", upperFormat }
                 };
 
-                string viewPath = data.NepaliReport
+                string viewPath = request.VisualReport
                     ? "Views/Report/MemberAccount/OthersReport/TellerCashBalanceNepaliReport.cshtml"
-                    : "Views/Report/MemberAccount/OthersReport/TellerCashBalanceReport.cshtml";
+                    : "Views/Report/Account/OtherReports/TellerCashBalanceReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
