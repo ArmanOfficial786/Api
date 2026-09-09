@@ -1,4 +1,4 @@
-﻿@* Views/Report/MemberAccount/OthersReport/TellerCashBalanceReport.cshtml *@
+﻿@* Views/Report/Account/OtherReports/TellerCashBalanceReport.cshtml *@
 @using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport;
 @model Dictionary<string, object>
 @{
@@ -12,21 +12,19 @@
     var officeName = Model["OfficeName"]?.ToString() ?? "All";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
+    var isNepali = Model.ContainsKey("NepaliReport") && Model["NepaliReport"] is bool nr && nr;
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
     string Fmt(decimal? v) => (v ?? 0m).ToString("N2");
+    string L(string en, string np) => isNepali ? np : en;
 
-    // Grouped by Date — teller rows listed under each date (Date column left blank
-    // on detail rows), then a bold subtotal row per date repeating the date and
-    // summing every numeric column. Rows must arrive pre-sorted by Date (see
-    // repository's ORDER BY) since GroupBy preserves first-seen order, not sorted order.
     var dateGroups = rows.GroupBy(r => r.Date ?? "").ToList();
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Teller Cash Balance Report</title>
+    <title>@L("Teller Cash Balance Report", "टेलर नगद मौज्दात प्रतिवेदन")</title>
     <style>
             * {
                 margin: 0;
@@ -35,7 +33,7 @@
             }
 
             body {
-                font-family: Arial, sans-serif;
+                font-family: @(isNepali ? "'Kalimati', 'Noto Sans Devanagari', Arial, sans-serif" : "Arial, sans-serif");
                 font-size: 8.5pt;
                 background: white;
                 color: #000;
@@ -64,6 +62,18 @@
                     vertical-align: middle;
                 }
 
+            /* Report title / subheader — was missing entirely; this is the visible
+                           bold underlined heading that appears inside the rendered report body,
+                           distinct from the HTML <title> tag which never shows in a PDF. */
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
             .meta-row td {
                 padding: 3px 6px;
                 font-size: 9pt;
@@ -73,11 +83,6 @@
                 height: 6px;
             }
 
-            /* FIX: headers were overlapping into neighboring columns because
-                           white-space: nowrap forced single-line text while table-layout: fixed
-                           kept the narrow colgroup widths — text overflowed past its own cell.
-                           Switching to white-space: normal lets long labels (e.g. "Closing Cash
-                           Balance") wrap onto two lines within their own column instead. */
             .data-table th {
                 border-top: 2px solid #000;
                 border-bottom: 1px solid #000;
@@ -154,43 +159,47 @@
 
         <table class="data-table" data-sheet-name="TellerCashBalance">
             <colgroup>
-                <col style="width:8%;" />   <!-- Date -->
-                <col style="width:11%;" />  <!-- Teller Name -->
-                <col style="width:10%;" />  <!-- Cash From Vault -->
-                <col style="width:10%;" />  <!-- Cash From Teller -->
-                <col style="width:10%;" />  <!-- Cash Collection -->
-                <col style="width:9%;" />   <!-- Cash Expense -->
-                <col style="width:10%;" />  <!-- Cash Balance -->
-                <col style="width:9%;" />   <!-- Cash to Teller -->
-                <col style="width:9%;" />   <!-- Cash To Vault -->
-                <col style="width:14%;" />  <!-- Closing Cash Balance -->
+                <col style="width:8%;" />
+                <col style="width:11%;" />
+                <col style="width:10%;" />
+                <col style="width:10%;" />
+                <col style="width:10%;" />
+                <col style="width:9%;" />
+                <col style="width:10%;" />
+                <col style="width:9%;" />
+                <col style="width:9%;" />
+                <col style="width:14%;" />
             </colgroup>
             <tbody>
+                <tr class="meta-title">
+                    <td colspan="10">@L("Teller Cash Balance Report", "टेलर नगद मौज्दात प्रतिवेदन")</td>
+                </tr>
+
                 <tr class="meta-row">
-                    <td colspan="4"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="4"><strong>@L("Report Generated On", "प्रतिवेदन उत्पन्न मिति") :</strong> @generatedOn</td>
                     <td colspan="6" class="text-right">
-                        <strong>From Date :</strong> @fromDate
+                        <strong>@L("From Date", "देखि मिति") :</strong> @fromDate
                         &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
+                        <strong>@L("To Date", "सम्म मिति") :</strong> @toDate
                     </td>
                 </tr>
                 <tr class="meta-row">
                     <td colspan="4"></td>
-                    <td colspan="6" class="text-right"><strong>Branch Name :</strong> @officeName</td>
+                    <td colspan="6" class="text-right"><strong>@L("Branch Name", "शाखाको नाम") :</strong> @officeName</td>
                 </tr>
                 <tr class="meta-spacer"><td colspan="10"></td></tr>
 
                 <tr>
-                    <th>Date</th>
-                    <th>Teller Name</th>
-                    <th>Cash From Vault</th>
-                    <th>Cash From Teller</th>
-                    <th>Cash Collection</th>
-                    <th>Cash Expense</th>
-                    <th>Cash Balance</th>
-                    <th>Cash to Teller</th>
-                    <th>Cash To Vault</th>
-                    <th>Closing Cash Balance</th>
+                    <th>@L("Date", "मिति")</th>
+                    <th>@L("Teller Name", "टेलरको नाम")</th>
+                    <th>@L("Cash From Vault", "भल्टबाट नगद")</th>
+                    <th>@L("Cash From Teller", "टेलरबाट नगद")</th>
+                    <th>@L("Cash Collection", "नगद संकलन")</th>
+                    <th>@L("Cash Expense", "नगद खर्च")</th>
+                    <th>@L("Cash Balance", "नगद मौज्दात")</th>
+                    <th>@L("Cash to Teller", "टेलरलाई नगद")</th>
+                    <th>@L("Cash To Vault", "भल्टमा नगद")</th>
+                    <th>@L("Closing Cash Balance", "अन्तिम नगद मौज्दात")</th>
                 </tr>
 
                 @if (dateGroups.Any())
@@ -234,18 +243,18 @@
                     }
 
                     <tr class="grand-total-row">
-                        <td colspan="9" class="text-right">Grand Total (Closing Balance)</td>
+                        <td colspan="9" class="text-right">@L("Grand Total (Closing Balance)", "जम्मा (अन्तिम मौज्दात)")</td>
                         <td class="text-right">@totalClosingBalance.ToString("N2")</td>
                     </tr>
                     <tr class="grand-total-row">
-                        <td colspan="9" class="text-right">Total Records</td>
+                        <td colspan="9" class="text-right">@L("Total Records", "कुल रेकर्ड")</td>
                         <td class="text-right">@totalRecords</td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="10" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="10" class="text-center">@L("No data found for the selected criteria", "छानिएको मापदण्डको लागि डाटा फेला परेन")</td>
                     </tr>
                 }
             </tbody>

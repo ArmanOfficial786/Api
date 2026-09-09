@@ -49,7 +49,6 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
             _dateConverter = dateConverter;
         }
 
-        // POST api/TellerCashBalance?format=VIEW
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] TellerCashBalanceRequestDto request,
@@ -94,6 +93,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
                     branchIdForHeader = request.BranchId;
                 }
 
+
                 var dataTask = _repository.GetReportDataAsync(request);
                 var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
 
@@ -126,9 +126,8 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
                     { "Format", upperFormat }
                 };
 
-                string viewPath = request.VisualReport
-                    ? "Views/Report/MemberAccount/OthersReport/TellerCashBalanceNepaliReport.cshtml"
-                    : "Views/Report/Account/OtherReports/TellerCashBalanceReport.cshtml";
+
+                string viewPath = "Views/Report/Account/OtherReports/TellerCashBalanceReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

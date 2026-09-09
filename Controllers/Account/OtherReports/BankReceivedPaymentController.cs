@@ -1,4 +1,5 @@
 ﻿// Controllers/AccountOperation/OthersReport/BankReceivedPaymentController.cs
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -9,13 +10,14 @@ using NexgenCosysReport.Inteface.ServiceInterface.AccountOperation.OthersReport;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Account.OthersReport
 {
     [ApiController]
     [Route("api/[controller]")]
-    //[Authorize]
+    [Authorize]
     public class BankReceivedPaymentController : ControllerBase
     {
         private readonly IBankReceivedPaymentRepository _repository;
@@ -47,7 +49,6 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
             _dateConverter = dateConverter;
         }
 
-        // POST api/BankReceivedPayment?format=VIEW
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] BankReceivedPaymentRequestDto request,
@@ -55,11 +56,11 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
         {
             try
             {
-                //var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                //if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                //{
-                //    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                //}
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                {
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                }
 
                 if (request == null || !ModelState.IsValid)
                 {
@@ -69,7 +70,7 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
                 var reportName = "BankReceivedPayment";
                 var upperFormat = format.ToUpper();
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -123,7 +124,7 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
                     { "Format", upperFormat }
                 };
 
-                string viewPath = "Views/Report/AccountOperation/OthersReport/BankReceivedPaymentReport.cshtml";
+                string viewPath = "Views/Report/Account/OtherReports/BankReceivedPaymentReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -158,7 +159,6 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating BankReceivedPayment report");
                 return StatusCode(500, new
                 {
                     message = ex.Message,
