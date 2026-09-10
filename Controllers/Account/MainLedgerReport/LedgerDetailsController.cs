@@ -1,4 +1,4 @@
-﻿// Controllers/Account/SubLedgerDetailsReport/SubLedgerDetailsController.cs
+﻿// Controllers/Account/MainLedgerReport/LedgerDetailsController.cs
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -11,12 +11,12 @@ using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.Account.SubLedgerDetailsReport
+namespace NexgenCosysReport.Controllers.Account.MainLedgerReport
 {
     [ApiController]
     [Route("api/[controller]")]
     //[Authorize]
-    public class SubLedgerDetailsController : ControllerBase
+    public class LedgerDetailsController : ControllerBase
     {
         private readonly ISubLedgerDetailsRepository _repository;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
@@ -24,17 +24,17 @@ namespace NexgenCosysReport.Controllers.Account.SubLedgerDetailsReport
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly ILogger<SubLedgerDetailsController> _logger;
+        private readonly ILogger<LedgerDetailsController> _logger;
         private readonly IDateConverterService _dateConverter;
 
-        public SubLedgerDetailsController(
+        public LedgerDetailsController(
             ISubLedgerDetailsRepository repository,
             ICommonHeaderRepository commonHeaderRepository,
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<SubLedgerDetailsController> logger,
+            ILogger<LedgerDetailsController> logger,
             IDateConverterService dateConverter)
         {
             _repository = repository;
