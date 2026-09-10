@@ -17,7 +17,7 @@ namespace NexgenCosysReport.Controllers.Account.MainLedgerReport
     [ApiController]
     [Route("api/[controller]")]
     //[Authorize]
-    public class LedgerDetailsController : ControllerBase
+    public class FourthLedgerDetailsController : ControllerBase
     {
         private readonly I4thLedgerDetailsRepository _repository;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
@@ -25,17 +25,17 @@ namespace NexgenCosysReport.Controllers.Account.MainLedgerReport
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly ILogger<LedgerDetailsController> _logger;
+        private readonly ILogger<FourthLedgerDetailsController> _logger;
         private readonly IDateConverterService _dateConverter;
 
-        public LedgerDetailsController(
+        public FourthLedgerDetailsController(
             I4thLedgerDetailsRepository repository,
             ICommonHeaderRepository commonHeaderRepository,
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<LedgerDetailsController> logger,
+            ILogger<FourthLedgerDetailsController> logger,
             IDateConverterService dateConverter)
         {
             _repository = repository;

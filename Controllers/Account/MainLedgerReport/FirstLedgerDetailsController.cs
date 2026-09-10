@@ -11,7 +11,7 @@ using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.Account.FirstLedgerDetailsReport
+namespace NexgenCosysReport.Controllers.Account.MainLedgerReport
 {
     [ApiController]
     [Route("api/account/[controller]")]
