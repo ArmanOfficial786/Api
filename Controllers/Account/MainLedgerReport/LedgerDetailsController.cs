@@ -69,7 +69,7 @@ namespace NexgenCosysReport.Controllers.Account.MainLedgerReport
                 var reportName = "SubLedgerDetails";
                 var upperFormat = format.ToUpper();
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -109,10 +109,13 @@ namespace NexgenCosysReport.Controllers.Account.MainLedgerReport
                 await ReportUtils.ConvertUniqueImagesToBase64Async(
                     headerData, nameof(CommonHeader.CompanyLogo), webRoot);
 
+                // Controllers/Account/MainLedgerReport/LedgerDetailsController.cs
                 var reportData = new Dictionary<string, object>
                 {
                     { "Rows", data.Rows },
                     { "TotalRecords", data.TotalRecords },
+                    { "TotalDebitAmount", data.TotalDebitAmount },   // <-- was missing
+                    { "TotalCreditAmount", data.TotalCreditAmount }, // <-- was missing
                     { "OpeningBalance", data.OpeningBalance },
                     { "ClosingBalance", data.ClosingBalance },
                     { "AccountType", data.AccountType ?? "" },
@@ -129,7 +132,7 @@ namespace NexgenCosysReport.Controllers.Account.MainLedgerReport
                     { "Format", upperFormat }
                 };
 
-                string viewPath = "Views/Report/Account/SubLedgerDetailsReport/SubLedgerDetailsReport.cshtml";
+                string viewPath = "Views/Report/Account/MainLedgerReport/SubLedgerDetailsReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
