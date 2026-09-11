@@ -506,7 +506,7 @@ namespace NexgenCosysReport.Repository.Account.FirstLedgerDetailsReport
                 var totalCredit = rows.Sum(r => r.CreditAmount ?? 0);
                 var totalBalance = isSummary ? totalDebit - totalCredit : totalCredit - totalDebit;
 
-
+                var branchNames = await ResolveBranchNamesAsync(connection, request.BranchIds);
                 var data = new FirstLedgerDetailsData
                 {
                     Rows = rows,
@@ -525,7 +525,8 @@ namespace NexgenCosysReport.Repository.Account.FirstLedgerDetailsReport
                     ReportType = request.ReportType,
                     ShowOpeningBalance = request.ShowOpeningBalance,
                     OrderBy = request.OrderBy,
-                    LedgerHeadName = accountTypeName
+                    LedgerHeadName = accountTypeName,
+                    BranchNames = branchNames
                 };
 
                 return data;
@@ -535,6 +536,37 @@ namespace NexgenCosysReport.Repository.Account.FirstLedgerDetailsReport
                 _logger.LogError(ex, "Error in GetFirstLedgerDetailsDataAsync");
                 throw;
             }
+        }
+
+        private static async Task<string> ResolveBranchNamesAsync(SqlConnection connection, string? BranchIds)
+        {
+            if (string.IsNullOrEmpty(BranchIds) || BranchIds == "-1" || BranchIds == "string")
+            {
+                return "All Branches";
+            }
+
+            var BranchIdsList = BranchIds
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Select(id => long.TryParse(id, out var parsed) ? (long?)parsed : null)
+                .Where(id => id.HasValue)
+                .Select(id => id!.Value)
+                .Distinct()
+                .ToList();
+
+            if (BranchIdsList.Count == 0)
+            {
+                return "All Branches";
+            }
+
+            const string sql = @"
+                SELECT OfficeName
+                FROM UsmOffice
+                WHERE UsmOfficeId IN @Ids
+                ORDER BY OfficeName";
+
+            var names = (await connection.QueryAsync<string>(sql, new { Ids = BranchIdsList })).ToList();
+
+            return names.Count > 0 ? string.Join(", ", names) : "All Branches";
         }
     }
 }

@@ -24,12 +24,6 @@
 
     Func<decimal?, string> N = v => (v ?? 0m).ToString("N2");
 
-    // Opening/Closing balance direction: the SP already flips the sign for
-    // LIABILITIES/INCOME account types before returning @openingBalance /
-    // @closingBalance, so a positive value is that account type's *normal*
-    // side (DR for ASSETS/EXPENSES, CR for LIABILITIES/INCOME) and negative
-    // is the reverse. Per-row balances don't need this — the SP already
-    // returns a "Type" column (DR/CR) computed per row, used directly below.
     string SummaryBalanceWithDirection(decimal balance, string? acctType)
     {
         var normalIsDebit = string.Equals(acctType, "ASSETS", StringComparison.OrdinalIgnoreCase)
@@ -87,7 +81,7 @@
                 text-align: center !important;
             }
 
-            .report-title td {
+            .report-title {
                 text-align: center;
                 font-family: "Times New Roman", Times, serif;
                 font-size: 15pt;
@@ -96,13 +90,31 @@
                 padding: 6px 6px 10px 6px;
             }
 
-            .meta-row td {
-                padding: 2px 6px;
-                font-size: 9.5pt;
+            /* FIX: subheader now uses its own auto-layout table (no table-layout:
+                           fixed, no word-wrap: break-word) so each "Label : Value" pair stays
+                           on a single line instead of wrapping once it exceeds a fixed
+                           6-column width inherited from the data table below. */
+            .meta-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 6px;
+            }
+
+                .meta-table td {
+                    padding: 2px 6px;
+                    font-size: 9.5pt;
+                    white-space: nowrap;
+                    vertical-align: top;
+                }
+
+            .meta-left {
+                text-align: left;
+                width: 50%;
             }
 
             .meta-right {
                 text-align: right;
+                width: 50%;
             }
 
             .meta-spacer td {
@@ -167,6 +179,24 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
+        <div class="report-title">First Sub Ledger Report</div>
+
+        <table class="meta-table">
+            <tr>
+                <td class="meta-left"><strong>Branch Name :</strong> @branchNames</td>
+                <td class="meta-right"><strong>From Date :</strong> @fromDate</td>
+            </tr>
+            <tr>
+                <td class="meta-left"><strong>Report Generated On :</strong> @generatedOn</td>
+                <td class="meta-right"><strong>To Date :</strong> @toDate</td>
+            </tr>
+            <tr>
+                <td class="meta-left"><strong>Ledger Name :</strong> @ledgerName</td>
+                <td class="meta-right"><strong>Sub Ledger Name :</strong> @subLedgerName</td>
+            </tr>
+            <tr class="meta-spacer"><td colspan="2"></td></tr>
+        </table>
+
         <table class="data-table" data-sheet-name="FirstLedgerDetails">
             <colgroup>
                 <col style="width:10%;" />
@@ -177,27 +207,6 @@
                 <col style="width:14%;" />
             </colgroup>
             <tbody>
-                <tr class="report-title">
-                    <td colspan="6">First Sub Ledger Report</td>
-                </tr>
-
-                <!-- Header block, per requested order:
-                     Left:  Branch Name -> Report Generated On -> Ledger Name
-                     Right: From Date   -> To Date              -> Sub Ledger Name -->
-                <tr class="meta-row">
-                    <td colspan="2"><strong>Branch Name :</strong> @branchNames</td>
-                    <td colspan="4" class="meta-right"><strong>From Date :</strong> @fromDate</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="2"><strong>Report Generated On:</strong> @generatedOn</td>
-                    <td colspan="4" class="meta-right"><strong>To Date :</strong> @toDate</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="2"><strong>Ledger Name :</strong> @ledgerName</td>
-                    <td colspan="4" class="meta-right"><strong>Sub Ledger Name :</strong> @subLedgerName</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="6"></td></tr>
-
                 @if (showOpeningBalance)
                 {
                     <tr class="opening-balance-row">

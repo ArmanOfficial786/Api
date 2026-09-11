@@ -104,13 +104,13 @@ namespace NexgenCosysReport.Repository.Common
 
         // Feeds ddlSubLedgerName — level 1 in the webform: account-type filter plus
         // "MainLedger = @MainLedger", returns distinct SubLedger1 values.
+        // Feeds ddlSubLedgerName — level 1 in the webform: account-type filter plus
+        // "MainLedger = @MainLedger", returns distinct SubLedger1 values.
         public async Task<List<SubLedgerNameRowDto>> GetSubLedgerNamesAsync(SubLedgerNameRequestDto request)
         {
             var sqlFilterExp = await BuildSqlFilterExp(request.FromDate, request.ToDate, request.BranchId, request.AccountTypeId);
-
-            // Level-1 filter matches the exact pattern in GetVoucherLedgerDetailsMainLedger:
-            // " And MainLedger = N'<ledger>'" — parameterized here instead of concatenated.
-            const string sqlFilterExpFilter = " And MainLedger = @MainLedger";
+            var escapedMainLedger = (request.MainLedger ?? string.Empty).Replace("'", "''");
+            var sqlFilterExpFilter = $" And MainLedger = N'{escapedMainLedger}'";
 
             var connectionString = _context.Database.GetConnectionString();
             await using var connection = new SqlConnection(connectionString);
@@ -120,7 +120,6 @@ namespace NexgenCosysReport.Repository.Common
             parameters.Add("@SqlFilterExpFilter", sqlFilterExpFilter);
             parameters.Add("@SqlFilterExpOrderBy", string.Empty);
             parameters.Add("@Level", 1);
-            parameters.Add("@MainLedger", request.MainLedger);
 
             var rows = await connection.QueryAsync<SubLedgerNameRowDto>(
                 "sp_6_56_GetVoucherLedgerDetailsMainLedger",
