@@ -1,0 +1,293 @@
+﻿@* Views/Report/Account/IBTReports/IBTStatementBranchwiseReport.cshtml *@
+@using NexgenCosysReport.Dtos.RequestDtos.Account.IBTReports;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var detailRows = (Model["DetailRows"] as List<IBTStatementBranchwiseRowDto>) ?? new List<IBTStatementBranchwiseRowDto>();
+    var ledgerGroupRows = (Model["LedgerGroupRows"] as List<IBTStatementBranchwiseLedgerGroupRowDto>) ?? new List<IBTStatementBranchwiseLedgerGroupRowDto>();
+    var interestRows = (Model["InterestRows"] as List<IBTStatementBranchwiseInterestRowDto>) ?? new List<IBTStatementBranchwiseInterestRowDto>();
+
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var loginBranchName = Model["LoginBranchName"]?.ToString() ?? "";
+    var payableBranchName = Model["PayableBranchName"]?.ToString() ?? "";
+    var reportType = Model["ReportType"]?.ToString() ?? "Detail";
+    var interestRate = Model["InterestRate"] as decimal? ?? 0;
+    var minimumClosingBalance = Model["MinimumClosingBalance"] as decimal? ?? 0;
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var reportTitle = reportType switch
+    {
+        "SubLedger" => "IBT Statement Branchwise — Ledger Wise",
+        "InterestCalculation" => "IBT Statement Branchwise — Interest Calculation",
+        _ => "IBT Statement Branchwise — Detail"
+    };
+
+    string Fmt(decimal? v) => v.HasValue ? (v.Value < 0 ? $"({Math.Abs(v.Value):N2})" : v.Value.ToString("N2")) : "";
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>@reportTitle</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: right;
+                white-space: nowrap;
+            }
+
+                .data-table th:nth-child(-n+2) {
+                    text-align: left;
+                }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+                text-align: right;
+            }
+
+                .detail-row td:nth-child(-n+2) {
+                    text-align: left;
+                }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+                text-align: right;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="6">@reportTitle</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="3"><strong>Login Branch :</strong> @loginBranchName</td>
+                    <td colspan="3" class="text-right"><strong>Payable Branch :</strong> @payableBranchName</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="3">
+                        <strong>From Date :</strong> @fromDate
+                        &nbsp;&nbsp;&nbsp;
+                        <strong>To Date :</strong> @toDate
+                    </td>
+                    <td colspan="3" class="text-right"><strong>Report Generated On :</strong> @generatedOn</td>
+                </tr>
+                @if (reportType == "InterestCalculation")
+                {
+                    <tr class="meta-row">
+                        <td colspan="3"><strong>Interest Rate :</strong> @interestRate.ToString("N2")%</td>
+                        <td colspan="3" class="text-right"><strong>Minimum Closing Balance :</strong> @Fmt(minimumClosingBalance)</td>
+                    </tr>
+                }
+                <tr class="meta-spacer"><td colspan="6"></td></tr>
+            </tbody>
+        </table>
+
+        @if (reportType == "SubLedger")
+        {
+            <table class="data-table" data-sheet-name="IBTStatementLedgerWise">
+                <colgroup>
+                    <col style="width:20%;" />
+                    <col style="width:20%;" />
+                    <col style="width:20%;" />
+                    <col style="width:20%;" />
+                    <col style="width:20%;" />
+                </colgroup>
+                <tbody>
+                    <tr>
+                        <th>Main Ledger</th>
+                        <th>Sub Ledger</th>
+                        <th>Debit</th>
+                        <th>Credit</th>
+                        <th>Balance</th>
+                    </tr>
+                    @if (ledgerGroupRows.Any())
+                    {
+                        foreach (var row in ledgerGroupRows)
+                        {
+                            <tr class="detail-row">
+                                <td>@(row.MainLedger ?? "")</td>
+                                <td>@(row.SubLedger ?? "")</td>
+                                <td>@Fmt(row.DebitAmount)</td>
+                                <td>@Fmt(row.CreditAmount)</td>
+                                <td>@Fmt(row.Balance)</td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr><td colspan="5" class="text-center">No data found for the selected criteria</td></tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else if (reportType == "InterestCalculation")
+        {
+            <table class="data-table" data-sheet-name="IBTStatementInterest">
+                <colgroup>
+                    <col style="width:15%;" />
+                    <col style="width:15%;" />
+                    <col style="width:35%;" />
+                    <col style="width:17.5%;" />
+                    <col style="width:17.5%;" />
+                </colgroup>
+                <tbody>
+                    <tr>
+                        <th>Voucher Date</th>
+                        <th>Voucher No</th>
+                        <th>Narration</th>
+                        <th>Closing Balance</th>
+                        <th>Interest Amount</th>
+                    </tr>
+                    @if (interestRows.Any())
+                    {
+                        foreach (var row in interestRows)
+                        {
+                            <tr class="detail-row">
+                                <td>@(row.VoucherDate ?? "")</td>
+                                <td>@(row.VoucherNo ?? "")</td>
+                                <td>@(row.Narration ?? "")</td>
+                                <td>@Fmt(row.ClosingBalance)</td>
+                                <td>@Fmt(row.InterestAmount)</td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr><td colspan="5" class="text-center">No data found for the selected criteria</td></tr>
+                    }
+                </tbody>
+            </table>
+        }
+        else
+        {
+            <table class="data-table" data-sheet-name="IBTStatementDetail">
+                <colgroup>
+                    <col style="width:15%;" />
+                    <col style="width:15%;" />
+                    <col style="width:35%;" />
+                    <col style="width:17.5%;" />
+                    <col style="width:17.5%;" />
+                </colgroup>
+                <tbody>
+                    <tr>
+                        <th>Voucher Date</th>
+                        <th>Voucher No</th>
+                        <th>Narration</th>
+                        <th>Debit</th>
+                        <th>Credit</th>
+                    </tr>
+                    @if (detailRows.Any())
+                    {
+                        foreach (var row in detailRows)
+                        {
+                            <tr class="detail-row">
+                                <td>@(row.VoucherDate ?? "")</td>
+                                <td>@(row.VoucherNo ?? "")</td>
+                                <td>@(row.Narration ?? "")</td>
+                                <td>@Fmt(row.DebitAmount)</td>
+                                <td>@Fmt(row.CreditAmount)</td>
+                            </tr>
+                        }
+                    }
+                    else
+                    {
+                        <tr><td colspan="5" class="text-center">No data found for the selected criteria</td></tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </div>
+</body>
+</html>
