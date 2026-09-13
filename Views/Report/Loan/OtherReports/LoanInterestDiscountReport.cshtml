@@ -1,0 +1,244 @@
+﻿@* Views/Report/Loan/OtherReports/LoanInterestDiscountReport.cshtml *@
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<LoanInterestDiscountRowDto>) ?? new List<LoanInterestDiscountRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var memberName = Model["MemberName"]?.ToString() ?? "";
+    var loanTypeName = Model["LoanTypeName"]?.ToString() ?? "";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "-1";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var isMemberSearch = !string.IsNullOrEmpty(memberName);
+    var isLoanTypeFiltered = !string.IsNullOrEmpty(loanTypeName);
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Loan Interest Discount Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="LoanInterestDiscount">
+            <colgroup>
+                <col style="width:10%;" />
+                <col style="width:18%;" />
+                <col style="width:14%;" />
+                <col style="width:14%;" />
+                <col style="width:12%;" />
+                <col style="width:14%;" />
+                <col style="width:14%;" />
+            </colgroup>
+            <tbody>
+                <!-- Report Title -->
+                <tr class="meta-title">
+                    <td colspan="7">Loan Interest Discount Report</td>
+                </tr>
+
+                <!-- Metadata -->
+                @if (isMemberSearch)
+                {
+                    <tr class="meta-row">
+                        <td colspan="4"><strong>Member :</strong> @memberName</td>
+                        <td colspan="3" class="text-right"><strong>Branch :</strong> @branchName</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr class="meta-row">
+                        <td colspan="4"><strong>Branch Name :</strong> @branchName</td>
+                        <td colspan="3" class="text-right">
+                            <strong>From Date :</strong> @fromDate
+                            &nbsp;&nbsp;&nbsp;
+                            <strong>To Date :</strong> @toDate
+                        </td>
+                    </tr>
+                }
+                @if (isLoanTypeFiltered)
+                {
+                    <tr class="meta-row">
+                        <td colspan="4"><strong>Loan Type :</strong> @loanTypeName</td>
+                        <td colspan="3" class="text-right">
+                            <strong>Report Generated On :</strong> @generatedOn
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    <tr class="meta-row">
+                        <td colspan="7" class="text-right"><strong>Report Generated On :</strong> @generatedOn</td>
+                    </tr>
+                }
+                <tr class="meta-spacer"><td colspan="7"></td></tr>
+
+                <!-- Table Header -->
+                <tr>
+                    <th>Member Id</th>
+                    <th>Member Name</th>
+                    <th>Loan A/c No</th>
+                    <th>Loan Type</th>
+                    <th>Transaction Date</th>
+                    <th>Operator</th>
+                    <th class="text-right">Amount</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.FullName ?? "")</td>
+                            <td>@(row.LoanAccountNo ?? "")</td>
+                            <td>@(row.LoanTypeName ?? "")</td>
+                            <td>@(row.TransactionOnBs ?? "")</td>
+                            <td>@(row.Operator ?? "")</td>
+                            <td class="text-right">@(row.CashReceived.HasValue ? row.CashReceived.Value.ToString("N2") : "")</td>
+                        </tr>
+                    }
+
+                    <!-- Grand Total Row -->
+                    <tr class="grand-total-row">
+                        <td colspan="6" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-right"><strong>@totalAmount.ToString("N2")</strong></td>
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="6" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-right"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

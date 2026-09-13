@@ -1,0 +1,204 @@
+﻿@* Views/Report/Loan/OtherReports/LoanFollowUpReport.cshtml *@
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<LoanFollowUpRowDto>) ?? new List<LoanFollowUpRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var memberName = Model["MemberName"]?.ToString() ?? "";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var isMemberSearch = !string.IsNullOrEmpty(memberName);
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Loan Follow Up Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="LoanFollowUp">
+            <colgroup>
+                <col style="width:10%;" />
+                <col style="width:16%;" />
+                <col style="width:14%;" />
+                <col style="width:16%;" />
+                <col style="width:12%;" />
+                <col style="width:16%;" />
+                <col style="width:16%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="7">Loan Follow Up Report</td>
+                </tr>
+
+                @if (isMemberSearch)
+                {
+                    <tr class="meta-row">
+                        <td colspan="4"><strong>Member :</strong> @memberName</td>
+                        <td colspan="3" class="text-right"><strong>Branch :</strong> @branchName</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr class="meta-row">
+                        <td colspan="4"><strong>Branch Name :</strong> @branchName</td>
+                        <td colspan="3" class="text-right">
+                            <strong>From Date :</strong> @fromDate
+                            &nbsp;&nbsp;&nbsp;
+                            <strong>To Date :</strong> @toDate
+                        </td>
+                    </tr>
+                }
+                <tr class="meta-row">
+                    <td colspan="7"><strong>Report Generated On :</strong> @generatedOn</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="7"></td></tr>
+
+                <tr>
+                    <th>Member Id</th>
+                    <th>Member Name</th>
+                    <th>Loan Account No</th>
+                    <th>Follow Up Person</th>
+                    <th>Follow Up Date</th>
+                    <th>Follow Up By</th>
+                    <th class="text-right">Loan Balance</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    foreach (var row in rows)
+                    {
+                        <tr class="detail-row">
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.MemberName ?? "")</td>
+                            <td>@(row.LoanAccountNo ?? "")</td>
+                            <td>@(row.FollowUpPerson ?? "")</td>
+                            <td>@(row.FollowUpDateOn.HasValue ? row.FollowUpDateOn.Value.ToString("yyyy/MM/dd") : "")</td>
+                            <td>@(row.FollowUpBy ?? "")</td>
+                            <td class="text-right">@(row.LoanBalance.HasValue ? row.LoanBalance.Value.ToString("N2") : "")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="6" class="text-right">Total Records</td>
+                        <td class="text-right">@totalRecords</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

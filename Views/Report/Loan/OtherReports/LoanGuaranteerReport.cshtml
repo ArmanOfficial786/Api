@@ -1,0 +1,224 @@
+﻿@* Views/Report/Loan/OtherReports/LoanGuaranteerReport.cshtml *@
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<LoanGuaranteerRowDto>) ?? new List<LoanGuaranteerRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalGuaranteeAmount = Model["TotalGuaranteeAmount"] as decimal? ?? 0;
+    var totalGuaranteeShareAmount = Model["TotalGuaranteeShareAmount"] as decimal? ?? 0;
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var memberName = Model["MemberName"]?.ToString() ?? "";
+    var memberId = Model["MemberId"]?.ToString() ?? "";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "-1";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Loan Guaranteer Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="LoanGuaranteer">
+            <colgroup>
+                <col style="width:9%;" />
+                <col style="width:14%;" />
+                <col style="width:12%;" />
+                <col style="width:10%;" />
+                <col style="width:10%;" />
+                <col style="width:12%;" />
+                <col style="width:11%;" />
+                <col style="width:12%;" />
+                <col style="width:10%;" />
+            </colgroup>
+            <tbody>
+                <!-- Report Title -->
+                <tr class="meta-title">
+                    <td colspan="9">Loan Guaranteer Report</td>
+                </tr>
+
+                <!-- Metadata -->
+                <tr class="meta-row">
+                    <td colspan="5"><strong>Member :</strong> @memberName (@memberId)</td>
+                    <td colspan="4" class="text-right"><strong>Branch :</strong> @branchName</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="9" class="text-right"><strong>Report Generated On :</strong> @generatedOn</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="9"></td></tr>
+
+                <!-- Table Header -->
+                <tr>
+                    <th>Guarantor Id</th>
+                    <th>Guarantor Name</th>
+                    <th>Loan A/c No</th>
+                    <th>Loan Type</th>
+                    <th>Account No</th>
+                    <th>Share Type</th>
+                    <th>Loanee Id</th>
+                    <th>Loanee Name</th>
+                    <th>Guarantee Date</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.FullName ?? "")</td>
+                            <td>@(row.LoanAccountNo ?? "")</td>
+                            <td>@(row.LoanTypeName ?? "")</td>
+                            <td>@(row.AccountNo ?? "")</td>
+                            <td>@(row.ShareTypeName ?? "")</td>
+                            <td>@(row.LoneeId ?? "")</td>
+                            <td>@(row.LoneeFullName ?? "")</td>
+                            <td>@(row.GuaranteeDateOnBs ?? "")</td>
+                        </tr>
+                    }
+
+                    <!-- Guarantee Amount Summary Rows -->
+                    <tr class="grand-total-row">
+                        <td colspan="6" class="text-right"><strong>Total Guarantee Amount</strong></td>
+                        <td colspan="3" class="text-right"><strong>@totalGuaranteeAmount.ToString("N2")</strong></td>
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="6" class="text-right"><strong>Total Guarantee Share Amount</strong></td>
+                        <td colspan="3" class="text-right"><strong>@totalGuaranteeShareAmount.ToString("N2")</strong></td>
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="8" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-center"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
