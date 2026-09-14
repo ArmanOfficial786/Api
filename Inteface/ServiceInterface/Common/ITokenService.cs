@@ -8,7 +8,7 @@ namespace NexgenCosysReport.Inteface.ServiceInterface.Common;
 /// </summary>
 public interface ITokenService
 {
-    string GenerateToken(UsmUser user, string officeIds, string userTypeName);
+    string GenerateToken(UsmUser user, string officeIds, string userTypeName, string branchName);
     int GetExpiryMinutes();
     long? GetUserIdFromPrincipal(ClaimsPrincipal principal);
 }

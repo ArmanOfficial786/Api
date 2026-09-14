@@ -25,6 +25,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Common
         public string UserTypeName { get; set; } = string.Empty;
         public long GenderId { get; set; }
         public long OfficeId { get; set; }
+        public string BranchName { get; set; } = string.Empty;
         public string OfficeIds { get; set; } = string.Empty;
         public string CompanyName { get; set; } = string.Empty;
         public string SystemEditionName { get; set; } = string.Empty;

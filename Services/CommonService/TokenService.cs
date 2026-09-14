@@ -17,7 +17,7 @@ public class TokenService : ITokenService
         _config = config;
     }
 
-    public string GenerateToken(UsmUser user, string officeIds, string userTypeName)
+    public string GenerateToken(UsmUser user, string officeIds, string userTypeName, string branchName)
     {
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = Encoding.ASCII.GetBytes(_config["Jwt:Key"]!);
@@ -31,7 +31,8 @@ public class TokenService : ITokenService
             new Claim(ClaimTypes.Role, userTypeName ?? string.Empty),
             new Claim("GenderId", user.UsmGenderId.ToString()),
             new Claim("OfficeId", user.UsmOfficeId.ToString()),
-            new Claim("OfficeIds", officeIds ?? string.Empty)
+            new Claim("OfficeIds", officeIds ?? string.Empty),
+            new Claim("BranchName", branchName ?? string.Empty)
         };
         var expiryMinutes = _config.GetValue<int?>("Jwt:ExpiryMinutes") ?? 30;
         var tokenDescriptor = new SecurityTokenDescriptor
