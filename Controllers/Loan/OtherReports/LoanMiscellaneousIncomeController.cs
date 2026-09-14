@@ -16,25 +16,25 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
     [ApiController]
     [Route("api/[controller]")]
     //[Authorize]
-    public class MiscellaneousIncomeController : ControllerBase
+    public class LoanMiscellaneousIncomeController : ControllerBase
     {
-        private readonly IMiscellaneousIncomeRepository _repository;
+        private readonly ILoanMiscellaneousIncomeRepository _repository;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly ILogger<MiscellaneousIncomeController> _logger;
+        private readonly ILogger<LoanMiscellaneousIncomeController> _logger;
         private readonly IDateConverterService _dateConverter;
 
-        public MiscellaneousIncomeController(
-            IMiscellaneousIncomeRepository repository,
+        public LoanMiscellaneousIncomeController(
+            ILoanMiscellaneousIncomeRepository repository,
             ICommonHeaderRepository commonHeaderRepository,
             IJsReportService jsReportService,
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<MiscellaneousIncomeController> logger,
+            ILogger<LoanMiscellaneousIncomeController> logger,
             IDateConverterService dateConverter)
         {
             _repository = repository;
@@ -51,7 +51,7 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
         // Body: { "memberId": null, "branchIds": "1,2", "memberGroupId": "-1", "orderBy": "MemberId" }
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
-            [FromBody] MiscellaneousIncomeRequestDto request,
+            [FromBody] LoanMiscellaneousIncomeRequestDto request,
             [FromQuery] string format = "VIEW")
         {
             try

@@ -11,16 +11,16 @@ using System.Text;
 
 namespace NexgenCosysReport.Repository.Loan.OtherReports
 {
-    public class MiscellaneousIncomeRepository : IMiscellaneousIncomeRepository
+    public class LoanMiscellaneousIncomeRepository : ILoanMiscellaneousIncomeRepository
     {
         private readonly AppDbContext _context;
         private readonly IDateConverterService _dateConverter;
-        private readonly ILogger<MiscellaneousIncomeRepository> _logger;
+        private readonly ILogger<LoanMiscellaneousIncomeRepository> _logger;
 
-        public MiscellaneousIncomeRepository(
+        public LoanMiscellaneousIncomeRepository(
             AppDbContext context,
             IDateConverterService dateConverter,
-            ILogger<MiscellaneousIncomeRepository> logger)
+            ILogger<LoanMiscellaneousIncomeRepository> logger)
         {
             _context = context;
             _dateConverter = dateConverter;
@@ -65,7 +65,7 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
             return string.Join(",", validIds);
         }
 
-        public async Task<MiscellaneousIncomeData> GetReportDataAsync(MiscellaneousIncomeRequestDto request)
+        public async Task<LoanMiscellaneousIncomeData> GetReportDataAsync(LoanMiscellaneousIncomeRequestDto request)
         {
             try
             {
@@ -123,7 +123,7 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                 parameters.Add("@SqlFilterExp", sqlFilterExp.ToString(), DbType.String, size: -1);
                 parameters.Add("@SqlFilterExpbranchId", sqlFilterExpBranchId.ToString(), DbType.String, size: -1);
 
-                var rows = await connection.QueryAsync<MiscellaneousIncomeRowDto>(
+                var rows = await connection.QueryAsync<LoanMiscellaneousIncomeRowDto>(
                     "sp_7_16_MiscellaneousIncomeReport",
                     parameters,
                     commandType: CommandType.StoredProcedure,
@@ -142,7 +142,7 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                     branchName = nameList.Count > 0 ? string.Join(", ", nameList) : "All";
                 }
 
-                return new MiscellaneousIncomeData
+                return new LoanMiscellaneousIncomeData
                 {
                     Rows = resultList,
                     TotalRecords = resultList.Count,

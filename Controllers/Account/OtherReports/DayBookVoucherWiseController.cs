@@ -1,20 +1,15 @@
-﻿
-using global::NexgenCosysReport.Dtos.ReportDtos;
-using global::NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports;
-using global::NexgenCosysReport.Dtos.RequestDtos.Common;
-using global::NexgenCosysReport.Inteface.ReportInterface;
-using global::NexgenCosysReport.Inteface.ServiceInterface.AccountOperation.OthersReport;
-using global::NexgenCosysReport.Inteface.ServiceInterface.Common;
-using global::NexgenCosysReport.Services.ReportService;
-using global::NexgenCosysReport.Utils.Report;
-using Microsoft.AspNetCore.Authorization;
-
-// Controllers/AccountOperation/OthersReport/DayBookVoucherWiseController.cs
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
+using NexgenCosysReport.Dtos.ReportDtos;
+using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
+using NexgenCosysReport.Inteface.ReportInterface;
+using NexgenCosysReport.Inteface.ServiceInterface.AccountOperation.OthersReport;
+using NexgenCosysReport.Inteface.ServiceInterface.Common;
+using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
-
-//using NexgenCosysReport.Dtos.RequestDtos.AccountOperation.OthersReport;
 using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Account.OtherReports

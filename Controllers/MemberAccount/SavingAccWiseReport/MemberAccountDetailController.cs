@@ -9,7 +9,7 @@ using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.SavingAcWiseRepo
 using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
 
-namespace NexgenCosysReport.Controllers.MembeAccount.SavingAccWiseReport
+namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
 {
     [Route("api/[controller]")]
     [ApiController]

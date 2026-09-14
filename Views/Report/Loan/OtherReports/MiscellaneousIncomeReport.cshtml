@@ -4,7 +4,7 @@
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<MiscellaneousIncomeRowDto>) ?? new List<MiscellaneousIncomeRowDto>();
+    var rows = (Model["Rows"] as List<LoanMiscellaneousIncomeRowDto>) ?? new List<LoanMiscellaneousIncomeRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
     var branchName = Model["BranchName"]?.ToString() ?? "All";

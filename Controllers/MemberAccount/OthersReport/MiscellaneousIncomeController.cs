@@ -15,8 +15,9 @@ using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
 {
-    [ApiController]
+
     [Route("api/[controller]")]
+    [ApiController]
     [Authorize]
     public class MiscellaneousIncomeController : ControllerBase
     {

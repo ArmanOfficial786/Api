@@ -13,10 +13,10 @@ using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.Account.SecondLedgerDetailsReport
+namespace NexgenCosysReport.Controllers.Account.MainLedgerReport
 {
     [ApiController]
-    [Route("api/account/[controller]")]
+    [Route("api/[controller]")]
     [Authorize]
     public class SecondLedgerDetailsController : ControllerBase
     {

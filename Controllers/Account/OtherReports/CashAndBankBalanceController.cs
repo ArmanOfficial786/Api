@@ -1,5 +1,4 @@
-﻿// Controllers/AccountOperation/OthersReport/CashAndBankBalanceController.cs
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -13,7 +12,7 @@ using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.Account.OthersReport
+namespace NexgenCosysReport.Controllers.Account.OtherReports
 {
     [ApiController]
     [Route("api/[controller]")]

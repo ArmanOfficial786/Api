@@ -16,7 +16,7 @@ using System.Text.Json;
 namespace NexgenCosysReport.Controllers.Account.MainLedgerReport
 {
     [ApiController]
-    [Route("api/account/[controller]")]
+    [Route("api/[controller]")]
     [Authorize]
     public class FirstLedgerDetailsController : ControllerBase
     {
