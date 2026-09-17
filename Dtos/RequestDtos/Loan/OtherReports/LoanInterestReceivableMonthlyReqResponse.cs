@@ -1,25 +1,14 @@
-﻿// Dtos/RequestDtos/Loan/OtherReports/LoanInterestReceivableMonthlyRequestDto.cs
-namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+﻿namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
 {
     public class LoanInterestReceivableMonthlyRequestDto
     {
-        // Till date in BS format (required)
         public string TillDateBs { get; set; } = string.Empty;
-
-        // Comma-separated office ids from the checkbox list ("-1" or empty = all offices)
         public string? BranchIds { get; set; }
-
-        // Member Group filter (empty/-1 = all groups)
-        public string? MemberGroupId { get; set; }
-
-        // "MemberId" | "FullName" | "LoanAccountNo" | "InterestAmount"
+        public long MemberGroupId { get; set; } = -1;
         public string OrderBy { get; set; } = "-1";
-
-        // Visual report flag
         public bool VisualReport { get; set; } = false;
     }
 
-    // Columns match sp_7_16_LoanInterestReceivableMonthlyReport's output SELECT list
     public class LoanInterestReceivableMonthlyRowDto
     {
         public string? MemberId { get; set; }

@@ -1,33 +1,18 @@
-﻿// Dtos/RequestDtos/Loan/OtherReports/LoanInterestReceivableYearEndRequestDto.cs
-namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+﻿namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
 {
     public class LoanInterestReceivableYearEndRequestDto
     {
-        // Selection type: "As" (As on date), "Monthly", "Yearly"
         public string SelectType { get; set; } = "As";
-
-        // Date (As on date) in BS format - used when SelectType = "As"
         public string? AsOnDateBs { get; set; }
-
-        // Monthly mode: Year and Month (BS)
         public int? YearlyYear { get; set; }
         public int? MonthlyYear { get; set; }
         public int? MonthlyMonth { get; set; }
-
-        // Comma-separated office ids from the checkbox list ("-1" or empty = all offices)
         public string? BranchIds { get; set; }
-
-        // Member Group filter (empty/-1 = all groups)
-        public string? MemberGroupId { get; set; }
-
-        // "MemberId" | "FullName" | "LoanAccountNo" | "InterestAmount" | "LoanTypeName"
+        public long MemberGroupId { get; set; } = -1;
         public string OrderBy { get; set; } = "-1";
-
-        // Visual report flag
         public bool VisualReport { get; set; } = false;
     }
 
-    // Columns match sp_7_16_LoanInterestReceivableYearEndReport's output SELECT list
     public class LoanInterestReceivableYearEndRowDto
     {
         public string? MemberId { get; set; }

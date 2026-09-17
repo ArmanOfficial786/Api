@@ -1,23 +1,15 @@
-﻿// Dtos/RequestDtos/Loan/OtherReports/LoanGuaranteerRequestDto.cs
+﻿
 namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
 {
     public class LoanGuaranteerRequestDto
     {
-        // Member ID (human-readable code, e.g. "MR-01-1") - required
         public string MemberId { get; set; } = string.Empty;
-
-        // Comma-separated office ids from the checkbox list ("-1" or empty = all offices)
         public string? BranchIds { get; set; }
-
-        // "MrL.MemberId" | "LoneeFullName" | "LoanAccountNo" | "AccountNo" 
-        // | "GuaranteeAmount" | "GuaranteeShareAmount" | "GuaranteeDateOnBs"
         public string OrderBy { get; set; } = "-1";
-
-        // Visual report flag
         public bool VisualReport { get; set; } = false;
     }
 
-    // Columns match sp_7_16_LoanGuaranteerReport's output SELECT list
+
     public class LoanGuaranteerRowDto
     {
         public string? MemberId { get; set; }

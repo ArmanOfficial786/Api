@@ -139,7 +139,7 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                     }
                 }
 
-                if (!string.IsNullOrEmpty(request.MemberGroupId) && request.MemberGroupId != "-1")
+                if (request.MemberGroupId != -1)
                 {
                     sqlFilterExpMemberGroup.Append(" AND MR.SycMemberGroupId = ").Append(request.MemberGroupId);
 

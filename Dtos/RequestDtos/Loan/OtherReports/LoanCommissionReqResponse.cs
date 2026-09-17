@@ -1,16 +1,10 @@
-﻿// Dtos/RequestDtos/Loan/OtherReports/LoanCommissionRequestDto.cs
-namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+﻿namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
 {
     public class LoanCommissionRequestDto
     {
-        // Date range in BS format (from/to)
         public string? FromDateBs { get; set; }
         public string? ToDateBs { get; set; }
-
-        // Collector filter (-1 = all collectors)
         public long CollectorId { get; set; } = -1;
-
-        // Visual report flag
         public bool VisualReport { get; set; } = false;
     }
 

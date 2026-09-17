@@ -1,17 +1,16 @@
-﻿// Dtos/RequestDtos/Loan/OtherReports/MiscellaneousIncomeRequestDto.cs
-namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+﻿namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
 {
     public class LoanMiscellaneousIncomeRequestDto
     {
 
         public string? MemberId { get; set; }
         public string? BranchIds { get; set; }
-        public string? MemberGroupId { get; set; }
+        public long MemberGroupId { get; set; } = -1;
         public string OrderBy { get; set; } = "AccountNo";
         public bool VisualReport { get; set; } = false;
     }
 
-    // Columns match sp_7_16_MiscellaneousIncomeReport's output SELECT list
+
     public class LoanMiscellaneousIncomeRowDto
     {
         public string? MemberId { get; set; }

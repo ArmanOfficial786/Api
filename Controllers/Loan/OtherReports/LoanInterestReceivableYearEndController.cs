@@ -1,5 +1,4 @@
-﻿// Controllers/Loan/OtherReports/LoanInterestReceivableYearEndController.cs
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
@@ -47,10 +46,6 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
             _dateConverter = dateConverter;
         }
 
-        // POST api/LoanInterestReceivableYearEnd?format=VIEW
-        // Body (As on date): { "selectType": "As", "asOnDateBs": "2080-12-30", "branchIds": "1,2", "memberGroupId": "-1", "orderBy": "MemberId" }
-        // Body (Monthly):   { "selectType": "Monthly", "monthlyYear": 2080, "monthlyMonth": 5, "branchIds": "1,2", "memberGroupId": "-1", "orderBy": "InterestAmount" }
-        // Body (Yearly):    { "selectType": "Yearly", "yearlyYear": 2080, "branchIds": "1,2", "memberGroupId": "-1", "orderBy": "LoanAccountNo" }
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] LoanInterestReceivableYearEndRequestDto request,
@@ -71,7 +66,6 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
 
                 if (string.IsNullOrEmpty(request.BranchIds) || request.BranchIds == "-1")
                 {
-                    // Mirrors legacy: "Please select Branch Name" validation
                     return BadRequest(new { success = false, StatusCode = 400, message = "Please select Branch Name" });
                 }
 
@@ -133,7 +127,9 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                     { "Format", upperFormat }
                 };
 
-                string viewPath = "Views/Report/Loan/OtherReports/LoanInterestReceivableYearEndReport.cshtml";
+                string viewPath = request.VisualReport
+                     ? "Views/VisualReport/VFirstLedgerDetailsReport.cshtml"
+                     : "Views/Report/Loan/OtherReports/LoanInterestReceivableYearEndReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -166,13 +162,8 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                  reportName,
                  _jsReportService, _logger);
             }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, StatusCode = 400, message = ex.Message });
-            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating LoanInterestReceivableYearEnd report");
                 return StatusCode(500, new
                 {
                     message = ex.Message,

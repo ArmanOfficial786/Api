@@ -1,34 +1,44 @@
-﻿@* Views/Report/Loan/OtherReports/LoanSummaryReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<LoanSummaryRowDto>) ?? new List<LoanSummaryRowDto>();
+    var rows = (Model["Rows"] as List<MaturedLoanRowDto>) ?? new List<MaturedLoanRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalMembers = Model.ContainsKey("TotalMembers") ? (Model["TotalMembers"] as int? ?? 0) : 0;
     var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
+    var totalPrincipleDue = Model.ContainsKey("TotalPrincipleDue") ? (Model["TotalPrincipleDue"] as decimal? ?? 0) : 0;
+    var totalInterestDue = Model.ContainsKey("TotalInterestDue") ? (Model["TotalInterestDue"] as decimal? ?? 0) : 0;
+    var totalDueAmount = Model["TotalDueAmount"] as decimal? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
     var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var loanTypeName = Model["LoanTypeName"]?.ToString() ?? "";
+    var memberName = Model["MemberName"]?.ToString() ?? "";
     var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
+    var isMemberSearch = !string.IsNullOrEmpty(memberName);
     var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName);
-    var isLoanTypeFiltered = !string.IsNullOrEmpty(loanTypeName);
 
-    // Grouped by member, like the legacy report: member header once,
-    // then a numbered list of that member's loans underneath.
+    // --------------------------------------------------------------
+    // Group by member for display, same as the legacy DevExpress
+    // report (Member = group header band, loans underneath). Rows
+    // sharing a MemberId are grouped together wherever they appear;
+    // group order follows first appearance, so this matches the SQL
+    // ORDER BY whenever that order keeps each member's loans together
+    // (the default MemberId sort, and typically the others too).
+    // --------------------------------------------------------------
     var memberGroups = rows
-        .GroupBy(r => new { r.MemberId, r.FullName })
+        .GroupBy(r => new { r.MemberId, r.FullName, r.MobileNo, r.Addess })
         .ToList();
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Loan Summary Report</title>
+    <title>Matured Loan Report</title>
     <style>
             * {
                 margin: 0;
@@ -62,7 +72,6 @@
                 .data-table td, .data-table th {
                     word-wrap: break-word;
                     overflow-wrap: break-word;
-                    overflow: hidden;
                     padding: 4px 6px;
                     vertical-align: middle;
                 }
@@ -92,29 +101,33 @@
                 border-bottom: 1px solid #000;
                 text-align: left;
                 white-space: normal;
+                word-wrap: break-word;
+                overflow: hidden;
                 line-height: 1.2;
                 vertical-align: bottom;
             }
 
-            /* Member group header row (Member Id + Name only) */
+            /* Member group header row (Member Id / Name / Mobile / District) */
             .member-header-row td {
+                border-top: 1px solid #000;
                 padding-top: 6px;
                 padding-bottom: 2px;
                 font-weight: bold;
+                white-space: nowrap;
             }
 
-            /* Loan rows under a member, numbered, each with a bottom rule */
+            /* Loan detail row, indented under its member header */
             .detail-row td {
-                border-bottom: 1px solid #ccc;
+                border-bottom: 1px solid #eee;
             }
 
-            .sn-col {
-                text-align: center;
-                color: #555;
-            }
-
-            .loan-account {
+            .loan-account, .loan-type {
                 color: #1F5C99;
+                padding-left: 14px;
+            }
+
+            .loan-type {
+                padding-left: 6px;
             }
 
             .grand-total-row td {
@@ -153,32 +166,45 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        <table class="data-table" data-sheet-name="LoanSummary">
+        <table class="data-table" data-sheet-name="MaturedLoan">
             <colgroup>
-                <col style="width:9%;" />
-                <col style="width:17%;" />
-                <col style="width:5%;" />
-                <col style="width:12%;" />
+                <col style="width:14%;" />
                 <col style="width:13%;" />
+                <col style="width:11%;" />
+                <col style="width:11%;" />
+                <col style="width:7%;" />
                 <col style="width:12%;" />
-                <col style="width:13%;" />
-                <col style="width:9%;" />
+                <col style="width:11%;" />
+                <col style="width:11%;" />
                 <col style="width:10%;" />
             </colgroup>
             <tbody>
                 <!-- Report Title -->
                 <tr class="meta-title">
-                    <td colspan="9">Loan Summary Report</td>
+                    <td colspan="9">Matured Loan Report</td>
                 </tr>
 
-                <!-- Metadata: stacked, left-aligned -->
-                <tr class="meta-row">
-                    <td colspan="9"><strong>Branch Name :</strong> @branchName</td>
-                </tr>
-                @if (isLoanTypeFiltered)
+                <!-- Metadata: stacked, left-aligned, matching the legacy report -->
+                @if (isMemberSearch)
                 {
                     <tr class="meta-row">
-                        <td colspan="9"><strong>Loan Type :</strong> @loanTypeName</td>
+                        <td colspan="9"><strong>Member :</strong> @memberName</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="9"><strong>Branch :</strong> @branchName</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr class="meta-row">
+                        <td colspan="9"><strong>Branch Name :</strong> @branchName</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="9">
+                            <strong>From Date :</strong> @fromDate
+                            &nbsp;&nbsp;&nbsp;&nbsp;
+                            <strong>Till Date :</strong> @toDate
+                        </td>
                     </tr>
                 }
                 @if (isMemberGroupFiltered)
@@ -194,27 +220,27 @@
 
                 <!-- Table Header -->
                 <tr>
-                    <th>MemberId</th>
-                    <th>Name</th>
-                    <th></th>
-                    <th>A/C No</th>
+                    <th>Member Info/ A/C No</th>
                     <th>Loan Type</th>
-                    <th>Disburse Date</th>
-                    <th class="text-right">Disburse Amount</th>
-                    <th>Period</th>
-                    <th>Interest Rate</th>
+                    <th>Issue Date</th>
+                    <th>Maturity Date</th>
+                    <th class="text-right">Rate</th>
+                    <th class="text-right">Disburse Amt</th>
+                    <th class="text-right">Principle Due</th>
+                    <th class="text-right">Interest Due</th>
+                    <th class="text-right">Due Balance</th>
                 </tr>
 
                 @if (memberGroups.Any())
                 {
                     foreach (var grp in memberGroups)
                     {
-                        <!-- Member header band -->
+                        <!-- Member group header band -->
                         <tr class="member-header-row">
                             <td>@(grp.Key.MemberId ?? "")</td>
                             <td>@(grp.Key.FullName ?? "")</td>
-                            <td></td>
-                            <td></td>
+                            <td>@(string.IsNullOrWhiteSpace(grp.Key.MobileNo) ? "-" : grp.Key.MobileNo)</td>
+                            <td>@(string.IsNullOrWhiteSpace(grp.Key.Addess) ? "-" : grp.Key.Addess)</td>
                             <td></td>
                             <td></td>
                             <td></td>
@@ -222,30 +248,30 @@
                             <td></td>
                         </tr>
 
-                        <!-- That member's loans, numbered -->
-                        var sn = 0;
+                        <!-- Loans belonging to this member -->
                         foreach (var row in grp)
                         {
-                            sn++;
                             <tr class="detail-row">
-                                <td></td>
-                                <td></td>
-                                <td class="sn-col">@sn</td>
                                 <td class="loan-account">@(row.LoanAccountNo ?? "")</td>
-                                <td>@(row.LoanTypeName ?? "")</td>
+                                <td class="loan-type">@(row.LoanTypeName ?? "")</td>
                                 <td>@(row.LoanIssueDate ?? "")</td>
+                                <td>@(row.MaturityDate ?? "")</td>
+                                <td class="text-right">@(row.InterestRate.HasValue ? row.InterestRate.Value.ToString("N2") : "")</td>
                                 <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
-                                <td>@(row.Period ?? "")</td>
-                                <td>@(row.InterestRate ?? "")</td>
+                                <td class="text-right">@(row.PrincipleDue.HasValue ? row.PrincipleDue.Value.ToString("N2") : "")</td>
+                                <td class="text-right">@(row.InterestDue.HasValue ? row.InterestDue.Value.ToString("N2") : "")</td>
+                                <td class="text-right">@(row.TotalDueAmount.HasValue ? row.TotalDueAmount.Value.ToString("N2") : "")</td>
                             </tr>
                         }
                     }
 
                     <!-- Grand Total Row -->
                     <tr class="grand-total-row">
-                        <td colspan="6" class="text-right"><strong>Grand Total</strong></td>
+                        <td colspan="5" class="text-right"><strong>Grand Total</strong></td>
                         <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
-                        <td colspan="2"></td>
+                        <td class="text-right"><strong>@totalPrincipleDue.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalInterestDue.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalDueAmount.ToString("N2")</strong></td>
                     </tr>
                     <tr class="grand-total-row">
                         <td colspan="9" class="text-right">

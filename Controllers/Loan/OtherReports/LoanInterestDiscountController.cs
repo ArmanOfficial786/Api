@@ -1,5 +1,4 @@
-﻿// Controllers/Loan/OtherReports/LoanInterestDiscountController.cs
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
@@ -47,8 +46,6 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
             _dateConverter = dateConverter;
         }
 
-        // POST api/LoanInterestDiscount?format=VIEW
-        // Body: { "memberId": null, "loanTypeId": -1, "fromDateBs": "2080-01-01", "toDateBs": "2080-12-30", "branchIds": "1,2", "orderBy": "Date" }
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] LoanInterestDiscountRequestDto request,
@@ -69,7 +66,6 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
 
                 if (string.IsNullOrEmpty(request.BranchIds) || request.BranchIds == "-1")
                 {
-                    // Mirrors legacy: "Please select Branch Name" validation
                     return BadRequest(new { success = false, StatusCode = 400, message = "Please select Branch Name" });
                 }
 
@@ -129,7 +125,9 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                     { "Format", upperFormat }
                 };
 
-                string viewPath = "Views/Report/Loan/OtherReports/LoanInterestDiscountReport.cshtml";
+                string viewPath = request.VisualReport
+                       ? "Views/VisualReport/VFirstLedgerDetailsReport.cshtml"
+                       : "Views/Report/Loan/OtherReports/LoanInterestDiscountReport.cshtmll";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -162,13 +160,9 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                  reportName,
                  _jsReportService, _logger);
             }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, StatusCode = 400, message = ex.Message });
-            }
+
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating LoanInterestDiscount report");
                 return StatusCode(500, new
                 {
                     message = ex.Message,

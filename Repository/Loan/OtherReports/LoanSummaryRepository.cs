@@ -104,7 +104,7 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                     sqlFilterExp.Append(" And v.UsmOfficeId in (").Append(branchIds).Append(")");
                 }
 
-                if (!string.IsNullOrEmpty(request.MemberGroupId) && request.MemberGroupId != "-1")
+                if (request.MemberGroupId != -1)
                 {
                     sqlFilterExp.Append(" AND MR.SycMemberGroupId = ").Append(request.MemberGroupId);
 

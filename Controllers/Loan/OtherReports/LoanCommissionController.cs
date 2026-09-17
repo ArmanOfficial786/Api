@@ -1,5 +1,4 @@
-﻿// Controllers/Loan/OtherReports/LoanCommissionController.cs
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
@@ -46,9 +45,6 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
             _logger = logger;
             _dateConverter = dateConverter;
         }
-
-        // POST api/LoanCommission?format=VIEW
-        // Body: { "fromDateBs": "2080-01-01", "toDateBs": "2080-12-30", "collectorId": 65 }
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] LoanCommissionRequestDto request,
@@ -70,7 +66,7 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                 var reportName = "LoanCommission";
                 var upperFormat = format.ToUpper();
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -114,7 +110,9 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                     { "Format", upperFormat }
                 };
 
-                string viewPath = "Views/Report/Loan/OtherReports/LoanCommissionReport.cshtml";
+                string viewPath = request.VisualReport
+                         ? "Views/VisualReport/VFirstLedgerDetailsReport.cshtml"
+                         : "Views/Report/Loan/OtherReports/LoanCommissionReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

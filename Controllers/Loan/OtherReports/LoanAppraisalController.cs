@@ -1,5 +1,4 @@
-﻿// Controllers/Loan/OtherReports/LoanAppraisalController.cs
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
@@ -47,8 +46,7 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
             _dateConverter = dateConverter;
         }
 
-        // POST api/LoanAppraisal?format=VIEW
-        // Body: { "memberId": "M-001", "branchIds": "1,2", "visualReport": false }
+
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] LoanAppraisalRequestDto request,
@@ -69,20 +67,18 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
 
                 if (string.IsNullOrWhiteSpace(request.MemberId))
                 {
-                    // Mirrors legacy: txtMemberId.Text check before BtnViewReport_Click proceeds
                     return BadRequest(new { success = false, StatusCode = 400, message = "Please enter Member Id" });
                 }
 
                 if (string.IsNullOrEmpty(request.BranchIds) || request.BranchIds == "-1")
                 {
-                    // Mirrors legacy: "Please select Branch Name" validation
                     return BadRequest(new { success = false, StatusCode = 400, message = "Please select Branch Name" });
                 }
 
                 var reportName = "LoanAppraisal";
                 var upperFormat = format.ToUpper();
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -133,7 +129,9 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                     { "Format", upperFormat }
                 };
 
-                string viewPath = "Views/Report/Loan/OtherReports/LoanAppraisalReport.cshtml";
+                string viewPath = request.VisualReport
+                       ? "Views/VisualReport/VFirstLedgerDetailsReport.cshtml"
+                       : "Views/Report/Loan/OtherReports/LoanAppraisalReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

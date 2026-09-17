@@ -1,4 +1,4 @@
-﻿// Controllers/Account/IBTReports/IBTTransactionController.cs
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -9,13 +9,14 @@ using NexgenCosysReport.Inteface.ServiceInterface.Account.IBTReports;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Account.IBTReports
 {
     [ApiController]
     [Route("api/[controller]")]
-    //[Authorize]
+    [Authorize]
     public class IBTTransactionController : ControllerBase
     {
         private readonly IIBTTransactionRepository _repository;
@@ -47,7 +48,7 @@ namespace NexgenCosysReport.Controllers.Account.IBTReports
             _dateConverter = dateConverter;
         }
 
-        // POST api/IBTTransaction?format=VIEW
+
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] IBTTransactionRequestDto request,
@@ -55,11 +56,11 @@ namespace NexgenCosysReport.Controllers.Account.IBTReports
         {
             try
             {
-                //var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                //if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                //{
-                //    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                //}
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                {
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                }
 
                 if (request == null || !ModelState.IsValid)
                 {
@@ -108,12 +109,12 @@ namespace NexgenCosysReport.Controllers.Account.IBTReports
 
                 await ReportUtils.ConvertUniqueImagesToBase64Async(
                     headerData, nameof(CommonHeader.CompanyLogo), webRoot);
-
                 var reportData = new Dictionary<string, object>
                 {
                     { "Rows", data.Rows },
                     { "TotalRecords", data.TotalRecords },
-                    { "TotalAmount", data.TotalAmount },
+                    { "TotalCashReceived", data.TotalCashReceived },
+                    { "TotalCashWithdrawl", data.TotalCashWithdrawl },
                     { "HeaderDataSet", headerData },
                     { "FromDate", request.FromDateBs },
                     { "ToDate", request.ToDateBs },

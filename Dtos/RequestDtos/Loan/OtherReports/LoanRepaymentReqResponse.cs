@@ -1,19 +1,13 @@
-﻿// Dtos/RequestDtos/Loan/OtherReports/LoanRepaymentRequestDto.cs
-namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+﻿namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
 {
     public class LoanRepaymentRequestDto
     {
-        // Member ID (human-readable code, e.g. "M-001") - optional
         public string? MemberId { get; set; }
-
-        // Comma-separated office ids from the checkbox list ("-1" or empty = all offices)
         public string? BranchIds { get; set; }
-
-        // Visual report flag
         public bool VisualReport { get; set; } = false;
     }
 
-    // Columns match sp_7_16_LoanRepaymentAccountDetails's output SELECT list
+
     public class LoanRepaymentRowDto
     {
         public string? MemberId { get; set; }

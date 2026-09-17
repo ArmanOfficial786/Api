@@ -1,25 +1,14 @@
-﻿// Dtos/RequestDtos/Loan/OtherReports/LoanSummaryRequestDto.cs
-namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+﻿namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
 {
     public class LoanSummaryRequestDto
     {
-        // Loan Type filter (required, > 0)
         public long LoanTypeId { get; set; } = -1;
-
-        // Comma-separated office ids from the checkbox list ("-1" or empty = all offices)
         public string? BranchIds { get; set; }
-
-        // Member Group filter (empty/-1 = all groups)
-        public string? MemberGroupId { get; set; }
-
-        // "MemberId" | "FullName" | "LoanAccountNo" | "LoanTypeName" | "LoanIssueAmount" | "LoanIssueDate" | "Period" | "InterestRate"
+        public long MemberGroupId { get; set; } = -1;
         public string OrderBy { get; set; } = "-1";
-
-        // Visual report flag
         public bool VisualReport { get; set; } = false;
     }
 
-    // Columns match sp_7_16_LoanSummaryReport's output SELECT list
     public class LoanSummaryRowDto
     {
         public string? MemberId { get; set; }

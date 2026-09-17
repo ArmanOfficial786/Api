@@ -10,8 +10,7 @@
 
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
-    var loginBranchName = Model["LoginBranchName"]?.ToString() ?? "";
-    var payableBranchName = Model["PayableBranchName"]?.ToString() ?? "";
+    var branchName = Model["LoginBranchName"]?.ToString() ?? "";
     var reportType = Model["ReportType"]?.ToString() ?? "Detail";
     var interestRate = Model["InterestRate"] as decimal? ?? 0;
     var minimumClosingBalance = Model["MinimumClosingBalance"] as decimal? ?? 0;
@@ -19,14 +18,9 @@
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var reportTitle = reportType switch
-    {
-        "SubLedger" => "IBT Statement Branchwise — Ledger Wise",
-        "InterestCalculation" => "IBT Statement Branchwise — Interest Calculation",
-        _ => "IBT Statement Branchwise — Detail"
-    };
+    var reportTitle = "IBT Statement Branchwise Report";
 
-    string Fmt(decimal? v) => v.HasValue ? (v.Value < 0 ? $"({Math.Abs(v.Value):N2})" : v.Value.ToString("N2")) : "";
+    string Fmt(decimal? v) => v.HasValue ? (v.Value < 0 ? $"({Math.Abs(v.Value):N2})" : v.Value.ToString("N2")) : "0.00";
 }
 <!DOCTYPE html>
 <html>
@@ -56,6 +50,44 @@
                 display: table-row-group;
             }
 
+            .report-title {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            /* Own auto-layout table for the subheader so long labels never
+                           wrap or overlap — same fix applied throughout this thread. */
+            .meta-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 6px;
+            }
+
+                .meta-table td {
+                    padding: 3px 6px;
+                    font-size: 9pt;
+                    white-space: nowrap;
+                    vertical-align: top;
+                }
+
+            .meta-left {
+                text-align: left;
+                width: 50%;
+            }
+
+            .meta-right {
+                text-align: right;
+                width: 50%;
+            }
+
+            .meta-spacer td {
+                height: 8px;
+            }
+
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
@@ -68,54 +100,24 @@
                     overflow-wrap: break-word;
                     padding: 4px 6px;
                     vertical-align: middle;
+                    border: 1px solid #000;
                 }
 
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: right;
-                white-space: nowrap;
-            }
-
-                .data-table th:nth-child(-n+2) {
+                .data-table th {
+                    background: #f9f9f9;
                     text-align: left;
+                    white-space: normal;
+                    font-weight: bold;
                 }
 
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-                text-align: right;
-            }
-
-                .detail-row td:nth-child(-n+2) {
-                    text-align: left;
-                }
+                    .data-table th.text-right,
+                    .data-table td.text-right {
+                        text-align: right;
+                    }
 
             .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
                 font-weight: bold;
                 background: #f9f9f9;
-                padding: 5px 6px;
-                text-align: right;
             }
 
             .text-right {
@@ -146,32 +148,25 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        <table class="data-table">
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="6">@reportTitle</td>
+        <div class="report-title">@reportTitle</div>
+
+        <table class="meta-table">
+            <tr>
+                <td class="meta-left"><strong>Branch Name :</strong> @branchName</td>
+                <td class="meta-right"><strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp; <strong>To Date :</strong> @toDate</td>
+            </tr>
+            <tr>
+                <td class="meta-left"><strong>Report Generated On :</strong> @generatedOn</td>
+                <td class="meta-right"></td>
+            </tr>
+            @if (reportType == "InterestCalculation")
+            {
+                <tr>
+                    <td class="meta-left"><strong>Interest Rate :</strong> @interestRate.ToString("N2")%</td>
+                    <td class="meta-right"><strong>Minimum Closing Balance :</strong> @Fmt(minimumClosingBalance)</td>
                 </tr>
-                <tr class="meta-row">
-                    <td colspan="3"><strong>Login Branch :</strong> @loginBranchName</td>
-                    <td colspan="3" class="text-right"><strong>Payable Branch :</strong> @payableBranchName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="3">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                    <td colspan="3" class="text-right"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                @if (reportType == "InterestCalculation")
-                {
-                    <tr class="meta-row">
-                        <td colspan="3"><strong>Interest Rate :</strong> @interestRate.ToString("N2")%</td>
-                        <td colspan="3" class="text-right"><strong>Minimum Closing Balance :</strong> @Fmt(minimumClosingBalance)</td>
-                    </tr>
-                }
-                <tr class="meta-spacer"><td colspan="6"></td></tr>
-            </tbody>
+            }
+            <tr class="meta-spacer"><td colspan="2"></td></tr>
         </table>
 
         @if (reportType == "SubLedger")
@@ -188,20 +183,20 @@
                     <tr>
                         <th>Main Ledger</th>
                         <th>Sub Ledger</th>
-                        <th>Debit</th>
-                        <th>Credit</th>
-                        <th>Balance</th>
+                        <th class="text-right">Debit</th>
+                        <th class="text-right">Credit</th>
+                        <th class="text-right">Balance</th>
                     </tr>
                     @if (ledgerGroupRows.Any())
                     {
                         foreach (var row in ledgerGroupRows)
                         {
-                            <tr class="detail-row">
+                            <tr>
                                 <td>@(row.MainLedger ?? "")</td>
                                 <td>@(row.SubLedger ?? "")</td>
-                                <td>@Fmt(row.DebitAmount)</td>
-                                <td>@Fmt(row.CreditAmount)</td>
-                                <td>@Fmt(row.Balance)</td>
+                                <td class="text-right">@Fmt(row.DebitAmount)</td>
+                                <td class="text-right">@Fmt(row.CreditAmount)</td>
+                                <td class="text-right">@Fmt(row.Balance)</td>
                             </tr>
                         }
                     }
@@ -227,19 +222,19 @@
                         <th>Voucher Date</th>
                         <th>Voucher No</th>
                         <th>Narration</th>
-                        <th>Closing Balance</th>
-                        <th>Interest Amount</th>
+                        <th class="text-right">Closing Balance</th>
+                        <th class="text-right">Interest Amount</th>
                     </tr>
                     @if (interestRows.Any())
                     {
                         foreach (var row in interestRows)
                         {
-                            <tr class="detail-row">
+                            <tr>
                                 <td>@(row.VoucherDate ?? "")</td>
                                 <td>@(row.VoucherNo ?? "")</td>
                                 <td>@(row.Narration ?? "")</td>
-                                <td>@Fmt(row.ClosingBalance)</td>
-                                <td>@Fmt(row.InterestAmount)</td>
+                                <td class="text-right">@Fmt(row.ClosingBalance)</td>
+                                <td class="text-right">@Fmt(row.InterestAmount)</td>
                             </tr>
                         }
                     }
@@ -254,36 +249,42 @@
         {
             <table class="data-table" data-sheet-name="IBTStatementDetail">
                 <colgroup>
-                    <col style="width:15%;" />
-                    <col style="width:15%;" />
-                    <col style="width:35%;" />
-                    <col style="width:17.5%;" />
-                    <col style="width:17.5%;" />
+                    <col style="width:12%;" />
+                    <col style="width:11%;" />
+                    <col style="width:14%;" />
+                    <col style="width:33%;" />
+                    <col style="width:10%;" />
+                    <col style="width:10%;" />
+                    <col style="width:10%;" />
                 </colgroup>
                 <tbody>
                     <tr>
-                        <th>Voucher Date</th>
-                        <th>Voucher No</th>
-                        <th>Narration</th>
-                        <th>Debit</th>
-                        <th>Credit</th>
+                        <th>VoucherNo</th>
+                        <th>VoucherOnBs</th>
+                        <th>LedgerName</th>
+                        <th>Description</th>
+                        <th class="text-right">DebitAmount</th>
+                        <th class="text-right">CreditAmount</th>
+                        <th class="text-right">Balance</th>
                     </tr>
                     @if (detailRows.Any())
                     {
                         foreach (var row in detailRows)
                         {
-                            <tr class="detail-row">
-                                <td>@(row.VoucherDate ?? "")</td>
+                            <tr>
                                 <td>@(row.VoucherNo ?? "")</td>
+                                <td>@(row.VoucherOnBs ?? "")</td>
+                                <td>@(row.MainLedger ?? "")</td>
                                 <td>@(row.Narration ?? "")</td>
-                                <td>@Fmt(row.DebitAmount)</td>
-                                <td>@Fmt(row.CreditAmount)</td>
+                                <td class="text-right">@Fmt(row.DebitAmount)</td>
+                                <td class="text-right">@Fmt(row.CreditAmount)</td>
+                                <td class="text-right">@Fmt(row.Balance)</td>
                             </tr>
                         }
                     }
                     else
                     {
-                        <tr><td colspan="5" class="text-center">No data found for the selected criteria</td></tr>
+                        <tr><td colspan="7" class="text-center">No data found for the selected criteria</td></tr>
                     }
                 </tbody>
             </table>

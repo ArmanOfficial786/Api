@@ -58,6 +58,8 @@ public partial class AppDbContext : Microsoft.EntityFrameworkCore.DbContext
 
     public virtual DbSet<AcoVoucher> AcoVouchers { get; set; }
 
+    public virtual DbSet<LmtPaymentDurationType> LmtPaymentDurationTypes { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -672,6 +674,15 @@ public partial class AppDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.Property(e => e.VoucherOn).HasColumnType("datetime");
             entity.Property(e => e.VoucherOnBs).HasMaxLength(50);
         });
+
+        modelBuilder.Entity<LmtPaymentDurationType>(entity =>
+        {
+            entity.ToTable("LmtPaymentDurationType");
+
+            entity.Property(e => e.Description).HasColumnType("ntext");
+            entity.Property(e => e.PaymentDurationType).HasMaxLength(50);
+        });
+
 
 
 

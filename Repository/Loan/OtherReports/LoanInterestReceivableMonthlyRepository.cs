@@ -88,7 +88,7 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                 // 3. @SqlFilterExp = quoted AD date string
                 // 4. ORDER BY (@SqlFilterExpOrderBy)
                 // --------------------------------------------------------------
-                if (!string.IsNullOrEmpty(request.MemberGroupId) && request.MemberGroupId != "-1")
+                if (request.MemberGroupId != -1)
                 {
                     sqlFilterExpBranchId.Append(" AND MR.SycMemberGroupId = ").Append(request.MemberGroupId);
 

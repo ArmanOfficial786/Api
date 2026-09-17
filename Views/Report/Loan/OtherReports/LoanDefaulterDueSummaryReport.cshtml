@@ -6,32 +6,29 @@
 
     var rows = (Model["Rows"] as List<LoanDefaulterDueSummaryRowDto>) ?? new List<LoanDefaulterDueSummaryRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
-    var totalInterest = Model["TotalInterest"] as decimal? ?? 0;
     var totalPrincipleAmount = Model["TotalPrincipleAmount"] as decimal? ?? 0;
+    var totalInterest = Model["TotalInterest"] as decimal? ?? 0;
     var totalInstallmentAmount = Model["TotalInstallmentAmount"] as decimal? ?? 0;
     var tillDate = Model["TillDate"]?.ToString() ?? "";
     var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var collectionCenterName = Model["CollectionCenterName"]?.ToString() ?? "";
-    var collectorName = Model["CollectorName"]?.ToString() ?? "";
-    var reportType = Model["ReportType"]?.ToString() ?? "LDR";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "-1";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var reportTitle = reportType == "LDTPR"
-        ? "Loan Defaulter - Till Date Interest Report"
-        : "Loan Defaulter - Schedulewise Interest Report";
+    Func<decimal?, string> N = v => (v ?? 0m).ToString("N2");
 
-    var isCollectionCenterEnabled = !string.IsNullOrEmpty(collectionCenterName);
-    var isCollectorFiltered = !string.IsNullOrEmpty(collectorName);
+    // Grouped by Member (MemberId + FullName + MobileNo + Address) — rows must arrive
+    // pre-sorted by MemberId (see repository's default order) since GroupBy preserves
+    // first-seen order, not sorted order.
+    var memberGroups = rows
+        .GroupBy(r => new { r.MemberId, r.FullName, r.MobileNo, r.TemporaryAddressDetail })
+        .ToList();
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Loan Defaulter Due Summary Report</title>
+    <title>Loan Defaulter - Due Summary</title>
     <style>
             * {
                 margin: 0;
@@ -51,8 +48,28 @@
                 overflow: visible;
             }
 
-            thead {
-                display: table-row-group;
+            .report-title {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 15pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 0;
+            }
+
+            .meta-line {
+                font-size: 9.5pt;
+                padding: 3px 0;
+            }
+
+                .meta-line strong {
+                    display: inline-block;
+                }
+
+            .filter-line {
+                font-weight: bold;
+                padding: 8px 0 4px 0;
+                font-size: 9.5pt;
             }
 
             .data-table {
@@ -69,39 +86,32 @@
                     vertical-align: middle;
                 }
 
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
+                .data-table th {
+                    border-top: 2px solid #000;
+                    border-bottom: 1.5px solid #000;
+                    text-align: left;
+                    white-space: nowrap;
+                    font-weight: bold;
+                }
+
+            .member-row td {
                 font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
+                padding-top: 10px;
+                padding-bottom: 2px;
+                border: none;
             }
 
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
+            .member-row.first-group td {
+                padding-top: 4px;
             }
 
             .detail-row td {
-                border-bottom: 1px solid #eee;
+                border: none;
             }
 
-            .detail-row-alt td {
-                background: #f9f9f9;
-                border-bottom: 1px solid #eee;
+            .subtotal-row td {
+                border-top: 1px solid #000;
+                font-weight: bold;
             }
 
             .grand-total-row td {
@@ -112,14 +122,6 @@
                 padding: 5px 6px;
             }
 
-            .collection-center-header td {
-                background: #e8e8e8;
-                font-weight: bold;
-                padding: 5px 6px;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-            }
-
             .text-right {
                 text-align: right !important;
             }
@@ -128,26 +130,10 @@
                 text-align: center !important;
             }
 
-            .positive {
-                color: #006600;
-            }
-
-            .negative {
-                color: #CC0000;
-            }
-
             @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
                 tr {
                     page-break-inside: avoid;
                     break-inside: avoid;
-                }
-
-                .collection-center-header td {
-                    background: #e8e8e8 !important;
                 }
             }
     </style>
@@ -160,115 +146,91 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
+        <div class="report-title">Loan Defaulter - Due Summary</div>
+
+        <div class="meta-line"><strong>Branch Name :</strong> &nbsp;&nbsp;@branchName</div>
+        <div class="meta-line"><strong>Report Generated On :</strong> &nbsp;&nbsp;@generatedOn</div>
+        <div class="filter-line">Filter By:- Tilldate: @tillDate</div>
+
         <table class="data-table" data-sheet-name="LoanDefaulterDueSummary">
             <colgroup>
-                <col style="width:9%;" />
-                <col style="width:15%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
+                <col style="width:6%;" />
+                <col style="width:12%;" />
+                <col style="width:20%;" />
                 <col style="width:10%;" />
+                <col style="width:13%;" />
+                <col style="width:13%;" />
+                <col style="width:13%;" />
+                <col style="width:8%;" />
             </colgroup>
             <tbody>
-                <!-- Report Title -->
-                <tr class="meta-title">
-                    <td colspan="9">@reportTitle</td>
-                </tr>
-
-                <!-- Metadata -->
-                <tr class="meta-row">
-                    <td colspan="4"><strong>Branch Name :</strong> @branchName</td>
-                    <td colspan="5" class="text-right">
-                        <strong>Till Date :</strong> @tillDate
-                    </td>
-                </tr>
-                @if (isCollectorFiltered)
-                {
-                    <tr class="meta-row">
-                        <td colspan="4"><strong>Collector :</strong> @collectorName</td>
-                        <td colspan="5" class="text-right">
-                            <strong>Report Generated On :</strong> @generatedOn
-                        </td>
-                    </tr>
-                }
-                else
-                {
-                    <tr class="meta-row">
-                        <td colspan="9" class="text-right"><strong>Report Generated On :</strong> @generatedOn</td>
-                    </tr>
-                }
-                @if (isCollectionCenterEnabled)
-                {
-                    <tr class="meta-row">
-                        <td colspan="9"><strong>Collection Center :</strong> @collectionCenterName</td>
-                    </tr>
-                }
-                <tr class="meta-spacer"><td colspan="9"></td></tr>
-
-                <!-- Table Header -->
                 <tr>
-                    <th>Member Id</th>
-                    <th>Member Name</th>
-                    <th>Loan A/c No</th>
+                    <th>S.N.</th>
+                    <th>Loan A/C No</th>
                     <th>Loan Type</th>
-                    <th class="text-right">Loan Amount</th>
+                    <th>Date</th>
+                    <th class="text-right">Principle</th>
                     <th class="text-right">Interest</th>
-                    <th class="text-right">Principal Due</th>
                     <th class="text-right">Installment</th>
-                    <th>Date (BS)</th>
+                    <th class="text-right">Inst Cnt</th>
                 </tr>
 
-                @if (rows.Any())
+                @if (memberGroups.Any())
                 {
                     var sn = 0;
-                    var currentCollectionCenter = string.Empty;
+                    var isFirstGroup = true;
 
-                    foreach (var row in rows)
+                    foreach (var memberGroup in memberGroups)
                     {
-                        // Show collection center header if grouping enabled
-                        if (isCollectionCenterEnabled && currentCollectionCenter != row.CollectionCenterName)
+                        var memberRows = memberGroup.ToList();
+
+                        <tr class="member-row @(isFirstGroup ? "first-group" : "")">
+                            <td></td>
+                            <td colspan="2">@memberGroup.Key.MemberId &nbsp;&nbsp; @memberGroup.Key.FullName</td>
+                            <td colspan="5">@(memberGroup.Key.MobileNo ?? "") &nbsp;&nbsp; @(memberGroup.Key.TemporaryAddressDetail ?? "")</td>
+                        </tr>
+                        isFirstGroup = false;
+
+                        foreach (var row in memberRows)
                         {
-                            currentCollectionCenter = row.CollectionCenterName;
-                            <tr class="collection-center-header">
-                                <td colspan="9"><strong>Collection Center: @(currentCollectionCenter ?? "N/A")</strong></td>
+                            sn++;
+                            <tr class="detail-row">
+                                <td>@sn</td>
+                                <td>@(row.LoanAccountNo ?? "")</td>
+                                <td>@(row.LoanTypeName ?? "")</td>
+                                <td>@(row.DateOnBS ?? "")</td>
+                                <td class="text-right">@N(row.PrincipleAmount)</td>
+                                <td class="text-right">@N(row.Interest)</td>
+                                <td class="text-right">@N(row.InstallamentAmount)</td>
+                                <td class="text-right">@(row.InstallmentCount?.ToString() ?? "")</td>
                             </tr>
                         }
 
-                        sn++;
-                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.FullName ?? "")</td>
-                            <td>@(row.LoanAccountNo ?? "")</td>
-                            <td>@(row.LoanTypeName ?? "")</td>
-                            <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.Interest.HasValue ? row.Interest.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.PrincipleAmount.HasValue ? row.PrincipleAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.InstallamentAmount.HasValue ? row.InstallamentAmount.Value.ToString("N2") : "")</td>
-                            <td>@(row.DateOnBS ?? "")</td>
+                        <tr class="subtotal-row">
+                            <td colspan="4"></td>
+                            <td class="text-right">@N(memberRows.Sum(r => r.PrincipleAmount ?? 0))</td>
+                            <td class="text-right">@N(memberRows.Sum(r => r.Interest ?? 0))</td>
+                            <td class="text-right">@N(memberRows.Sum(r => r.InstallamentAmount ?? 0))</td>
+                            <td></td>
                         </tr>
                     }
 
-                    <!-- Grand Total Row -->
                     <tr class="grand-total-row">
-                        <td colspan="4" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalInterest.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalPrincipleAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalInstallmentAmount.ToString("N2")</strong></td>
+                        <td colspan="4" class="text-right">Grand Total</td>
+                        <td class="text-right">@totalPrincipleAmount.ToString("N2")</td>
+                        <td class="text-right">@totalInterest.ToString("N2")</td>
+                        <td class="text-right">@totalInstallmentAmount.ToString("N2")</td>
                         <td></td>
                     </tr>
                     <tr class="grand-total-row">
-                        <td colspan="8" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
+                        <td colspan="7" class="text-right">Total Records</td>
+                        <td class="text-center">@totalRecords</td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="8" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

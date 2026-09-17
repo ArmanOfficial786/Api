@@ -1,4 +1,4 @@
-﻿// Controllers/Loan/OtherReports/MaturedLoanController.cs
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -8,16 +8,21 @@ using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Loan.OtherReports;
 using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Loan.OtherReports
 {
     [ApiController]
     [Route("api/[controller]")]
-    //[Authorize]
+    [Authorize]
     public class MaturedLoanController : ControllerBase
     {
+        private static readonly PageSizeSetting PageSetting =
+          PageSizeSetting.Custom(270, 297, PageUnit.mm, landscape: false);
+
         private readonly IMaturedLoanRepository _repository;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly IJsReportService _jsReportService;
@@ -47,9 +52,6 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
             _dateConverter = dateConverter;
         }
 
-        // POST api/MaturedLoan?format=VIEW
-        // Body (member mode): { "memberId": "M-001", "branchIds": "1,2", "memberGroupId": "-1", "orderBy": "MemberId" }
-        // Body (date mode):   { "fromDateBs": "2080-01-01", "toDateBs": "2080-12-30", "branchIds": "1,2", "memberGroupId": "-1", "orderBy": "MaturityDate" }
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] MaturedLoanRequestDto request,
@@ -57,11 +59,11 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
         {
             try
             {
-                //var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                //if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                //{
-                //    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                //}
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                {
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                }
 
                 if (request == null || !ModelState.IsValid)
                 {
@@ -70,18 +72,12 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
 
                 if (string.IsNullOrEmpty(request.BranchIds) || request.BranchIds == "-1")
                 {
-                    // Mirrors legacy: "Please select Branch Name" validation
                     return BadRequest(new { success = false, StatusCode = 400, message = "Please select Branch Name" });
                 }
-
-                // Mirrors legacy behavior:
-                // - BtnViewReport (member mode) requires MemberId
-                // - BtnViewReport1 (date mode) requires FromDateBs and ToDateBs
-
                 var reportName = "MaturedLoan";
                 var upperFormat = format.ToUpper();
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -91,7 +87,7 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                     return await ReportExportHelper.ExportFromCacheAsync(
                         reportKey, upperFormat,
                         reportName,
-                        _jsReportService, _logger);
+                        _jsReportService, _logger, PageSetting);
                 }
 
                 string? branchIdForHeader = null;
@@ -102,7 +98,7 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                 }
 
                 var dataTask = _repository.GetReportDataAsync(request);
-                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+                var headerTask = _commonHeaderRepository.GetCommonHeaders();
 
                 await Task.WhenAll(dataTask, headerTask);
 
@@ -123,10 +119,11 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                 {
                     { "Rows", data.Rows },
                     { "TotalRecords", data.TotalRecords },
+                    { "TotalMembers", data.TotalMembers },
                     { "TotalLoanIssueAmount", data.TotalLoanIssueAmount },
+                    { "TotalPrincipleDue", data.TotalPrincipleDue },
+                    { "TotalInterestDue", data.TotalInterestDue },
                     { "TotalDueAmount", data.TotalDueAmount },
-                    { "TotalPaidAmount", data.TotalPaidAmount },
-                    { "TotalBalanceAmount", data.TotalBalanceAmount },
                     { "HeaderDataSet", headerData },
                     { "FromDate", data.FromDateBs ?? "" },
                     { "ToDate", data.ToDateBs ?? "" },
@@ -137,7 +134,9 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                     { "Format", upperFormat }
                 };
 
-                string viewPath = "Views/Report/Loan/OtherReports/MaturedLoanReport.cshtml";
+                string viewPath = request.VisualReport
+                         ? "Views/VisualReport/VFirstLedgerDetailsReport.cshtml"
+                         : "Views/Report/Loan/OtherReports/MaturedLoanReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -170,13 +169,8 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                  reportName,
                  _jsReportService, _logger);
             }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, StatusCode = 400, message = ex.Message });
-            }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating MaturedLoan report");
                 return StatusCode(500, new
                 {
                     message = ex.Message,
