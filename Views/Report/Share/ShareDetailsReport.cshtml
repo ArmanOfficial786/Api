@@ -1,0 +1,283 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Share;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<ShareDetailsRowDto>) ?? new List<ShareDetailsRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalMembers = Model.ContainsKey("TotalMembers") ? (Model["TotalMembers"] as int? ?? 0) : 0;
+    var totalShare = Model.ContainsKey("TotalShare") ? (Model["TotalShare"] as decimal? ?? 0) : 0;
+    var totalShareAmount = Model.ContainsKey("TotalShareAmount") ? (Model["TotalShareAmount"] as decimal? ?? 0) : 0;
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var shareTypeName = Model["ShareTypeName"]?.ToString() ?? "All";
+    var memberTypeName = Model["MemberTypeName"]?.ToString() ?? "All";
+    var collectionCenterName = Model["CollectionCenterName"]?.ToString() ?? "All";
+    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "All";
+    var enableCollectionCenter = Model["EnableCollectionCenter"] as bool? ?? false;
+    var enableGroup = Model["EnableGroup"] as bool? ?? false;
+    var reportType = Model["ReportType"]?.ToString() ?? "ENGLISH";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var isNepali = reportType == "NEPALI";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    string NepaliNumber(string? input)
+    {
+        if (string.IsNullOrEmpty(input)) return input ?? "";
+        var eng = new[] { "0", "1", "2", "3", "4", "5", "6", "7", "8", "9" };
+        var nep = new[] { "०", "१", "२", "३", "४", "५", "६", "७", "८", "९" };
+        for (var i = 0; i < eng.Length; i++)
+        {
+            input = input.Replace(eng[i], nep[i]);
+        }
+        return input;
+    }
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Share Details Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 8pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    overflow: hidden;
+                    padding: 3px 4px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+                text-align: left;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: normal;
+                line-height: 1.2;
+                vertical-align: bottom;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #ccc;
+            }
+
+            .sn-col {
+                text-align: center;
+                color: #555;
+            }
+
+            .preeti {
+                font-family: 'Preeti', Arial, sans-serif;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="ShareDetails">
+            <colgroup>
+                <col style="width:3%;" />
+                <col style="width:9%;" />
+                @if (enableCollectionCenter)
+                {
+                    <col style="width:9%;" />
+                }
+                @if (enableGroup)
+                {
+                    <col style="width:9%;" />
+                }
+                <col style="width:13%;" />
+                <col style="width:5%;" />
+                <col style="width:6%;" />
+                <col style="width:5%;" />
+                <col style="width:11%;" />
+                <col style="width:7%;" />
+                <col style="width:8%;" />
+                <col style="width:7%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="20">@(isNepali ? "सेयर विवरण प्रतिवेदन" : "Share Details Report")</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="20"><strong>@(isNepali ? "शाखा" : "Branch") :</strong> @branchName</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="20">
+                        <strong>@(isNepali ? "मिति सम्म" : "Till Date") :</strong> @tillDate
+                        &nbsp;&nbsp;&nbsp;&nbsp;
+                        <strong>@(isNepali ? "सेयर प्रकार" : "Share Type") :</strong> @shareTypeName
+                        &nbsp;&nbsp;&nbsp;&nbsp;
+                        <strong>@(isNepali ? "सदस्य प्रकार" : "Member Type") :</strong> @memberTypeName
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="20">
+                        @if (enableCollectionCenter)
+                        {
+                            <span><strong>@(isNepali ? "संकलन केन्द्र" : "Collection Center") :</strong> @collectionCenterName &nbsp;&nbsp;&nbsp;&nbsp;</span>
+                        }
+                        @if (enableGroup)
+                        {
+                            <span><strong>@(isNepali ? "समूह" : "Member Group") :</strong> @memberGroupName</span>
+                        }
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="20"><strong>@(isNepali ? "प्रतिवेदन मिति" : "Report Generated On") :</strong> @generatedOn</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="20"></td></tr>
+
+                <tr>
+                    <th class="text-center">@(isNepali ? "क्र.सं." : "S.N.")</th>
+                    <th>@(isNepali ? "सदस्य परिचय" : "Member ID")</th>
+                    @if (enableCollectionCenter)
+                    {
+                        <th>@(isNepali ? "संकलन केन्द्र" : "Center")</th>
+                    }
+                    @if (enableGroup)
+                    {
+                        <th>@(isNepali ? "समूह" : "Member Group")</th>
+                    }
+                    <th>@(isNepali ? "सदस्य नाम" : "Member Name")</th>
+                    <th class="text-right">@(isNepali ? "उमेर" : "Age")</th>
+                    <th>@(isNepali ? "जन्म मिति" : "Date of Birth")</th>
+                    <th>@(isNepali ? "नागरिकता" : "Citizenship")</th>
+                    <th>@(isNepali ? "ठेगाना" : "Address")</th>
+                    <th>@(isNepali ? "पेशा" : "Occupation")</th>
+                    <th class="text-right">@(isNepali ? "सेयर संख्या" : "Share No")</th>
+                    <th class="text-right">@(isNepali ? "सेयर रकम" : "Share Amount")</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="detail-row">
+                            <td class="sn-col">@(isNepali ? NepaliNumber(sn.ToString()) : sn.ToString())</td>
+                            <td>@(isNepali ? NepaliNumber(row.MemberId) : row.MemberId ?? "")</td>
+                            @if (enableCollectionCenter)
+                            {
+                                <td>@(isNepali ? NepaliNumber(row.Center) : row.Center ?? "")</td>
+                            }
+                            @if (enableGroup)
+                            {
+                                <td>@(row.MemberGroup ?? "")</td>
+                            }
+                            <td>@(row.MemberName ?? "")</td>
+                            <td class="text-right @(isNepali ? "preeti" : "")">@(isNepali ? NepaliNumber(row.MemberAge) : row.MemberAge ?? "")</td>
+                            <td class="@(isNepali ? "preeti" : "")">@(row.DateOfBirth ?? "")</td>
+                            <td>@(isNepali ? NepaliNumber(row.CitizenShipNo) : row.CitizenShipNo ?? "")</td>
+                            <td>@(row.MemberAddress ?? "")</td>
+                            <td>@(isNepali ? NepaliNumber(row.Occupation) : row.Occupation ?? "")</td>
+                            <td class="text-right">@(row.TotalShare?.ToString("N0") ?? "")</td>
+                            <td class="text-right">@(row.TotalShareAmount?.ToString("N2") ?? "")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="@(3 + (enableCollectionCenter ? 1 : 0) + (enableGroup ? 1 : 0))" class="text-right">
+                            @(isNepali ? "कुल सदस्य" : "Total Members"): @(isNepali ? NepaliNumber(totalMembers.ToString()) : totalMembers.ToString())
+                            &nbsp;|&nbsp;
+                            @(isNepali ? "कुल रेकर्ड" : "Total Records"): @(isNepali ? NepaliNumber(totalRecords.ToString()) : totalRecords.ToString())
+                        </td>
+                        <td colspan="4"></td>
+                        <td class="text-right">@totalShare.ToString("N0")</td>
+                        <td class="text-right">@totalShareAmount.ToString("N2")</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="20" class="text-center">@(isNepali ? "कुनै डाटा फेला परेन" : "No data found for the selected criteria")</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

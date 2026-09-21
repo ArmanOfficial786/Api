@@ -1,0 +1,227 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Share;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<ShareStatementRowDto>) ?? new List<ShareStatementRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalPurchasedAmount = Model.ContainsKey("TotalPurchasedAmount") ? (Model["TotalPurchasedAmount"] as decimal? ?? 0) : 0;
+    var totalReturnedAmount = Model.ContainsKey("TotalReturnedAmount") ? (Model["TotalReturnedAmount"] as decimal? ?? 0) : 0;
+    var closingBalance = Model.ContainsKey("ClosingBalance") ? (Model["ClosingBalance"] as decimal? ?? 0) : 0;
+    var memberId = Model["MemberId"]?.ToString() ?? "";
+    var memberName = Model["MemberName"]?.ToString() ?? "";
+    var address = Model["Address"]?.ToString() ?? "";
+    var phoneNo = Model["PhoneNo"]?.ToString() ?? "";
+    var shareTypeName = Model["ShareTypeName"]?.ToString() ?? "All";
+    var enableHeader = Model["EnableHeader"] as bool? ?? true;
+    var enableBillNo = Model["EnableBillNo"] as bool? ?? false;
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Share Statement Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    overflow: hidden;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+                text-align: left;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: normal;
+                line-height: 1.2;
+                vertical-align: bottom;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #ccc;
+            }
+
+            .sn-col {
+                text-align: center;
+                color: #555;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel && enableHeader)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="ShareStatement">
+            <colgroup>
+                <col style="width:4%;" />
+                <col style="width:10%;" />
+                <col style="width:8%;" />
+                <col style="width:24%;" />
+                <col style="width:10%;" />
+                <col style="width:10%;" />
+                <col style="width:10%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="9">Share Statement Report</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="9"><strong>Member Id :</strong> @memberId &nbsp;&nbsp;&nbsp;&nbsp; <strong>Member Name :</strong> @memberName</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="9"><strong>Address :</strong> @address &nbsp;&nbsp;&nbsp;&nbsp; <strong>Contact :</strong> @phoneNo</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="9"><strong>Share Type :</strong> @shareTypeName</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="9"><strong>Report Generated On :</strong> @generatedOn</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="9"></td></tr>
+
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Date</th>
+                    @if (enableBillNo)
+                    {
+                        <th class="text-right">Bill No</th>
+                    }
+                    <th>Description</th>
+                    <th>Share Type</th>
+                    <th class="text-right">Purchased</th>
+                    <th class="text-right">Returned</th>
+                    <th class="text-right">Balance</th>
+                    <th>Member</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="detail-row">
+                            <td class="sn-col">@sn</td>
+                            <td>@(row.Date ?? "")</td>
+                            @if (enableBillNo)
+                            {
+                                <td class="text-right">@(row.TransactionNumber?.ToString("N0") ?? "")</td>
+                            }
+                            <td>@(row.Description ?? "")</td>
+                            <td>@(row.ShareType ?? "")</td>
+                            <td class="text-right">@(row.PurchasedAmount?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.ReturnedAmount?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Balance?.ToString("N2") ?? "")</td>
+                            <td>@(row.MemberId ?? "")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="@(enableBillNo ? 5 : 4)" class="text-right">
+                            Total Records: @totalRecords
+                        </td>
+                        <td class="text-right">@totalPurchasedAmount.ToString("N2")</td>
+                        <td class="text-right">@totalReturnedAmount.ToString("N2")</td>
+                        <td class="text-right">@closingBalance.ToString("N2")</td>
+                        <td></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
