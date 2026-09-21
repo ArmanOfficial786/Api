@@ -1,5 +1,4 @@
-﻿// Repository/Loan/OtherReports/LoanGuaranteerRepository.cs
-using Dapper;
+﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
@@ -28,9 +27,7 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
         }
 
         // --------------------------------------------------------------
-        // @SqlFilterExpOrderBy — column names match the SP's final SELECT
-        // Preserves the substring-based natural sort for MemberId and
-        // LoanAccountNo exactly as in the legacy BLL.
+        // @SqlFilterExpOrderBy — column names match the SP's final SELECT.
         // --------------------------------------------------------------
         private static string BuildSqlOrderBy(LoanGuaranteerRequestDto request)
         {
@@ -39,13 +36,10 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
 
             return request.OrderBy.Trim() switch
             {
-                "MrL.MemberId" => " order by substring(MrL.MemberId, 1,(len(MrL.MemberId)-charindex('-', MrL.MemberId))-1), MrL.MemberId ",
-                "LoneeFullName" => " order by LoneeFullName ",
-                "LoanAccountNo" => " order by substring(LoanAccountNo, 1,(len(LoanAccountNo)-charindex('-', LoanAccountNo))-1), LoanAccountNo ",
-                "AccountNo" => " order by AccountNo",
-                "GuaranteeAmount" => " order by GuaranteeAmount DESC",
-                "GuaranteeShareAmount" => " order by GuaranteeShareAmount DESC",
-                "GuaranteeDateOnBs" => " order by GuaranteeDateOnBs",
+                "FullName" => " order by FullName",
+                "LoanAccountNo" => " order by LoanAccountNo",
+                "GuaranteeDate" => " order by GuaranteeDateOnBs",
+                "LoneeFullName" => " order by LoneeFullName",
                 _ => string.Empty
             };
         }
@@ -83,25 +77,14 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
 
                 var sqlFilterExp = new StringBuilder();
                 var sqlFilterExpBranchId = new StringBuilder();
-                string? memberName = null;
 
                 // --------------------------------------------------------------
                 // Build filter expression matching legacy BLL:
-                // 1. Member filter (@SqlFilterExp)
+                // 1. Guarantor filter (@SqlFilterExp)
                 // 2. Branch filter (@SqlFilterExpbranchId)
                 // 3. ORDER BY (@SqlFilterExpOrderBy)
                 // --------------------------------------------------------------
-                sqlFilterExp.Append(" And MR.MemberId = '").Append(request.MemberId.Trim()).Append("'");
-
-                // Get member name for display
-                var name = await connection.QueryFirstOrDefaultAsync<string>(
-                    @"SELECT FirstName + ' ' +
-                             CASE WHEN MiddleName = '' THEN '' ELSE MiddleName + ' ' END +
-                             LastName
-                      FROM MemMemberRegistration 
-                      WHERE MemberId = @MemberId AND IsActive = 1",
-                    new { MemberId = request.MemberId.Trim() });
-                memberName = name;
+                sqlFilterExp.Append(" And Mr.MemberId = '").Append(request.MemberId.Trim()).Append("'");
 
                 if (!string.IsNullOrEmpty(branchIds))
                 {
@@ -123,6 +106,13 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                 );
 
                 var resultList = rows.AsList();
+
+                // --------------------------------------------------------------
+                // MemberId / FullName for the guarantor come straight off the
+                // SP's own result set (Mr.MemberId / FullName, the guarantor side
+                // of the join) - no MemMemberRegistration lookup.
+                // --------------------------------------------------------------
+                var memberName = resultList.FirstOrDefault()?.FullName;
 
                 // Get branch names for display
                 string branchName = "All";

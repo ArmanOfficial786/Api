@@ -21,7 +21,7 @@
         public string? LoanerCharacter { get; set; }
         public string? Capital { get; set; }
         public string? ManagerialDecision { get; set; }
-        public bool? IsActive { get; set; }
+        public bool IsActive { get; set; } = true;
     }
 
     public class LoanAppraisalData

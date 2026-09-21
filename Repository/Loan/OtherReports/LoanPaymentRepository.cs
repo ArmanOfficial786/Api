@@ -116,7 +116,8 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                                 .Append("' And '").Append(toDateStr).Append("'");
 
                     // Add paymentby filter only when supplied (legacy behavior)
-                    if (!string.IsNullOrEmpty(request.PaymentBy))
+                    if (!string.IsNullOrEmpty(request.PaymentBy) &&
+                        !request.PaymentBy.Equals("All", StringComparison.OrdinalIgnoreCase))
                     {
                         sqlFilterExp.Append(" and tm.Paymentby = '").Append(request.PaymentBy).Append("'");
                     }

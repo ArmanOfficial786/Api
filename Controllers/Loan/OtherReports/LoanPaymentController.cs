@@ -72,7 +72,7 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                 var reportName = "LoanPayment";
                 var upperFormat = format.ToUpper();
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -93,7 +93,7 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                 }
 
                 var dataTask = _repository.GetReportDataAsync(request);
-                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+                var headerTask = _commonHeaderRepository.GetCommonHeaders();
 
                 await Task.WhenAll(dataTask, headerTask);
 

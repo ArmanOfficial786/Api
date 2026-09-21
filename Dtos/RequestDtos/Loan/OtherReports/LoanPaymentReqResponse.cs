@@ -11,7 +11,7 @@
         public bool VisualReport { get; set; } = false;
     }
 
-    // Columns match sp_7_16_LoanPaymentReport's output SELECT list
+
     public class LoanPaymentRowDto
     {
         public string? MemberId { get; set; }

@@ -1,5 +1,4 @@
-﻿// Repository/Loan/OtherReports/LoanAppraisalRepository.cs
-using Dapper;
+﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
@@ -60,7 +59,6 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
 
                 var sqlFilterExp = new StringBuilder();
                 var sqlFilterExpBranchId = new StringBuilder();
-                string? memberName = null;
 
                 // --------------------------------------------------------------
                 // Build filter expression matching legacy BLL:
@@ -68,16 +66,6 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                 // 2. Branch filter (@SqlFilterExpbranchId)
                 // --------------------------------------------------------------
                 sqlFilterExp.Append(" And Mr.MemberId = '").Append(request.MemberId.Trim()).Append("'");
-
-                // Get member name for display
-                var name = await connection.QueryFirstOrDefaultAsync<string>(
-                    @"SELECT FirstName + ' ' +
-                             CASE WHEN MiddleName = '' THEN '' ELSE MiddleName + ' ' END +
-                             LastName
-                      FROM MemMemberRegistration 
-                      WHERE MemberId = @MemberId AND IsActive = 1",
-                    new { MemberId = request.MemberId.Trim() });
-                memberName = name;
 
                 if (!string.IsNullOrEmpty(branchIds))
                 {
@@ -96,6 +84,13 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                 );
 
                 var resultList = rows.AsList();
+
+                // --------------------------------------------------------------
+                // MemberId / FullName come straight off the SP's own result set
+                // (it already selects Mr.MemberId and FullName per row) - no
+                // second round-trip to MemMemberRegistration needed.
+                // --------------------------------------------------------------
+                var memberName = resultList.FirstOrDefault()?.FullName;
 
                 // Get branch names for display
                 string branchName = "All";

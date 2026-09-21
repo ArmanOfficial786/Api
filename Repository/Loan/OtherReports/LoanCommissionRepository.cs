@@ -37,34 +37,24 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
 
                 var sqlFilterExp = new StringBuilder();
                 var sqlCollectorId = new StringBuilder();
-                string? collectorName = null;
 
                 // --------------------------------------------------------------
                 // Build filter expression matching legacy BLL:
-                // 1. Date range filter (@SqlFilterExp)
-                // 2. Collector filter (@SqlcollectorId)
+                // 1. Date range (@SqlFilterExp) - Ac.TransactionOnBs between ...
+                // 2. Collector filter (@SqlcollectorId) - Ac.HurCollectorId = ...
+                // Both are optional and independent, matching the SP's own
+                // usage comments. CollectorId is a plain long on the DTO
+                // (not nullable), so -1 is the "no filter" sentinel.
                 // --------------------------------------------------------------
-                if (!string.IsNullOrEmpty(request.FromDateBs) && !string.IsNullOrEmpty(request.ToDateBs)
-                    && request.FromDateBs != "-1" && request.ToDateBs != "-1")
+                if (!string.IsNullOrEmpty(request.FromDateBs) && !string.IsNullOrEmpty(request.ToDateBs))
                 {
-                    var fromDateAd = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
-                    var toDateAd = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
-
-                    var fromDateStr = fromDateAd.ToString("yyyy-MM-dd");
-                    var toDateStr = toDateAd.ToString("yyyy-MM-dd");
-
-                    sqlFilterExp.Append(" And Ac.TransactionOn between '").Append(fromDateStr)
-                                .Append("' And '").Append(toDateStr).Append("'");
+                    sqlFilterExp.Append(" And Ac.TransactionOnBs between '").Append(request.FromDateBs.Trim())
+                                .Append("' And '").Append(request.ToDateBs.Trim()).Append("'");
                 }
 
                 if (request.CollectorId != -1)
                 {
                     sqlCollectorId.Append(" And Ac.HurCollectorId = ").Append(request.CollectorId);
-
-                    // Get collector name for display
-                    collectorName = await connection.QueryFirstOrDefaultAsync<string>(
-                        "SELECT CollectorFullName FROM HurCollector WHERE HurCollectorId = @Id",
-                        new { Id = request.CollectorId });
                 }
 
                 var parameters = new DynamicParameters();
@@ -79,6 +69,12 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                 );
 
                 var resultList = rows.AsList();
+
+                // --------------------------------------------------------------
+                // Collector name comes straight off the SP's own result set
+                // (CollectorFullName) - no lookup against any collector table.
+                // --------------------------------------------------------------
+                var collectorName = resultList.FirstOrDefault()?.CollectorFullName;
 
                 return new LoanCommissionData
                 {
