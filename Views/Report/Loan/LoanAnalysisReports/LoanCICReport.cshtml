@@ -1,0 +1,344 @@
+﻿@* Views/Report/Loan/LoanAnalysisReport/LoanCICReport.cshtml *@
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<LoanCICRowDto>) ?? new List<LoanCICRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
+    var totalPriPaid = Model["TotalPriPaid"] as decimal? ?? 0;
+    var totalPriBalance = Model["TotalPriBalance"] as decimal? ?? 0;
+    var totalIntBalance = Model["TotalIntBalance"] as decimal? ?? 0;
+    var totalPenaltyBalance = Model["TotalPenaltyBalance"] as decimal? ?? 0;
+    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
+    var totalGoodLoan = Model["TotalGoodLoan"] as decimal? ?? 0;
+    var totalLoanRisk30 = Model["TotalLoanRisk30"] as decimal? ?? 0;
+    var totalLoanRisk31to365 = Model["TotalLoanRisk31to365"] as decimal? ?? 0;
+    var totalLoanRisk1to365 = Model["TotalLoanRisk1to365"] as decimal? ?? 0;
+    var totalLoanRiskGt365 = Model["TotalLoanRiskGreaterThan365"] as decimal? ?? 0;
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var loanTypeName = Model["LoanTypeName"]?.ToString() ?? "";
+    var provisionType = Model["ProvisionType"]?.ToString() ?? "S";
+    var provisionTypeName = Model["ProvisionTypeName"]?.ToString() ?? "Schedule Wise";
+    var enable1To30Days = Model["Enable1To30Days"] as bool? ?? false;
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var isLoanTypeFiltered = !string.IsNullOrEmpty(loanTypeName);
+
+    // Column layout:
+    // Fixed 19 cols: SN, MemberId, Name, PermAddr, TempAddr, Contact, Citizenship, LoanType, AccountNo,
+    //                IssueDate, Maturity, IssueAmt, IntRate, PriPaid, PriBal, IntBal, Penalty, Total, GoodLoan
+    // + 1 optional   : Risk 1-30 (when enable1To30Days)
+    // + 3 fixed      : Risk 31-365, Risk 1-365, Risk >365
+    // + 2 fixed      : Guaranteer, Guaranteer Citizenship
+    var colCount = 24 + (enable1To30Days ? 1 : 0);
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Loan CIC Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 7.5pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 7.5pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 2px 3px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 4px 5px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            .provision-badge {
+                display: inline-block;
+                padding: 2px 10px;
+                border-radius: 3px;
+                font-size: 8pt;
+                font-weight: bold;
+            }
+
+            .badge-schedule {
+                background: #d1ecf1;
+                color: #0c5460;
+            }
+
+            .badge-remaining {
+                background: #fff3cd;
+                color: #856404;
+            }
+
+            .badge-maturity {
+                background: #f8d7da;
+                color: #721c24;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="LoanCIC">
+            <colgroup>
+                <col style="width:2%;" />   @* SN *@
+                <col style="width:5%;" />   @* MemberId *@
+                <col style="width:9%;" />   @* Name *@
+                <col style="width:7%;" />   @* PermAddr *@
+                <col style="width:7%;" />   @* TempAddr *@
+                <col style="width:5%;" />   @* Contact *@
+                <col style="width:5%;" />   @* Citizenship *@
+                <col style="width:6%;" />   @* Loan Type *@
+                <col style="width:6%;" />   @* Account No *@
+                <col style="width:5%;" />   @* Issue Date *@
+                <col style="width:5%;" />   @* Maturity *@
+                <col style="width:6%;" />   @* Issue Amt *@
+                <col style="width:4%;" />   @* Int Rate *@
+                <col style="width:6%;" />   @* Pri Paid *@
+                <col style="width:6%;" />   @* Pri Bal *@
+                <col style="width:5%;" />   @* Int Bal *@
+                <col style="width:5%;" />   @* Penalty *@
+                <col style="width:5%;" />   @* Total *@
+                <col style="width:5%;" />   @* Good Loan *@
+                @if (enable1To30Days)
+                {
+                    <col style="width:5%;" />  @* Risk 1-30 *@
+                }
+                <col style="width:5%;" />   @* Risk 31-365 *@
+                <col style="width:5%;" />   @* Risk 1-365 *@
+                <col style="width:5%;" />   @* Risk >365 *@
+                <col style="width:7%;" />   @* Guaranteer *@
+                <col style="width:7%;" />   @* Guaranteer Citizenship *@
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="@colCount">Loan CIC Report</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="12">
+                        <strong>Branch :</strong> @branchName
+                        &nbsp;&nbsp;
+                        <strong>Till Date :</strong> @tillDate
+                        @if (isLoanTypeFiltered)
+                        {
+                            <text>&nbsp;&nbsp;<strong>Loan Type :</strong> @loanTypeName</text>
+                        }
+                    </td>
+                    <td colspan="@(colCount - 12)" class="text-right">
+                        <strong>Provision Type :</strong>
+                        <span class="provision-badge @(provisionType == "S" ? "badge-schedule" : provisionType == "R" ? "badge-remaining" : "badge-maturity")">
+                            @provisionTypeName
+                        </span>
+                        &nbsp;&nbsp;
+                        <strong>Generated :</strong> @generatedOn
+                    </td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
+
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Member Id</th>
+                    <th>Member Name</th>
+                    <th>Permanent Address</th>
+                    <th>Temporary Address</th>
+                    <th>Contact No</th>
+                    <th>Citizenship No</th>
+                    <th>Loan Type</th>
+                    <th>Account No</th>
+                    <th>Issue Date</th>
+                    <th>Maturity</th>
+                    <th class="text-right">Issue Amt</th>
+                    <th class="text-center">Int Rate</th>
+                    <th class="text-right">Pri Paid</th>
+                    <th class="text-right">Pri Bal</th>
+                    <th class="text-right">Int Bal</th>
+                    <th class="text-right">Penalty</th>
+                    <th class="text-right">Total</th>
+                    <th class="text-right">Good Loan</th>
+                    @if (enable1To30Days)
+                    {
+                        <th class="text-right">Risk 1-30</th>
+                    }
+                    <th class="text-right">Risk 31-365</th>
+                    <th class="text-right">Risk 1-365</th>
+                    <th class="text-right">Risk &gt;365</th>
+                    <th>Guaranteer</th>
+                    <th>Guaranteer Citizenship</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.FullName ?? "")</td>
+                            <td>@(row.PermanentAddessDetail ?? "")</td>
+                            <td>@(row.TemporaryAddressDetail ?? "")</td>
+                            <td>@(row.ContactNo ?? "")</td>
+                            <td>@(row.CitizenshipNo ?? "")</td>
+                            <td>@(row.LoanTypeName ?? "")</td>
+                            <td>@(row.LoanAccountNo ?? "")</td>
+                            <td>@(row.LoanIssueOnBs ?? "")</td>
+                            <td>@(row.MaturityOnBs ?? "")</td>
+                            <td class="text-right">@(row.LoanIssueAmount?.ToString("N2") ?? "")</td>
+                            <td class="text-center">@(row.InterestRate?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.PriPaid?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.PriBalance?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.IntBalance?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.PenaltyBalance?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.TotalBalance?.ToString("N2") ?? "")</td>
+                            <td class="text-right positive">@(row.GoodLoan?.ToString("N2") ?? "")</td>
+                            @if (enable1To30Days)
+                            {
+                                <td class="text-right">@(row.LoanRisk30?.ToString("N2") ?? "")</td>
+                            }
+                            <td class="text-right">@(row.LoanRisk31to365?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.LoanRisk1to365?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.LoanRiskGreaterThan365?.ToString("N2") ?? "")</td>
+                            <td>@(row.Guaranteer ?? "")</td>
+                            <td>@(row.GuaranteerCitizenshipNo ?? "")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="12" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
+                        <td></td>
+                        <td class="text-right"><strong>@totalPriPaid.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalPriBalance.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalIntBalance.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalPenaltyBalance.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalBalance.ToString("N2")</strong></td>
+                        <td class="text-right positive"><strong>@totalGoodLoan.ToString("N2")</strong></td>
+                        @if (enable1To30Days)
+                        {
+                            <td class="text-right"><strong>@totalLoanRisk30.ToString("N2")</strong></td>
+                        }
+                        <td class="text-right"><strong>@totalLoanRisk31to365.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalLoanRisk1to365.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalLoanRiskGt365.ToString("N2")</strong></td>
+                        <td colspan="2"></td>
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="@(colCount - 1)" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-center"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="@colCount" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

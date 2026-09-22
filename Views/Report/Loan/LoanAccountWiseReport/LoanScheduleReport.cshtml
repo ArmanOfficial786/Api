@@ -1,0 +1,310 @@
+﻿
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var memberInfo = Model["MemberInfo"] as LoanScheduleMemberInfoDto;
+    var rows = (Model["Rows"] as List<LoanScheduleRowDto>) ?? new List<LoanScheduleRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalInstallmentAmount = Model["TotalInstallmentAmount"] as decimal? ?? 0;
+    var totalPrincipleAmount = Model["TotalPrincipleAmount"] as decimal? ?? 0;
+    var totalInterestAmount = Model["TotalInterestAmount"] as decimal? ?? 0;
+    var totalBalanceAmount = Model["TotalBalanceAmount"] as decimal? ?? 0;
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Loan Schedule Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .section-header td {
+                background: #e8e8e8;
+                font-weight: bold;
+                font-size: 10pt;
+                padding: 5px 6px;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+            }
+
+            .member-info td {
+                padding: 3px 6px;
+                font-size: 9pt;
+                border-bottom: 1px solid #eee;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+            }
+
+            .paid-row td {
+                color: #888;
+                font-style: italic;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            .paid-badge {
+                display: inline-block;
+                padding: 1px 6px;
+                background: #d4edda;
+                color: #155724;
+                border-radius: 3px;
+                font-size: 7pt;
+                font-weight: bold;
+            }
+
+            .unpaid-badge {
+                display: inline-block;
+                padding: 1px 6px;
+                background: #fff3cd;
+                color: #856404;
+                border-radius: 3px;
+                font-size: 7pt;
+                font-weight: bold;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="LoanSchedule">
+            <colgroup>
+                <col style="width:5%;" />
+                <col style="width:11%;" />
+                <col style="width:11%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:9%;" />
+                <col style="width:16%;" />
+            </colgroup>
+            <tbody>
+                <!-- Report Title -->
+                <tr class="meta-title">
+                    <td colspan="9">Loan Schedule Report</td>
+                </tr>
+
+                <!-- Metadata -->
+                <tr class="meta-row">
+                    <td colspan="5">
+                        <strong>Account No :</strong> @(memberInfo?.LoanAccountNo ?? "")
+                    </td>
+                    <td colspan="4" class="text-right">
+                        <strong>Report Generated On :</strong> @generatedOn
+                    </td>
+                </tr>
+
+                <!-- Member Information Section -->
+                @if (memberInfo != null)
+                {
+                    <tr class="meta-spacer"><td colspan="9"></td></tr>
+                    <tr class="section-header">
+                        <td colspan="9"><strong>Member Information</strong></td>
+                    </tr>
+                    <tr class="member-info">
+                        <td colspan="2"><strong>Member Id :</strong> @memberInfo.MemberId</td>
+                        <td colspan="4"><strong>Member Name :</strong> @memberInfo.MemberName</td>
+                        <td colspan="3"><strong>Loan Type :</strong> @memberInfo.LoanTypeName</td>
+                    </tr>
+                    <tr class="member-info">
+                        <td colspan="2"><strong>Loan Amount :</strong> @(memberInfo.LoanIssueAmount?.ToString("N2"))</td>
+                        <td colspan="2"><strong>Interest Rate :</strong> @(memberInfo.InterestRate?.ToString("N2"))%</td>
+                        <td colspan="2"><strong>Issue Date :</strong> @memberInfo.LoanIssueOnBs</td>
+                        <td colspan="3"><strong>Maturity Date :</strong> @memberInfo.MaturityOnBs</td>
+                    </tr>
+                    <tr class="member-info">
+                        <td colspan="4"><strong>Address :</strong> @memberInfo.ContactAddress</td>
+                        <td colspan="3"><strong>Contact :</strong> @memberInfo.ContactNo</td>
+                        <td colspan="2"><strong>Status :</strong> @memberInfo.AccountStatus</td>
+                    </tr>
+                    <tr class="member-info">
+                        <td colspan="3"><strong>Period :</strong> @memberInfo.Period</td>
+                        <td colspan="3"><strong>Payment Duration :</strong> @memberInfo.PaymentDurationType</td>
+                        <td colspan="3"><strong>Loan Type :</strong> @memberInfo.LoanType</td>
+                    </tr>
+                    <tr class="meta-spacer"><td colspan="9"></td></tr>
+                }
+
+                <!-- Table Header -->
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Schedule Date (BS)</th>
+                    <th>Installment No</th>
+                    <th class="text-right">Installment Amount</th>
+                    <th class="text-right">Principal Amount</th>
+                    <th class="text-right">Interest Amount</th>
+                    <th class="text-right">Balance Amount</th>
+                    <th class="text-center">Status</th>
+                    <th>Remarks</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        var rowClass = row.IsPaid == true
+                            ? $"paid-row {(sn % 2 == 0 ? "detail-row" : "detail-row-alt")}"
+                            : (sn % 2 == 0 ? "detail-row" : "detail-row-alt");
+                        <tr class="@rowClass">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.ScheduleDateOnBs ?? "")</td>
+                            <td>@(row.LoanFrequency?.ToString() ?? "")</td>
+                            <td class="text-right">@(row.InstallmentAmount.HasValue ? row.InstallmentAmount.Value.ToString("N2") : "")</td>
+                            <td class="text-right">@(row.PrincipleAmount.HasValue ? row.PrincipleAmount.Value.ToString("N2") : "")</td>
+                            <td class="text-right">@(row.InterestAmount.HasValue ? row.InterestAmount.Value.ToString("N2") : "")</td>
+                            <td class="text-right @(row.PrincipleBalanceAmount.HasValue && row.PrincipleBalanceAmount.Value < 0 ? "negative" : "positive")">
+                                @(row.PrincipleBalanceAmount.HasValue ? row.PrincipleBalanceAmount.Value.ToString("N2") : "")
+                            </td>
+                            <td class="text-center">
+                                @if (row.IsPaid == true)
+                                {
+                                    <span class="paid-badge">Paid</span>
+                                }
+                                else
+                                {
+                                    <span class="unpaid-badge">Unpaid</span>
+                                }
+                            </td>
+                            <td>@(row.Remarks ?? "")</td>
+                        </tr>
+                    }
+
+                    <!-- Grand Total Row -->
+                    <tr class="grand-total-row">
+                        <td colspan="3" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-right"><strong>@totalInstallmentAmount.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalPrincipleAmount.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalInterestAmount.ToString("N2")</strong></td>
+                        <td class="text-right @(totalBalanceAmount < 0 ? "negative" : "positive")">
+                            <strong>@totalBalanceAmount.ToString("N2")</strong>
+                        </td>
+                        <td colspan="2"></td>
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="8" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-center"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="9" class="text-center">No schedule found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
