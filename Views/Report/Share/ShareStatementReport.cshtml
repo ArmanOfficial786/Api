@@ -4,7 +4,6 @@
     Layout = null;
 
     var rows = (Model["Rows"] as List<ShareStatementRowDto>) ?? new List<ShareStatementRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalPurchasedAmount = Model.ContainsKey("TotalPurchasedAmount") ? (Model["TotalPurchasedAmount"] as decimal? ?? 0) : 0;
     var totalReturnedAmount = Model.ContainsKey("TotalReturnedAmount") ? (Model["TotalReturnedAmount"] as decimal? ?? 0) : 0;
     var closingBalance = Model.ContainsKey("ClosingBalance") ? (Model["ClosingBalance"] as decimal? ?? 0) : 0;
@@ -13,8 +12,6 @@
     var address = Model["Address"]?.ToString() ?? "";
     var phoneNo = Model["PhoneNo"]?.ToString() ?? "";
     var shareTypeName = Model["ShareTypeName"]?.ToString() ?? "All";
-    var enableHeader = Model["EnableHeader"] as bool? ?? true;
-    var enableBillNo = Model["EnableBillNo"] as bool? ?? false;
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
@@ -43,8 +40,41 @@
                 overflow: visible;
             }
 
-            thead {
-                display: table-row-group;
+            .meta-title {
+                text-align: center;
+                font-family: Arial, sans-serif;
+                font-size: 13pt;
+                font-weight: bold;
+                padding: 8px 0;
+            }
+
+            .meta-row {
+                padding: 3px 0;
+                font-size: 9pt;
+            }
+
+            /* Bordered member-info box */
+            .info-grid {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                margin: 10px 0;
+                border: 1px solid #000;
+            }
+
+                .info-grid td {
+                    border: 1px solid #000;
+                    padding: 5px 8px;
+                    vertical-align: middle;
+                }
+
+            .info-label {
+                font-weight: bold;
+                width: 15%;
+            }
+
+            .info-value {
+                width: 35%;
             }
 
             .data-table {
@@ -59,53 +89,32 @@
                     overflow-wrap: break-word;
                     overflow: hidden;
                     padding: 4px 6px;
-                    vertical-align: middle;
+                    vertical-align: top;
                 }
 
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-                text-align: left;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: normal;
-                line-height: 1.2;
-                vertical-align: bottom;
-            }
+                .data-table th {
+                    background: #f9f9f9;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                }
 
             .detail-row td {
-                border-bottom: 1px solid #ccc;
+                border-bottom: 1px solid #eee;
             }
 
-            .sn-col {
-                text-align: center;
-                color: #555;
+            .date-col {
+                color: #B5651D;
             }
 
-            .grand-total-row td {
+            .amount-col {
+                color: #1F5C99;
+            }
+
+            .total-row td {
                 border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
                 font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
+                padding: 6px;
             }
 
             .text-right {
@@ -117,10 +126,6 @@
             }
 
             @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
                 tr {
                     page-break-inside: avoid;
                     break-inside: avoid;
@@ -131,55 +136,53 @@
 <body>
     <div class="report-container">
 
-        @if (!isExcel && enableHeader)
+        @if (!isExcel)
         {
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        <table class="data-table" data-sheet-name="ShareStatement">
+        <div class="meta-title">Share Statement Report</div>
+        <div class="meta-row"><strong>Report Generated On :</strong> @generatedOn</div>
+
+        <!-- Member info box -->
+        <table class="info-grid">
+            <tr>
+                <td class="info-label">Member Id :</td>
+                <td class="info-value">@memberId</td>
+                <td class="info-label">Member Name :</td>
+                <td class="info-value">@memberName</td>
+            </tr>
+            <tr>
+                <td class="info-label">Member Address :</td>
+                <td class="info-value">@address</td>
+                <td class="info-label">Phone No :</td>
+                <td class="info-value">@phoneNo</td>
+            </tr>
+            <tr>
+                <td class="info-label">Share Type :</td>
+                <td class="info-value" colspan="3">@shareTypeName</td>
+            </tr>
+        </table>
+
+        <table class="data-table">
             <colgroup>
-                <col style="width:4%;" />
-                <col style="width:10%;" />
-                <col style="width:8%;" />
-                <col style="width:24%;" />
+                <col style="width:6%;" />
                 <col style="width:10%;" />
                 <col style="width:10%;" />
+                <col style="width:44%;" />
                 <col style="width:10%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
+                <col style="width:10%;" />
+                <col style="width:10%;" />
             </colgroup>
             <tbody>
-                <tr class="meta-title">
-                    <td colspan="9">Share Statement Report</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="9"><strong>Member Id :</strong> @memberId &nbsp;&nbsp;&nbsp;&nbsp; <strong>Member Name :</strong> @memberName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="9"><strong>Address :</strong> @address &nbsp;&nbsp;&nbsp;&nbsp; <strong>Contact :</strong> @phoneNo</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="9"><strong>Share Type :</strong> @shareTypeName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="9"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="9"></td></tr>
-
                 <tr>
-                    <th class="text-center">S.N.</th>
+                    <th>S.No</th>
                     <th>Date</th>
-                    @if (enableBillNo)
-                    {
-                        <th class="text-right">Bill No</th>
-                    }
+                    <th>DateOnBs</th>
                     <th>Description</th>
-                    <th>Share Type</th>
-                    <th class="text-right">Purchased</th>
-                    <th class="text-right">Returned</th>
-                    <th class="text-right">Balance</th>
-                    <th>Member</th>
+                    <th class="text-right">Purchased (Rs)</th>
+                    <th class="text-right">Returned (Rs)</th>
+                    <th class="text-right">Balance (Rs)</th>
                 </tr>
 
                 @if (rows.Any())
@@ -189,35 +192,27 @@
                     {
                         sn++;
                         <tr class="detail-row">
-                            <td class="sn-col">@sn</td>
-                            <td>@(row.Date ?? "")</td>
-                            @if (enableBillNo)
-                            {
-                                <td class="text-right">@(row.TransactionNumber?.ToString("N0") ?? "")</td>
-                            }
+                            <td class="date-col">@sn</td>
+                            <td class="date-col">@(row.DateAd ?? "")</td>
+                            <td class="date-col">@(row.Date ?? "")</td>
                             <td>@(row.Description ?? "")</td>
-                            <td>@(row.ShareType ?? "")</td>
-                            <td class="text-right">@(row.PurchasedAmount?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.ReturnedAmount?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.Balance?.ToString("N2") ?? "")</td>
-                            <td>@(row.MemberId ?? "")</td>
+                            <td class="text-right amount-col">@(row.PurchasedAmount.HasValue ? row.PurchasedAmount.Value.ToString("N2") : "")</td>
+                            <td class="text-right amount-col">@(row.ReturnedAmount.HasValue ? row.ReturnedAmount.Value.ToString("N2") : "")</td>
+                            <td class="text-right amount-col">@(row.Balance.HasValue ? row.Balance.Value.ToString("N2") : "")</td>
                         </tr>
                     }
 
-                    <tr class="grand-total-row">
-                        <td colspan="@(enableBillNo ? 5 : 4)" class="text-right">
-                            Total Records: @totalRecords
-                        </td>
+                    <tr class="total-row">
+                        <td colspan="4" class="text-right">Total :</td>
                         <td class="text-right">@totalPurchasedAmount.ToString("N2")</td>
                         <td class="text-right">@totalReturnedAmount.ToString("N2")</td>
                         <td class="text-right">@closingBalance.ToString("N2")</td>
-                        <td></td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

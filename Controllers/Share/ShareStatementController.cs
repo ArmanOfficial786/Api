@@ -66,7 +66,7 @@ namespace NexgenCosysReport.Controllers.Share
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
                 }
 
-                if (request.MemberId == -1)
+                if (request.MemberId == "-1")
                 {
                     return BadRequest(new { success = false, StatusCode = 400, message = "Member Id is required" });
                 }

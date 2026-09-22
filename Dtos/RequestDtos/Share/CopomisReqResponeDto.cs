@@ -80,5 +80,8 @@
         public string? MemberGroupName { get; set; }
         public string? MemberTypeName { get; set; }
         public string? OrderBy { get; set; }
+        public string? MemberNameEnglish { get; set; }
+        public string? StateName { get; set; }
+        public string? CertificateNo { get; set; }
     }
 }

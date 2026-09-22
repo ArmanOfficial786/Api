@@ -103,10 +103,14 @@ namespace NexgenCosysReport.Repository.Share
                 parameters.Add("@ToDate", toDateAd.ToString("yyyy-MM-dd"), DbType.String, size: 10);
                 parameters.Add("@FromdateBs", fiscalYear.FromBs ?? "", DbType.String, size: 10);
                 parameters.Add("@ToDateBs", fiscalYear.ToBs ?? "", DbType.String, size: 10);
-                parameters.Add("@ShareDividenPercent", 0m, DbType.Decimal, direction: ParameterDirection.Output);
-                parameters.Add("@RemainingReserveAmount", 0m, DbType.Decimal, direction: ParameterDirection.Output);
-                parameters.Add("@DividendAmount", 0m, DbType.Decimal, direction: ParameterDirection.Output);
-                parameters.Add("@TotalPurchaseAmount", 0m, DbType.Decimal, direction: ParameterDirection.Output);
+                // Output parameters are read back as decimal? below (see comment there) -
+                // the SP can genuinely return DBNull for these (e.g. SUM() with no matching
+                // rows, or a reserve-fund lookup that finds no row), so the DbType/precision
+                // registration here stays the same, but Dapper.Get<T> must be nullable.
+                parameters.Add("@ShareDividenPercent", dbType: DbType.Decimal, direction: ParameterDirection.Output, precision: 18, scale: 2);
+                parameters.Add("@RemainingReserveAmount", dbType: DbType.Decimal, direction: ParameterDirection.Output, precision: 18, scale: 2);
+                parameters.Add("@DividendAmount", dbType: DbType.Decimal, direction: ParameterDirection.Output, precision: 18, scale: 2);
+                parameters.Add("@TotalPurchaseAmount", dbType: DbType.Decimal, direction: ParameterDirection.Output, precision: 18, scale: 2);
 
                 var rows = await connection.QueryAsync<ShareDividendRowDto>(
                     "sp_8_14_GetShareDividend",
@@ -117,6 +121,21 @@ namespace NexgenCosysReport.Repository.Share
 
                 var resultList = rows.AsList();
 
+                // --------------------------------------------------------------
+                // FIX: read as decimal? and coalesce to 0. The SP can return
+                // DBNull for any of these (most obviously @TotalPurchaseAmount,
+                // whose SUM() has no ISNULL guard and returns NULL when no rows
+                // match; @ShareDividenPercent similarly has no fallback if its
+                // AcoReserveFundMaster lookup finds nothing). Reading them as
+                // non-nullable decimal, as before, throws
+                // "Unable to cast a DBNull to a non nullable type" the moment
+                // that happens.
+                // --------------------------------------------------------------
+                var shareDividendPercent = parameters.Get<decimal?>("@ShareDividenPercent") ?? 0;
+                var remainingReserveAmount = parameters.Get<decimal?>("@RemainingReserveAmount") ?? 0;
+                var dividendAmount = parameters.Get<decimal?>("@DividendAmount") ?? 0;
+                var totalPurchaseAmount = parameters.Get<decimal?>("@TotalPurchaseAmount") ?? 0;
+
                 return new ShareDividendData
                 {
                     Rows = resultList,
@@ -125,12 +144,12 @@ namespace NexgenCosysReport.Repository.Share
                         .Select(r => r.MemberId)
                         .Distinct()
                         .Count(),
-                    TotalPurchaseAmount = parameters.Get<decimal>("@TotalPurchaseAmount"),
+                    TotalPurchaseAmount = totalPurchaseAmount,
                     TotalAggregateAmount = resultList.Sum(r => r.AggregateAmount ?? 0),
                     TotalDividendPayableAmount = resultList.Sum(r => r.DividendPayableAmount ?? 0),
-                    ShareDividendPercent = parameters.Get<decimal>("@ShareDividenPercent"),
-                    DividendAmount = parameters.Get<decimal>("@DividendAmount"),
-                    RemainingReserveAmount = parameters.Get<decimal>("@RemainingReserveAmount"),
+                    ShareDividendPercent = shareDividendPercent,
+                    DividendAmount = dividendAmount,
+                    RemainingReserveAmount = remainingReserveAmount,
                     FiscalYear = fiscalYear.FiscalYear,
                     FromDateBs = fiscalYear.FromBs,
                     ToDateBs = fiscalYear.ToBs,

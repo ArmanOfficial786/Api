@@ -11,13 +11,16 @@
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var officeName = Model["OfficeName"]?.ToString() ?? "All";
-    var shareTypeName = Model["ShareTypeName"]?.ToString() ?? "All";
-    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var generatedOn = DateTime.Now.ToString("MM/dd/yyyy");
 
-    var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName);
+    // Grouped by the receiving member: member header once, then a list of
+    // share transfers received (from previous owners), then a per-member
+    // subtotal - matches the legacy report exactly.
+    var memberGroups = rows
+        .GroupBy(r => new { r.MemberId, r.Name })
+        .ToList();
 }
 <!DOCTYPE html>
 <html>
@@ -91,21 +94,30 @@
                 vertical-align: bottom;
             }
 
-            .detail-row td {
-                border-bottom: 1px solid #ccc;
+            /* Member group header row (Member Id + Name only) */
+            .member-header-row td {
+                padding-top: 8px;
+                padding-bottom: 2px;
+                font-weight: bold;
             }
 
-            .sn-col {
-                text-align: center;
-                color: #555;
+            /* Transfer rows under a member */
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            /* Per-member subtotal */
+            .member-total-row td {
+                border-top: 1px solid #000;
+                font-weight: bold;
+                padding-top: 4px;
+                padding-bottom: 8px;
             }
 
             .grand-total-row td {
                 border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
                 font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
+                padding: 6px;
             }
 
             .text-right {
@@ -138,92 +150,111 @@
 
         <table class="data-table" data-sheet-name="ShareTransfer">
             <colgroup>
-                <col style="width:4%;" />
-                <col style="width:10%;" />
-                <col style="width:16%;" />
-                <col style="width:10%;" />
-                <col style="width:16%;" />
-                <col style="width:8%;" />
-                <col style="width:8%;" />
+                <col style="width:9%;" />
+                <col style="width:15%;" />
+                <col style="width:11%;" />
+                <col style="width:15%;" />
+                <col style="width:13%;" />
                 <col style="width:9%;" />
                 <col style="width:10%;" />
+                <col style="width:9%;" />
                 <col style="width:9%;" />
             </colgroup>
             <tbody>
+                <!-- Report Title -->
                 <tr class="meta-title">
-                    <td colspan="10">Share Transfer Report</td>
+                    <td colspan="9">Share Transfer Report</td>
                 </tr>
 
+                <!-- Metadata: Report Generated On + From/To Date on one line, Branch Name on the next -->
                 <tr class="meta-row">
-                    <td colspan="10"><strong>Office Name :</strong> @officeName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="10">
+                    <td colspan="4"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="5">
                         <strong>From Date :</strong> @fromDate
                         &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Till Date :</strong> @toDate
+                        <strong>To Date :</strong> @toDate
                     </td>
                 </tr>
                 <tr class="meta-row">
-                    <td colspan="10"><strong>Share Type :</strong> @shareTypeName</td>
+                    <td colspan="4"></td>
+                    <td colspan="5"><strong>Branch Name :</strong> @officeName</td>
                 </tr>
-                @if (isMemberGroupFiltered)
-                {
-                    <tr class="meta-row">
-                        <td colspan="10"><strong>Member Group :</strong> @memberGroupName</td>
-                    </tr>
-                }
-                <tr class="meta-row">
-                    <td colspan="10"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="10"></td></tr>
+                <tr class="meta-spacer"><td colspan="9"></td></tr>
 
+                <!-- Table Header -->
                 <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Member ID</th>
+                    <th>Member Id</th>
                     <th>Member Name</th>
-                    <th>Previous Member ID</th>
-                    <th>Previous Member Name</th>
-                    <th class="text-right">No. of Share</th>
-                    <th class="text-right">Amount</th>
+                    <th>Old Member Id</th>
+                    <th>Old Member Name</th>
+                    <th>User Name</th>
+                    <th class="text-right">No Of Share</th>
+                    <th class="text-right">Amount (Rs)</th>
                     <th>Date</th>
                     <th>Share Type</th>
-                    <th>UserName</th>
                 </tr>
 
-                @if (rows.Any())
+                @if (memberGroups.Any())
                 {
-                    var sn = 0;
-                    foreach (var row in rows)
+                    foreach (var grp in memberGroups)
                     {
-                        sn++;
-                        <tr class="detail-row">
-                            <td class="sn-col">@sn</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.Name ?? "")</td>
-                            <td>@(row.PreviousMemberId ?? "")</td>
-                            <td>@(row.PreviousMemberName ?? "")</td>
-                            <td class="text-right">@(row.TotalNoShare?.ToString("N0") ?? "")</td>
-                            <td class="text-right">@(row.Amount?.ToString("N2") ?? "")</td>
-                            <td>@(row.Date ?? "")</td>
-                            <td>@(row.ShareType ?? "")</td>
-                            <td>@(row.UserName ?? "")</td>
+                        <!-- Member header band -->
+                        <tr class="member-header-row">
+                            <td>@(grp.Key.MemberId ?? "")</td>
+                            <td>@(grp.Key.Name ?? "")</td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+
+                        <!-- Transfers received by this member -->
+                        var groupShareTotal = 0m;
+                        var groupAmountTotal = 0m;
+                        foreach (var row in grp)
+                        {
+                            groupShareTotal += row.TotalNoShare ?? 0;
+                            groupAmountTotal += row.Amount ?? 0;
+                            <tr class="detail-row">
+                                <td></td>
+                                <td></td>
+                                <td>@(row.PreviousMemberId ?? "")</td>
+                                <td>@(row.PreviousMemberName ?? "")</td>
+                                <td>@(row.UserName ?? "")</td>
+                                <td class="text-right">@(row.TotalNoShare?.ToString("N2") ?? "")</td>
+                                <td class="text-right">@(row.Amount?.ToString("N2") ?? "")</td>
+                                <td>@(row.Date ?? "")</td>
+                                <td>@(row.ShareType ?? "")</td>
+                            </tr>
+                        }
+
+                        <!-- Per-member subtotal -->
+                        <tr class="member-total-row">
+                            <td></td>
+                            <td></td>
+                            <td colspan="2" class="text-right">@(grp.Key.Name ?? "")</td>
+                            <td></td>
+                            <td class="text-right">@groupShareTotal.ToString("N2")</td>
+                            <td class="text-right">@groupAmountTotal.ToString("N2")</td>
+                            <td colspan="2"></td>
                         </tr>
                     }
 
+                    <!-- Report-level grand total -->
                     <tr class="grand-total-row">
-                        <td colspan="5" class="text-right">
-                            Total Members: @totalMembers &nbsp;&nbsp;|&nbsp;&nbsp; Total Records: @totalRecords
-                        </td>
-                        <td class="text-right">@totalNoShare.ToString("N0")</td>
+                        <td colspan="5" class="text-right">Grand Total :</td>
+                        <td class="text-right">@totalNoShare.ToString("N2")</td>
                         <td class="text-right">@totalAmount.ToString("N2")</td>
-                        <td colspan="3"></td>
+                        <td colspan="2"></td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="10" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

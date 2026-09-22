@@ -15,8 +15,14 @@
     var memberTypeName = Model["MemberTypeName"]?.ToString() ?? "All";
     var showMemberPhoto = Model["ShowMemberPhoto"] as bool? ?? false;
     var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var isView = format == "VIEW";
+    var isExcel = format is "EXCEL" or "XLSX";
+
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // S.N. + optional Photo + 9 fixed data columns
+    int totalVisibleCols = showMemberPhoto ? 12 : 11;
 }
 <!DOCTYPE html>
 <html>
@@ -33,35 +39,31 @@
             body {
                 font-family: Arial, sans-serif;
                 font-size: 8pt;
-                background: white;
+                background: @(isView ? "#d0d0d0" : "#fff");
                 color: #000;
+                @(isView ? "" : "margin-top: 25px;")
             }
 
-            .report-container {
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+
+            /* ── Sub-header (title + meta) – sits ABOVE the table header ─────── */
+            .report-subheader {
                 width: 100%;
-                overflow: visible;
+                padding: 4px 6px 0 6px;
+                background: #fff;
             }
 
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 8pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 3px 4px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
+            .subheader-title {
                 text-align: center;
                 font-family: "Times New Roman", Times, serif;
                 font-size: 14pt;
@@ -70,14 +72,37 @@
                 padding: 8px 6px;
             }
 
-            .meta-row td {
-                padding: 3px 6px;
+            .subheader-meta {
+                display: flex;
+                justify-content: space-between;
+                flex-wrap: wrap;
                 font-size: 9pt;
-                text-align: left;
+                padding: 3px 6px;
             }
 
-            .meta-spacer td {
+            .subheader-spacer {
                 height: 6px;
+            }
+
+            /* ── Data table ──────────────────────────────────────────────────── */
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                font-size: 8pt;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    overflow: hidden;
+                    padding: 3px 4px;
+                    vertical-align: middle;
+                    background: #fff;
+                }
+
+            thead {
+                display: table-row-group;
             }
 
             .data-table th {
@@ -88,6 +113,7 @@
                 white-space: normal;
                 line-height: 1.2;
                 vertical-align: bottom;
+                font-weight: bold;
             }
 
             .detail-row td {
@@ -116,12 +142,53 @@
                 padding: 5px 6px;
             }
 
-            .text-right {
-                text-align: right !important;
+            /* ── Column widths (percent-based, table-layout:fixed) ────────────── */
+            col.c-sn {
+                width: 3%;
             }
 
-            .text-center {
-                text-align: center !important;
+            col.c-mid {
+                width: 9%;
+            }
+
+            col.c-name {
+                width: 14%;
+            }
+
+            col.c-photo {
+                width: 6%;
+            }
+
+            col.c-gender {
+                width: 5%;
+            }
+
+            col.c-age {
+                width: 4%;
+            }
+
+            col.c-reg {
+                width: 8%;
+            }
+
+            col.c-contact {
+                width: 10%;
+            }
+
+            col.c-addr {
+                width: 9%;
+            }
+
+            col.c-parent {
+                width: 11%;
+            }
+
+            col.c-shareno {
+                width: 9%;
+            }
+
+            col.c-amount {
+                width: 9%;
             }
 
             @@media print {
@@ -134,82 +201,339 @@
                     break-inside: avoid;
                 }
             }
+
+            /* ── VIEW chrome (paged, horizontally-scrollable canvas) ───────────── */
+            .view-outer {
+                background: #d0d0d0;
+                padding: 2px 16px 20px 16px;
+                min-height: 100vh;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                cursor: grab;
+            }
+
+                .view-outer:active {
+                    cursor: grabbing;
+                }
+
+            /* PageSetting.Custom(594mm, 420mm, landscape) @@ 96dpi:
+                           594mm → 2245px wide (we standardize to 3600px canvas like MemberAllDetail),
+                           420mm → 1587px tall */
+            .view-page {
+                background: #fff;
+                margin: 0 auto 24px auto;
+                box-shadow: 0 2px 8px rgba(0,0,0,.18);
+                width: 3600px;
+                height: 1587px;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .view-page-content {
+                flex: 1;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .view-page-footer {
+                background: #fff;
+                border-top: 1px solid #ccc;
+                text-align: center;
+                font-size: 9pt;
+                font-weight: bold;
+                padding: 6px 0;
+                flex-shrink: 0;
+            }
+
+            .common-header-wrap {
+                width: 3600px;
+                overflow: hidden;
+                flex-shrink: 0;
+            }
+
+            .page-subheader {
+                flex-shrink: 0;
+            }
+
+            .page-table-wrap {
+                flex: 1;
+                overflow: hidden;
+            }
+
+            #sourceWrap {
+                opacity: 0;
+                pointer-events: none;
+                width: 3600px;
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+
+            #commonHeaderSource {
+                visibility: hidden;
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 3600px;
+                pointer-events: none;
+            }
     </style>
 </head>
 <body>
-    <div class="report-container">
 
+    @* Common header — rendered for VIEW and PDF, skipped for Excel *@
+    @if (!isExcel)
+    {
+        <div id="commonHeaderSource">
+            @await Html.PartialAsync("_CommonHeader", Model)
+        </div>
+    }
+
+    @if (isView)
+    {
+        <div id="sourceWrap">
+            @* Hidden sub-header template – JS clones this into each page *@
+            <div id="subheaderTemplate" class="report-subheader">
+                <div class="subheader-title">Copomis Report</div>
+                <div class="subheader-meta">
+                    <span><strong>Branch :</strong> @branchName</span>
+                    <span><strong>Till Date :</strong> @tillDate</span>
+                    <span><strong>Report Generated On :</strong> @generatedOn</span>
+                </div>
+                <div class="subheader-meta">
+                    <span><strong>Collection Center :</strong> @collectionCenterName</span>
+                    <span><strong>Member Group :</strong> @memberGroupName</span>
+                    <span><strong>Member Type :</strong> @memberTypeName</span>
+                </div>
+                <div class="subheader-spacer"></div>
+            </div>
+
+            <table class="data-table" id="mainTable">
+                <colgroup>
+                    <col class="c-sn" />
+                    <col class="c-mid" />
+                    <col class="c-name" />
+                    @if (showMemberPhoto)
+                    {
+                        <col class="c-photo" />
+                    }
+                    <col class="c-gender" />
+                    <col class="c-age" />
+                    <col class="c-reg" />
+                    <col class="c-contact" />
+                    <col class="c-addr" />
+                    <col class="c-parent" />
+                    <col class="c-shareno" />
+                    <col class="c-amount" />
+                </colgroup>
+                <thead>
+                    <tr id="colHeaderRow">
+                        <th class="text-center">S.N.</th>
+                        <th>Member ID</th>
+                        <th>Member Name</th>
+                        @if (showMemberPhoto)
+                        {
+                            <th class="text-center">Photo</th>
+                        }
+                        <th>Gender</th>
+                        <th class="text-right">Age</th>
+                        <th>Registration</th>
+                        <th>Contact</th>
+                        <th>Address</th>
+                        <th>Father / Mother</th>
+                        <th class="text-right">Share No</th>
+                        <th class="text-right">Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        int snV = 0;
+                    }
+                    @if (rows.Any())
+                    {
+                        foreach (var row in rows)
+                        {
+                            snV++;
+                            var address = string.Join(", ", new[]
+                            {
+                                row.Tole, row.WardNo, row.VDCName, row.DistrictName
+                            }.Where(s => !string.IsNullOrWhiteSpace(s) && s != "-"));
+
+                            var contact = string.Join(", ", new[]
+                            {
+                                row.MobileNo, row.PhoneNo
+                            }.Where(s => !string.IsNullOrWhiteSpace(s) && s != "-"));
+
+                            var parents = string.Join(" / ", new[]
+                            {
+                                row.FatherName, row.MotherName
+                            }.Where(s => !string.IsNullOrWhiteSpace(s) && s != "-"));
+
+                            <tr class="detail-row">
+                                <td class="sn-col">@snV</td>
+                                <td>@(row.MemberId ?? "")</td>
+                                <td>@(row.MemberName ?? "")</td>
+                                @if (showMemberPhoto)
+                                {
+                                    <td class="photo-cell">
+                                        @if (!string.IsNullOrEmpty(row.MemberImage))
+                                        {
+                                            <img src="data:image/jpeg;base64,@row.MemberImage" alt="" />
+                                        }
+                                    </td>
+                                }
+                                <td>@(row.Gender ?? "")</td>
+                                <td class="text-right">@(row.Age?.ToString() ?? "")</td>
+                                <td>@(row.RegistrationOnBS ?? "")</td>
+                                <td>@contact</td>
+                                <td>@address</td>
+                                <td>@parents</td>
+                                <td class="text-right">@(row.ShareNo?.ToString("N0") ?? "")</td>
+                                <td class="text-right">@(row.TotalShareAmt?.ToString("N2") ?? "")</td>
+                            </tr>
+                        }
+
+                        <tr class="grand-total-row" id="grandTotalRow">
+                            <td colspan="@(showMemberPhoto ? 10 : 9)" class="text-right">
+                                Total Members: @totalMembers &nbsp;&nbsp;|&nbsp;&nbsp; Total Records: @totalRecords
+                            </td>
+                            <td class="text-right">@totalShareNo.ToString("N0")</td>
+                            <td class="text-right">@totalShareAmount.ToString("N2")</td>
+                        </tr>
+                    }
+                    else
+                    {
+                        <tr>
+                            <td colspan="@totalVisibleCols" class="text-center">No data found for the selected criteria</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="view-outer" id="viewOuter"></div>
+    }
+
+    @if (!isView)
+    {
         @if (!isExcel)
         {
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        <table class="data-table" data-sheet-name="Copomis">
+        @if (!isExcel)
+        {
+            <div class="report-subheader">
+                <div class="subheader-title">Copomis Report</div>
+                <div class="subheader-meta">
+                    <span><strong>Branch :</strong> @branchName</span>
+                    <span><strong>Till Date :</strong> @tillDate</span>
+                    <span><strong>Report Generated On :</strong> @generatedOn</span>
+                </div>
+                <div class="subheader-meta">
+                    <span><strong>Collection Center :</strong> @collectionCenterName</span>
+                    <span><strong>Member Group :</strong> @memberGroupName</span>
+                    <span><strong>Member Type :</strong> @memberTypeName</span>
+                </div>
+                <div class="subheader-spacer"></div>
+            </div>
+        }
+
+        <table class="data-table" id="mainTable"
+            @(isExcel ? Html.Raw("data-sheet-name=\"Copomis\"") : Html.Raw(""))>
             <colgroup>
-                <col style="width:3%;" />
-                <col style="width:9%;" />
-                <col style="width:14%;" />
+                <col class="c-sn" />
+                <col class="c-mid" />
+                <col class="c-name" />
                 @if (showMemberPhoto)
                 {
-                    <col style="width:6%;" />
+                    <col class="c-photo" />
                 }
-                <col style="width:5%;" />
-                <col style="width:4%;" />
-                <col style="width:8%;" />
-                <col style="width:10%;" />
-                <col style="width:9%;" />
-                <col style="width:11%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
+                <col class="c-gender" />
+                <col class="c-age" />
+                <col class="c-reg" />
+                <col class="c-contact" />
+                <col class="c-addr" />
+                <col class="c-parent" />
+                <col class="c-shareno" />
+                <col class="c-amount" />
             </colgroup>
+
+            @if (isExcel)
+            {
+                <thead>
+                    <tr class="meta-title"><td colspan="@totalVisibleCols">Copomis Report</td></tr>
+                    <tr class="meta-row">
+                        <td colspan="@totalVisibleCols"><strong>Branch :</strong> @branchName</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="@totalVisibleCols">
+                            <strong>Till Date :</strong> @tillDate
+                            &nbsp;&nbsp;&nbsp;&nbsp;
+                            <strong>Collection Center :</strong> @collectionCenterName
+                            &nbsp;&nbsp;&nbsp;&nbsp;
+                            <strong>Member Group :</strong> @memberGroupName
+                            &nbsp;&nbsp;&nbsp;&nbsp;
+                            <strong>Member Type :</strong> @memberTypeName
+                        </td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="@totalVisibleCols"><strong>Report Generated On :</strong> @generatedOn</td>
+                    </tr>
+                    <tr><td colspan="@totalVisibleCols"></td></tr>
+                    <tr>
+                        <th class="text-center">S.N.</th>
+                        <th>Member ID</th>
+                        <th>Member Name</th>
+                        @if (showMemberPhoto)
+                        {
+                            <th class="text-center">Photo</th>
+                        }
+                        <th>Gender</th>
+                        <th class="text-right">Age</th>
+                        <th>Registration</th>
+                        <th>Contact</th>
+                        <th>Address</th>
+                        <th>Father / Mother</th>
+                        <th class="text-right">Share No</th>
+                        <th class="text-right">Amount</th>
+                    </tr>
+                </thead>
+            }
+            else
+            {
+                <thead>
+                    <tr>
+                        <th class="text-center">S.N.</th>
+                        <th>Member ID</th>
+                        <th>Member Name</th>
+                        @if (showMemberPhoto)
+                        {
+                            <th class="text-center">Photo</th>
+                        }
+                        <th>Gender</th>
+                        <th class="text-right">Age</th>
+                        <th>Registration</th>
+                        <th>Contact</th>
+                        <th>Address</th>
+                        <th>Father / Mother</th>
+                        <th class="text-right">Share No</th>
+                        <th class="text-right">Amount</th>
+                    </tr>
+                </thead>
+            }
+
             <tbody>
-                <tr class="meta-title">
-                    <td colspan="@(showMemberPhoto ? 12 : 11)">Copomis Report</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="@(showMemberPhoto ? 12 : 11)"><strong>Branch :</strong> @branchName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="@(showMemberPhoto ? 12 : 11)">
-                        <strong>Till Date :</strong> @tillDate
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Collection Center :</strong> @collectionCenterName
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Member Group :</strong> @memberGroupName
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Member Type :</strong> @memberTypeName
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="@(showMemberPhoto ? 12 : 11)"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="@(showMemberPhoto ? 12 : 11)"></td></tr>
-
-                <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Member ID</th>
-                    <th>Member Name</th>
-                    @if (showMemberPhoto)
-                    {
-                        <th class="text-center">Photo</th>
-                    }
-                    <th>Gender</th>
-                    <th class="text-right">Age</th>
-                    <th>Registration</th>
-                    <th>Contact</th>
-                    <th>Address</th>
-                    <th>Father / Mother</th>
-                    <th class="text-right">Share No</th>
-                    <th class="text-right">Amount</th>
-                </tr>
-
+                @{
+                    int snP = 0;
+                }
                 @if (rows.Any())
                 {
-                    var sn = 0;
                     foreach (var row in rows)
                     {
-                        sn++;
+                        snP++;
                         var address = string.Join(", ", new[]
                         {
                             row.Tole, row.WardNo, row.VDCName, row.DistrictName
@@ -226,13 +550,13 @@
                         }.Where(s => !string.IsNullOrWhiteSpace(s) && s != "-"));
 
                         <tr class="detail-row">
-                            <td class="sn-col">@sn</td>
+                            <td class="sn-col">@snP</td>
                             <td>@(row.MemberId ?? "")</td>
                             <td>@(row.MemberName ?? "")</td>
                             @if (showMemberPhoto)
                             {
                                 <td class="photo-cell">
-                                    @if (!string.IsNullOrEmpty(row.MemberImage))
+                                    @if (!isExcel && !string.IsNullOrEmpty(row.MemberImage))
                                     {
                                         <img src="data:image/jpeg;base64,@row.MemberImage" alt="" />
                                     }
@@ -260,11 +584,184 @@
                 else
                 {
                     <tr>
-                        <td colspan="@(showMemberPhoto ? 12 : 11)" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="@totalVisibleCols" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>
         </table>
-    </div>
+    }
+
+    @if (isView)
+    {
+        <script>
+                (function () {
+                    'use strict';
+
+                    var MAX_RETRIES  = 5;
+                    var RETRY_DELAY  = 80;
+                    var retryCount   = 0;
+                    var PAGE_W       = 3600;
+                    // Fixed page height: 420 mm @@ 96 dpi = 1587 px
+                    var PAGE_H       = 1587;
+                    var FOOTER_H     = 28;
+
+                    function buildPages() {
+                        var tbl          = document.getElementById('mainTable');
+                        var colHdrRow    = document.getElementById('colHeaderRow');
+                        var grandTotalEl = document.getElementById('grandTotalRow');
+                        var subHdrTpl    = document.getElementById('subheaderTemplate');
+
+                        if (!tbl || !colHdrRow || !subHdrTpl) {
+                            if (retryCount++ < MAX_RETRIES)
+                                setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+                            return;
+                        }
+
+                        var colHdrH  = colHdrRow.getBoundingClientRect().height;
+                        var subHdrH  = subHdrTpl.getBoundingClientRect().height;
+                        var gtH      = grandTotalEl ? grandTotalEl.getBoundingClientRect().height : 0;
+                        var gtHtml   = grandTotalEl ? grandTotalEl.outerHTML : '';
+
+                        var commonHdrEl   = document.getElementById('commonHeaderSource');
+                        var commonHdrHtml = commonHdrEl ? commonHdrEl.innerHTML : '';
+                        var commonHdrH    = commonHdrEl ? commonHdrEl.getBoundingClientRect().height : 0;
+
+                        var detailRows = tbl.querySelectorAll('tr.detail-row');
+                        var rowData    = Array.from(detailRows).map(function (r) {
+                            return { html: r.outerHTML, h: r.getBoundingClientRect().height };
+                        });
+
+                        var allZero = rowData.length > 0 && rowData.every(function (r) { return r.h === 0; });
+                        if (allZero) {
+                            if (retryCount++ < MAX_RETRIES)
+                                setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+                            return;
+                        }
+
+                        var colgroupHtml = tbl.querySelector('colgroup').outerHTML;
+                        var colHdrHtml   = colHdrRow.outerHTML;
+                        var subHdrHtml   = subHdrTpl.outerHTML;
+
+                        var availP1 = PAGE_H - FOOTER_H - commonHdrH - subHdrH - colHdrH;
+                        var availPN = PAGE_H - FOOTER_H - colHdrH;
+
+                        // ── Paginate rows ────────────────────────────────────────
+                        var pages = [], cur = [], usedH = 0;
+                        var isFirstPage = true;
+
+                        for (var i = 0; i < rowData.length; i++) {
+                            var rh    = rowData[i].h || 14;
+                            var avail = isFirstPage ? availP1 : availPN;
+                            var extra = (i === rowData.length - 1) ? gtH : 0;
+
+                            if (cur.length > 0 && usedH + rh + extra > avail) {
+                                pages.push(cur);
+                                cur  = [];
+                                usedH = 0;
+                                isFirstPage = false;
+                            }
+                            cur.push(i);
+                            usedH += rh;
+                        }
+                        pages.push(cur);
+
+                        var totalPages = pages.length;
+
+                        // ── Remove source DOM ────────────────────────────────────
+                        var sourceWrap = document.getElementById('sourceWrap');
+                        if (sourceWrap)  sourceWrap.parentNode.removeChild(sourceWrap);
+                        if (commonHdrEl) commonHdrEl.parentNode.removeChild(commonHdrEl);
+
+                        var viewOuter = document.getElementById('viewOuter');
+                        var fragment  = document.createDocumentFragment();
+
+                        for (var p = 0; p < totalPages; p++) {
+                            var card = document.createElement('div');
+                            card.className = 'view-page';
+                            card.setAttribute('data-page', String(p + 1));
+
+                            var contentHtml = '<div class="view-page-content">';
+
+                            if (p === 0 && commonHdrHtml) {
+                                contentHtml += '<div class="common-header-wrap">' + commonHdrHtml + '</div>';
+                            }
+
+                            if (p === 0) {
+                                contentHtml += '<div class="page-subheader">' + subHdrHtml + '</div>';
+                            }
+
+                            contentHtml += '<div class="page-table-wrap">'
+                                         + '<table class="data-table" style="width:' + PAGE_W + 'px;">'
+                                         + colgroupHtml
+                                         + '<thead>' + colHdrHtml + '</thead>'
+                                         + '<tbody>';
+
+                            var pageRows = pages[p];
+                            for (var r = 0; r < pageRows.length; r++) {
+                                contentHtml += rowData[pageRows[r]].html;
+                            }
+
+                            if (p === totalPages - 1 && gtHtml) {
+                                contentHtml += gtHtml;
+                            }
+
+                            contentHtml += '</tbody></table>'
+                                         + '</div>';  // .page-table-wrap
+
+                            contentHtml += '</div>';  // .view-page-content
+
+                            contentHtml += '<div class="view-page-footer">Page '
+                                         + (p + 1) + ' of ' + totalPages
+                                         + '</div>';
+
+                            card.innerHTML = contentHtml;
+                            fragment.appendChild(card);
+                        }
+
+                        viewOuter.appendChild(fragment);
+
+                        // ── Drag-to-scroll (mouse-slide horizontal pan) ──────────
+                        (function (el) {
+                            var drag = false, sx = 0, ss = 0;
+                            el.addEventListener('mousedown', function (e) {
+                                if (e.button !== 0) return;
+                                drag = true; sx = e.clientX; ss = el.scrollLeft;
+                                el.style.userSelect = 'none';
+                                e.preventDefault();
+                            });
+                            document.addEventListener('mousemove', function (e) {
+                                if (drag) el.scrollLeft = ss - (e.clientX - sx);
+                            });
+                            document.addEventListener('mouseup', function () {
+                                drag = false; el.style.userSelect = '';
+                            });
+                        })(viewOuter);
+
+                        // ── Scroll-to-page helper ────────────────────────────────
+                        window.scrollToPage = function (pageNumber) {
+                            var target = document.querySelector(
+                                '.view-page[data-page="' + pageNumber + '"]'
+                            );
+                            if (!target) return;
+                            window.scrollTo({ top: target.offsetTop, behavior: 'smooth' });
+                        };
+
+                        // ── Notify parent iframe ─────────────────────────────────
+                        if (window.parent && window.parent !== window) {
+                            window.parent.postMessage(
+                                { type: 'REPORT_PAGES_READY', totalPages: totalPages },
+                                '*'
+                            );
+                        }
+
+                    } // end buildPages
+
+                    requestAnimationFrame(function () {
+                        requestAnimationFrame(buildPages);
+                    });
+
+                }());
+        </script>
+    }
 </body>
 </html>

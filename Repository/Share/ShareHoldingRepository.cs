@@ -28,18 +28,21 @@ namespace NexgenCosysReport.Repository.Share
 
         private static string BuildSqlOrderBy(ShareHoldingRequestDto request)
         {
+            // MemberId always leads so a member's rows arrive contiguous — required
+            // for the view's GroupBy (which preserves first-seen order, does not
+            // sort) to group correctly.
             if (string.IsNullOrEmpty(request.OrderBy) || request.OrderBy == "-1")
-                return string.Empty;
+                return " order by substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId";
 
             return request.OrderBy.Trim() switch
             {
                 "MemberId" => " order by substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId ",
-                "MemberName" => " order by MemberName ",
-                "TotalNoShare" => " order by TotalNoShare DESC",
-                "HoldingPeriodFromOnBs" => " order by HoldingPeriodFromBs ",
-                "ShareType" => " order by ShareType",
-                "Amount" => " order by Amount DESC",
-                _ => string.Empty
+                "MemberName" => " order by substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId, MemberName ",
+                "TotalNoShare" => " order by substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId, TotalNoShare DESC",
+                "HoldingPeriodFromOnBs" => " order by substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId, HoldingPeriodFromBs ",
+                "ShareType" => " order by substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId, ShareType",
+                "Amount" => " order by substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId, Amount DESC",
+                _ => " order by substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId"
             };
         }
 
@@ -88,7 +91,11 @@ namespace NexgenCosysReport.Repository.Share
                         new { Id = request.OfficeId });
                 }
 
-                if (request.ShareTypeId != -1)
+                // FIX: ShareTypeId was checked against -1 only, so a default/unset
+                // value of 0 (as sent in the reported request) was treated as an
+                // explicit filter for share type id 0, which almost certainly
+                // matches nothing and zeroed out every row.
+                if (request.ShareTypeId > 0)
                 {
                     sqlFilterExp.Append(" And s.ShmShareTypeId = ").Append(request.ShareTypeId);
                     shareTypeName = await connection.QueryFirstOrDefaultAsync<string>(
@@ -96,7 +103,9 @@ namespace NexgenCosysReport.Repository.Share
                         new { Id = request.ShareTypeId });
                 }
 
-                if (request.MemberTypeId != -1)
+                // FIX: same bug as ShareTypeId above — MemberTypeId: 0 was being
+                // treated as an explicit filter for member type id 0.
+                if (request.MemberTypeId > 0)
                 {
                     sqlFilterExp.Append(" And syc.SycMemberTypeId = ").Append(request.MemberTypeId);
                     memberTypeName = await connection.QueryFirstOrDefaultAsync<string>(

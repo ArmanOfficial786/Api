@@ -2,15 +2,13 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.Share;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Share;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Share
 {
@@ -27,6 +25,11 @@ namespace NexgenCosysReport.Controllers.Share
         private readonly IOptions<ReportSettings> _reportSettings;
         private readonly ILogger<ShareDetailsController> _logger;
         private readonly IDateConverterService _dateConverter;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        private static readonly PageSizeSetting PageSetting =
+          PageSizeSetting.Custom(594, 420, PageUnit.mm, landscape: true);
+
 
         public ShareDetailsController(
             IShareDetails repository,
@@ -36,7 +39,8 @@ namespace NexgenCosysReport.Controllers.Share
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
             ILogger<ShareDetailsController> logger,
-            IDateConverterService dateConverter)
+            IDateConverterService dateConverter,
+            IReportFileResponse reportFileResponse)
         {
             _repository = repository;
             _commonHeaderRepository = commonHeaderRepository;
@@ -46,12 +50,15 @@ namespace NexgenCosysReport.Controllers.Share
             _reportSettings = reportSettings;
             _logger = logger;
             _dateConverter = dateConverter;
+            _reportFileResponse = reportFileResponse;
         }
 
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] ShareDetailsRequestDto request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+             CancellationToken ct = default
+            )
         {
             try
             {
@@ -139,31 +146,27 @@ namespace NexgenCosysReport.Controllers.Share
                         reportPath: viewPath,
                         data: reportData));
 
+
                 if (upperFormat == "VIEW")
                 {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.Rows.Count
-                    };
+                    var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
+                     htmlContent, reportKey, ct);
 
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
+                    _logger.LogInformation("?? VIEW — jsreport Html recipe, {Bytes:N0} chars", viewHtml.Length);
+                    return Content(viewHtml, "text/html");
 
-                    return new FileContentResult(pdfBytes, "application/pdf");
+                }
+
+                if (upperFormat == "PDF")
+                {
+                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
+                        htmlContent, "PDF", reportKey, PageSetting, ct);
+                    return _reportFileResponse.BuildPdfResponse(pdfBytes);
                 }
 
                 return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat,
-                    reportName,
-                    _jsReportService, _logger);
+                    reportKey, upperFormat, "MemberDetailReport",
+                    _jsReportService, _logger, PageSetting, ct);
             }
             catch (Exception ex)
             {

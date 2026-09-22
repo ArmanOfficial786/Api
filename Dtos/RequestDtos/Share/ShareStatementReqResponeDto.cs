@@ -2,7 +2,7 @@
 {
     public class ShareStatementRequestDto
     {
-        public long MemberId { get; set; } = -1;
+        public string? MemberId { get; set; }
         public long ShareTypeId { get; set; } = -1;
         public bool EnableHeader { get; set; } = true;
         public bool EnableBillNo { get; set; } = false;
@@ -14,6 +14,7 @@
         public string? MemberId { get; set; }
         public string? MemberName { get; set; }
         public string? Date { get; set; }
+        public string? DateAd { get; set; }
         public string? Address { get; set; }
         public string? PhoneNo { get; set; }
         public string? Description { get; set; }

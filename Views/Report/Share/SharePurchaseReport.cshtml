@@ -12,13 +12,14 @@
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var officeName = Model["OfficeName"]?.ToString() ?? "All";
-    var shareTypeName = Model["ShareTypeName"]?.ToString() ?? "All";
-    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName);
+   
+    var memberGroups = rows
+        .GroupBy(r => new { r.MemberId, r.Name })
+        .ToList();
 }
 <!DOCTYPE html>
 <html>
@@ -48,6 +49,44 @@
                 display: table-row-group;
             }
 
+            .report-title {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            /* Own auto-layout table for the subheader so labels never wrap
+                           or overlap — same fix applied throughout this thread. */
+            .meta-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 6px;
+            }
+
+                .meta-table td {
+                    padding: 3px 6px;
+                    font-size: 9pt;
+                    white-space: nowrap;
+                    vertical-align: top;
+                }
+
+            .meta-left {
+                text-align: left;
+                width: 50%;
+            }
+
+            .meta-right {
+                text-align: right;
+                width: 50%;
+            }
+
+            .meta-spacer td {
+                height: 8px;
+            }
+
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
@@ -58,47 +97,44 @@
                 .data-table td, .data-table th {
                     word-wrap: break-word;
                     overflow-wrap: break-word;
-                    overflow: hidden;
                     padding: 4px 6px;
                     vertical-align: middle;
                 }
 
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
+                .data-table th {
+                    border-top: none;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                    white-space: normal;
+                    font-weight: bold;
+                }
+
+                    .data-table th.text-right,
+                    .data-table td.text-right {
+                        text-align: right;
+                    }
+
+            .member-row td {
                 font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
+                padding-top: 8px;
+                padding-bottom: 2px;
+                border: none;
             }
 
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-                text-align: left;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: normal;
-                line-height: 1.2;
-                vertical-align: bottom;
+            .member-row.first-group td {
+                padding-top: 2px;
             }
 
             .detail-row td {
-                border-bottom: 1px solid #ccc;
+                padding-left: 20px;
+                border: none;
             }
 
-            .sn-col {
-                text-align: center;
-                color: #555;
+            .subtotal-row td {
+                border-top: 1px solid #000;
+                font-weight: bold;
+                padding-top: 3px;
+                padding-bottom: 6px;
             }
 
             .grand-total-row td {
@@ -137,95 +173,93 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
+        <div class="report-title">Share Purchase Report</div>
+
+        <table class="meta-table">
+            <tr>
+                <td class="meta-left"><strong>Report Generated On :</strong> @generatedOn</td>
+                <td class="meta-right"><strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp; <strong>To Date :</strong> @toDate</td>
+            </tr>
+            <tr>
+                <td class="meta-left"></td>
+                <td class="meta-right"><strong>Branch Name :</strong> @officeName</td>
+            </tr>
+            <tr class="meta-spacer"><td colspan="2"></td></tr>
+        </table>
+
         <table class="data-table" data-sheet-name="SharePurchase">
             <colgroup>
-                <col style="width:5%;" />
                 <col style="width:11%;" />
-                <col style="width:18%;" />
-                <col style="width:8%;" />
-                <col style="width:8%;" />
-                <col style="width:8%;" />
-                <col style="width:10%;" />
+                <col style="width:16%;" />
+                <col style="width:16%;" />
                 <col style="width:11%;" />
                 <col style="width:11%;" />
-                <col style="width:10%;" />
+                <col style="width:11%;" />
+                <col style="width:11%;" />
+                <col style="width:13%;" />
             </colgroup>
             <tbody>
-                <tr class="meta-title">
-                    <td colspan="10">Share Purchase Report</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="10"><strong>Office Name :</strong> @officeName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="10">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Till Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="10"><strong>Share Type :</strong> @shareTypeName</td>
-                </tr>
-                @if (isMemberGroupFiltered)
-                {
-                    <tr class="meta-row">
-                        <td colspan="10"><strong>Member Group :</strong> @memberGroupName</td>
-                    </tr>
-                }
-                <tr class="meta-row">
-                    <td colspan="10"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="10"></td></tr>
-
                 <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Member ID</th>
-                    <th>Name</th>
-                    <th class="text-right">No. of Share</th>
+                    <th>Member Id</th>
+                    <th>Member Name</th>
+                    <th>Group</th>
+                    <th class="text-right">No of Share</th>
                     <th>Share From</th>
                     <th>Share To</th>
                     <th>Date</th>
-                    <th class="text-right">Amount</th>
-                    <th>Share Type</th>
-                    <th>Member Group</th>
+                    <th class="text-right">Amount (Rs)</th>
                 </tr>
 
-                @if (rows.Any())
+                @if (memberGroups.Any())
                 {
-                    var sn = 0;
-                    foreach (var row in rows)
+                    bool isFirstGroup = true;
+                    foreach (var group in memberGroups)
                     {
-                        sn++;
-                        <tr class="detail-row">
-                            <td class="sn-col">@sn</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.Name ?? "")</td>
-                            <td class="text-right">@(row.TotalNoShare?.ToString("N0") ?? "")</td>
-                            <td>@(row.ShareFrom ?? "")</td>
-                            <td>@(row.ShareTO ?? "")</td>
-                            <td>@(row.Date ?? "")</td>
-                            <td class="text-right">@(row.Amount?.ToString("N2") ?? "")</td>
-                            <td>@(row.ShareType ?? "")</td>
-                            <td>@(row.MemberGroup ?? "")</td>
+                        var groupRows = group.ToList();
+
+                        <tr class="member-row @(isFirstGroup ? "first-group" : "")">
+                            <td>@(group.Key.MemberId ?? "")</td>
+                            <td colspan="7">@(group.Key.Name ?? "")</td>
+                        </tr>
+                        isFirstGroup = false;
+
+                        foreach (var row in groupRows)
+                        {
+                            <tr class="detail-row">
+                                <td></td>
+                                <td>@(row.ShareType ?? "")</td>
+                                <td>@(row.MemberGroup ?? "")</td>
+                                <td class="text-right">@(row.TotalNoShare?.ToString("N0") ?? "")</td>
+                                <td>@(row.ShareFrom ?? "")</td>
+                                <td>@(row.ShareTO ?? "")</td>
+                                <td>@(row.Date ?? "")</td>
+                                <td class="text-right">@(row.Amount?.ToString("N2") ?? "")</td>
+                            </tr>
+                        }
+
+                        <tr class="subtotal-row">
+                            <td></td>
+                            <td>@(group.Key.Name ?? "")</td>
+                            <td></td>
+                            <td class="text-right">@groupRows.Sum(r => r.TotalNoShare ?? 0).ToString("N2")</td>
+                            <td colspan="3"></td>
+                            <td class="text-right">@groupRows.Sum(r => r.Amount ?? 0).ToString("N2")</td>
                         </tr>
                     }
 
                     <tr class="grand-total-row">
                         <td colspan="3" class="text-right">
-                            Total Members: @totalMembers &nbsp;&nbsp;|&nbsp;&nbsp; Total Records: @totalRecords
+                            Total Members: @totalMembers &nbsp;&nbsp;
                         </td>
                         <td class="text-right">@totalNoShare.ToString("N0")</td>
                         <td colspan="3"></td>
                         <td class="text-right">@totalAmount.ToString("N2")</td>
-                        <td colspan="2"></td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="10" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="8" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

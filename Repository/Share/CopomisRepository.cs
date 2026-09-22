@@ -57,34 +57,17 @@ namespace NexgenCosysReport.Repository.Share
             return string.Join(",", validIds);
         }
 
-        private async Task<string?> GetMemberPhotoBase64Async(string memberId)
-        {
-            try
-            {
-                var webRoot = _webHostEnvironment.WebRootPath ?? _webHostEnvironment.ContentRootPath;
-                var path = Path.Combine(webRoot, "UploadedDocuments", "MemMemberManagement", "MemMemberPhotoAndSignature");
-
-                if (!Directory.Exists(path))
-                    return null;
-
-                var photoFile = Path.Combine(path, $"{memberId}_MemberPhoto.jpg");
-                if (!File.Exists(photoFile))
-                {
-                    var fallback = Path.Combine(path, "PhotoNotAvailable.jpg");
-                    if (!File.Exists(fallback))
-                        return null;
-                    photoFile = fallback;
-                }
-
-                var bytes = await File.ReadAllBytesAsync(photoFile);
-                return Convert.ToBase64String(bytes);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Could not load member photo for {MemberId}", memberId);
-                return null;
-            }
-        }
+        // --------------------------------------------------------------
+        // Real ids (member type, collection center) start at 1. Some
+        // callers send 0 as their "nothing selected" sentinel instead of
+        // -1 (same pattern seen elsewhere in this codebase, e.g.
+        // ShareTypeId). Both this repository's own filter and the SP's
+        // internal @collectorId check only ever test for -1, so a bare 0
+        // was silently filtering on a nonexistent id and zeroing out the
+        // whole result set. Normalize any id <= 0 to -1 here so both
+        // sides agree on what "no filter" means.
+        // --------------------------------------------------------------
+        private static long NormalizeSentinel(long id) => id <= 0 ? -1 : id;
 
         public async Task<CopomisData> GetReportDataAsync(CopomisRequestDto request)
         {
@@ -98,6 +81,8 @@ namespace NexgenCosysReport.Repository.Share
                 var tillDateAdStr = tillDateAd.ToString("yyyy-MM-dd");
 
                 var officeIds = SanitizeOfficeIds(request.OfficeIds);
+                var memberTypeId = NormalizeSentinel(request.MemberTypeId);
+                var collectionCenterId = NormalizeSentinel(request.CollectionCenterId);
 
                 var sqlFilterExp = new StringBuilder();
                 string? branchName = null;
@@ -115,19 +100,19 @@ namespace NexgenCosysReport.Repository.Share
                     branchName = nameList.Count > 0 ? string.Join(", ", nameList) : null;
                 }
 
-                if (request.MemberTypeId != -1)
+                if (memberTypeId != -1)
                 {
-                    sqlFilterExp.Append(" AND M.SycMemberTypeId = ").Append(request.MemberTypeId);
+                    sqlFilterExp.Append(" AND M.SycMemberTypeId = ").Append(memberTypeId);
                     memberTypeName = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT MemberTypeName FROM SycMemberType WHERE SycMemberTypeId = @Id",
-                        new { Id = request.MemberTypeId });
+                        new { Id = memberTypeId });
                 }
 
-                if (request.CollectionCenterId != -1)
+                if (collectionCenterId != -1)
                 {
                     collectionCenterName = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT CollectionCenterName FROM SycCollectionCenter WHERE SycCollectionCenterId = @Id",
-                        new { Id = request.CollectionCenterId });
+                        new { Id = collectionCenterId });
                 }
 
                 if (request.MemberGroupId != -1)
@@ -141,7 +126,7 @@ namespace NexgenCosysReport.Repository.Share
                 parameters.Add("@SqlFilterExpDate", tillDateAdStr, DbType.String, size: -1);
                 parameters.Add("@SqlFilterExp", sqlFilterExp.ToString(), DbType.String, size: -1);
                 parameters.Add("@SqlFilterExpOrder", BuildSqlOrderBy(request), DbType.String, size: -1);
-                parameters.Add("@collectorId", request.CollectionCenterId, DbType.Int64);
+                parameters.Add("@collectorId", collectionCenterId, DbType.Int64);
                 parameters.Add("@groupId", request.MemberGroupId, DbType.Int64);
 
                 var rows = await connection.QueryAsync<CopomisRowDto>(
@@ -186,6 +171,35 @@ namespace NexgenCosysReport.Repository.Share
             {
                 _logger.LogError(ex, "Error in GetReportDataAsync");
                 throw;
+            }
+        }
+
+        private async Task<string?> GetMemberPhotoBase64Async(string memberId)
+        {
+            try
+            {
+                var webRoot = _webHostEnvironment.WebRootPath ?? _webHostEnvironment.ContentRootPath;
+                var path = Path.Combine(webRoot, "UploadedDocuments", "MemMemberManagement", "MemMemberPhotoAndSignature");
+
+                if (!Directory.Exists(path))
+                    return null;
+
+                var photoFile = Path.Combine(path, $"{memberId}_MemberPhoto.jpg");
+                if (!File.Exists(photoFile))
+                {
+                    var fallback = Path.Combine(path, "PhotoNotAvailable.jpg");
+                    if (!File.Exists(fallback))
+                        return null;
+                    photoFile = fallback;
+                }
+
+                var bytes = await File.ReadAllBytesAsync(photoFile);
+                return Convert.ToBase64String(bytes);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not load member photo for {MemberId}", memberId);
+                return null;
             }
         }
     }

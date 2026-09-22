@@ -59,6 +59,7 @@ public partial class AppDbContext : Microsoft.EntityFrameworkCore.DbContext
     public virtual DbSet<AcoVoucher> AcoVouchers { get; set; }
 
     public virtual DbSet<LmtPaymentDurationType> LmtPaymentDurationTypes { get; set; }
+    public virtual DbSet<SycMemberType> SycMemberTypes { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
 
@@ -681,6 +682,17 @@ public partial class AppDbContext : Microsoft.EntityFrameworkCore.DbContext
 
             entity.Property(e => e.Description).HasColumnType("ntext");
             entity.Property(e => e.PaymentDurationType).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<SycMemberType>(entity =>
+        {
+            entity.ToTable("SycMemberType");
+
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.Description).HasColumnType("ntext");
+            entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_SycMemberType_IsActive");
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.MemberTypeName).HasMaxLength(50);
         });
 
 

@@ -17,8 +17,6 @@ namespace NexgenCosysReport.Controllers.Common
         [HttpPost()]
         public async Task<ActionResult<List<SoleMemberGroupResponseDto>>> GetSoleMemberGroup([FromBody] SoleMemberGroupRequestDtos request)
         {
-            if (request.lstOfficeId <= 0)
-                return BadRequest("Office ID is required");
             var result = await _soleMemberGroupService.GetSoleMemberGroups(request.lstOfficeId);
             return Ok(result);
         }

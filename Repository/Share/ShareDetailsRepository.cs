@@ -55,6 +55,17 @@ namespace NexgenCosysReport.Repository.Share
             return string.Join(",", validIds);
         }
 
+        // --------------------------------------------------------------
+        // Real ids (share type, member type, collection center) start at
+        // 1. The frontend sends 0 as its "nothing selected" sentinel for
+        // these three, but both this repository's own filters and the
+        // SP's internal @collectorId check only ever test for -1 - so a
+        // bare 0 was silently filtering on a nonexistent id and zeroing
+        // out the whole result set (same bug pattern already fixed on
+        // the Copomis and Share Transfer reports).
+        // --------------------------------------------------------------
+        private static long NormalizeSentinel(long id) => id <= 0 ? -1 : id;
+
         public async Task<ShareDetailsData> GetReportDataAsync(ShareDetailsRequestDto request)
         {
             try
@@ -67,6 +78,9 @@ namespace NexgenCosysReport.Repository.Share
                 var tillDateAdStr = tillDateAd.ToString("yyyy-MM-dd");
 
                 var officeIds = SanitizeOfficeIds(request.OfficeIds);
+                var shareTypeId = NormalizeSentinel(request.ShareTypeId);
+                var memberTypeId = NormalizeSentinel(request.MemberTypeId);
+                var collectionCenterId = NormalizeSentinel(request.CollectionCenterId);
 
                 var sqlFilterExp = new StringBuilder();
                 string? branchName = null;
@@ -85,27 +99,27 @@ namespace NexgenCosysReport.Repository.Share
                     branchName = nameList.Count > 0 ? string.Join(", ", nameList) : null;
                 }
 
-                if (request.ShareTypeId != -1)
+                if (shareTypeId != -1)
                 {
-                    sqlFilterExp.Append(" And S.ShmShareTypeId = ").Append(request.ShareTypeId);
+                    sqlFilterExp.Append(" And S.ShmShareTypeId = ").Append(shareTypeId);
                     shareTypeName = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT ShareTypeName FROM ShmShareType WHERE ShmShareTypeId = @Id",
-                        new { Id = request.ShareTypeId });
+                        new { Id = shareTypeId });
                 }
 
-                if (request.MemberTypeId != -1)
+                if (memberTypeId != -1)
                 {
-                    sqlFilterExp.Append(" AND M.SycMemberTypeId = ").Append(request.MemberTypeId);
+                    sqlFilterExp.Append(" AND M.SycMemberTypeId = ").Append(memberTypeId);
                     memberTypeName = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT MemberTypeName FROM SycMemberType WHERE SycMemberTypeId = @Id",
-                        new { Id = request.MemberTypeId });
+                        new { Id = memberTypeId });
                 }
 
-                if (request.CollectionCenterId != -1)
+                if (collectionCenterId != -1)
                 {
                     collectionCenterName = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT CollectionCenterName FROM SycCollectionCenter WHERE SycCollectionCenterId = @Id",
-                        new { Id = request.CollectionCenterId });
+                        new { Id = collectionCenterId });
                 }
 
                 if (request.MemberGroupId != -1)
@@ -124,7 +138,7 @@ namespace NexgenCosysReport.Repository.Share
                 parameters.Add("@SqlFilterExp", sqlFilterExp.ToString(), DbType.String, size: -1);
                 parameters.Add("@SqlFilterExpOrder", BuildSqlOrderBy(request), DbType.String, size: -1);
                 parameters.Add("@SqlFilterExpGreaterOrLessThanTotalAmt", sqlFilterExpGreaterOrLessThan, DbType.String, size: -1);
-                parameters.Add("@collectorId", request.CollectionCenterId, DbType.Int64);
+                parameters.Add("@collectorId", collectionCenterId, DbType.Int64);
                 parameters.Add("@groupId", request.MemberGroupId, DbType.Int64);
 
                 var rows = await connection.QueryAsync<ShareDetailsRowDto>(

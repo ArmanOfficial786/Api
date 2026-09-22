@@ -73,7 +73,6 @@
             .meta-row td {
                 padding: 3px 6px;
                 font-size: 9pt;
-                text-align: left;
             }
 
             .meta-spacer td {
@@ -85,18 +84,11 @@
                 border-top: 2px solid #000;
                 border-bottom: 1px solid #000;
                 text-align: left;
-                white-space: normal;
-                line-height: 1.2;
-                vertical-align: bottom;
+                white-space: nowrap;
             }
 
             .detail-row td {
                 border-bottom: 1px solid #ccc;
-            }
-
-            .sn-col {
-                text-align: center;
-                color: #555;
             }
 
             .grand-total-row td {
@@ -137,60 +129,53 @@
 
         <table class="data-table" data-sheet-name="ShareDividendPatronizeTransferred">
             <colgroup>
-                <col style="width:4%;" />
-                <col style="width:11%;" />
-                <col style="width:20%;" />
                 <col style="width:10%;" />
+                <col style="width:20%;" />
                 <col style="width:12%;" />
+                <col style="width:14%;" />
                 <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:9%;" />
+                <col style="width:11%;" />
+                <col style="width:11%;" />
+                <col style="width:10%;" />
             </colgroup>
             <tbody>
                 <tr class="meta-title">
-                    <td colspan="9">@reportTitle</td>
+                    <td colspan="8">@reportTitle</td>
                 </tr>
 
                 <tr class="meta-row">
-                    <td colspan="9">
+                    <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="5" class="text-right">
                         <strong>From Date :</strong> @fromDate
                         &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Till Date :</strong> @toDate
+                        <strong>To Date :</strong> @toDate
                     </td>
                 </tr>
-                <tr class="meta-row">
-                    <td colspan="9"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="9"></td></tr>
+                <tr class="meta-spacer"><td colspan="8"></td></tr>
 
                 <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Member ID</th>
+                    <th>MemberId</th>
                     <th>Member Name</th>
-                    <th>Pan/VAT No</th>
+                    <th>Pan/Vat</th>
                     <th>Account No</th>
-                    <th class="text-right">Cash Amount</th>
-                    <th class="text-right">Tax Amount</th>
-                    <th class="text-right">Bonus Share Amount</th>
-                    <th>Transaction Date</th>
+                    <th class="text-right">Cash Amt</th>
+                    <th class="text-right">Bonus Amt</th>
+                    <th class="text-right">Tax Amt</th>
+                    <th>Date</th>
                 </tr>
 
                 @if (rows.Any())
                 {
-                    var sn = 0;
                     foreach (var row in rows)
                     {
-                        sn++;
                         <tr class="detail-row">
-                            <td class="sn-col">@sn</td>
                             <td>@(row.MemberId ?? "")</td>
                             <td>@(row.MemberName ?? "")</td>
                             <td>@(row.PanVatNo ?? "")</td>
                             <td>@(row.AccountNo ?? "")</td>
                             <td class="text-right">@(row.CashAmount?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.TaxAmount?.ToString("N2") ?? "")</td>
                             <td class="text-right">@(row.BonusShareAmount?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.TaxAmount?.ToString("N2") ?? "")</td>
                             <td>@(row.TransactionOnBs ?? "")</td>
                         </tr>
                     }
@@ -199,17 +184,16 @@
                         <td colspan="4" class="text-right">
                             Total Members: @totalMembers &nbsp;&nbsp;|&nbsp;&nbsp; Total Records: @totalRecords
                         </td>
-                        <td></td>
                         <td class="text-right">@totalCashAmount.ToString("N2")</td>
-                        <td class="text-right">@totalTaxAmount.ToString("N2")</td>
                         <td class="text-right">@totalBonusShareAmount.ToString("N2")</td>
+                        <td class="text-right">@totalTaxAmount.ToString("N2")</td>
                         <td></td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="8" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

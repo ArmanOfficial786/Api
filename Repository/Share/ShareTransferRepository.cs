@@ -44,6 +44,18 @@ namespace NexgenCosysReport.Repository.Share
             };
         }
 
+        // --------------------------------------------------------------
+        // The rest of the app's BS dates are slash-separated (e.g.
+        // "2079/05/01"), but requests to this endpoint have arrived with
+        // dashes ("2079-06-06"). If the date converter expects the
+        // slash format, a dash-separated string can silently parse to
+        // the wrong AD date instead of throwing - which would explain
+        // why the exact same filter syntax works in SSMS with literal
+        // AD dates but returns nothing when the BS conversion is in the
+        // loop. Normalizing here removes that ambiguity.
+        // --------------------------------------------------------------
+        private static string NormalizeBsDate(string bsDate) => bsDate.Trim().Replace("-", "/");
+
         public async Task<ShareTransferData> GetReportDataAsync(ShareTransferRequestDto request)
         {
             try
@@ -57,16 +69,27 @@ namespace NexgenCosysReport.Repository.Share
                 string? shareTypeName = null;
                 string? memberGroupName = null;
 
-                if (!string.IsNullOrEmpty(request.FromDateBs) && !string.IsNullOrEmpty(request.ToDateBs))
+                if (!string.IsNullOrEmpty(request.FromDateBs) && !string.IsNullOrEmpty(request.ToDateBs)
+                    && request.FromDateBs != "-1" && request.ToDateBs != "-1")
                 {
-                    var fromDateAd = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
-                    var toDateAd = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
+                    var fromDateBsNormalized = NormalizeBsDate(request.FromDateBs);
+                    var toDateBsNormalized = NormalizeBsDate(request.ToDateBs);
 
-                    sqlFilterExp.Append(" And a.TransactionOn between '")
-                                .Append(fromDateAd.ToString("yyyy-MM-dd"))
-                                .Append("' And '")
-                                .Append(toDateAd.ToString("yyyy-MM-dd"))
-                                .Append("'");
+                    var fromDateAd = await _dateConverter.NepaliToEnglishAsync(fromDateBsNormalized);
+                    var toDateAd = await _dateConverter.NepaliToEnglishAsync(toDateBsNormalized);
+
+                    var fromDateStr = fromDateAd.ToString("yyyy-MM-dd");
+                    var toDateStr = toDateAd.ToString("yyyy-MM-dd");
+
+                    // Log the actual computed AD range so a "no data" report
+                    // can be checked against what was really queried, instead
+                    // of only seeing the original BS input.
+                    _logger.LogInformation(
+                        "ShareTransferReport date filter: BS {FromBs}..{ToBs} -> AD {FromAd}..{ToAd}",
+                        fromDateBsNormalized, toDateBsNormalized, fromDateStr, toDateStr);
+
+                    sqlFilterExp.Append(" And a.TransactionOn >= '").Append(fromDateStr).Append("'");
+                    sqlFilterExp.Append(" And a.TransactionOn <= '").Append(toDateStr).Append("'");
                 }
 
                 if (request.OfficeId != -1)
@@ -77,6 +100,8 @@ namespace NexgenCosysReport.Repository.Share
                         new { Id = request.OfficeId });
                 }
 
+                // ShareTypeId's "no filter" sentinel is -1 (matches the form
+                // default and every other sentinel in this repository).
                 if (request.ShareTypeId != -1)
                 {
                     sqlFilterExp.Append(" And s.ShmShareTypeId = ").Append(request.ShareTypeId);
@@ -94,6 +119,8 @@ namespace NexgenCosysReport.Repository.Share
                 }
 
                 sqlFilterExp.Append(BuildSqlOrderBy(request));
+
+                _logger.LogInformation("ShareTransferReport @SqlFilterExp: {Filter}", sqlFilterExp.ToString());
 
                 var parameters = new DynamicParameters();
                 parameters.Add("@SqlFilterExp", sqlFilterExp.ToString(), DbType.String, size: -1);

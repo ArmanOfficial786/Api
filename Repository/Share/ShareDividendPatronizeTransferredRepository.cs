@@ -33,20 +33,24 @@ namespace NexgenCosysReport.Repository.Share
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
-                var fromDateAd = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
-                var toDateAd = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
+                var normalizedFromDate = (request.FromDateBs ?? string.Empty).Replace("/", "-");
+                var normalizedToDate = (request.ToDateBs ?? string.Empty).Replace("/", "-");
+
+                var fromDateAd = await _dateConverter.NepaliToEnglishAsync(normalizedFromDate);
+                var toDateAd = await _dateConverter.NepaliToEnglishAsync(normalizedToDate);
 
                 var reportType = string.IsNullOrWhiteSpace(request.ReportType)
-                    ? "SHARE_DIVIDEND"
+                    ? "SHARE DIVIDEND"
                     : request.ReportType.ToUpper();
 
                 var spName = reportType == "PATRONIZE"
                     ? "sp_8_14_GetPatronizedTransferredReport"
                     : "sp_8_14_GetShareDividendTransferredReport";
 
+
                 var parameters = new DynamicParameters();
-                parameters.Add("@fromDate", fromDateAd.ToString("yyyy-MM-dd"), DbType.String, size: 225);
-                parameters.Add("@toDate", toDateAd.ToString("yyyy-MM-dd"), DbType.String, size: 225);
+                parameters.Add("@fromDate", fromDateAd.Date, DbType.Date);
+                parameters.Add("@toDate", toDateAd.Date, DbType.Date);
 
                 var rows = await connection.QueryAsync<ShareDividendPatronizeTransferredRowDto>(
                     spName,
