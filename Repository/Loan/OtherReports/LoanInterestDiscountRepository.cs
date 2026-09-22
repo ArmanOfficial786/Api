@@ -27,11 +27,6 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
             _logger = logger;
         }
 
-        // --------------------------------------------------------------
-        // @SqlFilterExp — column names match the SP's final SELECT
-        // Preserves the substring-based natural sort for MemberId and
-        // LoanAccountNo exactly as in the legacy BLL.
-        // --------------------------------------------------------------
         private static string BuildSqlOrderBy(LoanInterestDiscountRequestDto request)
         {
             if (string.IsNullOrEmpty(request.OrderBy) || request.OrderBy == "-1")
@@ -49,10 +44,6 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
             };
         }
 
-        // --------------------------------------------------------------
-        // Guards against injection through the comma-separated branch id
-        // list, same pattern used across the other reports.
-        // --------------------------------------------------------------
         private static string SanitizeBranchIds(string? branchIds)
         {
             if (string.IsNullOrWhiteSpace(branchIds) || branchIds == "-1" || branchIds == "string")
@@ -79,19 +70,14 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                 string? memberName = null;
                 string? loanTypeName = null;
 
-                // --------------------------------------------------------------
-                // Build filter expression matching legacy BLL order:
-                // 1. Member filter
-                // 2. Branch filter
-                // 3. Loan Type filter
-                // 4. Date range filter
-                // 5. ORDER BY
-                // --------------------------------------------------------------
-                if (!string.IsNullOrWhiteSpace(request.MemberId))
+                // FIX: "string" placeholder guard added for MemberId, matching the
+                // pattern already used for BranchIds — a Swagger placeholder value
+                // left unreplaced would otherwise filter on a literal MemberId of
+                // "string", zeroing out the result set.
+                if (!string.IsNullOrWhiteSpace(request.MemberId) && request.MemberId.Trim() != "string")
                 {
                     sqlFilterExp.Append(" And MR.MemberId = '").Append(request.MemberId.Trim()).Append("'");
 
-                    // Get member name for display
                     var name = await connection.QueryFirstOrDefaultAsync<string>(
                         @"SELECT FirstName + ' ' +
                                  CASE WHEN MiddleName = '' THEN '' ELSE MiddleName + ' ' END +
@@ -107,11 +93,16 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                     sqlFilterExp.Append(" And LIs.UsmOfficeId in (").Append(branchIds).Append(")");
                 }
 
-                if (request.LoanTypeId != -1)
+                // FIX: root cause of "No data found" — LoanTypeId was checked against
+                // -1 only, so a default/unset value of 0 (as sent in the reported
+                // request) was treated as an explicit filter for loan type id 0,
+                // which almost certainly matches nothing and zeroed out every row.
+                // Now both -1 (explicit "no filter" sentinel) and <= 0 (default/unset)
+                // are treated as "no filter".
+                if (request.LoanTypeId > 0)
                 {
                     sqlFilterExp.Append(" And LTMr.LmtLoanTypeMasterId = ").Append(request.LoanTypeId);
 
-                    // Get loan type name for display
                     loanTypeName = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT LoanTypeName FROM LmtLoanTypeMaster WHERE LmtLoanTypeMasterId = @Id",
                         new { Id = request.LoanTypeId });
@@ -130,7 +121,6 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                     sqlFilterExp.Append(" And Ac.TransactionOn <= '").Append(toDateStr).Append("'");
                 }
 
-                // Append ORDER BY clause
                 var sqlOrderBy = BuildSqlOrderBy(request);
                 sqlFilterExp.Append(sqlOrderBy);
 
@@ -146,7 +136,6 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
 
                 var resultList = rows.AsList();
 
-                // Get branch names for display
                 string branchName = "All";
                 if (!string.IsNullOrEmpty(branchIds))
                 {

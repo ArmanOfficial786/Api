@@ -1,19 +1,11 @@
-﻿// Dtos/RequestDtos/Loan/OtherReports/LoanAppraisalRequestDto.cs
-namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+﻿namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
 {
     public class LoanAppraisalRequestDto
     {
-        // Member ID (human-readable code, e.g. "M-001") - required
         public string MemberId { get; set; } = string.Empty;
-
-        // Comma-separated office ids from the checkbox list ("-1" or empty = all offices)
         public string? BranchIds { get; set; }
-
-        // Visual report flag
         public bool VisualReport { get; set; } = false;
     }
-
-    // Columns match sp_7_16_LoanAppraisalReport's output SELECT list
     public class LoanAppraisalRowDto
     {
         public string? MemberId { get; set; }
@@ -29,7 +21,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
         public string? LoanerCharacter { get; set; }
         public string? Capital { get; set; }
         public string? ManagerialDecision { get; set; }
-        public bool? IsActive { get; set; }
+        public bool IsActive { get; set; } = true;
     }
 
     public class LoanAppraisalData

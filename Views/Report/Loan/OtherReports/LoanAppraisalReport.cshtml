@@ -1,16 +1,10 @@
-﻿@* Views/Report/Loan/OtherReports/LoanAppraisalReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
 @model Dictionary<string, object>
 @{
     Layout = null;
 
     var rows = (Model["Rows"] as List<LoanAppraisalRowDto>) ?? new List<LoanAppraisalRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalCollateralAmount = Model["TotalCollateralAmount"] as decimal? ?? 0;
-    var totalCollateralSanctionAmount = Model["TotalCollateralSanctionAmount"] as decimal? ?? 0;
     var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var memberName = Model["MemberName"]?.ToString() ?? "";
-    var memberId = Model["MemberId"]?.ToString() ?? "";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
@@ -39,89 +33,80 @@
                 overflow: visible;
             }
 
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
+            .meta-title {
                 text-align: center;
                 font-family: "Times New Roman", Times, serif;
                 font-size: 14pt;
                 font-weight: bold;
                 text-decoration: underline;
-                padding: 8px 6px;
+                padding: 8px 0;
             }
 
-            .meta-row td {
-                padding: 3px 6px;
+            .meta-row {
+                padding: 3px 0;
                 font-size: 9pt;
             }
 
-            .meta-spacer td {
-                height: 6px;
+            .appraisal-block {
+                margin-bottom: 26px;
+                page-break-inside: avoid;
+                break-inside: avoid;
             }
 
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
+            .info-grid {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                margin-top: 8px;
             }
 
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
+                .info-grid td {
+                    border: 1px solid #000;
+                    padding: 5px 8px;
+                    vertical-align: middle;
+                }
 
-            .detail-row-alt td {
-                background: #f9f9f9;
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
+            .info-label {
                 font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
+                width: 14%;
             }
 
-            .text-right {
-                text-align: right !important;
+            .info-value {
+                width: 36%;
             }
 
-            .text-center {
-                text-align: center !important;
+            .collateral-line {
+                padding: 10px 0;
+                font-size: 9pt;
             }
 
-            .positive {
-                color: #006600;
+                .collateral-line strong {
+                    margin-left: 18px;
+                }
+
+                    .collateral-line strong:first-child {
+                        margin-left: 0;
+                    }
+
+            .form-section {
+                margin-top: 14px;
             }
 
-            .negative {
-                color: #CC0000;
+            .form-label {
+                font-weight: bold;
+                font-size: 9pt;
+                display: block;
+                margin-bottom: 20px;
+            }
+
+            .form-line {
+                border-bottom: 1px solid #000;
+                height: 4px;
+                margin-bottom: 14px;
             }
 
             @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
+                .appraisal-block {
                     page-break-inside: avoid;
                     break-inside: avoid;
                 }
@@ -136,106 +121,67 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        <table class="data-table" data-sheet-name="LoanAppraisal">
-            <colgroup>
-                <col style="width:10%;" />
-                <col style="width:16%;" />
-                <col style="width:13%;" />
-                <col style="width:13%;" />
-                <col style="width:14%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:12%;" />
-            </colgroup>
-            <tbody>
-                <!-- Report Title -->
-                <tr class="meta-title">
-                    <td colspan="8">Loan Appraisal Report</td>
-                </tr>
+        <div class="meta-title">Loan Appraisal Report</div>
+        <div class="meta-row"><strong>Branch Name :</strong> @branchName</div>
+        <div class="meta-row" style="margin-top:6px;"><strong>Report Generated On :</strong> @generatedOn</div>
 
-                <!-- Metadata -->
-                <tr class="meta-row">
-                    <td colspan="4"><strong>Member :</strong> @memberName (@memberId)</td>
-                    <td colspan="4" class="text-right"><strong>Branch :</strong> @branchName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="8" class="text-right"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="8"></td></tr>
+        @if (rows.Any())
+        {
+            foreach (var row in rows)
+            {
+                <div class="appraisal-block">
 
-                <!-- Table Header -->
-                <tr>
-                    <th>Member Id</th>
-                    <th>Member Name</th>
-                    <th>Loan A/c No</th>
-                    <th>Loan Type</th>
-                    <th>Collateral Name</th>
-                    <th class="text-right">Collateral Amount</th>
-                    <th class="text-right">Sanction Amount</th>
-                    <th>Quantity / Condition</th>
-                </tr>
-
-                @if (rows.Any())
-                {
-                    var sn = 0;
-                    foreach (var row in rows)
-                    {
-                        sn++;
-                        var qtyCond = string.Join(" / ", new[] { row.CollateralQuantity, row.CollateralCondition }
-                            .Where(s => !string.IsNullOrWhiteSpace(s)));
-                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.FullName ?? "")</td>
-                            <td>@(row.LoanAccountNo ?? "")</td>
-                            <td>@(row.LoanTypeName ?? "")</td>
-                            <td>@(row.CollateralName ?? "")</td>
-                            <td class="text-right">@(row.CollateralAmount.HasValue ? row.CollateralAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.CollateralSanctionAmount.HasValue ? row.CollateralSanctionAmount.Value.ToString("N2") : "")</td>
-                            <td>@qtyCond</td>
+                    <!-- Member / Loan info grid -->
+                    <table class="info-grid">
+                        <tr>
+                            <td class="info-label">MemberId</td>
+                            <td class="info-value">@(row.MemberId ?? "")</td>
+                            <td class="info-label">Member Name</td>
+                            <td class="info-value">@(row.FullName ?? "")</td>
                         </tr>
-                    }
-
-                    <!-- Grand Total Row -->
-                    <tr class="grand-total-row">
-                        <td colspan="5" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalCollateralAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalCollateralSanctionAmount.ToString("N2")</strong></td>
-                        <td></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="7" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
-                    </tr>
-
-                    <!-- Appraisal Assessment Summary -->
-                    <tr class="meta-spacer"><td colspan="8"></td></tr>
-                    <tr class="grand-total-row">
-                        <td colspan="8" class="text-center"><strong>Appraisal Assessment</strong></td>
-                    </tr>
-                    <tr>
-                        <th colspan="2">Capacity to Pay</th>
-                        <th colspan="2">Loaner Character</th>
-                        <th colspan="2">Capital</th>
-                        <th colspan="2">Managerial Decision</th>
-                    </tr>
-                    @foreach (var row in rows)
-                    {
-                        <tr class="detail-row">
-                            <td colspan="2">@(row.CapacityToPay ?? "")</td>
-                            <td colspan="2">@(row.LoanerCharacter ?? "")</td>
-                            <td colspan="2">@(row.Capital ?? "")</td>
-                            <td colspan="2">@(row.ManagerialDecision ?? "")</td>
+                        <tr>
+                            <td class="info-label">Account No</td>
+                            <td class="info-value">@(row.LoanAccountNo ?? "")</td>
+                            <td class="info-label">Loan Type</td>
+                            <td class="info-value">@(row.LoanTypeName ?? "")</td>
                         </tr>
-                    }
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="8" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+                    </table>
+
+                    <!-- Collateral summary line -->
+                    <div class="collateral-line">
+                        <strong>Collateral :</strong> @(row.CollateralName ?? "")
+                        <strong>Collateral Value :</strong> @(row.CollateralAmount.HasValue ? row.CollateralAmount.Value.ToString("N2") : "")
+                        <strong>Collateral Status :</strong> @(row.CollateralCondition ?? "")
+                        <strong>Collateral Quantity :</strong> @(row.CollateralQuantity ?? "")
+                    </div>
+
+                    <!-- Assessment fill-in sections -->
+                    <div class="form-section">
+                        <span class="form-label">Checked By:</span>
+                        <div class="form-line"></div>
+
+                        <span class="form-label">Capacity: @(row.CapacityToPay ?? "")</span>
+                        <div class="form-line"></div>
+
+                        <span class="form-label">Character: @(row.LoanerCharacter ?? "")</span>
+                        <div class="form-line"></div>
+
+                        <span class="form-label">Capital: @(row.Capital ?? "")</span>
+                        <div class="form-line"></div>
+
+                        <span class="form-label">Condition:</span>
+                        <div class="form-line"></div>
+
+                        <span class="form-label">Decision: @(row.ManagerialDecision ?? "")</span>
+                        <div class="form-line"></div>
+                    </div>
+                </div>
+            }
+        }
+        else
+        {
+            <div class="meta-row text-center">No data found for the selected criteria</div>
+        }
     </div>
 </body>
 </html>

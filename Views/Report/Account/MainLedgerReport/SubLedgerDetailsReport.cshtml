@@ -6,22 +6,24 @@
 
     var rows = (Model["Rows"] as List<SubLedgerDetailsRowDto>) ?? new List<SubLedgerDetailsRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalDebitAmount = Model["TotalDebitAmount"] as decimal? ?? 0;
+    var totalCreditAmount = Model["TotalCreditAmount"] as decimal? ?? 0;
     var openingBalance = Model["OpeningBalance"] as decimal? ?? 0;
     var closingBalance = Model["ClosingBalance"] as decimal? ?? 0;
     var accountType = Model["AccountType"]?.ToString() ?? "";
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var voucherType = Model["VoucherType"]?.ToString() ?? "All";
     var ledgerHead = (Model["LedgerHead"] as List<string>) ?? new List<string>();
-    var showOpeningBalance = Model["ShowOpeningBalance"] as bool? ?? true;
-    var reportType = Model["ReportType"]?.ToString() ?? "4thLedgerDetailsReport";
+    var showOpeningBalance = Model["ShowOpeningBalance"] as bool? ?? false;
+    var reportType = Model["ReportType"]?.ToString() ?? "LedgerDetailsReport";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
     var reportTitle = reportType switch
     {
+        "LedgerDetailsReport" => "Main Ledger Report",
         "1stLedgerDetailsReport" => "First Sub Ledger Report",
         "2ndLedgerDetailsReport" => "Second Sub Ledger Report",
         "3rdLedgerDetailsReport" => "Third Sub Ledger Report",
@@ -29,9 +31,21 @@
         _ => "Ledger Details Report"
     };
 
-    var ledgerPath = string.Join(" > ", ledgerHead.Where(l => !string.IsNullOrWhiteSpace(l)));
+    // Image shows a single ledger name (MainLedger), not a drilled-down path — matches
+    // the "LedgerDetailsReport" (MainLedger-only) case.
+    var ledgerName = ledgerHead.Count > 0 ? ledgerHead[0] : "";
 
-    string Fmt(decimal? v) => v.HasValue ? (v.Value < 0 ? $"({Math.Abs(v.Value):N2})" : v.Value.ToString("N2")) : "";
+    Func<decimal?, string> N = v => (v ?? 0m).ToString("N2");
+
+    string SummaryBalanceWithDirection(decimal balance, string? acctType)
+    {
+        var normalIsDebit = string.Equals(acctType, "ASSETS", StringComparison.OrdinalIgnoreCase)
+                          || string.Equals(acctType, "EXPENSES", StringComparison.OrdinalIgnoreCase);
+        var direction = normalIsDebit
+            ? (balance >= 0 ? "DR" : "CR")
+            : (balance >= 0 ? "CR" : "DR");
+        return $"{Math.Abs(balance):N2} {direction}";
+    }
 }
 <!DOCTYPE html>
 <html>
@@ -47,7 +61,7 @@
 
             body {
                 font-family: Arial, sans-serif;
-                font-size: 9pt;
+                font-size: 9.5pt;
                 background: white;
                 color: #000;
             }
@@ -60,7 +74,7 @@
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 9pt;
+                font-size: 9.5pt;
                 table-layout: fixed;
             }
 
@@ -68,68 +82,8 @@
                     word-wrap: break-word;
                     overflow-wrap: break-word;
                     padding: 4px 6px;
-                    vertical-align: middle;
+                    vertical-align: top;
                 }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: right;
-                white-space: nowrap;
-            }
-
-                .data-table th:nth-child(-n+2) {
-                    text-align: left;
-                }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-                text-align: right;
-            }
-
-                .detail-row td:nth-child(-n+2) {
-                    text-align: left;
-                }
-
-            .opening-row td, .closing-row td {
-                font-weight: bold;
-                background: #f5f5f5;
-                border-top: 1px solid #666;
-                border-bottom: 1px solid #666;
-                text-align: right;
-            }
-
-                .opening-row td:first-child, .closing-row td:first-child {
-                    text-align: left;
-                }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-                text-align: right;
-            }
 
             .text-right {
                 text-align: right !important;
@@ -137,6 +91,91 @@
 
             .text-center {
                 text-align: center !important;
+            }
+
+            .report-title {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 15pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 6px 6px 10px 6px;
+            }
+
+            .meta-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 6px;
+            }
+
+                .meta-table td {
+                    padding: 2px 6px;
+                    font-size: 9.5pt;
+                    white-space: nowrap;
+                    vertical-align: top;
+                }
+
+            .meta-left {
+                text-align: left;
+                width: 50%;
+            }
+
+            .meta-right {
+                text-align: right;
+                width: 50%;
+            }
+
+            .meta-ledger-row td {
+                text-align: center;
+                font-weight: bold;
+                padding-top: 14px;
+                padding-bottom: 24px;
+            }
+
+            .meta-spacer td {
+                height: 14px;
+            }
+
+            .column-header-row th {
+                text-align: left;
+                font-weight: bold;
+                border-top: none;
+                border-bottom: 1.5px solid #000;
+                padding: 6px 6px 8px 6px;
+            }
+
+            .entry-line-1 td {
+                padding: 6px 6px 0 6px;
+                border-top: 1px solid #000;
+            }
+
+            .entry-line-2 td {
+                padding: 0 6px;
+            }
+
+            .entry-line-3 td {
+                padding: 0 6px 6px 6px;
+            }
+
+            .sub-ledger-code {
+                display: inline-block;
+                min-width: 90px;
+            }
+
+            .opening-balance-row td {
+                background: #f2f2f2;
+                font-weight: bold;
+                padding: 5px 6px;
+                border-top: 1px solid #000;
+                border-bottom: 1px solid #000;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
             }
 
             @@media print {
@@ -155,75 +194,103 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        <table class="data-table" data-sheet-name="SubLedgerDetails">
+        <div class="report-title">@reportTitle</div>
+
+        <table class="meta-table">
+            <tr>
+                <td class="meta-left"><strong>Report Generated On :</strong> @generatedOn</td>
+                <td class="meta-right"><strong>From Date :</strong> @fromDate</td>
+            </tr>
+            <tr>
+                <td class="meta-left"><strong>Branch Name :</strong> @branchName</td>
+                <td class="meta-right"><strong>To Date :</strong> @toDate</td>
+            </tr>
+            <tr class="meta-ledger-row">
+                <td colspan="2"><strong>Ledger Name :</strong> @ledgerName</td>
+            </tr>
+        </table>
+
+        <table class="data-table" data-sheet-name="MainLedgerReport">
             <colgroup>
+                <col style="width:10%;" />
+                <col style="width:14%;" />
+                <col style="width:38%;" />
                 <col style="width:12%;" />
                 <col style="width:12%;" />
-                <col style="width:26%;" />
-                <col style="width:16%;" />
-                <col style="width:16%;" />
-                <col style="width:18%;" />
+                <col style="width:14%;" />
             </colgroup>
             <tbody>
-                <tr class="meta-title">
-                    <td colspan="6">@reportTitle</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="6"><strong>Ledger :</strong> @ledgerPath</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="3"><strong>Branch :</strong> @branchName &nbsp;&nbsp;&nbsp; <strong>Voucher Type :</strong> @voucherType</td>
-                    <td colspan="3" class="text-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="6"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="6"></td></tr>
-
                 @if (showOpeningBalance)
                 {
-                    <tr class="opening-row">
+                    <tr class="opening-balance-row">
                         <td colspan="5" class="text-right">Opening Balance</td>
-                        <td class="text-right">@Fmt(openingBalance)</td>
+                        <td class="text-right">@SummaryBalanceWithDirection(openingBalance, accountType)</td>
                     </tr>
                 }
 
-                <tr>
-                    <th>Voucher Date</th>
+                <tr class="column-header-row">
+                    <th>Date</th>
                     <th>Voucher No</th>
-                    <th>Narration</th>
-                    <th>Debit</th>
-                    <th>Credit</th>
-                    <th>Balance</th>
+                    <th class="text-center">Particulars</th>
+                    <th class="text-right">DR</th>
+                    <th class="text-right">CR</th>
+                    <th class="text-right">Balance</th>
                 </tr>
 
                 @if (rows.Any())
                 {
                     foreach (var row in rows)
                     {
-                        <tr class="detail-row">
-                            <td>@(row.VoucherOn.HasValue ? row.VoucherOn.Value.ToString("yyyy/MM/dd") : "")</td>
+                        var adDate = row.VoucherDateOn.HasValue ? row.VoucherDateOn.Value.ToString("MM/dd/yyyy") : "";
+                        var rowBalance = row.BalanceAmount ?? 0m;
+                        var rowType = row.Type ?? "";
+
+                        <tr class="entry-line-1">
+                            <td>@(row.VoucherDate ?? "")</td>
                             <td>@(row.VoucherNo ?? "")</td>
-                            <td>@(row.Narration ?? "")</td>
-                            <td>@Fmt(row.DebitAmount)</td>
-                            <td>@Fmt(row.CreditAmount)</td>
-                            <td>@Fmt(row.BalanceAmount)</td>
+                            <td>@(row.MainLedger ?? "")</td>
+                            <td class="text-right">@N(row.DebitAmount)</td>
+                            <td class="text-right">@N(row.CreditAmount)</td>
+                            <td class="text-right">@Math.Abs(rowBalance).ToString("N2") @rowType</td>
+                        </tr>
+                        <tr class="entry-line-2">
+                            <td>@adDate</td>
+                            <td></td>
+                            <td>
+                                <span class="sub-ledger-code">@(row.SubLedger1 ?? "")</span>@(row.SubLedger2 ?? "")
+                            </td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
+                        </tr>
+                        <tr class="entry-line-3">
+                            <td></td>
+                            <td></td>
+                            <td>@(row.NarrationLedger ?? "")</td>
+                            <td></td>
+                            <td></td>
+                            <td></td>
                         </tr>
                     }
 
-                    <tr class="closing-row">
-                        <td colspan="5" class="text-right">Closing Balance</td>
-                        <td class="text-right">@Fmt(closingBalance)</td>
+                    <tr class="grand-total-row">
+                        <td colspan="3" class="text-right">Grand Total</td>
+                        <td class="text-right">@N(totalDebitAmount)</td>
+                        <td class="text-right">@N(totalCreditAmount)</td>
+                        <td class="text-right">@SummaryBalanceWithDirection(closingBalance, accountType)</td>
                     </tr>
                     <tr class="grand-total-row">
                         <td colspan="5" class="text-right">Total Records</td>
-                        <td class="text-right">@totalRecords</td>
+                        <td class="text-center">@totalRecords</td>
                     </tr>
+
+                    @if (closingBalance != 0)
+                    {
+                        <tr class="opening-balance-row">
+                            <td colspan="5" class="text-right">Closing Balance</td>
+                            <td class="text-right">@SummaryBalanceWithDirection(closingBalance, accountType)</td>
+                        </tr>
+                    }
                 }
                 else
                 {

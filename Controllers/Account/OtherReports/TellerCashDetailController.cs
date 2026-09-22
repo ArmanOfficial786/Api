@@ -1,4 +1,5 @@
 ﻿// Controllers/AccountOperation/OthersReport/TellerCashDetailController.cs
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -9,13 +10,14 @@ using NexgenCosysReport.Inteface.ServiceInterface.AccountOperation.OthersReport;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
+using System.Security.Claims;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.AccountOperation.OthersReport
+namespace NexgenCosysReport.Controllers.Account.OtherReports
 {
     [ApiController]
     [Route("api/[controller]")]
-    //[Authorize]
+    [Authorize]
     public class TellerCashDetailController : ControllerBase
     {
         private readonly ITellerCashDetailRepository _repository;
@@ -55,11 +57,11 @@ namespace NexgenCosysReport.Controllers.AccountOperation.OthersReport
         {
             try
             {
-                //var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                //if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                //{
-                //    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                //}
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                {
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                }
 
                 if (request == null || !ModelState.IsValid)
                 {

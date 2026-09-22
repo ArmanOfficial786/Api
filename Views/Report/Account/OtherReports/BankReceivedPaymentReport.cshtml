@@ -1,30 +1,36 @@
-﻿@* Views/Report/AccountOperation/OthersReport/BankReceivedPaymentReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Account.OthersReport;
+﻿<!-- Views/Report/Account/OtherReports/BankReceivedPaymentReport.cshtml -->
+@using NexgenCosysReport.Dtos.RequestDtos.Account.OthersReport
 @model Dictionary<string, object>
 @{
     Layout = null;
 
     var rows = (Model["Rows"] as List<BankReceivedPaymentRowDto>) ?? new List<BankReceivedPaymentRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
+    var totalAmount = Model["TotalAmount"] as decimal? ?? rows.Sum(r => r.CashReceived ?? 0);
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var branchNames = Model["BranchNames"]?.ToString() ?? "All";
-    var paymentType = Model["PaymentType"]?.ToString() ?? "Bank Payment";
-    var transactionType = Model["TransactionType"]?.ToString() ?? "all";
+    var paymentType = Model["PaymentType"]?.ToString() ?? "";
+    var transactionType = Model["TransactionType"]?.ToString() ?? "";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var reportTitle = paymentType == "Cheque Payment"
-        ? "Cheque Received Payment Report"
-        : "Bank Received Payment Report";
+    Func<decimal?, string> N = v => (v ?? 0m).ToString("N2");
+
+    // Grouped by Bank Name (LedgerHead) — the recurring categorical field in this
+    // report, same pattern as the Deposit Type / Particulars / Saving Type
+    // groupings used across the other converted reports. No re-ordering here —
+    // groups/rows print in the order the repository already returned (per OrderBy).
+    var bankGroups = rows
+        .GroupBy(r => r.LedgerHead ?? "")
+        .ToList();
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>@reportTitle</title>
+    <title>Bank Received Payment Report</title>
     <style>
             * {
                 margin: 0;
@@ -88,8 +94,20 @@
                 white-space: nowrap;
             }
 
+            .group-row td {
+                font-weight: bold;
+                padding-top: 8px;
+            }
+
             .detail-row td {
                 border-bottom: 1px solid #eee;
+            }
+
+            .subtotal-row td {
+                border-top: 1px solid #000;
+                font-weight: bold;
+                padding-top: 5px;
+                padding-bottom: 5px;
             }
 
             .grand-total-row td {
@@ -131,19 +149,24 @@
         <table class="data-table" data-sheet-name="BankReceivedPayment">
             <colgroup>
                 <col style="width:12%;" />
-                <col style="width:18%;" />
-                <col style="width:14%;" />
-                <col style="width:14%;" />
-                <col style="width:18%;" />
-                <col style="width:24%;" />
+                <col style="width:17%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:35%;" />
             </colgroup>
             <tbody>
                 <tr class="meta-title">
-                    <td colspan="6">@reportTitle</td>
+                    <td colspan="6">Bank Received Payment Report</td>
                 </tr>
 
                 <tr class="meta-row">
-                    <td colspan="3"><strong>Branch Name :</strong> @branchNames</td>
+                    <td colspan="6"><strong>Branch Name :</strong> @branchNames</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="6"></td></tr>
+
+                <tr class="meta-row">
+                    <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
                     <td colspan="3" class="text-right">
                         <strong>From Date :</strong> @fromDate
                         &nbsp;&nbsp;&nbsp;
@@ -151,47 +174,66 @@
                     </td>
                 </tr>
                 <tr class="meta-row">
-                    <td colspan="3"><strong>Transaction Type :</strong> @transactionType</td>
-                    <td colspan="3" class="text-right"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="3"></td>
+                    <td colspan="3" class="text-right"><strong>Payment Type :</strong> @paymentType</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="3"></td>
+                    <td colspan="3" class="text-right"><strong>Transaction Type :</strong> @transactionType</td>
                 </tr>
                 <tr class="meta-spacer"><td colspan="6"></td></tr>
 
                 <tr>
                     <th>Member Id</th>
-                    <th>Member Name</th>
+                    <th>Name</th>
                     <th>Account No</th>
-                    <th>Transaction Date</th>
-                    <th>Type</th>
                     <th class="text-right">Amount</th>
+                    <th>Date</th>
+                    <th>Transaction Description</th>
                 </tr>
 
-                @if (rows.Any())
+                @if (bankGroups.Any())
                 {
-                    foreach (var row in rows)
+                    foreach (var bankGroup in bankGroups)
                     {
-                        <tr class="detail-row">
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td>@(row.TransactionOnBs ?? row.TransactionOn ?? "")</td>
-                            <td>@(row.TransactionType ?? "")</td>
-                            <td class="text-right">@(row.CashReceived.HasValue ? row.CashReceived.Value.ToString("N2") : "")</td>
+                        <tr class="group-row">
+                            <td colspan="6">@bankGroup.Key</td>
+                        </tr>
+
+                        foreach (var row in bankGroup)
+                        {
+                            <tr class="detail-row">
+                                <td>@(row.MemberId ?? "")</td>
+                                <td>@(row.MemberName ?? "")</td>
+                                <td>@(row.Accountno ?? "")</td>
+                                <td class="text-right">@N(row.CashReceived)</td>
+                                <td>@(row.TransactionOn ?? "")</td>
+                                <td>@(row.Description ?? "")</td>
+                            </tr>
+                        }
+
+                        <tr class="subtotal-row">
+                            <td colspan="3" class="text-right">@bankGroup.Key</td>
+                            <td class="text-right">@N(bankGroup.Sum(r => r.CashReceived ?? 0))</td>
+                            <td colspan="2"></td>
                         </tr>
                     }
 
                     <tr class="grand-total-row">
-                        <td colspan="5" class="text-right">Grand Total</td>
-                        <td class="text-right">@totalAmount.ToString("N2")</td>
+                        <td colspan="3" class="text-right">Grand Total</td>
+                        <td class="text-right">@N(totalAmount)</td>
+                        <td colspan="2"></td>
                     </tr>
                     <tr class="grand-total-row">
-                        <td colspan="5" class="text-right">Total Records</td>
+                        <td colspan="3" class="text-right">Total Records</td>
                         <td class="text-right">@totalRecords</td>
+                        <td colspan="2"></td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="6" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="6" class="text-center">No bank received payment records found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

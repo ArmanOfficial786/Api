@@ -11,7 +11,6 @@
     var branchName = Model["BranchName"]?.ToString() ?? "All";
     var memberName = Model["MemberName"]?.ToString() ?? "";
     var memberId = Model["MemberId"]?.ToString() ?? "";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "-1";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
@@ -54,6 +53,7 @@
                 .data-table td, .data-table th {
                     word-wrap: break-word;
                     overflow-wrap: break-word;
+                    overflow: hidden;
                     padding: 4px 6px;
                     vertical-align: middle;
                 }
@@ -70,6 +70,19 @@
             .meta-row td {
                 padding: 3px 6px;
                 font-size: 9pt;
+                text-align: left;
+            }
+
+            .section-label td {
+                padding: 8px 6px 2px 6px;
+                font-size: 9pt;
+                font-weight: bold;
+            }
+
+            .guarantor-row td {
+                padding: 2px 6px 8px 6px;
+                font-size: 9pt;
+                font-weight: bold;
             }
 
             .meta-spacer td {
@@ -81,16 +94,17 @@
                 border-top: 2px solid #000;
                 border-bottom: 1px solid #000;
                 text-align: left;
-                white-space: nowrap;
+                white-space: normal;
+                line-height: 1.2;
+                vertical-align: bottom;
             }
 
             .detail-row td {
                 border-bottom: 1px solid #eee;
             }
 
-            .detail-row-alt td {
-                background: #f9f9f9;
-                border-bottom: 1px solid #eee;
+            .amount-col {
+                color: #1F5C99;
             }
 
             .grand-total-row td {
@@ -107,14 +121,6 @@
 
             .text-center {
                 text-align: center !important;
-            }
-
-            .positive {
-                color: #006600;
-            }
-
-            .negative {
-                color: #CC0000;
             }
 
             @@media print {
@@ -139,82 +145,81 @@
 
         <table class="data-table" data-sheet-name="LoanGuaranteer">
             <colgroup>
-                <col style="width:9%;" />
-                <col style="width:14%;" />
+                <col style="width:15%;" />
+                <col style="width:17%;" />
                 <col style="width:12%;" />
-                <col style="width:10%;" />
-                <col style="width:10%;" />
+                <col style="width:13%;" />
+                <col style="width:16%;" />
+                <col style="width:16%;" />
                 <col style="width:12%;" />
-                <col style="width:11%;" />
-                <col style="width:12%;" />
-                <col style="width:10%;" />
             </colgroup>
             <tbody>
                 <!-- Report Title -->
                 <tr class="meta-title">
-                    <td colspan="9">Loan Guaranteer Report</td>
+                    <td colspan="7">Loan Guaranteer Report</td>
                 </tr>
 
-                <!-- Metadata -->
+                <!-- Metadata: stacked, left-aligned -->
                 <tr class="meta-row">
-                    <td colspan="5"><strong>Member :</strong> @memberName (@memberId)</td>
-                    <td colspan="4" class="text-right"><strong>Branch :</strong> @branchName</td>
+                    <td colspan="7"><strong>Branch Name :</strong> @branchName</td>
                 </tr>
                 <tr class="meta-row">
-                    <td colspan="9" class="text-right"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="7"><strong>Report Generated On :</strong> @generatedOn</td>
                 </tr>
-                <tr class="meta-spacer"><td colspan="9"></td></tr>
+                <tr class="meta-spacer"><td colspan="7"></td></tr>
 
-                <!-- Table Header -->
-                <tr>
-                    <th>Guarantor Id</th>
-                    <th>Guarantor Name</th>
-                    <th>Loan A/c No</th>
-                    <th>Loan Type</th>
-                    <th>Account No</th>
-                    <th>Share Type</th>
-                    <th>Loanee Id</th>
-                    <th>Loanee Name</th>
-                    <th>Guarantee Date</th>
+                <!-- Guarantor block -->
+                <tr class="section-label">
+                    <td colspan="7">Guarantee Details :</td>
+                </tr>
+                <tr class="guarantor-row">
+                    <td>@memberId</td>
+                    <td colspan="6">@memberName</td>
                 </tr>
 
                 @if (rows.Any())
                 {
-                    var sn = 0;
+                    <!-- Loanee list section label -->
+                    <tr class="section-label">
+                        <td colspan="7">Loanee Details :</td>
+                    </tr>
+
+                    <!-- Table Header -->
+                    <tr>
+                        <th>Loanee Id</th>
+                        <th>Loanee Name</th>
+                        <th>Loan A/C No</th>
+                        <th>Savings A/C No</th>
+                        <th class="text-right">Savings Amt</th>
+                        <th class="text-right">Share Amt</th>
+                        <th>Guarantee Date</th>
+                    </tr>
+
                     foreach (var row in rows)
                     {
-                        sn++;
-                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.FullName ?? "")</td>
-                            <td>@(row.LoanAccountNo ?? "")</td>
-                            <td>@(row.LoanTypeName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td>@(row.ShareTypeName ?? "")</td>
+                        <tr class="detail-row">
                             <td>@(row.LoneeId ?? "")</td>
                             <td>@(row.LoneeFullName ?? "")</td>
-                            <td>@(row.GuaranteeDateOnBs ?? "")</td>
+                            <td>@(row.LoanAccountNo ?? "")</td>
+                            <td>@(row.AccountNo ?? "")</td>
+                            <td class="text-right amount-col">@(row.GuaranteeAmount.HasValue ? row.GuaranteeAmount.Value.ToString("N2") : "")</td>
+                            <td class="text-right amount-col">@(row.GuaranteeShareAmount.HasValue ? row.GuaranteeShareAmount.Value.ToString("N2") : "")</td>
+                            <td class="text-right amount-col">@(row.GuaranteeDateOnBs ?? "")</td>
                         </tr>
                     }
 
-                    <!-- Guarantee Amount Summary Rows -->
+                    <!-- Grand Total Row -->
                     <tr class="grand-total-row">
-                        <td colspan="6" class="text-right"><strong>Total Guarantee Amount</strong></td>
-                        <td colspan="3" class="text-right"><strong>@totalGuaranteeAmount.ToString("N2")</strong></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="6" class="text-right"><strong>Total Guarantee Share Amount</strong></td>
-                        <td colspan="3" class="text-right"><strong>@totalGuaranteeShareAmount.ToString("N2")</strong></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="8" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
+                        <td colspan="4" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-right"><strong>@totalGuaranteeAmount.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalGuaranteeShareAmount.ToString("N2")</strong></td>
+                        <td></td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

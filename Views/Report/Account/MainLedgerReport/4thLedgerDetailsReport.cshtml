@@ -20,7 +20,6 @@
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
     var ledgerPath = string.Join(" > ", ledgerHead.Where(l => !string.IsNullOrWhiteSpace(l)));
-    var runningBalance = showOpeningBalance ? openingBalance : 0m;
 
     string Fmt(decimal? v) => v.HasValue ? (v.Value < 0 ? $"({Math.Abs(v.Value):N2})" : v.Value.ToString("N2")) : "";
 }
@@ -48,6 +47,47 @@
                 overflow: visible;
             }
 
+            .report-title {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            /* FIX: subheader moved into its own auto-layout table (no
+                           table-layout: fixed, no forced nowrap width constraints) so
+                           "Label : Value" pairs never overlap or clip — same fix already
+                           applied to TellerCashBalance, First/Second/Third Ledger
+                           Details reports. */
+            .meta-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 6px;
+            }
+
+                .meta-table td {
+                    padding: 3px 6px;
+                    font-size: 9pt;
+                    white-space: nowrap;
+                    vertical-align: top;
+                }
+
+            .meta-left {
+                text-align: left;
+                width: 50%;
+            }
+
+            .meta-right {
+                text-align: right;
+                width: 50%;
+            }
+
+            .meta-spacer td {
+                height: 8px;
+            }
+
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
@@ -62,35 +102,19 @@
                     vertical-align: middle;
                 }
 
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: right;
-                white-space: nowrap;
-            }
-
-                .data-table th:nth-child(-n+2) {
-                    text-align: left;
+                /* FIX: headers now wrap (white-space: normal) instead of forcing
+                           single-line text into fixed-width columns. */
+                .data-table th {
+                    background: #f9f9f9;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: right;
+                    white-space: normal;
                 }
+
+                    .data-table th:nth-child(-n+2) {
+                        text-align: left;
+                    }
 
             .detail-row td {
                 border-bottom: 1px solid #eee;
@@ -146,6 +170,22 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
+        <div class="report-title">Ledger Details Report</div>
+
+        <table class="meta-table">
+            <tr>
+                <td colspan="2"><strong>Ledger :</strong> @ledgerPath</td>
+            </tr>
+            <tr>
+                <td class="meta-left"><strong>Branch :</strong> @branchName &nbsp;&nbsp;&nbsp; <strong>Voucher Type :</strong> @voucherType</td>
+                <td class="meta-right"><strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp; <strong>To Date :</strong> @toDate</td>
+            </tr>
+            <tr>
+                <td colspan="2"><strong>Report Generated On :</strong> @generatedOn</td>
+            </tr>
+            <tr class="meta-spacer"><td colspan="2"></td></tr>
+        </table>
+
         <table class="data-table" data-sheet-name="LedgerDetails">
             <colgroup>
                 <col style="width:12%;" />
@@ -156,26 +196,6 @@
                 <col style="width:18%;" />
             </colgroup>
             <tbody>
-                <tr class="meta-title">
-                    <td colspan="6">Ledger Details Report</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="6"><strong>Ledger :</strong> @ledgerPath</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="3"><strong>Branch :</strong> @branchName &nbsp;&nbsp;&nbsp; <strong>Voucher Type :</strong> @voucherType</td>
-                    <td colspan="3" class="text-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="6"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="6"></td></tr>
-
                 @if (showOpeningBalance)
                 {
                     <tr class="opening-row">

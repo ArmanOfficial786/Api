@@ -4,37 +4,48 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Account.OthersReport
     public class CashAndBankBalanceRequestDto
     {
         public string TillDateBs { get; set; } = string.Empty;
-        public string? BranchId { get; set; }       // single office id, "-1" = All
+        public string? BranchId { get; set; }
         public string OrderBy { get; set; } = "-1";
-        public bool NepaliReport { get; set; } = false; // picks between English/Nepali view templates
+        public bool NepaliReport { get; set; } = false;
     }
 
-    // INFERRED columns — confirm against sp_6_56_GetNepaliCashAndBankBalanceBank's actual SELECT list
+    // Matches #tempBank columns exactly:
+    // LedgerHead, LedgerHeadInNepali, BankName, BankNameInNepali,
+    // OpeningBankBalance, ClosingBankBalance, TodayBankDr, TodayBankCr, TodayBankBalance
     public class CashAndBankBalanceBankRowDto
     {
-        public string? MainLedger { get; set; }
-        public string? SubLedger { get; set; }
-        public decimal? DebitAmount { get; set; }
-        public decimal? CreditAmount { get; set; }
-        public decimal? Balance { get; set; }
+        public string? LedgerHead { get; set; }
+        public string? LedgerHeadInNepali { get; set; }
+        public string? BankName { get; set; }
+        public string? BankNameInNepali { get; set; }
+        public decimal? OpeningBankBalance { get; set; }
+        public decimal? ClosingBankBalance { get; set; }
+        public decimal? TodayBankDr { get; set; }
+        public decimal? TodayBankCr { get; set; }
+        public decimal? TodayBankBalance { get; set; }
     }
 
-    // Confirmed shape: CashBalance column is used directly (dt.Compute("Sum(CashBalance)"))
+    // Matches #FinalCash columns exactly:
+    // CashName, OpeningCashBalance, ClosingCashBalance, TodayCashDr, TodayCashCr, TodayCashBalance
+    public class CashAndBankBalanceCashRowDto
+    {
+        public string? CashName { get; set; }
+        public decimal? OpeningCashBalance { get; set; }
+        public decimal? ClosingCashBalance { get; set; }
+        public decimal? TodayCashDr { get; set; }
+        public decimal? TodayCashCr { get; set; }
+        public decimal? TodayCashBalance { get; set; }
+    }
+
+    // ASSUMPTION — sp_6_56_GetCashAndBankBalanceTeller wasn't provided.
+    // Columns inferred from the report image (Teller Name | Cash In | Cash Out | Cash Balance).
+    // Please confirm/share the SP so this can be verified.
     public class CashAndBankBalanceTellerRowDto
     {
         public string? TellerName { get; set; }
-        public string? OfficeName { get; set; }
+        public decimal? CashIn { get; set; }
+        public decimal? CashOut { get; set; }
         public decimal? CashBalance { get; set; }
-    }
-
-    // INFERRED columns — confirm against sp_6_56_GetCashAndBankBalanceCash's actual SELECT list
-    public class CashAndBankBalanceCashRowDto
-    {
-        public string? MainLedger { get; set; }
-        public string? SubLedger { get; set; }
-        public decimal? DebitAmount { get; set; }
-        public decimal? CreditAmount { get; set; }
-        public decimal? Balance { get; set; }
     }
 
     public class CashAndBankBalanceData
@@ -43,14 +54,9 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Account.OthersReport
         public List<CashAndBankBalanceTellerRowDto> TellerRows { get; set; } = [];
         public List<CashAndBankBalanceCashRowDto> CashRows { get; set; } = [];
 
-        // Raw output parameters from the two balance SPs
         public decimal BankBalanceOutput { get; set; }
         public decimal CashBalanceOutput { get; set; }
 
-        // Computed exactly as GetCashAndBankBalanceDetails:
-        //   TellerBalance = SUM(TellerRows.CashBalance)
-        //   FinalBank      = BankBalanceOutput
-        //   FinalCash      = CashBalanceOutput + TellerBalance
         public decimal TellerBalance { get; set; }
         public decimal FinalBankAmount => BankBalanceOutput;
         public decimal FinalCashAmount => CashBalanceOutput + TellerBalance;

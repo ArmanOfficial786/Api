@@ -6,13 +6,23 @@
 
     var rows = (Model["Rows"] as List<IBTTransactionRowDto>) ?? new List<IBTTransactionRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
+    var totalCashReceived = Model["TotalCashReceived"] as decimal? ?? 0;
+    var totalCashWithdrawl = Model["TotalCashWithdrawl"] as decimal? ?? 0;
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var branchName = Model["BranchName"]?.ToString() ?? "All";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // Alternating shading per member group (not per row) — matches the image,
+    // where consecutive rows for the same MemberId stay the same shade and
+    // the shade flips only when the MemberId changes. Rows must arrive
+    // pre-sorted so a member's rows are contiguous (the default @orderBy is
+    // empty, relying on the SP's own row order — if members aren't grouped
+    // contiguously in a given sort, this striping will look inconsistent).
+    string? currentMemberId = null;
+    bool shadeOn = false;
 }
 <!DOCTYPE html>
 <html>
@@ -56,7 +66,7 @@
                     vertical-align: middle;
                 }
 
-            .meta-title td {
+            .report-title {
                 text-align: center;
                 font-family: "Times New Roman", Times, serif;
                 font-size: 14pt;
@@ -65,13 +75,33 @@
                 padding: 8px 6px;
             }
 
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
+            /* Own auto-layout table for the subheader so long labels never
+                           wrap/overlap — same fix applied throughout this thread. */
+            .meta-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 6px;
+            }
+
+                .meta-table td {
+                    padding: 3px 6px;
+                    font-size: 9pt;
+                    white-space: nowrap;
+                    vertical-align: top;
+                }
+
+            .meta-left {
+                text-align: left;
+                width: 50%;
+            }
+
+            .meta-right {
+                text-align: right;
+                width: 50%;
             }
 
             .meta-spacer td {
-                height: 6px;
+                height: 8px;
             }
 
             .data-table th {
@@ -79,10 +109,16 @@
                 border-top: 2px solid #000;
                 border-bottom: 1px solid #000;
                 text-align: left;
-                white-space: nowrap;
+                white-space: normal;
+                font-weight: bold;
             }
 
             .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row-shaded td {
+                background: #cfcfcf;
                 border-bottom: 1px solid #eee;
             }
 
@@ -122,73 +158,80 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
+        <div class="report-title">IBT Transaction Report</div>
+
+        <table class="meta-table">
+            <tr>
+                <td class="meta-left"><strong>Branch Name :</strong> @branchName</td>
+                <td class="meta-right"><strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp; <strong>To Date :</strong> @toDate</td>
+            </tr>
+            <tr>
+                <td class="meta-left"><strong>Report Generated On :</strong> @generatedOn</td>
+                <td class="meta-right"></td>
+            </tr>
+            <tr class="meta-spacer"><td colspan="2"></td></tr>
+        </table>
+
         <table class="data-table" data-sheet-name="IBTTransaction">
             <colgroup>
-                <col style="width:12%;" />
-                <col style="width:18%;" />
-                <col style="width:14%;" />
-                <col style="width:16%;" />
-                <col style="width:14%;" />
-                <col style="width:16%;" />
                 <col style="width:10%;" />
+                <col style="width:13%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:11%;" />
+                <col style="width:16%;" />
+                <col style="width:13%;" />
+                <col style="width:13%;" />
             </colgroup>
             <tbody>
-                <tr class="meta-title">
-                    <td colspan="7">IBT Transaction Report</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="4"><strong>Transaction From Branch :</strong> @branchName</td>
-                    <td colspan="3" class="text-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="4"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="3"></td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="7"></td></tr>
-
                 <tr>
                     <th>Member Id</th>
                     <th>Member Name</th>
-                    <th>Account No</th>
-                    <th>Member Branch</th>
+                    <th class="text-right">Deposit Amount</th>
+                    <th class="text-right">Withdrawl Amount</th>
                     <th>Transaction Date</th>
-                    <th>Payable Branch</th>
-                    <th class="text-right">Amount</th>
+                    <th>Nature Of Transaction</th>
+                    <th>Transaction OfficeName</th>
+                    <th>Member OfficeName</th>
                 </tr>
 
                 @if (rows.Any())
                 {
                     foreach (var row in rows)
                     {
-                        <tr class="detail-row">
+                        if (row.MemberId != currentMemberId)
+                        {
+                            shadeOn = !shadeOn;
+                            currentMemberId = row.MemberId;
+                        }
+
+                        <tr class="@(shadeOn ? "detail-row-shaded" : "detail-row")">
                             <td>@(row.MemberId ?? "")</td>
                             <td>@(row.FullName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td>@(row.MemMemberRegistrationOfficeName ?? "")</td>
+                            <td class="text-right">@(row.CashReceived.HasValue ? row.CashReceived.Value.ToString("N2") : "0.00")</td>
+                            <td class="text-right">@(row.CashWithdrawl.HasValue ? row.CashWithdrawl.Value.ToString("N2") : "0.00")</td>
                             <td>@(row.TransactionOnBs ?? "")</td>
-                            <td>@(row.PayableBranchName ?? "")</td>
-                            <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
+                            <td>@(row.Description ?? "")</td>
+                            <td>@(row.TransactionOfficeName ?? "")</td>
+                            <td>@(row.MemMemberRegistrationOfficeName ?? "")</td>
                         </tr>
                     }
 
                     <tr class="grand-total-row">
-                        <td colspan="6" class="text-right">Grand Total</td>
-                        <td class="text-right">@totalAmount.ToString("N2")</td>
+                        <td colspan="2" class="text-right">Grand Total</td>
+                        <td class="text-right">@totalCashReceived.ToString("N2")</td>
+                        <td class="text-right">@totalCashWithdrawl.ToString("N2")</td>
+                        <td colspan="4"></td>
                     </tr>
                     <tr class="grand-total-row">
-                        <td colspan="6" class="text-right">Total Records</td>
+                        <td colspan="7" class="text-right">Total Records</td>
                         <td class="text-right">@totalRecords</td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="8" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

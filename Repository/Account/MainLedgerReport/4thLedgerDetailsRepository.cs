@@ -18,9 +18,6 @@ namespace NexgenCosysReport.Repository.Account.MainLedgerReport
         private readonly IDateConverterService _dateConverter;
         private readonly ILogger<LedgerDetailsRepository> _logger;
 
-        // Fiscal-year-closing lookup tables (AcoAccountYearClosing / AcoFiscalYear) are
-        // queried directly here rather than through their own repositories, mirroring
-        // the legacy BLL's inline instantiation of CAcoAccountYearClosing/CAcoFiscalYear.
         public LedgerDetailsRepository(
             AppDbContext context,
             IDateConverterService dateConverter,
@@ -33,12 +30,6 @@ namespace NexgenCosysReport.Repository.Account.MainLedgerReport
 
         private record DateFilterSet(string SqlFilterExp, string SqlFilterExpOpening, string SqlFilterExpClosing);
 
-        // --------------------------------------------------------------
-        // Mirrors the legacy fiscal-year-aware opening/closing date logic:
-        // for account types 3/4 (Income/Expense-like types, per legacy
-        // convention), the opening balance window is bounded by the most
-        // recent closed fiscal year rather than a flat "before fromDate".
-        // --------------------------------------------------------------
         private async Task<DateFilterSet> BuildDateFiltersAsync(
             SqlConnection connection, LedgerDetailsReqResponse request)
         {
@@ -61,7 +52,6 @@ namespace NexgenCosysReport.Repository.Account.MainLedgerReport
                     $" And v.VoucherOn <= '{dateTo}'");
             }
 
-            // ---- Account types 3/4: fiscal-year-closing-aware branch ----
             var maxFiscalYearId = await connection.QueryFirstOrDefaultAsync<int?>(
                 "SELECT MAX(AcoFiscalYearId) FROM AcoAccountYearClosing");
 
@@ -108,22 +98,17 @@ namespace NexgenCosysReport.Repository.Account.MainLedgerReport
             return orderBy.ToString();
         }
 
-        // --------------------------------------------------------------
-        // SqlFilterMainLedger — builds up progressively based on ReportType,
-        // matching the legacy if/else-if chain exactly. ledgerHead must
-        // have 5 entries: [0]=MainLedger .. [4]=SubLedger4.
-        // --------------------------------------------------------------
         private static string BuildLedgerFilter(LedgerDetailsReqResponse request)
         {
             var ledgerHead = request.LedgerHead;
-            while (ledgerHead.Count < 5) ledgerHead.Add(string.Empty); // guard against short lists
+            while (ledgerHead.Count < 5) ledgerHead.Add(string.Empty);
 
             var filter = new StringBuilder($"And MainLedger = '{ledgerHead[0]}'");
 
             switch (request.ReportType)
             {
                 case "LedgerDetailsReport":
-                    break; // MainLedger only
+                    break;
                 case "1stLedgerDetailsReport":
                     filter.Append($" And SubLedger1 = N'{ledgerHead[1]}'");
                     break;
@@ -182,19 +167,32 @@ namespace NexgenCosysReport.Repository.Account.MainLedgerReport
                 var sqlFilterExpOrderBy = BuildSqlOrderBy(request);
                 var sqlFilterMainLedger = BuildLedgerFilter(request);
 
+                var spName = request.IsSummary
+                    ? "sp_6_56_GetLedgerDetailsSummary"
+                    : "sp_6_56_GetLedgerDetails";
+
+                // Confirmed 8-parameter signature for both sp_6_56_GetLedgerDetails and
+                // sp_6_56_GetLedgerDetailsSummary (established while fixing First/Second/
+                // Third Ledger Details reports earlier in this thread).
+                // @ShowOpeningBalance is deliberately NOT sent — it is not a parameter
+                // either SP declares, and passing it caused "too many arguments
+                // specified". ShowOpeningBalance remains a display-only flag: it still
+                // flows through to LedgerDetailsData.ShowOpeningBalance below and the
+                // view still uses it to decide whether to render the Opening/Closing
+                // Balance rows. The SP always computes @openingBalance/@closingBalance
+                // regardless of this flag.
                 var parameters = new DynamicParameters();
                 parameters.Add("@SqlFilterExp", sqlFilterExp.ToString(), DbType.String, size: -1);
                 parameters.Add("@SqlFilterExpOrderBy", sqlFilterExpOrderBy, DbType.String, size: -1);
                 parameters.Add("@SqlFilterExpOpening", sqlFilterExpOpening.ToString(), DbType.String, size: -1);
                 parameters.Add("@SqlFilterExpClosing", sqlFilterExpClosing.ToString(), DbType.String, size: -1);
                 parameters.Add("@SqlFilterMainLedger", sqlFilterMainLedger, DbType.String, size: -1);
-                parameters.Add("@ShowOpeningBalance", request.ShowOpeningBalance);
                 parameters.Add("@openingBalance", dbType: DbType.Double, direction: ParameterDirection.Output);
                 parameters.Add("@closingBalance", dbType: DbType.Double, direction: ParameterDirection.Output);
-                parameters.Add("@SqlFilterExpAccountType", dbType: DbType.String, size: 15, direction: ParameterDirection.Output);
+                parameters.Add("@SqlFilterExpAccountType", dbType: DbType.String, size: -1, direction: ParameterDirection.Output);
 
                 var rows = (await connection.QueryAsync<LedgerDetailsRowDto>(
-                    "sp_6_56_GetLedgerDetails",
+                    spName,
                     parameters,
                     commandType: CommandType.StoredProcedure,
                     commandTimeout: 120

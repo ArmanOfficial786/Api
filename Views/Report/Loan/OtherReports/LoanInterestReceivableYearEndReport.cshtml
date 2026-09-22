@@ -6,15 +6,11 @@
 
     var rows = (Model["Rows"] as List<LoanInterestReceivableYearEndRowDto>) ?? new List<LoanInterestReceivableYearEndRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
-    var totalDepositAmount = Model["TotalDepositAmount"] as decimal? ?? 0;
-    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
     var totalInterestAmount = Model["TotalInterestAmount"] as decimal? ?? 0;
     var asOnDate = Model["AsOnDate"]?.ToString() ?? "";
     var branchName = Model["BranchName"]?.ToString() ?? "All";
     var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "";
     var selectType = Model["SelectType"]?.ToString() ?? "As";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "-1";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
@@ -22,11 +18,16 @@
     var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName);
     var dateLabel = selectType switch
     {
-        "As" => "As on Date",
         "Monthly" => "As on Month End",
         "Yearly" => "As on Year End",
-        _ => "As on Date"
+        _ => "From Date"
     };
+
+    // Grouped by Loan Type: a label line, then a numbered list of members
+    // holding that loan type, then a subtotal for that loan type.
+    var loanTypeGroups = rows
+        .GroupBy(r => r.LoanTypeName)
+        .ToList();
 }
 <!DOCTYPE html>
 <html>
@@ -66,6 +67,7 @@
                 .data-table td, .data-table th {
                     word-wrap: break-word;
                     overflow-wrap: break-word;
+                    overflow: hidden;
                     padding: 4px 6px;
                     vertical-align: middle;
                 }
@@ -82,6 +84,7 @@
             .meta-row td {
                 padding: 3px 6px;
                 font-size: 9pt;
+                text-align: left;
             }
 
             .meta-spacer td {
@@ -93,16 +96,40 @@
                 border-top: 2px solid #000;
                 border-bottom: 1px solid #000;
                 text-align: left;
-                white-space: nowrap;
+                white-space: normal;
+                line-height: 1.2;
+                vertical-align: bottom;
             }
 
+            /* Loan Type section label, underlined like the legacy report */
+            .loantype-label-row td {
+                padding-top: 10px;
+                padding-bottom: 2px;
+            }
+
+            .loantype-label {
+                font-weight: bold;
+                border-bottom: 1px solid #000;
+                padding-bottom: 2px;
+                display: inline-block;
+            }
+
+            /* Loan rows under a loan type, numbered */
             .detail-row td {
                 border-bottom: 1px solid #eee;
             }
 
-            .detail-row-alt td {
-                background: #f9f9f9;
-                border-bottom: 1px solid #eee;
+            .sn-col {
+                text-align: center;
+                color: #555;
+            }
+
+            /* Per-loan-type subtotal */
+            .group-total-row td {
+                border-top: 1px solid #000;
+                font-weight: bold;
+                padding-top: 4px;
+                padding-bottom: 8px;
             }
 
             .grand-total-row td {
@@ -119,14 +146,6 @@
 
             .text-center {
                 text-align: center !important;
-            }
-
-            .positive {
-                color: #006600;
-            }
-
-            .negative {
-                color: #CC0000;
             }
 
             @@media print {
@@ -151,98 +170,91 @@
 
         <table class="data-table" data-sheet-name="LoanInterestReceivableYearEnd">
             <colgroup>
-                <col style="width:9%;" />
-                <col style="width:15%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:10%;" />
-                <col style="width:10%;" />
-                <col style="width:10%;" />
+                <col style="width:6%;" />
+                <col style="width:14%;" />
+                <col style="width:26%;" />
+                <col style="width:34%;" />
+                <col style="width:20%;" />
             </colgroup>
             <tbody>
                 <!-- Report Title -->
                 <tr class="meta-title">
-                    <td colspan="9">Loan Interest Receivable (Year-End) Report</td>
+                    <td colspan="5">Loan Interest Receivable (Year-End) Report</td>
                 </tr>
 
-                <!-- Metadata -->
+                <!-- Metadata: stacked, left-aligned -->
                 <tr class="meta-row">
                     <td colspan="5"><strong>Branch Name :</strong> @branchName</td>
-                    <td colspan="4" class="text-right">
-                        <strong>@dateLabel :</strong> @asOnDate
-                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="5"><strong>@dateLabel :</strong> @asOnDate</td>
                 </tr>
                 @if (isMemberGroupFiltered)
                 {
                     <tr class="meta-row">
                         <td colspan="5"><strong>Member Group :</strong> @memberGroupName</td>
-                        <td colspan="4" class="text-right">
-                            <strong>Report Generated On :</strong> @generatedOn
-                        </td>
                     </tr>
                 }
-                else
-                {
-                    <tr class="meta-row">
-                        <td colspan="9" class="text-right"><strong>Report Generated On :</strong> @generatedOn</td>
-                    </tr>
-                }
-                <tr class="meta-spacer"><td colspan="9"></td></tr>
+                <tr class="meta-row">
+                    <td colspan="5"><strong>Report Generated On :</strong> @generatedOn</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="5"></td></tr>
 
                 <!-- Table Header -->
                 <tr>
+                    <th>S.No</th>
                     <th>Member Id</th>
                     <th>Member Name</th>
-                    <th>Loan A/c No</th>
-                    <th>Loan Type</th>
-                    <th class="text-right">Loan Amount</th>
-                    <th class="text-right">Deposit</th>
-                    <th class="text-right">Balance</th>
-                    <th class="text-right">Interest</th>
-                    <th>Last Payment</th>
+                    <th>Loanee Details</th>
+                    <th class="text-right">Interest Receivable</th>
                 </tr>
 
-                @if (rows.Any())
+                @if (loanTypeGroups.Any())
                 {
-                    var sn = 0;
-                    foreach (var row in rows)
+                    foreach (var grp in loanTypeGroups)
                     {
-                        sn++;
-                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.FullName ?? "")</td>
-                            <td>@(row.LoanAccountNo ?? "")</td>
-                            <td>@(row.LoanTypeName ?? "")</td>
-                            <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.DepositAmount.HasValue ? row.DepositAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.Balance.HasValue ? row.Balance.Value.ToString("N2") : "")</td>
-                            <td class="text-right @(row.InterestAmount.HasValue && row.InterestAmount.Value > 0 ? "negative" : "positive")">
-                                @(row.InterestAmount.HasValue ? row.InterestAmount.Value.ToString("N2") : "")
-                            </td>
-                            <td>@(row.LastPaymentOnAD.HasValue ? row.LastPaymentOnAD.Value.ToString("yyyy/MM/dd") : "")</td>
+                        <!-- Loan Type section label -->
+                        <tr class="loantype-label-row">
+                            <td colspan="5"><span class="loantype-label">@(grp.Key ?? "")</span></td>
+                        </tr>
+
+                        <!-- Members holding this loan type, numbered -->
+                        var sn = 0;
+                        var groupTotal = 0m;
+                        foreach (var row in grp)
+                        {
+                            sn++;
+                            groupTotal += row.InterestAmount ?? 0;
+                            <tr class="detail-row">
+                                <td class="sn-col">@sn</td>
+                                <td>@(row.MemberId ?? "")</td>
+                                <td>@(row.FullName ?? "")</td>
+                                <td>@(row.LoanAccountNo ?? "")</td>
+                                <td class="text-right">@(row.InterestAmount.HasValue ? row.InterestAmount.Value.ToString("N2") : "")</td>
+                            </tr>
+                        }
+
+                        <!-- Per-loan-type subtotal -->
+                        <tr class="group-total-row">
+                            <td colspan="3"></td>
+                            <td class="text-right">@(grp.Key ?? "")</td>
+                            <td class="text-right">@groupTotal.ToString("N2")</td>
                         </tr>
                     }
 
-                    <!-- Grand Total Row -->
+                    <!-- Report-level grand total -->
                     <tr class="grand-total-row">
                         <td colspan="4" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalDepositAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalBalance.ToString("N2")</strong></td>
                         <td class="text-right"><strong>@totalInterestAmount.ToString("N2")</strong></td>
-                        <td></td>
                     </tr>
                     <tr class="grand-total-row">
-                        <td colspan="8" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
+                        <td colspan="5" class="text-right"><strong>Total Records: @totalRecords</strong></td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="5" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

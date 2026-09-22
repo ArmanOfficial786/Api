@@ -90,11 +90,9 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                     sqlFilterExpBranchId.Append(" And v.UsmOfficeId in (").Append(branchIds).Append(")");
                 }
 
-                if (!string.IsNullOrEmpty(request.MemberGroupId) && request.MemberGroupId != "-1")
+                if (request.MemberGroupId != -1)
                 {
                     sqlFilterExpBranchId.Append(" AND MR.SycMemberGroupId = ").Append(request.MemberGroupId);
-
-                    // Get member group name for display
                     memberGroupName = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT Name FROM SycMemberGroup WHERE SycMemberGroupId = @Id",
                         new { Id = request.MemberGroupId });
@@ -143,8 +141,11 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                 {
                     Rows = resultList,
                     TotalRecords = resultList.Count,
+                    TotalMembers = resultList
+                        .Select(r => r.MemberId)
+                        .Distinct()
+                        .Count(),
                     TotalLoanIssueAmount = resultList.Sum(r => r.LoanIssueAmount ?? 0),
-                    TotalLoanCloseAmount = resultList.Sum(r => r.LoanCloseAmount ?? 0),
                     FromDateBs = request.FromDateBs,
                     ToDateBs = request.ToDateBs,
                     BranchName = branchName,

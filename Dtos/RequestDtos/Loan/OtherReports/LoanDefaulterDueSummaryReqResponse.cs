@@ -1,34 +1,17 @@
-﻿// Dtos/RequestDtos/Loan/OtherReports/LoanDefaulterDueSummaryRequestDto.cs
-namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+﻿namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
 {
     public class LoanDefaulterDueSummaryRequestDto
     {
-        // Till date in BS format (required)
         public string TillDate { get; set; } = string.Empty;
-
-        // Comma-separated office ids from the checkbox list ("-1" or empty = all offices)
         public string? BranchIds { get; set; }
-
-        // Collection Center filter (-1 = all)
         public string? CollectionCenterId { get; set; } = "-1";
-
-        // Enable collection center grouping
         public bool EnableCollectionCenter { get; set; } = false;
-
-        // Collector filter (-1 = all)
         public string? CollectorId { get; set; } = "-1";
-
-        // Report type: "LDR" (Schedulewise Interest) or "LDTPR" (Till Date Interest)
         public string ReportType { get; set; } = "LDR";
-
-        // Order By column name
         public string OrderBy { get; set; } = "-1";
-
-        // Visual report flag
         public bool VisualReport { get; set; } = false;
     }
 
-    // Columns match sp_7_16_LoanDefaulterDueSummaryTobePaid output SELECT list
     public class LoanDefaulterDueSummaryRowDto
     {
         public long? LmtLoanIssueId { get; set; }
@@ -47,6 +30,10 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
         public string? MobileNo { get; set; }
         public string? TemporaryAddressDetail { get; set; }
         public string? CollectionCenterName { get; set; }
+        // ADDED — matches the SP's new COUNT(*) AS InstallmentCount column.
+        // Only sp_7_16_LoanDefaulterDueSummary (LDR) returns this now; the
+        // TobePaid SP (LDTPR) was left unchanged, so this will be null there.
+        public int? InstallmentCount { get; set; }
     }
 
     public class LoanDefaulterDueSummaryData

@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 
-namespace NexgenCosysAPI.Controllers.Common
+namespace NexgenCosysReport.Controllers.Common
 {
     [ApiController]
     [Route("api/[controller]")]

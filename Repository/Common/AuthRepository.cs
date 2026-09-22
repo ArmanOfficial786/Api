@@ -109,10 +109,16 @@ public class AuthRepository : IAuth
         var userType = await _context.UsmUserTypes
             .Where(t => t.UsmUserTypeId == user.UsmUserTypeId)
             .FirstOrDefaultAsync(cancellationToken);
+        // 9b. Branch name for the user's own office — same UsmOffice.OfficeName lookup
+        //     pattern used across the report repositories.
+        var branchName = await _context.UsmOffices
+            .Where(o => o.UsmOfficeId == user.UsmOfficeId)
+            .Select(o => o.OfficeName)
+            .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
 
         // 10. Generate token BEFORE committing the login row — if this throws
         //     (e.g. missing Jwt:Key config), no dangling "already logged in" row is left behind.
-        var token = _tokenService.GenerateToken(user, officeIdsCsv, userType?.UserTypeName ?? string.Empty);
+        var token = _tokenService.GenerateToken(user, officeIdsCsv, userType?.UserTypeName ?? string.Empty, branchName);
 
         // 11. Only now create the login record — mirrors CUsmLogin.CreateLogin, moved to run
         //     last so failures above never leave an open, unclosed session.
@@ -135,6 +141,7 @@ public class AuthRepository : IAuth
             UserTypeName = userType?.UserTypeName ?? string.Empty,
             GenderId = user.UsmGenderId,
             OfficeId = user.UsmOfficeId,
+            BranchName = branchName,
             OfficeIds = officeIdsCsv,
             CompanyName = company?.CompanyName ?? string.Empty,
             SystemEditionName = systemEdition.SystemEditionName

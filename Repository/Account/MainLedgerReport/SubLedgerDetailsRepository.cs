@@ -17,9 +17,6 @@ namespace NexgenCosysReport.Repository.Account.SubLedgerDetailsReport
         private readonly IDateConverterService _dateConverter;
         private readonly ILogger<SubLedgerDetailsRepository> _logger;
 
-        // Fiscal-year-closing lookup tables (AcoAccountYearClosing / AcoFiscalYear) are
-        // queried directly here rather than through their own repositories, mirroring
-        // the legacy BLL's inline instantiation of CAcoAccountYearClosing/CAcoFiscalYear.
         public SubLedgerDetailsRepository(
             AppDbContext context,
             IDateConverterService dateConverter,
@@ -32,12 +29,6 @@ namespace NexgenCosysReport.Repository.Account.SubLedgerDetailsReport
 
         private record DateFilterSet(string SqlFilterExp, string SqlFilterExpOpening, string SqlFilterExpClosing);
 
-        // --------------------------------------------------------------
-        // Mirrors the legacy fiscal-year-aware opening/closing date logic:
-        // for account types 3/4 (Income/Expense-like types, per legacy
-        // convention), the opening balance window is bounded by the most
-        // recent closed fiscal year rather than a flat "before fromDate".
-        // --------------------------------------------------------------
         private async Task<DateFilterSet> BuildDateFiltersAsync(
             SqlConnection connection, SubLedgerDetailsRequestDto request)
         {
@@ -60,7 +51,6 @@ namespace NexgenCosysReport.Repository.Account.SubLedgerDetailsReport
                     $" And v.VoucherOn <= '{dateTo}'");
             }
 
-            // ---- Account types 3/4: fiscal-year-closing-aware branch ----
             var maxFiscalYearId = await connection.QueryFirstOrDefaultAsync<int?>(
                 "SELECT MAX(AcoFiscalYearId) FROM AcoAccountYearClosing");
 
@@ -108,34 +98,49 @@ namespace NexgenCosysReport.Repository.Account.SubLedgerDetailsReport
         }
 
         // --------------------------------------------------------------
-        // SqlFilterMainLedger — builds up progressively based on ReportType,
-        // matching the legacy if/else-if chain exactly. ledgerHead must
-        // have 5 entries: [0]=MainLedger .. [4]=SubLedger4.
+        // Root-cause fix: previously this switched purely on request.ReportType,
+        // and any unrecognized value (e.g. "0", the placeholder Swagger fills in
+        // by default) fell into the deepest "4th level" case — requiring
+        // SubLedger1..4 to equal empty string. The SP never returns empty
+        // string for those columns (it returns '-' when there's no posting
+        // detail), so that filter could never match a row, silently producing
+        // "No data found" even with valid data and a valid MainLedger name.
+        //
+        // Fixed by deriving the actual drill-down depth from how many non-empty
+        // entries LedgerHead genuinely contains — this is what the legacy
+        // webform encoded implicitly via which dropdown box had a selection —
+        // rather than trusting an arbitrary ReportType string. A caller that
+        // only sends ledgerHead[0] ("OFFICE EXPENSE") now correctly gets a
+        // MainLedger-only filter regardless of what ReportType was set to.
         // --------------------------------------------------------------
         private static string BuildLedgerFilter(SubLedgerDetailsRequestDto request)
         {
-            var ledgerHead = request.LedgerHead;
-            while (ledgerHead.Count < 5) ledgerHead.Add(string.Empty); // guard against short lists
+            var suppliedHead = request.LedgerHead ?? new List<string>();
 
-            var filter = new StringBuilder($"And MainLedger = '{ledgerHead[0]}'");
+            // How many levels the caller actually supplied a real value for.
+            var suppliedDepth = suppliedHead.Count(x => !string.IsNullOrWhiteSpace(x));
 
-            switch (request.ReportType)
+            // Prefer an explicit, recognized ReportType if given — but never let
+            // an unrecognized value push us deeper than what was actually supplied.
+            var requestedDepth = request.ReportType?.Trim() switch
             {
-                case "LedgerDetailsReport":
-                    break; // MainLedger only
-                case "1stLedgerDetailsReport":
-                    filter.Append($" And SubLedger1 = N'{ledgerHead[1]}'");
-                    break;
-                case "2ndLedgerDetailsReport":
-                    filter.Append($" And SubLedger1 = N'{ledgerHead[1]}' And SubLedger2 = N'{ledgerHead[2]}'");
-                    break;
-                case "3rdLedgerDetailsReport":
-                    filter.Append($" And SubLedger1 = N'{ledgerHead[1]}' And SubLedger2 = N'{ledgerHead[2]}' And SubLedger3 = N'{ledgerHead[3]}'");
-                    break;
-                case "4thLedgerDetailsReport":
-                default:
-                    filter.Append($" And SubLedger1 = N'{ledgerHead[1]}' And SubLedger2 = N'{ledgerHead[2]}' And SubLedger3 = N'{ledgerHead[3]}' And SubLedger4 = N'{ledgerHead[4]}'");
-                    break;
+                "LedgerDetailsReport" => 1,
+                "1stLedgerDetailsReport" => 2,
+                "2ndLedgerDetailsReport" => 3,
+                "3rdLedgerDetailsReport" => 4,
+                "4thLedgerDetailsReport" => 5,
+                _ => suppliedDepth
+            };
+
+            var depth = Math.Clamp(Math.Min(requestedDepth, Math.Max(suppliedDepth, 1)), 1, 5);
+
+            var mainLedger = suppliedHead.Count > 0 ? suppliedHead[0] : string.Empty;
+            var filter = new StringBuilder($"And MainLedger = '{mainLedger}'");
+
+            for (int level = 1; level < depth; level++)
+            {
+                var value = suppliedHead.Count > level ? suppliedHead[level] : string.Empty;
+                filter.Append($" And SubLedger{level} = N'{value}'");
             }
 
             return filter.ToString();
@@ -186,11 +191,10 @@ namespace NexgenCosysReport.Repository.Account.SubLedgerDetailsReport
                 parameters.Add("@SqlFilterExpOrderBy", sqlFilterExpOrderBy, DbType.String, size: -1);
                 parameters.Add("@SqlFilterExpOpening", sqlFilterExpOpening.ToString(), DbType.String, size: -1);
                 parameters.Add("@SqlFilterExpClosing", sqlFilterExpClosing.ToString(), DbType.String, size: -1);
+                parameters.Add("@openingBalance", dbType: DbType.Decimal, direction: ParameterDirection.Output);
+                parameters.Add("@closingBalance", dbType: DbType.Decimal, direction: ParameterDirection.Output);
+                parameters.Add("@SqlFilterExpAccountType", dbType: DbType.String, size: -1, direction: ParameterDirection.Output);
                 parameters.Add("@SqlFilterMainLedger", sqlFilterMainLedger, DbType.String, size: -1);
-                parameters.Add("@ShowOpeningBalance", request.ShowOpeningBalance);
-                parameters.Add("@openingBalance", dbType: DbType.Double, direction: ParameterDirection.Output);
-                parameters.Add("@closingBalance", dbType: DbType.Double, direction: ParameterDirection.Output);
-                parameters.Add("@SqlFilterExpAccountType", dbType: DbType.String, size: 15, direction: ParameterDirection.Output);
 
                 var rows = (await connection.QueryAsync<SubLedgerDetailsRowDto>(
                     "sp_6_56_GetLedgerDetails",
@@ -199,28 +203,24 @@ namespace NexgenCosysReport.Repository.Account.SubLedgerDetailsReport
                     commandTimeout: 120
                 )).AsList();
 
-                var openingBalance = parameters.Get<double?>("@openingBalance") ?? 0;
-                var closingBalance = parameters.Get<double?>("@closingBalance") ?? 0;
-                var accountType = parameters.Get<string?>("@SqlFilterExpAccountType");
+                var openingBalance = parameters.Get<decimal?>("@openingBalance") ?? 0m;
+                var closingBalance = parameters.Get<decimal?>("@closingBalance") ?? 0m;
+                var accountType = parameters.Get<string?>("@SqlFilterExpAccountType")
+                                   ?? rows.FirstOrDefault()?.AccountType;
 
-                string branchName = "All";
-                if (!string.IsNullOrEmpty(request.BranchId) &&
-                    request.BranchId != "-1" &&
-                    request.BranchId != "string" &&
-                    long.TryParse(request.BranchId, out var branchIdForName))
-                {
-                    var name = await connection.QueryFirstOrDefaultAsync<string>(
-                        "SELECT OfficeName FROM UsmOffice WHERE UsmOfficeId = @BranchId",
-                        new { BranchId = branchIdForName });
-                    branchName = string.IsNullOrEmpty(name) ? "All" : name;
-                }
+                var totalDebit = rows.Sum(r => r.DebitAmount ?? 0);
+                var totalCredit = rows.Sum(r => r.CreditAmount ?? 0);
+
+                var branchName = await ResolveBranchNameAsync(connection, request.BranchId);
 
                 return new SubLedgerDetailsData
                 {
                     Rows = rows,
                     TotalRecords = rows.Count,
-                    OpeningBalance = (decimal)openingBalance,
-                    ClosingBalance = (decimal)closingBalance,
+                    TotalDebitAmount = totalDebit,
+                    TotalCreditAmount = totalCredit,
+                    OpeningBalance = openingBalance,
+                    ClosingBalance = closingBalance,
                     AccountType = accountType,
                     FromDateBs = request.FromDateBs,
                     ToDateBs = request.ToDateBs,
@@ -238,6 +238,20 @@ namespace NexgenCosysReport.Repository.Account.SubLedgerDetailsReport
                 _logger.LogError(ex, "Error in GetReportDataAsync");
                 throw;
             }
+        }
+
+        private static async Task<string> ResolveBranchNameAsync(SqlConnection connection, string? branchId)
+        {
+            if (string.IsNullOrEmpty(branchId) || branchId == "-1" || branchId == "string" ||
+                !long.TryParse(branchId, out var id))
+            {
+                return "All";
+            }
+
+            var name = await connection.QueryFirstOrDefaultAsync<string>(
+                "SELECT OfficeName FROM UsmOffice WHERE UsmOfficeId = @Id", new { Id = id });
+
+            return string.IsNullOrEmpty(name) ? "All" : name;
         }
     }
 }

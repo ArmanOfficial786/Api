@@ -13,7 +13,7 @@ using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.MembeAccount.OthersReport
+namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
 {
     [ApiController]
     [Route("api/[controller]")]

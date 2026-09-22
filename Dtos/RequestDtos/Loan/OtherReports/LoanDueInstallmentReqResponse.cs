@@ -1,32 +1,17 @@
-﻿// Dtos/RequestDtos/Loan/OtherReports/LoanDueInstallmentRequestDto.cs
-namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+﻿namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
 {
     public class LoanDueInstallmentRequestDto
     {
-        // From/To dates in BS format (required for date range filter)
         public string? FromDateBs { get; set; }
         public string? ToDateBs { get; set; }
-
-        // Member ID (human-readable code, e.g. "M-001") - optional
         public string? MemberId { get; set; }
-
-        // Payment Duration Type filter (-1 = all)
         public int LmtPaymentDurationTypeId { get; set; } = -1;
-
-        // Comma-separated office ids from the checkbox list ("-1" or empty = all offices)
         public string? BranchIds { get; set; }
-
-        // Member Group filter (empty/-1 = all groups)
-        public string? MemberGroupId { get; set; }
-
-        // Order By column name
+        public long MemberGroupId { get; set; } = -1;
         public string OrderBy { get; set; } = "-1";
-
-        // Visual report flag
         public bool VisualReport { get; set; } = false;
     }
 
-    // Columns match sp_7_16_LoanDueInstallmentReport's output SELECT list
     public class LoanDueInstallmentRowDto
     {
         public long? LmtLoanIssueId { get; set; }

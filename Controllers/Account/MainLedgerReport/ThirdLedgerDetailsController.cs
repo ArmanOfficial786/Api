@@ -1,4 +1,5 @@
 ﻿// Controllers/Account/ThirdLedgerDetailsReport/ThirdLedgerDetailsController.cs
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -9,13 +10,14 @@ using NexgenCosysReport.Inteface.ServiceInterface.Account.ThirdLedgerDetailsRepo
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
+using System.Security.Claims;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.Account.ThirdLedgerDetailsReport
+namespace NexgenCosysReport.Controllers.Account.MainLedgerReport
 {
     [ApiController]
-    [Route("api/account/[controller]")]
-    //[Authorize]
+    [Route("api/[controller]")]
+    [Authorize]
     public class ThirdLedgerDetailsController : ControllerBase
     {
         private readonly IThirdLedgerDetailsRepository _repository;
@@ -51,11 +53,11 @@ namespace NexgenCosysReport.Controllers.Account.ThirdLedgerDetailsReport
         {
             try
             {
-                //var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                //if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                //{
-                //    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                //}
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                {
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                }
 
                 var reportName = "ThirdLedgerDetails";
                 var upperFormat = format.ToUpper();
@@ -65,7 +67,7 @@ namespace NexgenCosysReport.Controllers.Account.ThirdLedgerDetailsReport
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
                 }
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -131,7 +133,7 @@ namespace NexgenCosysReport.Controllers.Account.ThirdLedgerDetailsReport
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VThirdLedgerDetailsReport.cshtml"
-                    : "Views/Report/Account/ThirdLedgerDetailsReport/ThirdLedgerDetailsReport.cshtml";
+                    : "Views/Report/Account/MainLedgerReport/ThirdLedgerDetailsReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

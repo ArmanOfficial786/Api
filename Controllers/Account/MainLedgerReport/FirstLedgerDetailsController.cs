@@ -1,4 +1,5 @@
 ﻿// Controllers/Account/FirstLedgerDetailsReport/FirstLedgerDetailsController.cs
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -9,13 +10,14 @@ using NexgenCosysReport.Inteface.ServiceInterface.Account.FirstLedgerDetailsRepo
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
+using System.Security.Claims;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.Account.FirstLedgerDetailsReport
+namespace NexgenCosysReport.Controllers.Account.MainLedgerReport
 {
     [ApiController]
-    [Route("api/account/[controller]")]
-    //[Authorize]
+    [Route("api/[controller]")]
+    [Authorize]
     public class FirstLedgerDetailsController : ControllerBase
     {
         private readonly IFirstLedgerDetailsRepository _repository;
@@ -51,11 +53,11 @@ namespace NexgenCosysReport.Controllers.Account.FirstLedgerDetailsReport
         {
             try
             {
-                //    var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                //    if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                //    {
-                //        return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                //    }
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                {
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                }
                 var reportName = "FirstLedgerDetails";
                 var upperFormat = format.ToUpper();
 
@@ -64,7 +66,7 @@ namespace NexgenCosysReport.Controllers.Account.FirstLedgerDetailsReport
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
                 }
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -88,7 +90,7 @@ namespace NexgenCosysReport.Controllers.Account.FirstLedgerDetailsReport
                 // Get header data
                 string? branchIdForHeader = null;
                 if (!string.IsNullOrEmpty(request.BranchIds) &&
-                    request.BranchIds != "-1" && !request.BranchIds.Contains(','))
+                    request.BranchIds != "-1")
                 {
                     branchIdForHeader = request.BranchIds;
                 }
@@ -128,7 +130,7 @@ namespace NexgenCosysReport.Controllers.Account.FirstLedgerDetailsReport
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VFirstLedgerDetailsReport.cshtml"
-                    : "Views/Report/Account/FirstLedgerDetailsReport/FirstLedgerDetailsReport.cshtml";
+                    : "Views/Report/Account/MainLedgerReport/FirstLedgerDetailsReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

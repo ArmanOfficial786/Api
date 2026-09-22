@@ -84,7 +84,7 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                 // 3. @SqlFilterExp = quoted date string (used inside SP)
                 // 4. ORDER BY (@SqlFilterExpOrderBy)
                 // --------------------------------------------------------------
-                if (!string.IsNullOrEmpty(request.MemberGroupId) && request.MemberGroupId != "-1")
+                if (request.MemberGroupId != -1)
                 {
                     sqlFilterExpBranchId.Append(" AND MR.SycMemberGroupId = ").Append(request.MemberGroupId);
 
@@ -101,24 +101,21 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
 
                 // --------------------------------------------------------------
                 // Determine the target date based on SelectType:
-                // - "As" (As on date): use AsOnDateBs directly
-                // - "Monthly": use end date of given year/month
-                // - "Yearly": use end date of Ashad (month 3) of given year
+                // - "Monthly": end date of given year/month
+                // - "Yearly": end date of Ashad (month 3) of given year
+                // - anything else ("As", blank, unrecognized): falls back to
+                //   AsOnDateBs directly if it was supplied. This is a
+                //   deliberate fallback (not just an "As" case) so a caller
+                //   that omits/mis-cases SelectType but does send AsOnDateBs
+                //   still works, instead of always throwing.
                 // --------------------------------------------------------------
                 DateTime? targetDateAd = null;
+                var selectType = (request.SelectType ?? string.Empty).Trim();
 
-                if (request.SelectType == "As")
-                {
-                    if (!string.IsNullOrEmpty(request.AsOnDateBs) && request.AsOnDateBs != "-1")
-                    {
-                        targetDateAd = await _dateConverter.NepaliToEnglishAsync(request.AsOnDateBs);
-                    }
-                }
-                else if (request.SelectType == "Monthly")
+                if (selectType.Equals("Monthly", StringComparison.OrdinalIgnoreCase))
                 {
                     if (request.MonthlyYear.HasValue && request.MonthlyMonth.HasValue)
                     {
-                        // Get end date of the BS month
                         var monthEndBs = await GetNepaliMonthEndDateAsync(connection, request.MonthlyYear.Value, request.MonthlyMonth.Value);
                         if (!string.IsNullOrEmpty(monthEndBs))
                         {
@@ -126,11 +123,10 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                         }
                     }
                 }
-                else if (request.SelectType == "Yearly")
+                else if (selectType.Equals("Yearly", StringComparison.OrdinalIgnoreCase))
                 {
                     if (request.YearlyYear.HasValue)
                     {
-                        // Get end date of Ashad (month 3) of the BS year
                         var yearEndBs = await GetNepaliMonthEndDateAsync(connection, request.YearlyYear.Value, 3);
                         if (!string.IsNullOrEmpty(yearEndBs))
                         {
@@ -138,10 +134,19 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                         }
                     }
                 }
+                else if (!string.IsNullOrEmpty(request.AsOnDateBs) && request.AsOnDateBs != "-1")
+                {
+                    // Covers "As" explicitly, and also covers a blank/omitted
+                    // SelectType as long as AsOnDateBs was actually supplied.
+                    targetDateAd = await _dateConverter.NepaliToEnglishAsync(request.AsOnDateBs);
+                }
 
                 if (!targetDateAd.HasValue)
                 {
-                    throw new ArgumentException("Unable to determine target date from the provided parameters.");
+                    throw new ArgumentException(
+                        $"Unable to determine target date. SelectType='{request.SelectType}', " +
+                        $"AsOnDateBs='{request.AsOnDateBs}', MonthlyYear={request.MonthlyYear}, " +
+                        $"MonthlyMonth={request.MonthlyMonth}, YearlyYear={request.YearlyYear}.");
                 }
 
                 var targetDateStr = targetDateAd.Value.ToString("yyyy-MM-dd");
@@ -202,9 +207,6 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
         // --------------------------------------------------------------
         private async Task<string?> GetNepaliMonthEndDateAsync(SqlConnection connection, int year, int month)
         {
-            // Adjust month formatting to MM
-            var monthStr = month.ToString("D2");
-
             var endBs = await connection.QueryFirstOrDefaultAsync<string>(
                 @"SELECT TOP 1 
                         CAST(NepaliYear AS nvarchar) + '/' + 

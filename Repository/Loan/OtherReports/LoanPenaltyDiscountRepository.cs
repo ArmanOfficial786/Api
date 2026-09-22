@@ -85,17 +85,14 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                 // 4. Date range filter
                 // 5. ORDER BY
                 // --------------------------------------------------------------
-                if (!string.IsNullOrWhiteSpace(request.MemberId))
+                if (!string.IsNullOrWhiteSpace(request.MemberId) && request.MemberId.Trim() != "string")
                 {
                     sqlFilterExp.Append(" And MR.MemberId = '").Append(request.MemberId.Trim()).Append("'");
 
-                    // Get member name for display
                     var name = await connection.QueryFirstOrDefaultAsync<string>(
                         @"SELECT FirstName + ' ' +
-                                 CASE WHEN MiddleName = '' THEN '' ELSE MiddleName + ' ' END +
-                                 LastName
-                          FROM MemMemberRegistration 
-                          WHERE MemberId = @MemberId AND IsActive = 1",
+                           CASE WHEN MiddleName = '' THEN '' ELSE MiddleName + ' ' END +
+                           LastName FROM MemMemberRegistration WHERE MemberId = @MemberId AND IsActive = 1",
                         new { MemberId = request.MemberId.Trim() });
                     memberName = name;
                 }

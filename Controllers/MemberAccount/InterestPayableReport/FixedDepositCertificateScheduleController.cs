@@ -12,7 +12,7 @@ using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.MemberAccount.FixedDepositCertificateSchedule
+namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
 {
     [ApiController]
     [Route("api/[controller]")]

@@ -1,4 +1,4 @@
-﻿// Controllers/Loan/OtherReports/LoanCommissionController.cs
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -9,13 +9,14 @@ using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Loan.OtherReports;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Loan.OtherReports
 {
     [ApiController]
     [Route("api/[controller]")]
-    //[Authorize]
+    [Authorize]
     public class LoanCommissionController : ControllerBase
     {
         private readonly ILoanCommissionRepository _repository;
@@ -46,9 +47,6 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
             _logger = logger;
             _dateConverter = dateConverter;
         }
-
-        // POST api/LoanCommission?format=VIEW
-        // Body: { "fromDateBs": "2080-01-01", "toDateBs": "2080-12-30", "collectorId": 65 }
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] LoanCommissionRequestDto request,
@@ -56,11 +54,11 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
         {
             try
             {
-                //var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                //if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                //{
-                //    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                //}
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                {
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                }
 
                 if (request == null || !ModelState.IsValid)
                 {
@@ -70,7 +68,7 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                 var reportName = "LoanCommission";
                 var upperFormat = format.ToUpper();
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -114,7 +112,9 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                     { "Format", upperFormat }
                 };
 
-                string viewPath = "Views/Report/Loan/OtherReports/LoanCommissionReport.cshtml";
+                string viewPath = request.VisualReport
+                         ? "Views/VisualReport/VFirstLedgerDetailsReport.cshtml"
+                         : "Views/Report/Loan/OtherReports/LoanCommissionReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

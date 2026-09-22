@@ -11,7 +11,7 @@ using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.MembeAccount.SavingAccWiseReport;
+namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport;
 
 [ApiController]
 [Route("api/[controller]")]

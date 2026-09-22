@@ -1,4 +1,4 @@
-﻿// Controllers/AccountOperation/OthersReport/CashAndBankBalanceController.cs
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -9,13 +9,14 @@ using NexgenCosysReport.Inteface.ServiceInterface.AccountOperation.OthersReport;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
+using System.Security.Claims;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.Account.OthersReport
+namespace NexgenCosysReport.Controllers.Account.OtherReports
 {
     [ApiController]
     [Route("api/[controller]")]
-    //[Authorize]
+    [Authorize]
     public class CashAndBankBalanceController : ControllerBase
     {
         private readonly ICashAndBankBalanceRepository _repository;
@@ -26,6 +27,10 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
         private readonly IOptions<ReportSettings> _reportSettings;
         private readonly ILogger<CashAndBankBalanceController> _logger;
         private readonly IDateConverterService _dateConverter;
+
+        // Single Razor view for both English and Nepali — language is picked
+        // inside the view based on the NepaliReport flag passed in reportData.
+        private const string ViewPath = "Views/Report/Account/OtherReports/CashAndBankBalanceReport.cshtml";
 
         public CashAndBankBalanceController(
             ICashAndBankBalanceRepository repository,
@@ -47,7 +52,6 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
             _dateConverter = dateConverter;
         }
 
-        // POST api/CashAndBankBalance?format=VIEW
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] CashAndBankBalanceRequestDto request,
@@ -55,11 +59,11 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
         {
             try
             {
-                //var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                //if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                //{
-                //    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                //}
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                {
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                }
 
                 if (request == null || !ModelState.IsValid)
                 {
@@ -69,7 +73,7 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
                 var reportName = "CashAndBankBalance";
                 var upperFormat = format.ToUpper();
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -122,19 +126,15 @@ namespace NexgenCosysReport.Controllers.Account.OthersReport
                     { "HeaderDataSet", headerData },
                     { "TillDate", data.TillDateBs ?? "" },
                     { "BranchName", data.BranchName ?? "All" },
-                    { "OrderBy", request.OrderBy },
+                    { "OrderBy", request.OrderBy ?? "" },
                     { "NepaliReport", data.NepaliReport },
                     { "Format", upperFormat }
                 };
 
-                string viewPath = data.NepaliReport
-                    ? "Views/Report/AccountOperation/OthersReport/CashAndBankBalanceNepaliReport.cshtml"
-                    : "Views/Report/AccountOperation/OthersReport/CashAndBankBalanceReport.cshtml";
-
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
                         reportKey: reportKey,
-                        reportPath: viewPath,
+                        reportPath: ViewPath,
                         data: reportData));
 
                 if (upperFormat == "VIEW")

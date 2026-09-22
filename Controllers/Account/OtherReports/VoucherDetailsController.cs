@@ -10,7 +10,7 @@ using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.Account.OthersReport
+namespace NexgenCosysReport.Controllers.Account.OtherReports
 {
     [ApiController]
     [Route("api/account/[controller]")]

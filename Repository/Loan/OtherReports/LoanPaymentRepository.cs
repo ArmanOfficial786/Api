@@ -93,7 +93,7 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                     sqlFilterExpBranchId.Append(" And v.UsmOfficeId in (").Append(branchIds).Append(")");
                 }
 
-                if (!string.IsNullOrEmpty(request.MemberGroupId) && request.MemberGroupId != "-1")
+                if (request.MemberGroupId != -1)
                 {
                     sqlFilterExpBranchId.Append(" AND MR.SycMemberGroupId = ").Append(request.MemberGroupId);
 
@@ -116,7 +116,8 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                                 .Append("' And '").Append(toDateStr).Append("'");
 
                     // Add paymentby filter only when supplied (legacy behavior)
-                    if (!string.IsNullOrEmpty(request.PaymentBy))
+                    if (!string.IsNullOrEmpty(request.PaymentBy) &&
+                        !request.PaymentBy.Equals("All", StringComparison.OrdinalIgnoreCase))
                     {
                         sqlFilterExp.Append(" and tm.Paymentby = '").Append(request.PaymentBy).Append("'");
                     }

@@ -1,4 +1,5 @@
 ﻿// Controllers/Account/IBTReports/IBTStatementBranchwiseController.cs
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -9,13 +10,14 @@ using NexgenCosysReport.Inteface.ServiceInterface.Account.IBTReports;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Account.IBTReports
 {
     [ApiController]
     [Route("api/[controller]")]
-    //[Authorize]
+    [Authorize]
     public class IBTStatementBranchwiseController : ControllerBase
     {
         private readonly IIBTStatementBranchwiseRepository _repository;
@@ -47,8 +49,6 @@ namespace NexgenCosysReport.Controllers.Account.IBTReports
             _dateConverter = dateConverter;
         }
 
-        // POST api/IBTStatementBranchwise?format=VIEW
-        // Body: { ..., "reportType": "Detail" | "SubLedger" | "InterestCalculation" }
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] IBTStatementBranchwiseRequestDto request,
@@ -56,19 +56,17 @@ namespace NexgenCosysReport.Controllers.Account.IBTReports
         {
             try
             {
-                //var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                //if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                //{
-                //    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                //}
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+                {
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                }
 
                 if (request == null || !ModelState.IsValid)
                 {
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
                 }
 
-                // Legacy resolves office from the authenticated user's LoginOfficeId,
-                // not a user-selectable field — default to the claim if not supplied.
                 if (string.IsNullOrEmpty(request.OfficeId))
                 {
                     var officeClaim = User.FindFirst("LoginOfficeId")?.Value;
@@ -81,7 +79,7 @@ namespace NexgenCosysReport.Controllers.Account.IBTReports
                 var reportName = "IBTStatementBranchwise";
                 var upperFormat = format.ToUpper();
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
