@@ -1,0 +1,287 @@
+﻿
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<LoanRevolvingStatementRowDto>) ?? new List<LoanRevolvingStatementRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalDebitAmount = Model["TotalDebitAmount"] as decimal? ?? 0;
+    var totalCreditAmount = Model["TotalCreditAmount"] as decimal? ?? 0;
+    var openingBalance = Model["OpeningBalance"] as decimal? ?? 0;
+    var closingBalance = Model["ClosingBalance"] as decimal? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var accountNo = Model["AccountNo"]?.ToString() ?? "";
+    var memberName = Model["MemberName"]?.ToString() ?? "";
+    var memberId = Model["MemberId"]?.ToString() ?? "";
+    var verifiedTill = Model["VerifiedTill"]?.ToString() ?? "";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var hasVerification = !string.IsNullOrEmpty(verifiedTill);
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Loan Revolving Statement</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .opening-row td {
+                background: #e8f0f8;
+                font-weight: bold;
+                padding: 4px 6px;
+                border-top: 1px solid #999;
+                border-bottom: 1px solid #999;
+            }
+
+            .closing-row td {
+                background: #e8f0f8;
+                font-weight: bold;
+                padding: 4px 6px;
+                border-top: 1px solid #999;
+                border-bottom: 2px solid #000;
+            }
+
+            .verified-badge {
+                display: inline-block;
+                padding: 2px 10px;
+                background: #d4edda;
+                color: #155724;
+                border-radius: 3px;
+                font-size: 8pt;
+                font-weight: bold;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="LoanRevolvingStatement">
+            <colgroup>
+                <col style="width:10%;" />
+                <col style="width:16%;" />
+                <col style="width:11%;" />
+                <col style="width:11%;" />
+                <col style="width:11%;" />
+                <col style="width:11%;" />
+                <col style="width:11%;" />
+                <col style="width:9%;" />
+                <col style="width:10%;" />
+            </colgroup>
+            <tbody>
+                <!-- Report Title -->
+                <tr class="meta-title">
+                    <td colspan="9">Loan Revolving Statement</td>
+                </tr>
+
+                <!-- Metadata -->
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Member :</strong> @memberName (@memberId)</td>
+                    <td colspan="5" class="text-right">
+                        <strong>Account No :</strong> @accountNo
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="4">
+                        <strong>From Date :</strong> @fromDate
+                        &nbsp;&nbsp;&nbsp;
+                        <strong>To Date :</strong> @toDate
+                    </td>
+                    <td colspan="5" class="text-right">
+                        @if (hasVerification)
+                        {
+                            <span class="verified-badge">Verified Till: @verifiedTill</span>
+                            <text>&nbsp;&nbsp;&nbsp;</text>
+                        }
+                        <strong>Report Generated On :</strong> @generatedOn
+                    </td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="9"></td></tr>
+
+                <!-- Opening Balance Row -->
+                <tr class="opening-row">
+                    <td colspan="7" class="text-right"><strong>Opening Balance</strong></td>
+                    <td class="text-right"><strong>@openingBalance.ToString("N2")</strong></td>
+                    <td></td>
+                </tr>
+
+                <!-- Table Header -->
+                <tr>
+                    <th>Date (BS)</th>
+                    <th>Particulars</th>
+                    <th>Voucher No</th>
+                    <th>Cheque No</th>
+                    <th>Narration</th>
+                    <th class="text-right">Debit</th>
+                    <th class="text-right">Credit</th>
+                    <th class="text-right">Balance</th>
+                    <th>Entered By</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td>@(row.TransactionOnBs ?? "")</td>
+                            <td>@(row.Particulars ?? "")</td>
+                            <td>@(row.VoucherNo ?? "")</td>
+                            <td>@(row.ChequeNo ?? "")</td>
+                            <td>@(row.Narration ?? "")</td>
+                            <td class="text-right">@(row.DebitAmount.HasValue ? row.DebitAmount.Value.ToString("N2") : "")</td>
+                            <td class="text-right">@(row.CreditAmount.HasValue ? row.CreditAmount.Value.ToString("N2") : "")</td>
+                            <td class="text-right @(row.Balance.HasValue && row.Balance.Value < 0 ? "negative" : "positive")">
+                                @(row.Balance.HasValue ? row.Balance.Value.ToString("N2") : "")
+                            </td>
+                            <td>@(row.EnteredBy ?? "")</td>
+                        </tr>
+                    }
+
+                    <!-- Grand Total Row -->
+                    <tr class="grand-total-row">
+                        <td colspan="5" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-right"><strong>@totalDebitAmount.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalCreditAmount.ToString("N2")</strong></td>
+                        <td></td>
+                        <td></td>
+                    </tr>
+
+                    <!-- Closing Balance Row -->
+                    <tr class="closing-row">
+                        <td colspan="7" class="text-right"><strong>Closing Balance</strong></td>
+                        <td class="text-right @(closingBalance < 0 ? "negative" : "positive")">
+                            <strong>@closingBalance.ToString("N2")</strong>
+                        </td>
+                        <td></td>
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="8" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-center"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

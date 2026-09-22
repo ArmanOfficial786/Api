@@ -1,0 +1,291 @@
+﻿@* Views/Report/Loan/LoanAnalysisReport/LoanRegisterReport.cshtml *@
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<LoanRegisterRowDto>) ?? new List<LoanRegisterRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
+    var totalPriPaid = Model["TotalPriPaid"] as decimal? ?? 0;
+    var totalPriBalance = Model["TotalPriBalance"] as decimal? ?? 0;
+    var totalIntBalance = Model["TotalIntBalance"] as decimal? ?? 0;
+    var totalPenaltyBalance = Model["TotalPenaltyBalance"] as decimal? ?? 0;
+    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var loanTypeName = Model["LoanTypeName"]?.ToString() ?? "";
+    var collectorName = Model["CollectorName"]?.ToString() ?? "";
+    var collectionCenterName = Model["CollectionCenterName"]?.ToString() ?? "";
+    var selectLoanName = Model["SelectLoanName"]?.ToString() ?? "All";
+    var enableCollectionCenter = Model["EnableCollectionCenter"] as bool? ?? false;
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var isLoanTypeFiltered = !string.IsNullOrEmpty(loanTypeName);
+    var isCollectorFiltered = !string.IsNullOrEmpty(collectorName);
+    var isCollectionCenterFiltered = enableCollectionCenter && !string.IsNullOrEmpty(collectionCenterName);
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Loan Register Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 8pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 3px 4px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="LoanRegister">
+            <colgroup>
+                <col style="width:3%;" />
+                <col style="width:7%;" />
+                <col style="width:12%;" />
+                <col style="width:9%;" />
+                <col style="width:9%;" />
+                <col style="width:8%;" />
+                <col style="width:6%;" />
+                <col style="width:6%;" />
+                <col style="width:6%;" />
+                <col style="width:8%;" />
+                @if (enableCollectionCenter)
+                {
+                    <col style="width:8%;" />
+                }
+                <col style="width:7%;" />
+                <col style="width:7%;" />
+                <col style="width:6%;" />
+                <col style="width:6%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="15">Loan Register Report</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="7">
+                        <strong>Branch :</strong> @branchName
+                        &nbsp;&nbsp;
+                        <strong>Till Date :</strong> @tillDate
+                    </td>
+                    <td colspan="8" class="text-right">
+                        <strong>Loan :</strong> @selectLoanName
+                        @if (isLoanTypeFiltered)
+                        {
+                            <text>&nbsp;&nbsp;<strong>Type :</strong> @loanTypeName</text>
+                        }
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="7">
+                        @if (isCollectorFiltered)
+                        {
+                            <strong>Collector :</strong> 
+                            @collectorName
+                        }
+                        @if (isCollectionCenterFiltered)
+                        {
+                            <text>&nbsp;&nbsp;<strong>Collection Center :</strong> @collectionCenterName</text>
+                        }
+                    </td>
+                    <td colspan="8" class="text-right">
+                        <strong>Report Generated On :</strong> @generatedOn
+                    </td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="15"></td></tr>
+
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Member Id</th>
+                    <th>Member Name</th>
+                    <th>Address</th>
+                    <th>Contact No</th>
+                    <th>Loan Type</th>
+                    <th>Account No</th>
+                    <th>Issue Date</th>
+                    <th>Maturity</th>
+                    <th class="text-right">Issue Amt</th>
+                    @if (enableCollectionCenter)
+                    {
+                        <th>Coll. Center</th>
+                    }
+                    <th class="text-center">Int. Rate</th>
+                    <th class="text-right">Pri. Paid</th>
+                    <th class="text-right">Pri. Bal</th>
+                    <th class="text-right">Int. Bal</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.FullName ?? "")</td>
+                            <td>@(row.ContactAddress ?? "")</td>
+                            <td>@(row.ContactNo ?? "")</td>
+                            <td>@(row.LoanTypeName ?? "")</td>
+                            <td>@(row.LoanAccountNo ?? "")</td>
+                            <td>@(row.LoanIssueOnBs ?? "")</td>
+                            <td>@(row.MaturityOnBs ?? "")</td>
+                            <td class="text-right">@(row.LoanIssueAmount?.ToString("N2") ?? "")</td>
+                            @if (enableCollectionCenter)
+                            {
+                                <td>@(row.CollectionCenterName ?? "")</td>
+                            }
+                            <td class="text-center">@(row.InterestRate?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.PriPaid?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.PriBalance?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.IntBalance?.ToString("N2") ?? "")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="@(enableCollectionCenter ? 9 : 8)" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
+                        @if (enableCollectionCenter)
+                        {
+                            <td></td>
+                        }
+                        <td></td>
+                        <td class="text-right"><strong>@totalPriPaid.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalPriBalance.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalIntBalance.ToString("N2")</strong></td>
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="@(enableCollectionCenter ? 10 : 9)" class="text-right"><strong>Penalty Balance</strong></td>
+                        <td colspan="2" class="text-right"><strong>@totalPenaltyBalance.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>Total</strong></td>
+                        <td class="text-right"><strong>@totalBalance.ToString("N2")</strong></td>
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="@(enableCollectionCenter ? 13 : 12)" class="text-right"><strong>Total Records</strong></td>
+                        <td colspan="2" class="text-center"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="15" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

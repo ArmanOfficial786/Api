@@ -1,0 +1,314 @@
+﻿@* 
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var sections = (Model["Sections"] as List<LoanAgeingSectionDto>) ?? new List<LoanAgeingSectionDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
+    var totalOverDue = Model["TotalOverDue"] as decimal? ?? 0;
+    var totalPrincipalAmount = Model["TotalPrincipalAmount"] as decimal? ?? 0;
+    var tillDate = Model["TillDate"]?.ToString() ?? string.Empty;
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? string.Empty;
+    var collectorName = Model["CollectorName"]?.ToString() ?? string.Empty;
+    var penaltyType = Model["PenaltyType"]?.ToString() ?? "S";
+    var penaltyTypeName = Model["PenaltyTypeName"]?.ToString() ?? "Schedule Wise";
+    var ageingOn = Model["AgeingOn"]?.ToString() ?? "P";
+    var ageingOnName = Model["AgeingOnName"]?.ToString() ?? "Principle";
+    var showLoanIssueDate = Model["ShowLoanIssueDate"]?.ToString() ?? "ID";
+    var showLoanIssueDateName = Model["ShowLoanIssueDateName"]?.ToString() ?? "Issue Date";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName);
+    var isCollectorFiltered = !string.IsNullOrEmpty(collectorName);
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Loan Ageing Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 8pt;
+            background: white;
+            color: #000;
+        }
+
+        .report-container {
+            width: 100%;
+            overflow: visible;
+        }
+
+        thead {
+            display: table-row-group;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 8pt;
+            table-layout: fixed;
+        }
+
+        .data-table td, .data-table th {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            padding: 3px 4px;
+            vertical-align: middle;
+        }
+
+        .meta-title td {
+            text-align: center;
+            font-family: "Times New Roman", Times, serif;
+            font-size: 14pt;
+            font-weight: bold;
+            text-decoration: underline;
+            padding: 8px 6px;
+        }
+
+        .meta-row td {
+            padding: 3px 6px;
+            font-size: 8pt;
+        }
+
+        .meta-spacer td {
+            height: 6px;
+        }
+
+        .section-header td {
+            background: #e8e8e8;
+            font-weight: bold;
+            font-size: 9pt;
+            padding: 4px 6px;
+            border-top: 2px solid #000;
+            border-bottom: 1px solid #000;
+        }
+
+        .data-table th {
+            background: #f9f9f9;
+            border-top: 2px solid #000;
+            border-bottom: 1px solid #000;
+            text-align: left;
+            white-space: nowrap;
+        }
+
+        .detail-row td {
+            border-bottom: 1px solid #eee;
+        }
+
+        .detail-row-alt td {
+            background: #f9f9f9;
+            border-bottom: 1px solid #eee;
+        }
+
+        .sub-total-row td {
+            background: #f0f0f0;
+            font-weight: bold;
+            padding: 4px 6px;
+            border-top: 1px solid #666;
+            border-bottom: 1px solid #666;
+        }
+
+        .grand-total-row td {
+            border-top: 2px solid #000;
+            border-bottom: 2px solid #000;
+            font-weight: bold;
+            background: #f9f9f9;
+            padding: 5px 6px;
+        }
+
+        .text-right {
+            text-align: right !important;
+        }
+
+        .text-center {
+            text-align: center !important;
+        }
+
+        .positive {
+            color: #006600;
+        }
+
+        .negative {
+            color: #CC0000;
+        }
+
+        .penalty-badge {
+            display: inline-block;
+            padding: 2px 10px;
+            border-radius: 3px;
+            font-size: 8pt;
+            font-weight: bold;
+        }
+
+        .badge-schedule {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .badge-remaining {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .badge-maturity {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        @@media print {
+            thead {
+                display: table-row-group;
+            }
+
+            tr {
+                page-break-inside: avoid;
+                break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="LoanAgeing">
+            <colgroup>
+                <col style="width:4%;" />
+                <col style="width:8%;" />
+                <col style="width:14%;" />
+                <col style="width:10%;" />
+                <col style="width:9%;" />
+                <col style="width:9%;" />
+                <col style="width:9%;" />
+                <col style="width:9%;" />
+                <col style="width:8%;" />
+                <col style="width:8%;" />
+                <col style="width:9%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="11">Loan Ageing Report</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="5">
+                        <strong>Branch :</strong> @branchName
+                        &nbsp;&nbsp;
+                        <strong>Till Date :</strong> @tillDate
+                    </td>
+                    <td colspan="6" class="text-right">
+                        <strong>Penalty Type :</strong>
+                        <span class="penalty-badge @(penaltyType == "S" ? "badge-schedule" : penaltyType == "R" ? "badge-remaining" : "badge-maturity")">
+                            @penaltyTypeName
+                        </span>
+                        &nbsp;&nbsp;
+                        <strong>Ageing On :</strong> @ageingOnName
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="5">
+                        @if (isMemberGroupFiltered)
+                        {
+                            <strong>Member Group :</strong> @memberGroupName
+                        }
+                        @if (isCollectorFiltered)
+                        {
+                            <text>&nbsp;&nbsp;</text>
+                            <strong>Collector :</strong> @collectorName
+                        }
+                    </td>
+                    <td colspan="6" class="text-right">
+                        <strong>Date On :</strong> @showLoanIssueDateName
+                        <text>&nbsp;&nbsp;</text>
+                        <strong>Report Generated On :</strong> @generatedOn
+                    </td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="11"></td></tr>
+
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Member Id</th>
+                    <th>Full Name</th>
+                    <th>Loan A/c No</th>
+                    <th>Loan Type</th>
+                    <th>Issue Date</th>
+                    <th>Maturity Date</th>
+                    <th class="text-right">Loan Amount</th>
+                    <th class="text-right">Paid</th>
+                    <th class="text-right">Overdue</th>
+                    <th class="text-center">Due Days</th>
+                </tr>
+
+                @if (sections.Any() && sections.SelectMany(s => s.Rows).Any())
+                {
+                    foreach (var section in sections)
+                    {
+                        if (!section.Rows.Any()) continue;
+
+                        <tr class="section-header">
+                            <td colspan="11"><strong>@section.SectionName</strong></td>
+                        </tr>
+
+                        var sn = 0;
+                        foreach (var row in section.Rows)
+                        {
+                            sn++;
+                            <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                                <td class="text-center">@sn</td>
+                                <td>@(row.MemberId ?? string.Empty)</td>
+                                <td>@(row.FullName ?? string.Empty)</td>
+                                <td>@(row.LoanAccountNo ?? string.Empty)</td>
+                                <td>@(row.LoanTypeName ?? string.Empty)</td>
+                                <td>@(row.LoanIssueOnBs ?? string.Empty)</td>
+                                <td>@(row.MaturityOnBs ?? string.Empty)</td>
+                                <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : string.Empty)</td>
+                                <td class="text-right">@(row.PrinciplePaidAmt.HasValue ? row.PrinciplePaidAmt.Value.ToString("N2") : string.Empty)</td>
+                                <td class="text-right @(row.OverDue.HasValue && row.OverDue.Value > 0 ? "negative" : "")">@(row.OverDue.HasValue ? row.OverDue.Value.ToString("N2") : string.Empty)</td>
+                                <td class="text-center">@(row.DueDays ?? 0)</td>
+                            </tr>
+                        }
+
+                        <tr class="sub-total-row">
+                            <td colspan="7" class="text-right"><strong>@section.SectionName Sub Total</strong></td>
+                            <td class="text-right"><strong>@section.TotalLoanIssueAmount.ToString("N2")</strong></td>
+                            <td></td>
+                            <td class="text-right"><strong>@section.TotalOverDue.ToString("N2")</strong></td>
+                            <td class="text-center"><strong>@section.TotalRecords</strong></td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="7" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
+                        <td></td>
+                        <td class="text-right"><strong>@totalOverDue.ToString("N2")</strong></td>
+                        <td class="text-center"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="11" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html> *@

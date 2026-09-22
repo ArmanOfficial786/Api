@@ -1,0 +1,262 @@
+﻿
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<LoanIssueDetailsRowDto>) ?? new List<LoanIssueDetailsRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var memberId = Model["MemberId"]?.ToString() ?? "";
+    var memberName = Model["MemberName"]?.ToString() ?? "";
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var reportType = Model["ReportType"]?.ToString() ?? "LIR";
+    var enableCollectionCenter = Model["EnableCollectionCenter"] as bool? ?? false;
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var isMemberSearch = !string.IsNullOrEmpty(memberId);
+    var reportTitle = reportType.Equals("LIRR", StringComparison.OrdinalIgnoreCase)
+        ? "Loan Issue Report (Reschedule)"
+        : "Loan Issue Report";
+
+    var groupedRows = enableCollectionCenter
+        ? rows.GroupBy(r => r.CollectionCenterName ?? "Unassigned").OrderBy(g => g.Key)
+        : null;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>@reportTitle</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .group-header td {
+                background: #e8e8e8;
+                font-weight: bold;
+                padding: 5px 6px;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+
+                .group-header td {
+                    background: #e8e8e8 !important;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="8">@reportTitle</td>
+                </tr>
+
+                @if (isMemberSearch)
+                {
+                    <tr class="meta-row">
+                        <td colspan="4"><strong>Member :</strong> @memberId — @memberName</td>
+                        <td colspan="4" class="text-right"><strong>Branch :</strong> @branchName</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr class="meta-row">
+                        <td colspan="4"><strong>Branch Name :</strong> @branchName</td>
+                        <td colspan="4" class="text-right">
+                            <strong>From Date :</strong> @fromDate
+                            &nbsp;&nbsp;&nbsp;
+                            <strong>To Date :</strong> @toDate
+                        </td>
+                    </tr>
+                }
+                <tr class="meta-row">
+                    <td colspan="8"><strong>Report Generated On :</strong> @generatedOn</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="8"></td></tr>
+            </tbody>
+        </table>
+
+        @{
+            void RenderHeaderRow()
+            {
+                <tr>
+                    <th>Member Id</th>
+                    <th>Full Name</th>
+                    <th>Loan Account No</th>
+                    <th>Loan Type</th>
+                    <th class="text-right">Issue Amount</th>
+                    <th>Issue Date</th>
+                    <th>Period</th>
+                    <th>Interest Rate</th>
+                </tr>
+            }
+
+            void RenderDetailRow(LoanIssueDetailsRowDto row)
+            {
+                <tr class="detail-row">
+                    <td>@(row.MemberId ?? "")</td>
+                    <td>@(row.FullName ?? "")</td>
+                    <td>@(row.LoanAccountNo ?? "")</td>
+                    <td>@(row.LoanTypeName ?? "")</td>
+                    <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
+                    <td>@(row.LoanIssueDate ?? "")</td>
+                    <td>@(row.Period ?? "")</td>
+                    <td>@(row.InterestRate ?? "")</td>
+                </tr>
+            }
+        }
+
+        <table class="data-table" data-sheet-name="LoanIssueDetails">
+            <colgroup>
+                <col style="width:10%;" />
+                <col style="width:18%;" />
+                <col style="width:14%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:10%;" />
+                <col style="width:12%;" />
+            </colgroup>
+            <tbody>
+                @if (rows.Any())
+                {
+                    if (enableCollectionCenter && groupedRows != null)
+                    {
+                        foreach (var group in groupedRows)
+                        {
+                            <tr class="group-header">
+                                <td colspan="8">@group.Key</td>
+                            </tr>
+                            RenderHeaderRow();
+                            foreach (var row in group)
+                            {
+                                RenderDetailRow(row);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        RenderHeaderRow();
+                        foreach (var row in rows)
+                        {
+                            RenderDetailRow(row);
+                        }
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="7" class="text-right">Total Records</td>
+                        <td class="text-right">@totalRecords</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="8" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

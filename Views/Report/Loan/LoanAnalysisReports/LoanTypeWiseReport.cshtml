@@ -1,0 +1,336 @@
+﻿@* Views/Report/Loan/LoanAnalysisReport/LoanTypeWiseReport.cshtml *@
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<LoanTypeWiseRowDto>) ?? new List<LoanTypeWiseRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalDisburseAmount = Model["TotalDisburseAmount"] as decimal? ?? 0;
+    var totalRepaid = Model["TotalRepaid"] as decimal? ?? 0;
+    var totalBalanceAmount = Model["TotalBalanceAmount"] as decimal? ?? 0;
+    var totalOpeningBalance = Model["TotalOpeningBalance"] as decimal? ?? 0;
+    var totalClosingBalance = Model["TotalClosingBalance"] as decimal? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var loanTypeName = Model["LoanTypeName"]?.ToString() ?? "";
+    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "";
+    var collectionCenterName = Model["CollectionCenterName"]?.ToString() ?? "";
+    var collectorName = Model["CollectorName"]?.ToString() ?? "";
+    var loanGuarantee = Model["LoanGuarantee"]?.ToString() ?? "-1";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "-1";
+    var showOpeningBalance = Model["ShowOpeningBalance"] as bool? ?? false;
+    var enableCollectionCenter = Model["EnableCollectionCenter"] as bool? ?? false;
+    var groupByBranch = Model["GroupByBranch"] as bool? ?? false;
+    var groupByMemberGroup = Model["GroupByMemberGroup"] as bool? ?? false;
+    var viewCollector = Model["ViewCollector"] as bool? ?? false;
+    var showDetail = Model["ShowDetail"] as bool? ?? true;
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var isLoanTypeFiltered = !string.IsNullOrEmpty(loanTypeName);
+    var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName);
+    var isCollectionCenterFiltered = !string.IsNullOrEmpty(collectionCenterName);
+    var isCollectorFiltered = !string.IsNullOrEmpty(collectorName);
+    var isGuaranteeFiltered = !string.IsNullOrEmpty(loanGuarantee) && loanGuarantee != "-1";
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Loan Type Wise Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 8pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 3px 4px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 8pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .section-header td {
+                background: #e8e8e8;
+                font-weight: bold;
+                font-size: 9pt;
+                padding: 4px 6px;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+            }
+
+            .sub-total-row td {
+                background: #f0f0f0;
+                font-weight: bold;
+                padding: 4px 6px;
+                border-top: 1px solid #666;
+                border-bottom: 1px solid #666;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="LoanTypeWise">
+            <colgroup>
+                <col style="width:4%;" />
+                <col style="width:9%;" />
+                <col style="width:16%;" />
+                @if (viewCollector)
+                {
+                    <col style="width:12%;" />
+                }
+                <col style="width:11%;" />
+                <col style="width:11%;" />
+                <col style="width:11%;" />
+                <col style="width:11%;" />
+                @if (showOpeningBalance)
+                {
+                    <col style="width:11%;" />
+                    <col style="width:11%;" />
+                }
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="10">Loan Type Wise Report</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="5">
+                        <strong>Branch :</strong> @branchName
+                        &nbsp;&nbsp;
+                        <strong>From Date :</strong> @fromDate
+                        &nbsp;&nbsp;
+                        <strong>To Date :</strong> @toDate
+                    </td>
+                    <td colspan="5" class="text-right">
+                        @if (isLoanTypeFiltered)
+                        {
+                            <strong>Loan Type :</strong> 
+                            @loanTypeName
+                        }
+                        @if (isGuaranteeFiltered)
+                        {
+                            <text>&nbsp;&nbsp;</text>
+                            <strong>Loan Guarantee :</strong> 
+                            @loanGuarantee
+                        }
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="5">
+                        @if (isMemberGroupFiltered)
+                        {
+                            <strong>Member Group :</strong> 
+                            @memberGroupName
+                        }
+                        @if (isCollectionCenterFiltered)
+                        {
+                            <text>&nbsp;&nbsp;</text>
+                            <strong>Collection Center :</strong> 
+                            @collectionCenterName
+                        }
+                    </td>
+                    <td colspan="5" class="text-right">
+                        @if (isCollectorFiltered)
+                        {
+                            <strong>Collector :</strong> 
+                            @collectorName
+                            <text>&nbsp;&nbsp;</text>
+                        }
+                        <strong>Report Generated On :</strong> @generatedOn
+                    </td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="10"></td></tr>
+
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Member Id</th>
+                    <th>Member Name</th>
+                    @if (viewCollector)
+                    {
+                        <th>Collector</th>
+                    }
+                    <th>Loan A/c No</th>
+                    <th>Loan Type</th>
+                    <th class="text-right">Disburse Amount</th>
+                    <th class="text-right">Repaid</th>
+                    <th class="text-right">Balance Amount</th>
+                    @if (showOpeningBalance)
+                    {
+                        <th class="text-right">Opening Balance</th>
+                        <th class="text-right">Closing Balance</th>
+                    }
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    var currentGroup = string.Empty;
+
+                    foreach (var row in rows)
+                    {
+                        var rowGroup = groupByMemberGroup ? row.GroupName :
+                                       groupByBranch ? row.OfficeName :
+                                       enableCollectionCenter ? row.CollectionCenterName : null;
+
+                        if (!string.IsNullOrEmpty(rowGroup) && currentGroup != rowGroup)
+                        {
+                            currentGroup = rowGroup;
+                            <tr class="section-header">
+                                <td colspan="@(10)"><strong>@currentGroup</strong></td>
+                            </tr>
+                        }
+
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.FullName ?? "")</td>
+                            @if (viewCollector)
+                            {
+                                <td>@(row.CollectorName ?? "")</td>
+                            }
+                            <td>@(row.LoanAccountNo ?? "")</td>
+                            <td>@(row.LoanTypeName ?? "")</td>
+                            <td class="text-right">@(row.DisburseAmount.HasValue ? row.DisburseAmount.Value.ToString("N2") : "")</td>
+                            <td class="text-right">@(row.Repaid.HasValue ? row.Repaid.Value.ToString("N2") : "")</td>
+                            <td class="text-right @(row.BalanceAmount.HasValue && row.BalanceAmount.Value > 0 ? "negative" : "positive")">@(row.BalanceAmount.HasValue ? row.BalanceAmount.Value.ToString("N2") : "")</td>
+                            @if (showOpeningBalance)
+                            {
+                                <td class="text-right">@(row.OpeningBalance.HasValue ? row.OpeningBalance.Value.ToString("N2") : "")</td>
+                                <td class="text-right">@(row.ClosingBalance.HasValue ? row.ClosingBalance.Value.ToString("N2") : "")</td>
+                            }
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="@(viewCollector ? 6 : 5)" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-right"><strong>@totalDisburseAmount.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalRepaid.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalBalanceAmount.ToString("N2")</strong></td>
+                        @if (showOpeningBalance)
+                        {
+                            <td class="text-right"><strong>@totalOpeningBalance.ToString("N2")</strong></td>
+                            <td class="text-right"><strong>@totalClosingBalance.ToString("N2")</strong></td>
+                        }
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="@(showOpeningBalance ? 9 : 7)" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-center"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="10" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

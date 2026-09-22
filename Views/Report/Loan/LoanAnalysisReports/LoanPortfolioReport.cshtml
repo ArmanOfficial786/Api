@@ -1,0 +1,261 @@
+﻿
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var particulars = (Model["Particulars"] as List<LoanPortfolioParticularsDto>) ?? new List<LoanPortfolioParticularsDto>();
+    var outstanding = (Model["Outstanding"] as List<LoanPortfolioOutstandingDto>) ?? new List<LoanPortfolioOutstandingDto>();
+    var loanTypeWise = (Model["LoanTypeWise"] as List<LoanPortfolioLoanTypeWiseDto>) ?? new List<LoanPortfolioLoanTypeWiseDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalLoans = Model["TotalLoans"] as int? ?? 0;
+    var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Loan Portfolio Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .section-header td {
+                background: #e8e8e8;
+                font-weight: bold;
+                font-size: 10pt;
+                padding: 5px 6px;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="LoanPortfolio">
+            <colgroup>
+                <col style="width:8%;" />
+                <col style="width:42%;" />
+                <col style="width:20%;" />
+                <col style="width:30%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="4">Loan Portfolio Report</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="2"><strong>Branch :</strong> @branchName</td>
+                    <td colspan="2" class="text-right">
+                        <strong>Report Generated On :</strong> @generatedOn
+                    </td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="4"></td></tr>
+
+                @if (particulars.Any())
+                {
+                    <tr class="section-header">
+                        <td colspan="4"><strong>Particulars</strong></td>
+                    </tr>
+                    <tr>
+                        <th class="text-center">S.N.</th>
+                        <th>Particulars</th>
+                        <th class="text-center">No. of Loans</th>
+                        <th class="text-right">Loan Issue Amount</th>
+                    </tr>
+                    var sn = 0;
+                    foreach (var row in particulars)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.Particulars ?? "")</td>
+                            <td class="text-center">@(row.NoofLoan ?? 0)</td>
+                            <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
+                        </tr>
+                    }
+                    <tr class="meta-spacer"><td colspan="4"></td></tr>
+                }
+
+                @if (outstanding.Any())
+                {
+                    <tr class="section-header">
+                        <td colspan="4"><strong>Outstanding</strong></td>
+                    </tr>
+                    <tr>
+                        <th class="text-center">S.N.</th>
+                        <th>Particulars</th>
+                        <th class="text-center">No. of Loans</th>
+                        <th class="text-right">Outstanding Amount</th>
+                    </tr>
+                    var sn2 = 0;
+                    foreach (var row in outstanding)
+                    {
+                        sn2++;
+                        <tr class="@(sn2 % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn2</td>
+                            <td>@(row.Particulars ?? "")</td>
+                            <td class="text-center">@(row.NoofLoan ?? 0)</td>
+                            <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
+                        </tr>
+                    }
+                    <tr class="meta-spacer"><td colspan="4"></td></tr>
+                }
+
+                @if (loanTypeWise.Any())
+                {
+                    <tr class="section-header">
+                        <td colspan="4"><strong>Loan Type Wise</strong></td>
+                    </tr>
+                    <tr>
+                        <th class="text-center">S.N.</th>
+                        <th>Loan Type Name</th>
+                        <th class="text-center">No. of Loans</th>
+                        <th class="text-right">Loan Issue Amount</th>
+                    </tr>
+                    var sn3 = 0;
+                    foreach (var row in loanTypeWise)
+                    {
+                        sn3++;
+                        <tr class="@(sn3 % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn3</td>
+                            <td>@(row.LoanTypeName ?? "")</td>
+                            <td class="text-center">@(row.NoofLoan ?? 0)</td>
+                            <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="2" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-center"><strong>@totalLoans</strong></td>
+                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="3" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-center"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else if (!particulars.Any() && !outstanding.Any())
+                {
+                    <tr>
+                        <td colspan="4" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
