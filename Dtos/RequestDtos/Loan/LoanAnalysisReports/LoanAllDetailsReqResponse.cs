@@ -3,7 +3,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
 {
     public class LoanAllDetailsRequestDto
     {
-        public long MemberRegistrationId { get; set; } = -1;
+        public long MemberRegistrationId { get; set; }
         public string? LoanTypeId { get; set; }
         public string? Status { get; set; }
         public string TillDateBs { get; set; } = string.Empty;

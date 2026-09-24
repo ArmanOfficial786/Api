@@ -1,5 +1,4 @@
-﻿// Controllers/Loan/LoanAnalysisReport/LoanTypeWiseController.cs
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -136,7 +135,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/Loan/VLoanTypeWiseReport.cshtml"
-                    : "Views/Report/Loan/LoanAnalysisReport/LoanTypeWiseReport.cshtml";
+                    : "Views/Report/Loan/LoanAnalysisReports/LoanTypeWiseReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

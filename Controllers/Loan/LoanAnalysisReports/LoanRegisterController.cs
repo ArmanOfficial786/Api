@@ -1,17 +1,14 @@
-﻿// Controllers/Loan/LoanAnalysisReport/LoanRegisterController.cs
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Loan.LoanAnalysisReport;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 {
@@ -25,8 +22,13 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
+        private readonly IReportFileResponse _reportFileResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
         private readonly ILogger<LoanRegisterController> _logger;
+
+
+        private static readonly PageSizeSetting PageSetting =
+             PageSizeSetting.Custom(594, 420, PageUnit.mm, landscape: true);
 
         public LoanRegisterController(
             ILoanRegisterRepository repository,
@@ -35,7 +37,8 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<LoanRegisterController> logger)
+            ILogger<LoanRegisterController> logger,
+            IReportFileResponse reportFileResponse)
         {
             _repository = repository;
             _commonHeaderRepository = commonHeaderRepository;
@@ -44,12 +47,14 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
             _headerResponse = headerResponse;
             _reportSettings = reportSettings;
             _logger = logger;
+            _reportFileResponse = reportFileResponse;
         }
 
         [HttpPost]
         public async Task<IActionResult> GenerateReport(
             [FromBody] LoanRegisterRequestDto request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
             try
             {
@@ -136,7 +141,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     ? "Views/VisualReport/Loan/VLoanRegisterReport.cshtml"
                     : (request.NepaliReport
                         ? "Views/Report/Loan/LoanAnalysisReport/LoanRegisterNepaliReport.cshtml"
-                        : "Views/Report/Loan/LoanAnalysisReport/LoanRegisterReport.cshtml");
+                        : "Views/Report/Loan/LoanAnalysisReports/LoanRegisterReport.cshtml");
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -146,29 +151,24 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 
                 if (upperFormat == "VIEW")
                 {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.Rows.Count
-                    };
+                    var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
+                     htmlContent, reportKey, ct);
 
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
+                    _logger.LogInformation("?? VIEW — jsreport Html recipe, {Bytes:N0} chars", viewHtml.Length);
+                    return Content(viewHtml, "text/html");
 
-                    return new FileContentResult(pdfBytes, "application/pdf");
+                }
+
+                if (upperFormat == "PDF")
+                {
+                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
+                        htmlContent, "PDF", reportKey, PageSetting, ct);
+                    return _reportFileResponse.BuildPdfResponse(pdfBytes);
                 }
 
                 return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat,
-                    reportName,
-                    _jsReportService, _logger);
+                    reportKey, upperFormat, "MemberDetailReport",
+                    _jsReportService, _logger, PageSetting, ct);
             }
             catch (ArgumentException ex)
             {

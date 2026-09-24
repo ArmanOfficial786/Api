@@ -1,29 +1,19 @@
-﻿@* Views/Report/Loan/LoanAnalysisReport/LoanAgeingTypeWiseReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
 @model Dictionary<string, object>
 @{
     Layout = null;
 
     var rows = (Model["Rows"] as List<LoanAgeingTypeWiseRowDto>) ?? new List<LoanAgeingTypeWiseRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalLoans = Model["TotalLoans"] as int? ?? 0;
-    var totalMembers = Model["TotalMembers"] as int? ?? 0;
     var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
     var totalRepaid = Model["TotalRepaid"] as decimal? ?? 0;
+    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
     var totalOverdue = Model["TotalOverdue"] as decimal? ?? 0;
-    var totalGoodLoan = Model["TotalGoodLoan"] as decimal? ?? 0;
-    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var tillDateAd = Model.ContainsKey("TillDateAd") ? Model["TillDateAd"]?.ToString() : "";
     var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "";
-    var penaltyType = Model["PenaltyType"]?.ToString() ?? "S";
-    var penaltyTypeName = Model["PenaltyTypeName"]?.ToString() ?? "Schedule Wise";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "-1";
-    var withMemberCount = Model["WithMemberCount"] as bool? ?? false;
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-
-    var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName);
 }
 <!DOCTYPE html>
 <html>
@@ -38,8 +28,8 @@
             }
 
             body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 10pt;
                 background: white;
                 color: #000;
             }
@@ -56,29 +46,46 @@
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 9pt;
+                font-size: 10pt;
                 table-layout: fixed;
             }
 
                 .data-table td, .data-table th {
                     word-wrap: break-word;
                     overflow-wrap: break-word;
-                    padding: 4px 6px;
+                    padding: 3px 6px;
                     vertical-align: middle;
                 }
 
             .meta-title td {
                 text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
+                font-size: 13pt;
                 font-weight: bold;
                 text-decoration: underline;
-                padding: 8px 6px;
+                padding: 6px 6px 8px;
             }
 
             .meta-row td {
+                padding: 2px 6px;
+                font-size: 10pt;
+            }
+
+            .meta-row .label {
+                font-weight: bold;
+                white-space: nowrap;
+                width: 1%;
+            }
+
+            .section-bar td {
+                background: #808080;
+                font-weight: bold;
                 padding: 3px 6px;
-                font-size: 9pt;
+                border-top: 1px solid #000;
+                border-bottom: 1px solid #000;
+            }
+
+            .filter-row td {
+                padding: 4px 6px 2px;
             }
 
             .meta-spacer td {
@@ -86,28 +93,22 @@
             }
 
             .data-table th {
-                background: #f9f9f9;
                 border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
+                border-bottom: 2px solid #000;
                 text-align: left;
-                white-space: nowrap;
+                font-weight: bold;
+                padding: 4px 6px;
             }
 
             .detail-row td {
-                border-bottom: 1px solid #eee;
+                color: #1a3d7c;
+                padding: 2px 6px;
             }
 
-            .detail-row-alt td {
-                background: #f9f9f9;
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
+            .total-row td {
                 border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
                 font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
+                padding: 4px 6px;
             }
 
             .text-right {
@@ -116,37 +117,6 @@
 
             .text-center {
                 text-align: center !important;
-            }
-
-            .positive {
-                color: #006600;
-            }
-
-            .negative {
-                color: #CC0000;
-            }
-
-            .penalty-badge {
-                display: inline-block;
-                padding: 2px 10px;
-                border-radius: 3px;
-                font-size: 8pt;
-                font-weight: bold;
-            }
-
-            .badge-schedule {
-                background: #d1ecf1;
-                color: #0c5460;
-            }
-
-            .badge-remaining {
-                background: #fff3cd;
-                color: #856404;
-            }
-
-            .badge-maturity {
-                background: #f8d7da;
-                color: #721c24;
             }
 
             @@media print {
@@ -171,16 +141,13 @@
 
         <table class="data-table" data-sheet-name="LoanAgeingTypeWise">
             <colgroup>
-                <col style="width:5%;" />
-                <col style="width:35%;" />
-                @if (withMemberCount)
-                {
-                    <col style="width:12%;" />
-                }
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
+                <col style="width:6%;" />
+                <col style="width:28%;" />
+                <col style="width:11%;" />
+                <col style="width:14%;" />
+                <col style="width:14%;" />
+                <col style="width:13%;" />
+                <col style="width:14%;" />
             </colgroup>
             <tbody>
                 <tr class="meta-title">
@@ -188,43 +155,28 @@
                 </tr>
 
                 <tr class="meta-row">
-                    <td colspan="3">
-                        <strong>Branch :</strong> @branchName
-                        &nbsp;&nbsp;
-                        <strong>Till Date :</strong> @tillDate
-                    </td>
-                    <td colspan="4" class="text-right">
-                        <strong>Penalty Type :</strong>
-                        <span class="penalty-badge @(penaltyType == "S" ? "badge-schedule" : penaltyType == "R" ? "badge-remaining" : "badge-maturity")">
-                            @penaltyTypeName
-                        </span>
-                    </td>
+                    <td class="label" colspan="1">Branch Name:</td>
+                    <td colspan="6">@branchName</td>
                 </tr>
-                <tr class="meta-row">
-                    <td colspan="3">
-                        @if (isMemberGroupFiltered)
-                        {
-                            <strong>Member Group :</strong> 
-                            @memberGroupName
-                        }
-                    </td>
-                    <td colspan="4" class="text-right">
-                        <strong>Report Generated On :</strong> @generatedOn
-                    </td>
+                <tr class="meta-spacer"><td colspan="7"></td></tr>
+
+                <tr class="section-bar">
+                    <td colspan="7">Report Generated On: &nbsp; @generatedOn</td>
+                </tr>
+
+                <tr class="filter-row">
+                    <td colspan="7"><strong>Filter By:-</strong> Tilldate: @tillDateAd</td>
                 </tr>
                 <tr class="meta-spacer"><td colspan="7"></td></tr>
 
                 <tr>
-                    <th class="text-center">S.N.</th>
+                    <th class="text-center">S.No</th>
                     <th>Loan Type</th>
-                    @if (withMemberCount)
-                    {
-                        <th class="text-center">Member Count</th>
-                    }
-                    <th class="text-center">No. of Loans</th>
-                    <th class="text-right">Disburse Amount</th>
-                    <th class="text-right">Repaid Amount</th>
-                    <th class="text-right">Overdue Amount</th>
+                    <th class="text-center">No of Loan</th>
+                    <th class="text-right">Disburse Amt</th>
+                    <th class="text-right">Repaid Amt</th>
+                    <th class="text-right">Balance Amt</th>
+                    <th class="text-right">Overdue Amt(P)</th>
                 </tr>
 
                 @if (rows.Any())
@@ -233,34 +185,24 @@
                     foreach (var row in rows)
                     {
                         sn++;
-                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                        <tr class="detail-row">
                             <td class="text-center">@sn</td>
                             <td>@(row.LoanTypeName ?? "")</td>
-                            @if (withMemberCount)
-                            {
-                                <td class="text-center">@(row.MemberCount ?? 0)</td>
-                            }
-                            <td class="text-center">@(row.NoofLoan ?? 0)</td>
+                            <td class="text-center">@(row.LoanAccountNo?.ToString() ?? "0")</td>
                             <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
                             <td class="text-right">@(row.Repaid.HasValue ? row.Repaid.Value.ToString("N2") : "")</td>
-                            <td class="text-right @(row.Overdue.HasValue && row.Overdue.Value > 0 ? "negative" : "")">@(row.Overdue.HasValue ? row.Overdue.Value.ToString("N2") : "")</td>
+                            <td class="text-right">@(row.TotalPrincipalAmount.HasValue ? row.TotalPrincipalAmount.Value.ToString("N2") : "")</td>
+                            <td class="text-right">@(row.Overdue.HasValue ? row.Overdue.Value.ToString("N2") : "")</td>
                         </tr>
                     }
 
-                    <tr class="grand-total-row">
-                        <td colspan="@(withMemberCount ? 3 : 2)" class="text-right"><strong>Grand Total</strong></td>
-                        @if (withMemberCount)
-                        {
-                            <td class="text-center"><strong>@totalMembers</strong></td>
-                        }
-                        <td class="text-center"><strong>@totalLoans</strong></td>
-                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalRepaid.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalOverdue.ToString("N2")</strong></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="@(withMemberCount ? 6 : 5)" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
+                    <tr class="total-row">
+                        <td colspan="2">Total:</td>
+                        <td class="text-center">@totalLoans</td>
+                        <td class="text-right">@totalLoanIssueAmount.ToString("N2")</td>
+                        <td class="text-right">@totalRepaid.ToString("N2")</td>
+                        <td class="text-right">@totalBalance.ToString("N2")</td>
+                        <td class="text-right">@totalOverdue.ToString("N2")</td>
                     </tr>
                 }
                 else

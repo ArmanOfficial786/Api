@@ -134,6 +134,16 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                     commandTimeout: 300
                 )).AsList();
 
+                // --------------------------------------------------------------
+                // These four lookups are header display labels (derived from the
+                // request's filter ids, e.g. "Branch Name: Kathmandu Branch,
+                // Damak Branch, ..."), not row data - the SP has no way to
+                // return them since they aren't part of any row. Every actual
+                // row field (MemberId, FullName, LoanAccountNo, LoanTypeName,
+                // PaymentMode, DisburseAmount, RepaidTill, Repaid,
+                // BalanceAmount, CollectionCenterName) comes straight from the
+                // SP's own result set with no table fallback.
+                // --------------------------------------------------------------
                 string branchName = "All";
                 if (branchIds != "-1")
                 {

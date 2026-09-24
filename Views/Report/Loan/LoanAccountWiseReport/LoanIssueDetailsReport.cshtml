@@ -1,5 +1,4 @@
-﻿
-@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport;
 @model Dictionary<string, object>
 @{
     Layout = null;
@@ -12,19 +11,14 @@
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var branchName = Model["BranchName"]?.ToString() ?? "All";
     var reportType = Model["ReportType"]?.ToString() ?? "LIR";
-    var enableCollectionCenter = Model["EnableCollectionCenter"] as bool? ?? false;
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
     var isMemberSearch = !string.IsNullOrEmpty(memberId);
     var reportTitle = reportType.Equals("LIRR", StringComparison.OrdinalIgnoreCase)
-        ? "Loan Issue Report (Reschedule)"
-        : "Loan Issue Report";
-
-    var groupedRows = enableCollectionCenter
-        ? rows.GroupBy(r => r.CollectionCenterName ?? "Unassigned").OrderBy(g => g.Key)
-        : null;
+        ? "Loan Issue Report (Reschedule)."
+        : "Loan Issue Report.";
 }
 <!DOCTYPE html>
 <html>
@@ -64,6 +58,7 @@
                 .data-table td, .data-table th {
                     word-wrap: break-word;
                     overflow-wrap: break-word;
+                    overflow: hidden;
                     padding: 4px 6px;
                     vertical-align: middle;
                 }
@@ -80,18 +75,11 @@
             .meta-row td {
                 padding: 3px 6px;
                 font-size: 9pt;
+                text-align: left;
             }
 
             .meta-spacer td {
                 height: 6px;
-            }
-
-            .group-header td {
-                background: #e8e8e8;
-                font-weight: bold;
-                padding: 5px 6px;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
             }
 
             .data-table th {
@@ -99,11 +87,18 @@
                 border-top: 2px solid #000;
                 border-bottom: 1px solid #000;
                 text-align: left;
-                white-space: nowrap;
+                white-space: normal;
+                line-height: 1.2;
+                vertical-align: bottom;
             }
 
             .detail-row td {
                 border-bottom: 1px solid #eee;
+            }
+
+            .sn-col {
+                text-align: center;
+                color: #555;
             }
 
             .grand-total-row td {
@@ -131,10 +126,6 @@
                     page-break-inside: avoid;
                     break-inside: avoid;
                 }
-
-                .group-header td {
-                    background: #e8e8e8 !important;
-                }
             }
     </style>
 </head>
@@ -146,113 +137,92 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        <table class="data-table">
+        <table class="data-table" data-sheet-name="LoanIssueDetails">
+            <colgroup>
+                <col style="width:4%;" />
+                <col style="width:9%;" />
+                <col style="width:15%;" />
+                <col style="width:10%;" />
+                <col style="width:12%;" />
+                <col style="width:9%;" />
+                <col style="width:7%;" />
+                <col style="width:12%;" />
+                <col style="width:8%;" />
+                <col style="width:14%;" />
+            </colgroup>
             <tbody>
+                <!-- Report Title -->
                 <tr class="meta-title">
-                    <td colspan="8">@reportTitle</td>
+                    <td colspan="10">@reportTitle</td>
                 </tr>
 
+                <!-- Metadata -->
                 @if (isMemberSearch)
                 {
                     <tr class="meta-row">
-                        <td colspan="4"><strong>Member :</strong> @memberId — @memberName</td>
-                        <td colspan="4" class="text-right"><strong>Branch :</strong> @branchName</td>
+                        <td colspan="10"><strong>Member :</strong> @memberId — @memberName</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="10"><strong>Branch :</strong> @branchName</td>
                     </tr>
                 }
                 else
                 {
                     <tr class="meta-row">
-                        <td colspan="4"><strong>Branch Name :</strong> @branchName</td>
-                        <td colspan="4" class="text-right">
+                        <td colspan="10"><strong>Branch Name :</strong> @branchName</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="10">
                             <strong>From Date :</strong> @fromDate
-                            &nbsp;&nbsp;&nbsp;
+                            &nbsp;&nbsp;&nbsp;&nbsp;
                             <strong>To Date :</strong> @toDate
                         </td>
                     </tr>
                 }
                 <tr class="meta-row">
-                    <td colspan="8"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="10"><strong>Report Generated On :</strong> @generatedOn</td>
                 </tr>
-                <tr class="meta-spacer"><td colspan="8"></td></tr>
-            </tbody>
-        </table>
+                <tr class="meta-spacer"><td colspan="10"></td></tr>
 
-        @{
-            void RenderHeaderRow()
-            {
+                <!-- Table Header -->
                 <tr>
-                    <th>Member Id</th>
-                    <th>Full Name</th>
-                    <th>Loan Account No</th>
-                    <th>Loan Type</th>
-                    <th class="text-right">Issue Amount</th>
+                    <th>S.No</th>
+                    <th>Member ID</th>
+                    <th>Name</th>
+                    <th>Account No</th>
+                    <th>Account Type</th>
                     <th>Issue Date</th>
                     <th>Period</th>
-                    <th>Interest Rate</th>
+                    <th class="text-right">Issue Amount</th>
+                    <th class="text-right">Int Rate</th>
+                    <th>Loan Status</th>
                 </tr>
-            }
 
-            void RenderDetailRow(LoanIssueDetailsRowDto row)
-            {
-                <tr class="detail-row">
-                    <td>@(row.MemberId ?? "")</td>
-                    <td>@(row.FullName ?? "")</td>
-                    <td>@(row.LoanAccountNo ?? "")</td>
-                    <td>@(row.LoanTypeName ?? "")</td>
-                    <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
-                    <td>@(row.LoanIssueDate ?? "")</td>
-                    <td>@(row.Period ?? "")</td>
-                    <td>@(row.InterestRate ?? "")</td>
-                </tr>
-            }
-        }
-
-        <table class="data-table" data-sheet-name="LoanIssueDetails">
-            <colgroup>
-                <col style="width:10%;" />
-                <col style="width:18%;" />
-                <col style="width:14%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:10%;" />
-                <col style="width:12%;" />
-            </colgroup>
-            <tbody>
                 @if (rows.Any())
                 {
-                    if (enableCollectionCenter && groupedRows != null)
+                    var sn = 0;
+                    foreach (var row in rows)
                     {
-                        foreach (var group in groupedRows)
-                        {
-                            <tr class="group-header">
-                                <td colspan="8">@group.Key</td>
-                            </tr>
-                            RenderHeaderRow();
-                            foreach (var row in group)
-                            {
-                                RenderDetailRow(row);
-                            }
-                        }
+                        sn++;
+                        <tr class="detail-row">
+                            <td class="sn-col">@sn</td>
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.FullName ?? "")</td>
+                            <td>@(row.LoanAccountNo ?? "")</td>
+                            <td>@(row.LoanTypeName ?? "")</td>
+                            <td>@(row.LoanIssueDate ?? "")</td>
+                            <td>@(row.Period ?? "")</td>
+                            <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
+                            <td class="text-right">@(row.InterestRate ?? "")</td>
+                            <td>@(row.TransStatus ?? "")</td>
+                        </tr>
                     }
-                    else
-                    {
-                        RenderHeaderRow();
-                        foreach (var row in rows)
-                        {
-                            RenderDetailRow(row);
-                        }
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="7" class="text-right">Total Records</td>
-                        <td class="text-right">@totalRecords</td>
-                    </tr>
+                
                 }
                 else
                 {
                     <tr>
-                        <td colspan="8" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="10" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

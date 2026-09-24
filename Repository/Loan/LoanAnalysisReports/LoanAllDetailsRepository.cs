@@ -97,12 +97,18 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                     sqlFilterExp.Append(" And smg.SycMemberGroupId in(").Append(request.MemberGroupId).Append(")");
                 }
 
-                if (!string.IsNullOrEmpty(request.LoanTypeId))
+                // FIX: "-1" is this field's own "no filter" sentinel too (same
+                // convention as every other id on this DTO), but this check
+                // only tested for empty string. "-1" was slipping through and
+                // filtering on a loan type id that doesn't exist, zeroing out
+                // every result.
+                if (!string.IsNullOrEmpty(request.LoanTypeId) && request.LoanTypeId != "-1")
                 {
                     sqlFilterExp.Append(" AND Lm.LmtLoanTypeMasterId = ").Append(request.LoanTypeId);
                 }
 
-                if (!string.IsNullOrEmpty(request.Status) && request.Status != "-1")
+                if (!string.IsNullOrEmpty(request.Status) && request.Status != "-1"
+                    && !request.Status.Equals("All", StringComparison.OrdinalIgnoreCase))
                 {
                     sqlFilterExp.Append(" AND Ls.LmtLoanStatusId = ").Append(request.Status);
                 }
@@ -167,7 +173,7 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                 }
 
                 string? loanTypeName = null;
-                if (!string.IsNullOrEmpty(request.LoanTypeId))
+                if (!string.IsNullOrEmpty(request.LoanTypeId) && request.LoanTypeId != "-1")
                 {
                     loanTypeName = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT LoanTypeName FROM LmtLoanTypeMaster WHERE LmtLoanTypeMasterId = @Id",

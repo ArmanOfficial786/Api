@@ -1,0 +1,673 @@
+﻿@model Dictionary<string, object>
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<LoanAllDetailsRowDto>) ?? new List<LoanAllDetailsRowDto>();
+
+    var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "All";
+    var tillDate = Model.ContainsKey("TillDate") ? Model["TillDate"]?.ToString() : "";
+    var statusName = Model.ContainsKey("StatusName") ? Model["StatusName"]?.ToString() : "All";
+    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
+
+    var isView = format == "VIEW";
+    var isExcel = format is "EXCEL" or "XLSX";
+
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    int totalRecords = Model.ContainsKey("TotalRecords")
+        ? Convert.ToInt32(Model["TotalRecords"])
+        : rows.Count;
+
+    decimal totalLoanIssueAmount = Model.ContainsKey("TotalLoanIssueAmount") ? (Model["TotalLoanIssueAmount"] as decimal? ?? 0) : 0;
+    decimal totalRemainingPrinciple = Model.ContainsKey("TotalRemainingPrinciple") ? (Model["TotalRemainingPrinciple"] as decimal? ?? 0) : 0;
+    decimal totalDefaultPrinciple = Model.ContainsKey("TotalDefaultPrinciple") ? (Model["TotalDefaultPrinciple"] as decimal? ?? 0) : 0;
+    decimal totalCurrInterest = Model.ContainsKey("TotalCurrInterest") ? (Model["TotalCurrInterest"] as decimal? ?? 0) : 0;
+    decimal totalCurrPenalty = Model.ContainsKey("TotalCurrPenalty") ? (Model["TotalCurrPenalty"] as decimal? ?? 0) : 0;
+    decimal totalDue = Model.ContainsKey("TotalDue") ? (Model["TotalDue"] as decimal? ?? 0) : 0;
+    decimal totalRemaining = Model.ContainsKey("TotalRemaining") ? (Model["TotalRemaining"] as decimal? ?? 0) : 0;
+    decimal totalProvisionAmount = Model.ContainsKey("TotalProvisionAmount") ? (Model["TotalProvisionAmount"] as decimal? ?? 0) : 0;
+
+    // ── Selected columns from the request. Null/empty => show all. ───────
+    var selectedColumns = Model.ContainsKey("SelectedColumns")
+        ? (Model["SelectedColumns"] as IEnumerable<string>)?.ToList()
+        : null;
+    bool showAllColumns = selectedColumns == null || selectedColumns.Count == 0;
+
+    // ── Single source of truth for every optional column, in the order
+    // the report should actually display them (grouped logically, not in
+    // the checkbox-grid order LOAN_COLUMN_OPTIONS uses for the UI). ─────
+    var allColumns = new List<(string Key, string Header, string CssClass, bool Right, Func<LoanAllDetailsRowDto, string> Render)>
+    {
+        ("memberId",           "Member Id",             "c-mid",     false, r => r.MemberId ?? ""),
+        ("memberName",         "Member Name",           "c-name",    false, r => r.MemberName ?? ""),
+        ("temAddress",         "Tem Address",           "c-addr",    false, r => r.TemAddress ?? ""),
+        ("mobileNo",           "Mobile No",             "c-mob",     false, r => r.MobileNo ?? ""),
+        ("contactNo",          "Contact No",            "c-mob",     false, r => r.ContactNo ?? ""),
+        ("citizenshipNo",      "Citizenship No",        "c-cit",     false, r => r.CitizenshipNo ?? ""),
+        ("citizenShipIssFrom", "CitizenShip Iss From",  "c-cit",     false, r => r.CitizenshipIssuePlace ?? ""),
+        ("accountNo",          "Account No",            "c-acc",     false, r => r.LoanAccountNo ?? ""),
+        ("loanType",           "Loan Type",             "c-ltype",   false, r => r.LoanTypeName ?? ""),
+        ("loanCategory",       "Loan Category",         "c-cat",     false, r => r.LoanCategory ?? ""),
+        ("type",               "Type",                  "c-sm",      false, r => r.LoanPaymentTypeCode ?? ""),
+        ("period",             "Period",                "c-sm",      false, r => r.IssuePeriod ?? ""),
+        ("instType",           "Inst Type",             "c-sm",      false, r => r.InstallmentType ?? ""),
+        ("normalOD",           "NormalOD",              "c-sm",      false, r => r.NormalOD ?? ""),
+        ("issueType",          "Issue Type",            "c-sm",      false, r => r.LoanIssueType ?? ""),
+        ("issueDate",          "Issue Date",            "c-date",    false, r => r.IssueDate ?? ""),
+        ("matDate",             "Mat Date",             "c-date",    false, r => r.MaturityDate ?? ""),
+        ("intRate",            "Int Rate",              "c-num",     true,  r => r.InterestRate ?? ""),
+        ("issueAmt",           "Issue Amt",             "c-amt",     true,  r => r.LoanIssueAmount.HasValue ? r.LoanIssueAmount.Value.ToString("N2") : ""),
+        ("sanAmount",          "San Amount",            "c-amt",     true,  r => r.SansationAmount.HasValue ? r.SansationAmount.Value.ToString("N2") : ""),
+        ("odSanAmt",           "OD San Amt",            "c-amt",     true,  r => r.ODSansationAmount.HasValue ? r.ODSansationAmount.Value.ToString("N2") : ""),
+        ("revODBal",           "Rev OD Bal",            "c-amt",     true,  r => r.RevolvingODBalance.HasValue ? r.RevolvingODBalance.Value.ToString("N2") : ""),
+        ("status",             "Status",                "c-sm",      false, r => r.LoanStatus ?? ""),
+        ("analysisStatus",     "Analysis Status",       "c-sm",      false, r => r.LoanAnalysisStatus ?? ""),
+        ("prinPaid",           "Prin Paid",             "c-amt",     true,  r => r.TotalPrincipalpaid.HasValue ? r.TotalPrincipalpaid.Value.ToString("N2") : ""),
+        ("intPaid",            "Int Paid",              "c-amt",     true,  r => r.TotalInterestPaid.HasValue ? r.TotalInterestPaid.Value.ToString("N2") : ""),
+        ("penPaid",            "Pen paid",              "c-amt",     true,  r => r.TotalPenaltyPaid.HasValue ? r.TotalPenaltyPaid.Value.ToString("N2") : ""),
+        ("intPayDate",         "Int Pay Date",          "c-date",    false, r => r.LastInterestPaymentDate ?? ""),
+        ("pntPayDate",         "Pnt Pay date",          "c-date",    false, r => r.LastPenaltyPaymentDate ?? ""),
+        ("rePrincipal",        "Re Principal",          "c-amt",     true,  r => r.RemainingPrinciple.HasValue ? r.RemainingPrinciple.Value.ToString("N2") : ""),
+        ("defPrincipal",       "Def Principal",         "c-amt",     true,  r => r.DefaultPrinciple.HasValue ? r.DefaultPrinciple.Value.ToString("N2") : ""),
+        ("prevInterest",       "Prev Interest",         "c-amt",     true,  r => r.PreviousInterest.HasValue ? r.PreviousInterest.Value.ToString("N2") : ""),
+        ("prevPenalty",        "Prev Penalty",          "c-amt",     true,  r => r.PreviousPenalty.HasValue ? r.PreviousPenalty.Value.ToString("N2") : ""),
+        ("currInterest",       "Curr Interest",         "c-amt",     true,  r => r.CurrInterest.HasValue ? r.CurrInterest.Value.ToString("N2") : ""),
+        ("currPenalty",        "Curr Penalty",          "c-amt",     true,  r => r.CurrPenalty.HasValue ? r.CurrPenalty.Value.ToString("N2") : ""),
+        ("totalInterest",      "Total Interest",        "c-amt",     true,  r => r.TotalInterest.HasValue ? r.TotalInterest.Value.ToString("N2") : ""),
+        ("totalPenalty",       "Total Penalty",         "c-amt",     true,  r => r.TotalPenalty.HasValue ? r.TotalPenalty.Value.ToString("N2") : ""),
+        ("totalDue",           "Total Due",             "c-amt",     true,  r => r.TotalDue.HasValue ? r.TotalDue.Value.ToString("N2") : ""),
+        ("totRemaining",       "Tot Remaining",         "c-amt",     true,  r => r.TotalRemaining.HasValue ? r.TotalRemaining.Value.ToString("N2") : ""),
+        ("provisionAmt",       "Provision Amt",         "c-amt",     true,  r => r.ProvisionalAmount.HasValue ? r.ProvisionalAmount.Value.ToString("N2") : ""),
+        ("instAmt",            "Inst Amt",              "c-amt",     true,  r => r.InstallmentAmount.HasValue ? r.InstallmentAmount.Value.ToString("N2") : ""),
+        ("instCon",            "Inst Con",              "c-sm",      true,  r => r.InstallmentCount.HasValue ? r.InstallmentCount.Value.ToString() : ""),
+        ("priDefaulter",       "Pri Defaulter",         "c-amt",     true,  r => r.PrincipleDefaulter.HasValue ? r.PrincipleDefaulter.Value.ToString("N2") : ""),
+        ("intDefaulter",       "Int Defaulter",         "c-amt",     true,  r => r.InterestDefaulter.HasValue ? r.InterestDefaulter.Value.ToString("N2") : ""),
+        ("totDefaulter",       "Tot Defaulter",         "c-amt",     true,  r => r.TotalDefaulter.HasValue ? r.TotalDefaulter.Value.ToString("N2") : ""),
+    };
+
+    var columns = showAllColumns
+        ? allColumns
+        : allColumns.Where(c => selectedColumns!.Contains(c.Key, StringComparer.OrdinalIgnoreCase)).ToList();
+
+    int totalVisibleCols = columns.Count + 1; // +1 for S.N.
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Loan Detail Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 7pt;
+                background: @(isView ? "#d0d0d0" : "#fff");
+                @(isView ? "" : "margin-top: 25px;")
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .text-left {
+                text-align: left !important;
+            }
+
+            /* ── Sub-header (title + meta) – sits ABOVE the table header ─────── */
+            .report-subheader {
+                width: 100%;
+                padding: 4px 6px 0 6px;
+                background: #fff;
+            }
+
+            .subheader-title {
+                text-align: center;
+                font-size: 13pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 6px 4px 4px;
+            }
+
+            .subheader-meta {
+                display: flex;
+                justify-content: space-between;
+                flex-wrap: wrap;
+                gap: 4px 16px;
+                font-size: 7.5pt;
+                padding: 2px 4px;
+            }
+
+            .subheader-spacer {
+                height: 5px;
+            }
+
+            /* ── Data table ──────────────────────────────────────────────────── */
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                font-family: Arial, sans-serif;
+                font-size: 7pt;
+            }
+
+                .data-table td,
+                .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    word-break: break-word;
+                    white-space: normal;
+                    vertical-align: middle;
+                    background: #fff;
+                    padding: 3px 4px;
+                    border: none;
+                    font-size: 7pt;
+                    line-height: 1.3;
+                }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table th {
+                border-top: 1.5px solid #000;
+                border-bottom: 1px solid #000;
+                font-weight: bold;
+                background: #f2f2f2;
+                font-size: 6.8pt;
+                white-space: nowrap;
+                padding: 4px;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #e0e0e0;
+            }
+
+            .grand-total td {
+                border-top: 1.5px solid #000;
+                border-bottom: 1.5px solid #000;
+                font-weight: bold;
+                background: #fff;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            /* ── Column widths ───────────────────────────────────────────────── */
+            col.c-sn {
+                width: 1.2%;
+            }
+
+            col.c-mid {
+                width: 2.6%;
+            }
+
+            col.c-name {
+                width: 3.4%;
+            }
+
+            col.c-addr {
+                width: 3.6%;
+            }
+
+            col.c-mob {
+                width: 2.4%;
+            }
+
+            col.c-cit {
+                width: 2.6%;
+            }
+
+            col.c-acc {
+                width: 2.6%;
+            }
+
+            col.c-ltype {
+                width: 2.6%;
+            }
+
+            col.c-cat {
+                width: 2.4%;
+            }
+
+            col.c-sm {
+                width: 1.9%;
+            }
+
+            col.c-date {
+                width: 2.2%;
+            }
+
+            col.c-num {
+                width: 1.9%;
+            }
+
+            col.c-amt {
+                width: 2.3%;
+            }
+
+            @@media print {
+                body {
+                    margin: 0;
+                    background: #fff;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+
+            /* ── VIEW chrome ─────────────────────────────────────────────────── */
+            .view-outer {
+                background: #d0d0d0;
+                padding: 2px 16px 20px 16px;
+                min-height: 100vh;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                cursor: grab;
+            }
+
+                .view-outer:active {
+                    cursor: grabbing;
+                }
+
+            .view-page {
+                background: #fff;
+                margin: 0 auto 24px auto;
+                box-shadow: 0 2px 8px rgba(0,0,0,.18);
+                width: 3600px;
+                height: 1587px;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .view-page-content {
+                flex: 1;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .view-page-footer {
+                background: #fff;
+                border-top: 1px solid #ccc;
+                text-align: center;
+                font-size: 9pt;
+                font-weight: bold;
+                padding: 6px 0;
+                flex-shrink: 0;
+            }
+
+            .common-header-wrap {
+                width: 3600px;
+                overflow: hidden;
+                flex-shrink: 0;
+            }
+
+            .page-subheader {
+                flex-shrink: 0;
+            }
+
+            .page-table-wrap {
+                flex: 1;
+                overflow: hidden;
+            }
+
+            #sourceWrap {
+                opacity: 0;
+                pointer-events: none;
+                width: 3600px;
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+
+            #commonHeaderSource {
+                visibility: hidden;
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 3600px;
+                pointer-events: none;
+            }
+    </style>
+</head>
+<body>
+
+    @if (!isExcel)
+    {
+        <div id="commonHeaderSource">
+            @await Html.PartialAsync("_CommonHeader", Model)
+        </div>
+    }
+
+    @if (isView)
+    {
+        <div id="sourceWrap">
+            <div id="subheaderTemplate" class="report-subheader">
+                <div class="subheader-title">Loan Detail Report</div>
+                <div class="subheader-meta">
+                    <span><strong>Branch :</strong> @branchName</span>
+                    <span><strong>Till Date :</strong> @tillDate</span>
+                    <span><strong>Status :</strong> @statusName</span>
+                </div>
+                <div class="subheader-meta">
+                    <span><strong>Report Generated On :</strong> @generatedOn</span>
+                </div>
+                <div class="subheader-spacer"></div>
+            </div>
+
+            <table class="data-table" id="mainTable">
+                <colgroup>
+                    <col class="c-sn" />
+                    @foreach (var col in columns)
+                    {
+                        <col class="@col.CssClass" />
+                    }
+                </colgroup>
+                <thead>
+                    <tr id="colHeaderRow">
+                        <th class="text-center">S.N.</th>
+                        @foreach (var col in columns)
+                        {
+                            <th class="@(col.Right ? "text-right" : "")">@col.Header</th>
+                        }
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        int snV = 0;
+                    }
+                    @foreach (var row in rows)
+                    {
+                        snV++;
+                        <tr class="detail-row">
+                            <td class="text-center">@snV</td>
+                            @foreach (var col in columns)
+                            {
+                                <td class="@(col.Right ? "text-right" : "")">@col.Render(row)</td>
+                            }
+                        </tr>
+                    }
+
+                    <tr class="grand-total" id="grandTotalRow">
+                        <td colspan="2">Total Records :</td>
+                        <td colspan="@(totalVisibleCols - 2)">@totalRecords</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="view-outer" id="viewOuter"></div>
+    }
+
+    @if (!isView)
+    {
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        @if (!isExcel)
+        {
+            <div class="report-subheader">
+                <div class="subheader-title">Loan Detail Report</div>
+                <div class="subheader-meta">
+                    <span><strong>Branch :</strong> @branchName</span>
+                    <span><strong>Till Date :</strong> @tillDate</span>
+                    <span><strong>Status :</strong> @statusName</span>
+                </div>
+                <div class="subheader-meta">
+                    <span><strong>Report Generated On :</strong> @generatedOn</span>
+                </div>
+                <div class="subheader-spacer"></div>
+            </div>
+        }
+
+        <table class="data-table" id="mainTable"
+            @(isExcel ? Html.Raw("data-sheet-name=\"LoanAllDetails\"") : Html.Raw(""))>
+            <colgroup>
+                <col class="c-sn" />
+                @foreach (var col in columns)
+                {
+                    <col class="@col.CssClass" />
+                }
+            </colgroup>
+            @if (isExcel)
+            {
+                <thead>
+                    <tr class="meta-title"><td colspan="@totalVisibleCols">Loan Detail Report</td></tr>
+                    <tr class="meta-row">
+                        <td colspan="@((int)Math.Ceiling(totalVisibleCols * 0.55))"><strong>Branch :</strong> @branchName</td>
+                        <td colspan="@(totalVisibleCols - (int)Math.Ceiling(totalVisibleCols * 0.55))" class="text-right"><strong>Till Date :</strong> @tillDate</td>
+                    </tr>
+                    <tr class="meta-row">
+                        <td colspan="@((int)Math.Ceiling(totalVisibleCols * 0.55))"><strong>Report Generated On :</strong> @generatedOn</td>
+                        <td colspan="@(totalVisibleCols - (int)Math.Ceiling(totalVisibleCols * 0.55))" class="text-right"><strong>Status :</strong> @statusName</td>
+                    </tr>
+                    <tr><td colspan="@totalVisibleCols"></td></tr>
+                    <tr>
+                        <th class="text-center">S.N.</th>
+                        @foreach (var col in columns)
+                        {
+                            <th class="@(col.Right ? "text-right" : "")">@col.Header</th>
+                        }
+                    </tr>
+                </thead>
+            }
+            else
+            {
+                <thead>
+                    <tr>
+                        <th class="text-center">S.N.</th>
+                        @foreach (var col in columns)
+                        {
+                            <th class="@(col.Right ? "text-right" : "")">@col.Header</th>
+                        }
+                    </tr>
+                </thead>
+            }
+            <tbody>
+                @{
+                    int snP = 0;
+                }
+                @foreach (var row in rows)
+                {
+                    snP++;
+                    <tr class="detail-row">
+                        <td class="text-center">@snP</td>
+                        @foreach (var col in columns)
+                        {
+                            <td class="@(col.Right ? "text-right" : "")">@col.Render(row)</td>
+                        }
+                    </tr>
+                }
+
+                <tr class="grand-total">
+                    <td colspan="2">Total Records :</td>
+                    <td colspan="@(totalVisibleCols - 2)">@totalRecords</td>
+                </tr>
+            </tbody>
+        </table>
+    }
+
+    @if (isView)
+    {
+        <script>
+                (function () {
+                    'use strict';
+
+                    var MAX_RETRIES  = 5;
+                    var RETRY_DELAY  = 80;
+                    var retryCount   = 0;
+                    var PAGE_W       = 3600;
+                    var PAGE_H       = 1587;
+                    var FOOTER_H     = 28;
+
+                    function buildPages() {
+                        var tbl          = document.getElementById('mainTable');
+                        var colHdrRow    = document.getElementById('colHeaderRow');
+                        var grandTotalEl = document.getElementById('grandTotalRow');
+                        var subHdrTpl    = document.getElementById('subheaderTemplate');
+
+                        if (!tbl || !colHdrRow || !subHdrTpl) {
+                            if (retryCount++ < MAX_RETRIES)
+                                setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+                            return;
+                        }
+
+                        var colHdrH  = colHdrRow.getBoundingClientRect().height;
+                        var subHdrH  = subHdrTpl.getBoundingClientRect().height;
+                        var gtH      = grandTotalEl ? grandTotalEl.getBoundingClientRect().height : 0;
+                        var gtHtml   = grandTotalEl ? grandTotalEl.outerHTML : '';
+
+                        var commonHdrEl   = document.getElementById('commonHeaderSource');
+                        var commonHdrHtml = commonHdrEl ? commonHdrEl.innerHTML : '';
+                        var commonHdrH    = commonHdrEl ? commonHdrEl.getBoundingClientRect().height : 0;
+
+                        var detailRows = tbl.querySelectorAll('tr.detail-row');
+                        var rowData    = Array.from(detailRows).map(function (r) {
+                            return { html: r.outerHTML, h: r.getBoundingClientRect().height };
+                        });
+
+                        var allZero = rowData.length > 0 && rowData.every(function (r) { return r.h === 0; });
+                        if (allZero) {
+                            if (retryCount++ < MAX_RETRIES)
+                                setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+                            return;
+                        }
+
+                        var colgroupHtml = tbl.querySelector('colgroup').outerHTML;
+                        var colHdrHtml   = colHdrRow.outerHTML;
+                        var subHdrHtml   = subHdrTpl.outerHTML;
+
+                        var availP1 = PAGE_H - FOOTER_H - commonHdrH - subHdrH - colHdrH;
+                        var availPN = PAGE_H - FOOTER_H - colHdrH;
+
+                        var pages = [], cur = [], usedH = 0;
+                        var isFirstPage = true;
+
+                        for (var i = 0; i < rowData.length; i++) {
+                            var rh    = rowData[i].h || 14;
+                            var avail = isFirstPage ? availP1 : availPN;
+                            var extra = (i === rowData.length - 1) ? gtH : 0;
+
+                            if (cur.length > 0 && usedH + rh + extra > avail) {
+                                pages.push(cur);
+                                cur  = [];
+                                usedH = 0;
+                                isFirstPage = false;
+                            }
+                            cur.push(i);
+                            usedH += rh;
+                        }
+                        pages.push(cur);
+
+                        var totalPages = pages.length;
+
+                        var sourceWrap = document.getElementById('sourceWrap');
+                        if (sourceWrap)  sourceWrap.parentNode.removeChild(sourceWrap);
+                        if (commonHdrEl) commonHdrEl.parentNode.removeChild(commonHdrEl);
+
+                        var viewOuter = document.getElementById('viewOuter');
+                        var fragment  = document.createDocumentFragment();
+
+                        for (var p = 0; p < totalPages; p++) {
+                            var card = document.createElement('div');
+                            card.className = 'view-page';
+                            card.setAttribute('data-page', String(p + 1));
+
+                            var contentHtml = '<div class="view-page-content">';
+
+                            if (p === 0 && commonHdrHtml) {
+                                contentHtml += '<div class="common-header-wrap">' + commonHdrHtml + '</div>';
+                            }
+
+                            if (p === 0) {
+                                contentHtml += '<div class="page-subheader">' + subHdrHtml + '</div>';
+                            }
+
+                            contentHtml += '<div class="page-table-wrap">'
+                                         + '<table class="data-table" style="width:' + PAGE_W + 'px;">'
+                                         + colgroupHtml
+                                         + '<thead>' + colHdrHtml + '</thead>'
+                                         + '<tbody>';
+
+                            var pageRows = pages[p];
+                            for (var r = 0; r < pageRows.length; r++) {
+                                contentHtml += rowData[pageRows[r]].html;
+                            }
+
+                            if (p === totalPages - 1 && gtHtml) {
+                                contentHtml += gtHtml;
+                            }
+
+                            contentHtml += '</tbody></table>'
+                                         + '</div>';
+
+                            contentHtml += '</div>';
+
+                            contentHtml += '<div class="view-page-footer">Page '
+                                         + (p + 1) + ' of ' + totalPages
+                                         + '</div>';
+
+                            card.innerHTML = contentHtml;
+                            fragment.appendChild(card);
+                        }
+
+                        viewOuter.appendChild(fragment);
+
+                        (function (el) {
+                            var drag = false, sx = 0, ss = 0;
+                            el.addEventListener('mousedown', function (e) {
+                                if (e.button !== 0) return;
+                                drag = true; sx = e.clientX; ss = el.scrollLeft;
+                                el.style.userSelect = 'none';
+                                e.preventDefault();
+                            });
+                            document.addEventListener('mousemove', function (e) {
+                                if (drag) el.scrollLeft = ss - (e.clientX - sx);
+                            });
+                            document.addEventListener('mouseup', function () {
+                                drag = false; el.style.userSelect = '';
+                            });
+                        })(viewOuter);
+
+                        window.scrollToPage = function (pageNumber) {
+                            var target = document.querySelector(
+                                '.view-page[data-page="' + pageNumber + '"]'
+                            );
+                            if (!target) return;
+                            window.scrollTo({ top: target.offsetTop, behavior: 'smooth' });
+                        };
+
+                        if (window.parent && window.parent !== window) {
+                            window.parent.postMessage(
+                                { type: 'REPORT_PAGES_READY', totalPages: totalPages },
+                                '*'
+                            );
+                        }
+
+                    }
+
+                    requestAnimationFrame(function () {
+                        requestAnimationFrame(buildPages);
+                    });
+
+                }());
+        </script>
+    }
+</body>
+</html>

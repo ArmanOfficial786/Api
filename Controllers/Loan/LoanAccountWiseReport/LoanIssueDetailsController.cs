@@ -92,7 +92,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAccountWiseReport
                 }
 
                 var dataTask = _repository.GetReportDataAsync(request);
-                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+                var headerTask = _commonHeaderRepository.GetCommonHeaders();
 
                 await Task.WhenAll(dataTask, headerTask);
 

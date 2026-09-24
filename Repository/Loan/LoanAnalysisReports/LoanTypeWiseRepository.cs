@@ -53,6 +53,16 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
             };
         }
 
+        // FIX: "-1" and "All" (case-insensitive) are both treated as "no filter"
+        // sentinels here — previously only "-1" was recognized, so a request
+        // sending LoanGuarantee: "All" (as the reported request did) was
+        // filtered as And LS.LoanGuarantee = 'All', which matches no rows and
+        // silently zeroed out the entire result set.
+        private static bool IsGuaranteeFilterActive(string? loanGuarantee) =>
+            !string.IsNullOrEmpty(loanGuarantee) &&
+            loanGuarantee != "-1" &&
+            !loanGuarantee.Equals("All", StringComparison.OrdinalIgnoreCase);
+
         public async Task<LoanTypeWiseData> GetReportDataAsync(LoanTypeWiseRequestDto request)
         {
             try
@@ -102,7 +112,7 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                     sqlFilterExp.Append(" And LS.SycCollectionCenterId in(").Append(request.CollectionCenterId).Append(")");
                 }
 
-                if (!string.IsNullOrEmpty(request.LoanGuarantee) && request.LoanGuarantee != "-1")
+                if (IsGuaranteeFilterActive(request.LoanGuarantee))
                 {
                     sqlFilterExp.Append(" And LS.LoanGuarantee = '").Append(request.LoanGuarantee).Append("'");
                 }
@@ -205,7 +215,8 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                     CollectorName = collectorName,
                     LoanGuarantee = request.LoanGuarantee,
                     OrderBy = request.OrderBy,
-                    ShowOpeningBalance = request.ShowOpeningBalance
+                    ShowOpeningBalance = request.ShowOpeningBalance,
+                    ShowDetail = request.ShowDetail
                 };
             }
             catch (Exception ex)

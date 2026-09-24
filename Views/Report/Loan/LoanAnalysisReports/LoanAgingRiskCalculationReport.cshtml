@@ -1,5 +1,4 @@
-﻿
-@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
 @model Dictionary<string, object>
 @{
     Layout = null;
@@ -170,24 +169,23 @@
 
         <table class="data-table" data-sheet-name="LoanAgingRiskCalculation">
             <colgroup>
-                <col style="width:4%;" />
-                <col style="width:8%;" />
-                <col style="width:12%;" />
+                <col style="width:9%;" />
+                <col style="width:14%;" />
+                <col style="width:10%;" />
+                <col style="width:9%;" />
                 <col style="width:9%;" />
                 <col style="width:8%;" />
-                <col style="width:8%;" />
                 <col style="width:7%;" />
-                <col style="width:6%;" />
-                <col style="width:6%;" />
-                <col style="width:6%;" />
-                <col style="width:6%;" />
-                <col style="width:6%;" />
-                <col style="width:6%;" />
-                <col style="width:8%;" />
+                <col style="width:7%;" />
+                <col style="width:7%;" />
+                <col style="width:7%;" />
+                <col style="width:7%;" />
+                <col style="width:7%;" />
+                <col style="width:9%;" />
             </colgroup>
             <tbody>
                 <tr class="meta-title">
-                    <td colspan="14">Loan Ageing Risk Calculation Report</td>
+                    <td colspan="13">Loan Ageing Risk Calculation Report</td>
                 </tr>
 
                 <tr class="meta-row">
@@ -196,7 +194,7 @@
                         &nbsp;&nbsp;
                         <strong>Till Date :</strong> @tillDate
                     </td>
-                    <td colspan="9" class="text-right">
+                    <td colspan="8" class="text-right">
                         <strong>Penalty Type :</strong>
                         <span class="penalty-badge @(penaltyType == "S" ? "badge-schedule" : penaltyType == "R" ? "badge-remaining" : "badge-maturity")">
                             @penaltyTypeName
@@ -207,18 +205,17 @@
                     <td colspan="5">
                         @if (isMemberGroupFiltered)
                         {
-                            <strong>Member Group :</strong> 
+                            <strong>Member Group :</strong>
                             @memberGroupName
                         }
                     </td>
-                    <td colspan="9" class="text-right">
+                    <td colspan="8" class="text-right">
                         <strong>Report Generated On :</strong> @generatedOn
                     </td>
                 </tr>
-                <tr class="meta-spacer"><td colspan="14"></td></tr>
+                <tr class="meta-spacer"><td colspan="13"></td></tr>
 
                 <tr>
-                    <th class="text-center">S.N.</th>
                     <th>Member Id</th>
                     <th>Full Name</th>
                     <th>Loan A/c No</th>
@@ -241,7 +238,6 @@
                     {
                         sn++;
                         <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
-                            <td class="text-center">@sn</td>
                             <td>@(row.MemberId ?? "")</td>
                             <td>@(row.FullName ?? "")</td>
                             <td>@(row.LoanAccountNo ?? "")</td>
@@ -259,7 +255,7 @@
                     }
 
                     <tr class="grand-total-row">
-                        <td colspan="4" class="text-right"><strong>Grand Total</strong></td>
+                        <td colspan="3" class="text-right"><strong>Grand Total</strong></td>
                         <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
                         <td></td>
                         <td class="text-right"><strong>@totalBalanceAmount.ToString("N2")</strong></td>
@@ -270,15 +266,11 @@
                         <td class="text-right"><strong>@totalGrtthan365.ToString("N2")</strong></td>
                         <td colspan="2"></td>
                     </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="13" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
-                    </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="14" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="13" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

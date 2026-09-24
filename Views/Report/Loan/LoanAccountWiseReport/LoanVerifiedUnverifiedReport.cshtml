@@ -1,5 +1,4 @@
-﻿
-@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport;
 @model Dictionary<string, object>
 @{
     Layout = null;
@@ -16,9 +15,6 @@
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-
-    var isVerified = reportType == "V";
-    var badgeClass = isVerified ? "status-verified" : "status-unverified";
 }
 <!DOCTYPE html>
 <html>
@@ -58,8 +54,10 @@
                 .data-table td, .data-table th {
                     word-wrap: break-word;
                     overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
+                    word-break: break-word;
+                    padding: 5px 6px;
+                    vertical-align: top;
+                    line-height: 1.35;
                 }
 
             .meta-title td {
@@ -74,6 +72,8 @@
             .meta-row td {
                 padding: 3px 6px;
                 font-size: 9pt;
+                line-height: 1.4;
+                vertical-align: top;
             }
 
             .meta-spacer td {
@@ -85,15 +85,10 @@
                 border-top: 2px solid #000;
                 border-bottom: 1px solid #000;
                 text-align: left;
-                white-space: nowrap;
+                vertical-align: middle;
             }
 
             .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .detail-row-alt td {
-                background: #f9f9f9;
                 border-bottom: 1px solid #eee;
             }
 
@@ -111,32 +106,6 @@
 
             .text-center {
                 text-align: center !important;
-            }
-
-            .positive {
-                color: #006600;
-            }
-
-            .negative {
-                color: #CC0000;
-            }
-
-            .badge {
-                display: inline-block;
-                padding: 2px 8px;
-                border-radius: 3px;
-                font-size: 8pt;
-                font-weight: bold;
-            }
-
-            .status-verified {
-                background: #d4edda;
-                color: #155724;
-            }
-
-            .status-unverified {
-                background: #fff3cd;
-                color: #856404;
             }
 
             @@media print {
@@ -161,53 +130,49 @@
 
         <table class="data-table" data-sheet-name="LoanVerifiedUnverified">
             <colgroup>
+                <col style="width:6%;" />
                 <col style="width:9%;" />
-                <col style="width:16%;" />
+                <col style="width:13%;" />
                 <col style="width:12%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
                 <col style="width:10%;" />
+                <col style="width:9%;" />
                 <col style="width:10%;" />
-                <col style="width:10%;" />
+                <col style="width:8%;" />
+                <col style="width:9%;" />
+                <col style="width:9%;" />
+                <col style="width:5%;" />
             </colgroup>
             <tbody>
                 <!-- Report Title -->
                 <tr class="meta-title">
-                    <td colspan="9">@reportTypeName</td>
+                    <td colspan="11">@reportTypeName</td>
                 </tr>
 
                 <!-- Metadata -->
                 <tr class="meta-row">
-                    <td colspan="4"><strong>Branch Name :</strong> @branchName</td>
-                    <td colspan="5" class="text-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
+                    <td colspan="11"><strong>Branch Name:</strong> @branchName</td>
                 </tr>
+                <tr class="meta-spacer"><td colspan="11"></td></tr>
+
                 <tr class="meta-row">
-                    <td colspan="4">
-                        <strong>Status :</strong>
-                        <span class="badge @badgeClass">@(isVerified ? "Verified" : "Unverified")</span>
-                    </td>
-                    <td colspan="5" class="text-right">
-                        <strong>Report Generated On :</strong> @generatedOn
-                    </td>
+                    <td colspan="5"><strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp; <strong>To Date :</strong> @toDate</td>
+                    <td colspan="6" class="text-right"><strong>Report Generated On:</strong> @generatedOn</td>
                 </tr>
-                <tr class="meta-spacer"><td colspan="9"></td></tr>
+                <tr class="meta-spacer"><td colspan="11"></td></tr>
 
                 <!-- Table Header -->
                 <tr>
+                    <th>S.No.</th>
                     <th>Member Id</th>
                     <th>Member Name</th>
-                    <th>Loan A/c No</th>
                     <th>Loan Type</th>
-                    <th class="text-right">Loan Amount</th>
-                    <th>Interest Rate</th>
-                    <th>Issue Date (BS)</th>
-                    <th>Maturity Date</th>
+                    <th>Loan Account</th>
+                    <th>Issued On</th>
+                    <th class="text-right">Amount</th>
+                    <th class="text-right">Rate(%)</th>
+                    <th>Verified On</th>
                     <th>Verified By</th>
+                    <th>Period</th>
                 </tr>
 
                 @if (rows.Any())
@@ -216,34 +181,36 @@
                     foreach (var row in rows)
                     {
                         sn++;
-                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                        <tr class="detail-row">
+                            <td>@sn</td>
                             <td>@(row.MemberId ?? "")</td>
                             <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.LoanAccountNo ?? "")</td>
                             <td>@(row.LoanTypeName ?? "")</td>
-                            <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
-                            <td>@(row.InterestRate ?? "")</td>
+                            <td>@(row.LoanAccountNo ?? "")</td>
                             <td>@(row.LoanIssueOn ?? "")</td>
-                            <td>@(row.MaturityOn ?? "")</td>
+                            <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
+                            <td class="text-right">@(row.InterestRate ?? "")</td>
+                            <td>@(row.VerifiedOnBS ?? "")</td>
                             <td>@(row.VerifiedBy ?? "")</td>
+                            <td>@(row.Period ?? "")</td>
                         </tr>
                     }
 
                     <!-- Grand Total Row -->
                     <tr class="grand-total-row">
-                        <td colspan="4" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
+                        <td colspan="6" class="text-right">Grand Total</td>
+                        <td class="text-right">@totalLoanIssueAmount.ToString("N2")</td>
                         <td colspan="4"></td>
                     </tr>
                     <tr class="grand-total-row">
-                        <td colspan="8" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
+                        <td colspan="10" class="text-right">Total Records</td>
+                        <td class="text-center">@totalRecords</td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="11" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

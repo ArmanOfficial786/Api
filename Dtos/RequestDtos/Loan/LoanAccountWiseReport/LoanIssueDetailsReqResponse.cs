@@ -20,7 +20,6 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport
 
         public bool EnableCollectionCenter { get; set; } = false;
 
-
         public string? CollectionCenterIds { get; set; }
     }
 

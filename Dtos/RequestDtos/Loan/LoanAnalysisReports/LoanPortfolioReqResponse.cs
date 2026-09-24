@@ -12,6 +12,12 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
         public string? Particulars { get; set; }
         public int? NoofLoan { get; set; }
         public decimal? LoanIssueAmount { get; set; }
+        public int? TotalMemberRegistration { get; set; }
+        public int? LoanDisburseAccountNoWise { get; set; }
+        public int? LoaneeMemberWise { get; set; }
+        public int? MaleLoanee { get; set; }
+        public int? WomenLoanee { get; set; }
+        public int? OthersLoanee { get; set; }
     }
 
     public class LoanPortfolioOutstandingDto
@@ -19,6 +25,10 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
         public string? Particulars { get; set; }
         public int? NoofLoan { get; set; }
         public decimal? LoanIssueAmount { get; set; }
+        public int? MaleLoanee { get; set; }
+        public int? WomenLoanee { get; set; }
+        public int? OthersLoanee { get; set; }
+        public int? Outstanding { get; set; }
     }
 
     public class LoanPortfolioLoanTypeWiseDto
