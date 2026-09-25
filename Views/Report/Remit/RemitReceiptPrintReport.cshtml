@@ -1,0 +1,233 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Remit;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<RemitReceiptPrintRowDto>) ?? new List<RemitReceiptPrintRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var transactionAmount = Model.ContainsKey("TransactionAmount") ? (Model["TransactionAmount"] as decimal? ?? 0) : 0;
+    var amountInWords = Model["AmountInWords"]?.ToString() ?? "";
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var isReceived = Model["IsReceived"]?.ToString() ?? "0";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Remit Receipt Print Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    overflow: hidden;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+                text-align: left;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: normal;
+                line-height: 1.2;
+                vertical-align: bottom;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #ccc;
+            }
+
+            .sn-col {
+                text-align: center;
+                color: #555;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .words-row td {
+                padding: 6px;
+                font-style: italic;
+                border-top: 1px solid #000;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="RemitReceiptPrint">
+            <colgroup>
+                <col style="width:4%;" />
+                <col style="width:11%;" />
+                <col style="width:11%;" />
+                <col style="width:14%;" />
+                <col style="width:9%;" />
+                <col style="width:14%;" />
+                <col style="width:14%;" />
+                <col style="width:9%;" />
+                <col style="width:8%;" />
+                <col style="width:6%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="10">Remit Receipt Print Report</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="10"><strong>Branch Name :</strong> @branchName</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="10">
+                        <strong>From Date :</strong> @fromDate
+                        &nbsp;&nbsp;&nbsp;&nbsp;
+                        <strong>Till Date :</strong> @toDate
+                        &nbsp;&nbsp;&nbsp;&nbsp;
+                        <strong>Receipt Type :</strong> @(isReceived == "1" ? "Received" : "Payment")
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="10"><strong>Report Generated On :</strong> @generatedOn</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="10"></td></tr>
+
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>IME Code No</th>
+                    <th>Sender Name</th>
+                    <th>Name</th>
+                    <th>Country</th>
+                    <th>Receiver Name</th>
+                    <th>Receiver Address</th>
+                    <th>Date</th>
+                    <th class="text-right">Amount</th>
+                    <th>Entry By</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="detail-row">
+                            <td class="sn-col">@sn</td>
+                            <td>@(row.IMECodeNo ?? "")</td>
+                            <td>@(row.SenderName ?? "")</td>
+                            <td>@(row.Name ?? "")</td>
+                            <td>@(row.Country ?? "")</td>
+                            <td>@(row.ReceiverName ?? "")</td>
+                            <td>@(row.ReceiverAddress ?? "")</td>
+                            <td>@(row.TransactionOnBs ?? "")</td>
+                            <td class="text-right">@(row.TransactionAmount?.ToString("N2") ?? "")</td>
+                            <td>@(row.EntryBy ?? "")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="8" class="text-right">
+                            Total Records: @totalRecords
+                        </td>
+                        <td class="text-right">@transactionAmount.ToString("N2")</td>
+                        <td></td>
+                    </tr>
+
+                    <tr class="words-row">
+                        <td colspan="10">
+                            <strong>Amount in Words :</strong> @amountInWords
+                        </td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="10" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
