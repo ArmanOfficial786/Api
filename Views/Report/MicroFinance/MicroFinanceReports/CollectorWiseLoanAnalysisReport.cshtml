@@ -1,0 +1,356 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MicroFinance.MicroFinanceReports
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<CollectorWiseLoanAnalysisRowDto>) ?? new List<CollectorWiseLoanAnalysisRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
+    var totalPaidAmount = Model["TotalPaidAmount"] as decimal? ?? 0;
+    var totalBalanceAmount = Model["TotalBalanceAmount"] as decimal? ?? 0;
+    var totalGoodloan = Model["TotalGoodloan"] as decimal? ?? 0;
+    var totalArrear = Model["TotalArrear"] as decimal? ?? 0;
+    var totalArrearfrm1to365 = Model["TotalArrearfrm1to365"] as decimal? ?? 0;
+    var totalArreargrtthan365 = Model["TotalArreargrtthan365"] as decimal? ?? 0;
+    var totalOverDue = Model["TotalOverDue"] as decimal? ?? 0;
+    var totalProvision = Model["TotalProvision"] as decimal? ?? 0;
+    var totalOpeningDisburse = Model["TotalOpeningDisburse"] as decimal? ?? 0;
+    var totalOpeningPaid = Model["TotalOpeningPaid"] as decimal? ?? 0;
+    var totalOpeningBalance = Model["TotalOpeningBalance"] as decimal? ?? 0;
+    var totalClosingBalance = Model["TotalClosingBalance"] as decimal? ?? 0;
+    var totalActiveLoanCount = Model["TotalActiveLoanCount"] as int? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var collectorName = Model["CollectorName"]?.ToString() ?? "";
+    var collectionCenterName = Model["CollectionCenterName"]?.ToString() ?? "";
+    var penaltyType = Model["PenaltyType"]?.ToString() ?? "S";
+    var penaltyTypeName = Model["PenaltyTypeName"]?.ToString() ?? "Schedule Wise";
+    var groupByCollectionCenter = Model["GroupByCollectionCenter"] as bool? ?? false;
+    var reportMode = Model["ReportMode"]?.ToString() ?? "1";
+    var reportModeName = Model["ReportModeName"]?.ToString() ?? "Summary";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var isCollectorFiltered = !string.IsNullOrEmpty(collectorName);
+    var isCollectionCenterFiltered = !string.IsNullOrEmpty(collectionCenterName);
+
+    var extraCols = groupByCollectionCenter ? 1 : 0;
+    var colCount = 3 + extraCols + 13;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Collector Wise Loan Analysis Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 8pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 3px 4px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            .penalty-badge {
+                display: inline-block;
+                padding: 2px 10px;
+                border-radius: 3px;
+                font-size: 8pt;
+                font-weight: bold;
+            }
+
+            .badge-schedule {
+                background: #d1ecf1;
+                color: #0c5460;
+            }
+
+            .badge-remaining {
+                background: #fff3cd;
+                color: #856404;
+            }
+
+            .badge-maturity {
+                background: #f8d7da;
+                color: #721c24;
+            }
+
+            .mode-badge {
+                display: inline-block;
+                padding: 2px 10px;
+                border-radius: 3px;
+                font-size: 8pt;
+                font-weight: bold;
+            }
+
+            .badge-summary {
+                background: #d1ecf1;
+                color: #0c5460;
+            }
+
+            .badge-detail {
+                background: #fff3cd;
+                color: #856404;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="CollectorWiseLoanAnalysis">
+            <colgroup>
+                <col style="width:3%;" />
+                <col style="width:7%;" />
+                <col style="width:13%;" />
+                @if (groupByCollectionCenter)
+                {
+                    <col style="width:10%;" />
+                }
+                <col style="width:8%;" />
+                <col style="width:8%;" />
+                <col style="width:8%;" />
+                <col style="width:8%;" />
+                <col style="width:8%;" />
+                <col style="width:8%;" />
+                <col style="width:8%;" />
+                <col style="width:8%;" />
+                <col style="width:8%;" />
+                <col style="width:7%;" />
+                <col style="width:7%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="@colCount">Collector Wise Loan Analysis Report (@reportModeName)</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="@(colCount / 2)">
+                        <strong>Branch :</strong> @branchName
+                        &nbsp;&nbsp;
+                        <strong>From :</strong> @fromDate
+                        &nbsp;&nbsp;
+                        <strong>To :</strong> @toDate
+                    </td>
+                    <td colspan="@(colCount - colCount / 2)" class="text-right">
+                        <strong>Penalty :</strong>
+                        <span class="penalty-badge @(penaltyType == "S" ? "badge-schedule" : penaltyType == "R" ? "badge-remaining" : "badge-maturity")">
+                            @penaltyTypeName
+                        </span>
+                        &nbsp;&nbsp;
+                        <strong>Mode :</strong>
+                        <span class="mode-badge @(reportMode == "1" ? "badge-summary" : "badge-detail")">
+                            @reportModeName
+                        </span>
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="@(colCount / 2)">
+                        @if (isCollectorFiltered)
+                        {
+                            <strong>Collector :</strong> 
+                            @collectorName
+                            <text>&nbsp;&nbsp;</text>
+                        }
+                        @if (isCollectionCenterFiltered)
+                        {
+                            <strong>Center :</strong> 
+                            @collectionCenterName
+                        }
+                    </td>
+                    <td colspan="@(colCount - colCount / 2)" class="text-right">
+                        <strong>Generated :</strong> @generatedOn
+                    </td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
+
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Member Id</th>
+                    <th>Member Name</th>
+                    @if (groupByCollectionCenter)
+                    {
+                        <th>Center</th>
+                    }
+                    <th>Account No</th>
+                    <th>Collector</th>
+                    <th class="text-right">Disburse</th>
+                    <th class="text-right">Opening Bal</th>
+                    <th class="text-right">Closing Bal</th>
+                    <th class="text-right">Repaid</th>
+                    <th class="text-right">Balance</th>
+                    <th class="text-right">Good Loan</th>
+                    <th class="text-right">Due 1-365</th>
+                    <th class="text-right">Due &gt; 365</th>
+                    <th class="text-right">Provision</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.FullName ?? "")</td>
+                            @if (groupByCollectionCenter)
+                            {
+                                <td>@(row.CollectionCenterName ?? "")</td>
+                            }
+                            <td>@(row.LoanAccountNo ?? "")</td>
+                            <td>@(row.CollectorName ?? "")</td>
+                            <td class="text-right">@(row.LoanIssueAmount?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.OpeningBalance?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.ClosingBalance?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.PaidAmount?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.BalanceAmount?.ToString("N2") ?? "")</td>
+                            <td class="text-right positive">@(row.Goodloan?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Arrearfrm1to365?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Arreargrtthan365?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.TotalProvision?.ToString("N2") ?? "")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="@(3 + extraCols)" class="text-right"><strong>Grand Total</strong></td>
+                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalOpeningBalance.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalClosingBalance.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalPaidAmount.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalBalanceAmount.ToString("N2")</strong></td>
+                        <td class="text-right positive"><strong>@totalGoodloan.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalArrearfrm1to365.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalArreargrtthan365.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalProvision.ToString("N2")</strong></td>
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="@(4 + extraCols)" class="text-right"><strong>Total Arrear</strong></td>
+                        <td colspan="2" class="text-right"><strong>@totalArrear.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>Total Overdue</strong></td>
+                        <td colspan="2" class="text-right"><strong>@totalOverDue.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>Active Loans</strong></td>
+                        <td class="text-right"><strong>@totalActiveLoanCount</strong></td>
+                        <td colspan="2"></td>
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="@(colCount - 1)" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-center"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="@colCount" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

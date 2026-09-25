@@ -1,0 +1,381 @@
+﻿@* Views/Report/Microfinance/MicrofinanceReport/SavingTypeWiseBalanceReport.cshtml *@
+@using NexgenCosysReport.Dtos.RequestDtos.MicroFinance.MicroFinanceReports
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<SavingTypeWiseBalanceRowDto>) ?? new List<SavingTypeWiseBalanceRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalAccountCount = Model["TotalAccountCount"] as int? ?? 0;
+    var totalOpening = Model["TotalOpening"] as decimal? ?? 0;
+    var totalDeposit = Model["TotalDeposit"] as decimal? ?? 0;
+    var totalWithdraw = Model["TotalWithdraw"] as decimal? ?? 0;
+    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
+    var totalClosing = Model["TotalClosing"] as decimal? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var collectionCenterName = Model["CollectionCenterName"]?.ToString() ?? "";
+    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "";
+    var collectorName = Model["CollectorName"]?.ToString() ?? "";
+    var orderBy = Model["OrderBy"]?.ToString() ?? "SavingType";
+    var showOpeningBalance = Model["ShowOpeningBalance"] as bool? ?? false;
+    var showPercentage = Model["ShowPercentage"] as bool? ?? false;
+    var showDetail = Model["ShowDetail"] as bool? ?? true;
+    var groupByBranch = Model["GroupByBranch"] as bool? ?? false;
+    var groupByCollectionCenter = Model["GroupByCollectionCenter"] as bool? ?? false;
+    var groupByMemberGroup = Model["GroupByMemberGroup"] as bool? ?? false;
+    var viewCollector = Model["ViewCollector"] as bool? ?? false;
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var isCollectionCenterFiltered = !string.IsNullOrEmpty(collectionCenterName);
+    var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName);
+    var isCollectorFiltered = !string.IsNullOrEmpty(collectorName);
+
+    var extraCols = 0;
+    if (groupByBranch) extraCols++;
+    if (groupByCollectionCenter) extraCols++;
+    if (groupByMemberGroup) extraCols++;
+    if (viewCollector) extraCols++;
+    if (showOpeningBalance) extraCols += 2;
+    if (showPercentage) extraCols += 3;
+
+    var colCount = 6 + extraCols;
+
+    var groupCols = (groupByBranch ? 1 : 0)
+                  + (groupByCollectionCenter ? 1 : 0)
+                  + (groupByMemberGroup ? 1 : 0)
+                  + (viewCollector ? 1 : 0);
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Saving Type Wise Balance Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 8pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8pt;
+                table-layout: fixed;
+            }
+
+                .data-table td,
+                .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 3px 4px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="SavingTypeWiseBalance">
+            <colgroup>
+                <col style="width:3%;" />
+                @if (groupByBranch)
+                {
+                    <col style="width:12%;" />
+                }
+                @if (groupByCollectionCenter)
+                {
+                    <col style="width:12%;" />
+                }
+                @if (groupByMemberGroup)
+                {
+                    <col style="width:12%;" />
+                }
+                @if (viewCollector)
+                {
+                    <col style="width:12%;" />
+                }
+                <col style="width:12%;" />
+                <col style="width:6%;" />
+                @if (showOpeningBalance)
+                {
+                    <col style="width:9%;" />
+                }
+                <col style="width:9%;" />
+                <col style="width:9%;" />
+                <col style="width:9%;" />
+                @if (showOpeningBalance)
+                {
+                    <col style="width:9%;" />
+                }
+                @if (showPercentage)
+                {
+                    <col style="width:9%;" />
+                    <col style="width:9%;" />
+                    <col style="width:9%;" />
+                }
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="@colCount">Saving Type Wise Balance Report</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="@(colCount / 2)">
+                        <strong>Branch :</strong> @branchName
+                        &nbsp;&nbsp;
+                        <strong>From :</strong> @fromDate
+                        &nbsp;&nbsp;
+                        <strong>To :</strong> @toDate
+                    </td>
+                    <td colspan="@(colCount - colCount / 2)" class="text-right">
+                        <strong>Order By :</strong> @orderBy
+                        &nbsp;&nbsp;
+                        <strong>Generated :</strong> @generatedOn
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="@colCount">
+                        @if (isCollectionCenterFiltered)
+                        {
+                            <strong>Collection Center :</strong>
+                            @collectionCenterName
+                            <text>&nbsp;&nbsp;</text>
+                        }
+                        @if (isMemberGroupFiltered)
+                        {
+                            <strong>Member Group :</strong>
+                            @memberGroupName
+                            <text>&nbsp;&nbsp;</text>
+                        }
+                        @if (isCollectorFiltered)
+                        {
+                            <strong>Collector :</strong>
+                            @collectorName
+                        }
+                    </td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
+
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    @if (groupByBranch)
+                    {
+                        <th>Office</th>
+                    }
+                    @if (groupByCollectionCenter)
+                    {
+                        <th>Collection Center</th>
+                    }
+                    @if (groupByMemberGroup)
+                    {
+                        <th>Member Group</th>
+                    }
+                    @if (viewCollector)
+                    {
+                        <th>Collector</th>
+                    }
+                    <th>Saving Type</th>
+                    <th class="text-center">A/C Count</th>
+                    @if (showOpeningBalance)
+                    {
+                        <th class="text-right">Opening</th>
+                    }
+                    <th class="text-right">Deposit</th>
+                    <th class="text-right">Withdraw</th>
+                    <th class="text-right">Balance</th>
+                    @if (showOpeningBalance)
+                    {
+                        <th class="text-right">Closing</th>
+                    }
+                    @if (showPercentage)
+                    {
+                        <th class="text-right">Deposit %</th>
+                        <th class="text-right">Withdraw %</th>
+                        <th class="text-right">Balance %</th>
+                    }
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            @if (groupByBranch)
+                            {
+                                <td>@(row.OfficeName ?? "")</td>
+                            }
+                            @if (groupByCollectionCenter)
+                            {
+                                <td>@(row.CenterName ?? "")</td>
+                            }
+                            @if (groupByMemberGroup)
+                            {
+                                <td>@(row.GroupName ?? "")</td>
+                            }
+                            @if (viewCollector)
+                            {
+                                <td>@(row.CollectorName ?? "")</td>
+                            }
+                            <td>@(row.SavingType ?? "")</td>
+                            <td class="text-center">@(row.Count ?? 0)</td>
+                            @if (showOpeningBalance)
+                            {
+                                <td class="text-right">@(row.Opening?.ToString("N2") ?? "")</td>
+                            }
+                            <td class="text-right">@(row.Deposit?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Withdraw?.ToString("N2") ?? "")</td>
+                            <td class="text-right @(row.Balance.HasValue && row.Balance.Value < 0 ? "negative" : "positive")">@(row.Balance?.ToString("N2") ?? "")</td>
+                            @if (showOpeningBalance)
+                            {
+                                <td class="text-right">@(row.Closing?.ToString("N2") ?? "")</td>
+                            }
+                            @if (showPercentage)
+                            {
+                                var depositPct = totalDeposit != 0 ? ((row.Deposit ?? 0) * 100 / totalDeposit) : 0;
+                                var withdrawPct = totalWithdraw != 0 ? ((row.Withdraw ?? 0) * 100 / totalWithdraw) : 0;
+                                var balancePct = totalBalance != 0 ? ((row.Balance ?? 0) * 100 / totalBalance) : 0;
+                                <td class="text-right">@depositPct.ToString("N2")</td>
+                                <td class="text-right">@withdrawPct.ToString("N2")</td>
+                                <td class="text-right">@balancePct.ToString("N2")</td>
+                            }
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="@(3 + groupCols)" class="text-right">
+                            <strong>Grand Total</strong>
+                        </td>
+                        <td class="text-center"><strong>@totalAccountCount</strong></td>
+                        @if (showOpeningBalance)
+                        {
+                            <td class="text-right"><strong>@totalOpening.ToString("N2")</strong></td>
+                        }
+                        <td class="text-right"><strong>@totalDeposit.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalWithdraw.ToString("N2")</strong></td>
+                        <td class="text-right"><strong>@totalBalance.ToString("N2")</strong></td>
+                        @if (showOpeningBalance)
+                        {
+                            <td class="text-right"><strong>@totalClosing.ToString("N2")</strong></td>
+                        }
+                        @if (showPercentage)
+                        {
+                            <td class="text-right"><strong>100.00</strong></td>
+                            <td class="text-right"><strong>100.00</strong></td>
+                            <td class="text-right"><strong>100.00</strong></td>
+                        }
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="@(colCount - 1)" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-center"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="@colCount" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

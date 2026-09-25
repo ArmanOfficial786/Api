@@ -1,0 +1,441 @@
+﻿@* Views/Report/Microfinance/MicrofinanceSheetReports/CenterCollectionSheetSingleReport.cshtml *@
+@using NexgenCosysReport.Dtos.RequestDtos.Microfinance.MicrofinanceSheetReports
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<CenterCollectionSheetSingleRowDto>) ?? new List<CenterCollectionSheetSingleRowDto>();
+    var loanSummary = (Model["LoanSummary"] as List<CenterCollectionSheetSingleLoanSummaryDto>) ?? new List<CenterCollectionSheetSingleLoanSummaryDto>();
+    var savingSummary = (Model["SavingSummary"] as List<CenterCollectionSheetSingleSavingSummaryDto>) ?? new List<CenterCollectionSheetSingleSavingSummaryDto>();
+    var evaluation = Model["Evaluation"] as CenterCollectionSheetSingleEvaluationDto ?? new CenterCollectionSheetSingleEvaluationDto();
+
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalSLedgerBalance = Model["TotalSLedgerBalance"] as decimal? ?? 0;
+    var totalSNetBalance = Model["TotalSNetBalance"] as decimal? ?? 0;
+    var totalSDueAmount = Model["TotalSDueAmount"] as decimal? ?? 0;
+    var totalSGrandTotal = Model["TotalSGrandTotal"] as decimal? ?? 0;
+    var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
+    var totalLRemainingPrinciple = Model["TotalLRemainingPrinciple"] as decimal? ?? 0;
+    var totalLDuePrinciple = Model["TotalLDuePrinciple"] as decimal? ?? 0;
+    var totalLDueInterest = Model["TotalLDueInterest"] as decimal? ?? 0;
+    var totalLDuePenalty = Model["TotalLDuePenalty"] as decimal? ?? 0;
+    var totalLTotalInstallment = Model["TotalLTotalInstallment"] as decimal? ?? 0;
+    var totalOtherAmount = Model["TotalOtherAmount"] as decimal? ?? 0;
+
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var collectionCenterName = Model["CollectionCenterName"]?.ToString() ?? "";
+    var collectionCenterAddress = Model["CollectionCenterAddress"]?.ToString() ?? "";
+    var nextMeetingDate = Model["NextMeetingDate"]?.ToString() ?? "";
+    var viewType = Model["ViewType"]?.ToString() ?? "T";
+    var viewTypeName = Model["ViewTypeName"]?.ToString() ?? "Show Account Type";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Center Collection Single Sheet Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 8pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8pt;
+                table-layout: fixed;
+                margin-bottom: 12px;
+            }
+
+                .data-table td,
+                .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 3px 4px;
+                    vertical-align: middle;
+                }
+
+            .section-title {
+                font-family: "Times New Roman", Times, serif;
+                font-size: 12pt;
+                font-weight: bold;
+                background: #e8e8e8;
+                padding: 5px 8px;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                margin-top: 10px;
+                margin-bottom: 6px;
+            }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            @@media print {
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+
+                .section-title {
+                    page-break-after: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        @* ==================== Title & Meta ==================== *@
+        <table class="data-table">
+            <tbody>
+                <tr class="meta-title">
+                    <td>Center Collection Single Sheet Report</td>
+                </tr>
+                <tr class="meta-row">
+                    <td>
+                        <strong>Center :</strong> @collectionCenterName
+                        @if (!string.IsNullOrEmpty(collectionCenterAddress))
+                        {
+                            <text>&nbsp;&nbsp;<strong>Address :</strong> @collectionCenterAddress</text>
+                        }
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td>
+                        <strong>Collection Date :</strong> @tillDate
+                        @if (!string.IsNullOrEmpty(nextMeetingDate))
+                        {
+                            <text>&nbsp;&nbsp;<strong>Next Meeting :</strong> @nextMeetingDate</text>
+                        }
+                        &nbsp;&nbsp;
+                        <strong>View :</strong> @viewTypeName
+                        &nbsp;&nbsp;
+                        <strong>Generated :</strong> @generatedOn
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        @* ==================== Section 1: Combined Saving + Loan Sheet ==================== *@
+        <div class="section-title">Member Saving &amp; Loan Detail</div>
+        <table class="data-table" data-sheet-name="MemberSavingLoanDetail">
+            <colgroup>
+                <col style="width:3%;" />
+                <col style="width:7%;" />
+                <col style="width:12%;" />
+                <col style="width:9%;" />
+                <col style="width:9%;" />
+                <col style="width:6%;" />
+                <col style="width:7%;" />
+                <col style="width:6%;" />
+                <col style="width:6%;" />
+                <col style="width:6%;" />
+                <col style="width:6%;" />
+                <col style="width:6%;" />
+                <col style="width:8%;" />
+                <col style="width:9%;" />
+            </colgroup>
+            <thead>
+                <tr>
+                    <th class="text-center" rowspan="2">S.N.</th>
+                    <th rowspan="2">Member Id</th>
+                    <th rowspan="2">Member Name</th>
+                    <th colspan="6" class="text-center">Saving</th>
+                    <th colspan="5" class="text-center">Loan</th>
+                    <th rowspan="2" class="text-right">Other Amt</th>
+                </tr>
+                <tr>
+                    <th>Saving Type</th>
+                    <th>@(viewType == "A" ? "Account No" : "Type Code")</th>
+                    <th class="text-right">Ledger</th>
+                    <th class="text-right">Net</th>
+                    <th class="text-right">Due</th>
+                    <th class="text-right">Total</th>
+                    <th>Loan Type</th>
+                    <th>@(viewType == "A" ? "Account No" : "Type Code")</th>
+                    <th class="text-right">Due Prin.</th>
+                    <th class="text-right">Due Int.</th>
+                    <th class="text-right">Installment</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.MemberName ?? "")</td>
+
+                            @* Saving *@
+                            <td>@(row.SavingTypeName ?? "")</td>
+                            <td>@(row.SAccountNo ?? "")</td>
+                            <td class="text-right">@(row.SLedgerBalance?.ToString("N0") ?? "")</td>
+                            <td class="text-right">@(row.SNetBalance?.ToString("N0") ?? "")</td>
+                            <td class="text-right negative">@(row.SDueAmount?.ToString("N0") ?? "")</td>
+                            <td class="text-right">@(row.SGrandTotal?.ToString("N0") ?? "")</td>
+
+                            @* Loan *@
+                            <td>@(row.LoanTypeName ?? "")</td>
+                            <td>@(row.LoanAccountNo ?? "")</td>
+                            <td class="text-right negative">@(row.LDuePrinciple?.ToString("N0") ?? "")</td>
+                            <td class="text-right negative">@(row.LDueInterest?.ToString("N0") ?? "")</td>
+                            <td class="text-right">@(row.LInstallment ?? "")</td>
+
+                            <td class="text-right">@(row.OtherAmount?.ToString("N0") ?? "")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="3" class="text-right">Grand Total</td>
+                        <td></td>
+                        <td></td>
+                        <td class="text-right">@totalSLedgerBalance.ToString("N0")</td>
+                        <td class="text-right">@totalSNetBalance.ToString("N0")</td>
+                        <td class="text-right negative">@totalSDueAmount.ToString("N0")</td>
+                        <td class="text-right">@totalSGrandTotal.ToString("N0")</td>
+                        <td></td>
+                        <td></td>
+                        <td class="text-right negative">@totalLDuePrinciple.ToString("N0")</td>
+                        <td class="text-right negative">@totalLDueInterest.ToString("N0")</td>
+                        <td class="text-right">@totalOtherAmount.ToString("N0")</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="14" class="text-center">No data found</td></tr>
+                }
+            </tbody>
+        </table>
+
+        @* ==================== Section 2: Saving Summary ==================== *@
+        <div class="section-title">Saving Summary</div>
+        <table class="data-table" data-sheet-name="SavingSummary">
+            <colgroup>
+                <col style="width:6%;" />
+                <col style="width:44%;" />
+                <col style="width:25%;" />
+                <col style="width:25%;" />
+            </colgroup>
+            <thead>
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Saving Type</th>
+                    <th class="text-right">Ledger Balance</th>
+                    <th class="text-right">Due Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (savingSummary.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in savingSummary)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.SavingTypeName ?? "")</td>
+                            <td class="text-right positive">@(row.LedgerBalance?.ToString("N0") ?? "")</td>
+                            <td class="text-right negative">@(row.DueAmount?.ToString("N0") ?? "")</td>
+                        </tr>
+                    }
+                    <tr class="grand-total-row">
+                        <td colspan="2" class="text-right">Grand Total</td>
+                        <td class="text-right positive">@savingSummary.Sum(s => s.LedgerBalance ?? 0).ToString("N0")</td>
+                        <td class="text-right negative">@savingSummary.Sum(s => s.DueAmount ?? 0).ToString("N0")</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="4" class="text-center">No data found</td></tr>
+                }
+            </tbody>
+        </table>
+
+        @* ==================== Section 3: Loan Summary ==================== *@
+        <div class="section-title">Loan Summary</div>
+        <table class="data-table" data-sheet-name="LoanSummary">
+            <colgroup>
+                <col style="width:5%;" />
+                <col style="width:25%;" />
+                <col style="width:14%;" />
+                <col style="width:14%;" />
+                <col style="width:14%;" />
+                <col style="width:14%;" />
+                <col style="width:14%;" />
+            </colgroup>
+            <thead>
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Loan Type</th>
+                    <th class="text-right">Issue Amt</th>
+                    <th class="text-right">Remaining</th>
+                    <th class="text-right">Due Prin.</th>
+                    <th class="text-right">Due Int.</th>
+                    <th class="text-right">Due Pen.</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (loanSummary.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in loanSummary)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.LoanTypeName ?? "")</td>
+                            <td class="text-right">@(row.LoanIssueAmount?.ToString("N0") ?? "")</td>
+                            <td class="text-right">@(row.RemainingPrinciple?.ToString("N0") ?? "")</td>
+                            <td class="text-right negative">@(row.DuePrinciple?.ToString("N0") ?? "")</td>
+                            <td class="text-right negative">@(row.DueInterest?.ToString("N0") ?? "")</td>
+                            <td class="text-right negative">@(row.DuePenalty?.ToString("N0") ?? "")</td>
+                        </tr>
+                    }
+                    <tr class="grand-total-row">
+                        <td colspan="2" class="text-right">Grand Total</td>
+                        <td class="text-right">@loanSummary.Sum(s => s.LoanIssueAmount ?? 0).ToString("N0")</td>
+                        <td class="text-right">@loanSummary.Sum(s => s.RemainingPrinciple ?? 0).ToString("N0")</td>
+                        <td class="text-right negative">@loanSummary.Sum(s => s.DuePrinciple ?? 0).ToString("N0")</td>
+                        <td class="text-right negative">@loanSummary.Sum(s => s.DueInterest ?? 0).ToString("N0")</td>
+                        <td class="text-right negative">@loanSummary.Sum(s => s.DuePenalty ?? 0).ToString("N0")</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="7" class="text-center">No data found</td></tr>
+                }
+            </tbody>
+        </table>
+
+        @* ==================== Section 4: Evaluation Summary ==================== *@
+        <div class="section-title">Evaluation Summary</div>
+        <table class="data-table" data-sheet-name="Evaluation">
+            <colgroup>
+                <col style="width:50%;" />
+                <col style="width:50%;" />
+            </colgroup>
+            <tbody>
+                <tr>
+                    <td class="text-right">Total Groups</td>
+                    <td class="text-right">@(evaluation.TotalGroup?.ToString("N0") ?? "0")</td>
+                </tr>
+                <tr>
+                    <td class="text-right">Total Active Groups</td>
+                    <td class="text-right">@(evaluation.TotalActiveGroup?.ToString("N0") ?? "0")</td>
+                </tr>
+                <tr>
+                    <td class="text-right">Total Members</td>
+                    <td class="text-right">@(evaluation.TotalMember?.ToString("N0") ?? "0")</td>
+                </tr>
+                <tr>
+                    <td class="text-right">Total Active Members</td>
+                    <td class="text-right">@(evaluation.TotalActiveMember?.ToString("N0") ?? "0")</td>
+                </tr>
+                <tr>
+                    <td class="text-right">Total Saving</td>
+                    <td class="text-right">@(evaluation.TotalSaving?.ToString("N0") ?? "0")</td>
+                </tr>
+                <tr>
+                    <td class="text-right">Total Loan</td>
+                    <td class="text-right">@(evaluation.TotalLoan?.ToString("N0") ?? "0")</td>
+                </tr>
+                <tr>
+                    <td class="text-right">Total Saving Members</td>
+                    <td class="text-right">@(evaluation.TotalSavingMember?.ToString("N0") ?? "0")</td>
+                </tr>
+                <tr>
+                    <td class="text-right">Total Loan Members</td>
+                    <td class="text-right">@(evaluation.TotalLoanMember?.ToString("N0") ?? "0")</td>
+                </tr>
+                <tr>
+                    <td class="text-right">Hit Kosh Balance</td>
+                    <td class="text-right">@(evaluation.HitKoshBalance?.ToString("N0") ?? "0")</td>
+                </tr>
+                <tr class="grand-total-row">
+                    <td class="text-right">Total Collection</td>
+                    <td class="text-right">@(evaluation.TotalCollection?.ToString("N0") ?? "0")</td>
+                </tr>
+            </tbody>
+        </table>
+
+    </div>
+</body>
+</html>

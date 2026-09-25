@@ -1,0 +1,387 @@
+﻿@* Views/Report/Microfinance/MicrofinanceSheetReports/CenterCollectionSheetPrintReport.cshtml *@
+@using NexgenCosysReport.Dtos.RequestDtos.Microfinance.MicrofinanceSheetReports;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var header = Model["Header"] as CenterCollectionSheetHeaderDto ?? new CenterCollectionSheetHeaderDto();
+    var rows = (Model["Rows"] as List<CenterCollectionSheetRowDto>) ?? new List<CenterCollectionSheetRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+
+    var totalSavingRemBalance = Model["TotalSavingRemBalance"] as decimal? ?? 0;
+    var totalSavingPayableDeposit = Model["TotalSavingPayableDeposit"] as decimal? ?? 0;
+    var totalSavingPayableWithdrawal = Model["TotalSavingPayableWithdrawal"] as decimal? ?? 0;
+    var totalSavingPayableInt = Model["TotalSavingPayableInt"] as decimal? ?? 0;
+    var totalLoanRemPrinciple = Model["TotalLoanRemPrinciple"] as decimal? ?? 0;
+    var totalLoanPayablePri = Model["TotalLoanPayablePri"] as decimal? ?? 0;
+    var totalLoanPayableInt = Model["TotalLoanPayableInt"] as decimal? ?? 0;
+
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var sheetType = Model["SheetType"]?.ToString() ?? "A";
+    var sheetTypeName = Model["SheetTypeName"]?.ToString() ?? "Saving And Loan";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var showSaving = sheetType == "A" || sheetType == "S" || sheetType == "LS";
+    var showLoan = sheetType == "A" || sheetType == "L" || sheetType == "LS";
+
+    // Column count depends on mode
+    // Base: SN, MemberId, MemberName = 3
+    // Saving: 4  (RemBal, PayableDeposit, PayableWithdrawal, PayableInt)
+    // Loan:   4 groups × 3 cols = 12
+    var savingCols = showSaving ? 4 : 0;
+    var loanCols = showLoan ? 12 : 0;
+    var colCount = 3 + savingCols + loanCols;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Center Collection Sheet Print Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 8pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 3px 4px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .group-header-row td {
+                background: #d9edf7;
+                font-weight: bold;
+                font-size: 9pt;
+                padding: 4px 6px;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+
+                .group-header-row {
+                    page-break-after: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="CenterCollectionSheetPrint">
+            <colgroup>
+                <col style="width:3%;" />
+                <col style="width:8%;" />
+                <col style="width:15%;" />
+                @if (showSaving)
+                {
+                    <col style="width:7%;" />
+                    <col style="width:7%;" />
+                    <col style="width:7%;" />
+                    <col style="width:7%;" />
+                }
+                @if (showLoan)
+                {
+                    @for (int i = 0; i < 12; i++)
+                    {
+                        <col style="width:6%;" />
+                    }
+                }
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="@colCount">Center Collection Sheet — @sheetTypeName</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="7">
+                        <strong>Center :</strong> @(header.CollectionCenterShortCode ?? "") — @(header.CollectionCenterName ?? "")
+                        @if (!string.IsNullOrEmpty(header.OfficeName))
+                        {
+                            <text>&nbsp;&nbsp;<strong>Office :</strong> @header.OfficeName</text>
+                        }
+                    </td>
+                    <td colspan="@(colCount - 7)" class="text-right">
+                        <strong>Till Date :</strong> @tillDate
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="7">
+                        @if (!string.IsNullOrEmpty(header.Address))
+                        {
+                            <strong>Address :</strong> 
+                            @header.Address
+                            <text>&nbsp;&nbsp;</text>
+                        }
+                        @if (!string.IsNullOrEmpty(header.VDCName))
+                        {
+                            <strong>VDC :</strong> 
+                            @header.VDCName
+                            <text>&nbsp;&nbsp;</text>
+                        }
+                        @if (!string.IsNullOrEmpty(header.ContactNo))
+                        {
+                            <strong>Contact :</strong> 
+                            @header.ContactNo
+                        }
+                    </td>
+                    <td colspan="@(colCount - 7)" class="text-right">
+                        @if (!string.IsNullOrEmpty(header.AgentName))
+                        {
+                            <strong>Agent :</strong> 
+                            @header.AgentName
+                            <text>&nbsp;&nbsp;</text>
+                        }
+                        <strong>Generated :</strong> @generatedOn
+                    </td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
+
+                @if (showSaving)
+                {
+                    <tr class="group-header-row">
+                        <td colspan="@colCount">Saving Details</td>
+                    </tr>
+                    <tr>
+                        <th class="text-center" rowspan="2">S.N.</th>
+                        <th rowspan="2">Member Id</th>
+                        <th rowspan="2">Member Name</th>
+                        <th class="text-right">Rem. Balance</th>
+                        <th class="text-right">Payable Deposit</th>
+                        <th class="text-right">Payable Withdrawal</th>
+                        <th class="text-right">Payable Int.</th>
+                        @if (showLoan)
+                        {
+                            <th colspan="12" class="text-center">Loan Details</th>
+                        }
+                    </tr>
+                    @if (showLoan)
+                    {
+                        <tr>
+                            <th colspan="3" class="text-center">Loan #1</th>
+                            <th colspan="3" class="text-center">Loan #2</th>
+                            <th colspan="3" class="text-center">Loan #3</th>
+                            <th colspan="3" class="text-center">Loan #4</th>
+                        </tr>
+                        <tr>
+                            <th>Type</th>
+                            <th>Ac. No</th>
+                            <th class="text-right">Due Pri.</th>
+                            <th>Type</th>
+                            <th>Ac. No</th>
+                            <th class="text-right">Due Pri.</th>
+                            <th>Type</th>
+                            <th>Ac. No</th>
+                            <th class="text-right">Due Pri.</th>
+                            <th>Type</th>
+                            <th>Ac. No</th>
+                            <th class="text-right">Due Pri.</th>
+                        </tr>
+                    }
+                }
+                else if (showLoan)
+                {
+                    <tr class="group-header-row">
+                        <td colspan="@colCount">Loan Details</td>
+                    </tr>
+                    <tr>
+                        <th class="text-center" rowspan="2">S.N.</th>
+                        <th rowspan="2">Member Id</th>
+                        <th rowspan="2">Member Name</th>
+                        <th colspan="3" class="text-center">Loan #1</th>
+                        <th colspan="3" class="text-center">Loan #2</th>
+                        <th colspan="3" class="text-center">Loan #3</th>
+                        <th colspan="3" class="text-center">Loan #4</th>
+                    </tr>
+                    <tr>
+                        <th>Type</th>
+                        <th>Ac. No</th>
+                        <th class="text-right">Due Pri.</th>
+                        <th>Type</th>
+                        <th>Ac. No</th>
+                        <th class="text-right">Due Pri.</th>
+                        <th>Type</th>
+                        <th>Ac. No</th>
+                        <th class="text-right">Due Pri.</th>
+                        <th>Type</th>
+                        <th>Ac. No</th>
+                        <th class="text-right">Due Pri.</th>
+                    </tr>
+                }
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.MemberName ?? "")</td>
+
+                            @if (showSaving)
+                            {
+                                <td class="text-right">@(row.SavingRemBalance?.ToString("N0") ?? "")</td>
+                                <td class="text-right">@(row.SavingPayableDeposit?.ToString("N0") ?? "")</td>
+                                <td class="text-right">@(row.SavingPayableWithdrawal?.ToString("N0") ?? "")</td>
+                                <td class="text-right">@(row.SavingPayableInt?.ToString("N0") ?? "")</td>
+                            }
+
+                            @if (showLoan)
+                            {
+                                <td>@(row.Loan1LoanType ?? "")</td>
+                                <td>@(row.Loan1AcNo ?? "")</td>
+                                <td class="text-right">@(row.Loan1PayablePri?.ToString("N0") ?? "")</td>
+
+                                <td>@(row.Loan2LoanType ?? "")</td>
+                                <td>@(row.Loan2AcNo ?? "")</td>
+                                <td class="text-right">@(row.Loan2PayablePri?.ToString("N0") ?? "")</td>
+
+                                <td>@(row.Loan3LoanType ?? "")</td>
+                                <td>@(row.Loan3AcNo ?? "")</td>
+                                <td class="text-right">@(row.Loan3PayablePri?.ToString("N0") ?? "")</td>
+
+                                <td>@(row.Loan4LoanType ?? "")</td>
+                                <td>@(row.Loan4AcNo ?? "")</td>
+                                <td class="text-right">@(row.Loan4PayablePri?.ToString("N0") ?? "")</td>
+                            }
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="3" class="text-right"><strong>Grand Total</strong></td>
+                        @if (showSaving)
+                        {
+                            <td class="text-right"><strong>@totalSavingRemBalance.ToString("N0")</strong></td>
+                            <td class="text-right"><strong>@totalSavingPayableDeposit.ToString("N0")</strong></td>
+                            <td class="text-right"><strong>@totalSavingPayableWithdrawal.ToString("N0")</strong></td>
+                            <td class="text-right"><strong>@totalSavingPayableInt.ToString("N0")</strong></td>
+                        }
+                        @if (showLoan)
+                        {
+                            var each = totalLoanPayablePri / 4;
+                            @for (int i = 0; i < 4; i++)
+                            {
+                                <td></td>
+                                <td></td>
+                                <td class="text-right"><strong>@each.ToString("N0")</strong></td>
+                            }
+                        }
+                    </tr>
+                    <tr class="grand-total-row">
+                        <td colspan="@(colCount - 1)" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-center"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="@colCount" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

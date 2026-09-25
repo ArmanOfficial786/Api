@@ -1,0 +1,316 @@
+﻿@* Views/Report/Microfinance/CenterDetailReports/CenterMeetingDetailReport.cshtml *@
+@using NexgenCosysReport.Dtos.RequestDtos.Microfinance.CenterDetailReports;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<CenterMeetingDetailRowDto>) ?? new List<CenterMeetingDetailRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var collectionCenterName = Model["CollectionCenterName"]?.ToString() ?? "";
+    var meetingType = Model["MeetingType"]?.ToString() ?? "rbNext";
+    var meetingTypeName = Model["MeetingTypeName"]?.ToString() ?? "Next Meeting";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var isCollectionCenterFiltered = !string.IsNullOrEmpty(collectionCenterName);
+    var isDetailMode = meetingType == "rbDetail";
+
+    var meetingBadgeClass = meetingType switch
+    {
+        "rbNext" => "badge-next",
+        "rbCenterWise" => "badge-centerwise",
+        "rbDetail" => "badge-detail",
+        _ => "badge-next"
+    };
+
+    var colCount = isDetailMode ? 6 : 14;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Center Meeting Detail Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 8pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 3px 4px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: nowrap;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            .meeting-badge {
+                display: inline-block;
+                padding: 2px 10px;
+                border-radius: 3px;
+                font-size: 8pt;
+                font-weight: bold;
+            }
+
+            .badge-next {
+                background: #d1ecf1;
+                color: #0c5460;
+            }
+
+            .badge-centerwise {
+                background: #fff3cd;
+                color: #856404;
+            }
+
+            .badge-detail {
+                background: #f8d7da;
+                color: #721c24;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="CenterMeetingDetail">
+            <colgroup>
+                <col style="width:3%;" />
+                @if (isDetailMode)
+                {
+                    <col style="width:20%;" />
+                    <col style="width:20%;" />
+                    <col style="width:20%;" />
+                    <col style="width:15%;" />
+                    <col style="width:22%;" />
+                }
+                else
+                {
+                    <col style="width:10%;" />
+                    <col style="width:13%;" />
+                    <col style="width:7%;" />
+                    <col style="width:8%;" />
+                    <col style="width:6%;" />
+                    <col style="width:6%;" />
+                    <col style="width:11%;" />
+                    <col style="width:9%;" />
+                    <col style="width:8%;" />
+                    <col style="width:12%;" />
+                    <col style="width:8%;" />
+                    <col style="width:9%;" />
+                    <col style="width:9%;" />
+                }
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="@colCount">
+                        Center Meeting Detail Report — @meetingTypeName
+                    </td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="@(colCount / 2)">
+                        <strong>Branch :</strong> @branchName
+                        @if (isCollectionCenterFiltered)
+                        {
+                            <text>&nbsp;&nbsp;<strong>Center :</strong> @collectionCenterName</text>
+                        }
+                    </td>
+                    <td colspan="@(colCount - colCount / 2)" class="text-right">
+                        <strong>Type :</strong>
+                        <span class="meeting-badge @meetingBadgeClass">
+                            @meetingTypeName
+                        </span>
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="@(colCount / 2)">
+                        <strong>From :</strong> @fromDate
+                        &nbsp;&nbsp;
+                        <strong>To :</strong> @toDate
+                    </td>
+                    <td colspan="@(colCount - colCount / 2)" class="text-right">
+                        <strong>Generated :</strong> @generatedOn
+                    </td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
+
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    @if (isDetailMode)
+                    {
+                        <th>Office</th>
+                        <th>Collection Center</th>
+                        <th>Field Visitor</th>
+                        <th>Visit Date</th>
+                        <th>Visit Status</th>
+                    }
+                    else
+                    {
+                        <th>Office</th>
+                        <th>Collection Center</th>
+                        <th>Center Code</th>
+                        <th>Meeting Date</th>
+                        <th>Day</th>
+                        <th>Time</th>
+                        <th>Collector</th>
+                        <th>Group</th>
+                        <th>Member Id</th>
+                        <th>Member Name</th>
+                        <th>Contact No</th>
+                        <th>Status</th>
+                        <th>Remarks</th>
+                    }
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            @if (isDetailMode)
+                            {
+                                <td>@(row.OfficeName ?? "")</td>
+                                <td>@(row.CollectionCenterName ?? "")</td>
+                                <td>@(row.FieldVisitorName ?? "")</td>
+                                <td>@(row.VisitDateBs ?? "")</td>
+                                <td>@(row.VisitStatus ?? "")</td>
+                            }
+                            else
+                            {
+                                <td>@(row.OfficeName ?? "")</td>
+                                <td>@(row.CollectionCenterName ?? "")</td>
+                                <td>@(row.CenterCode ?? "")</td>
+                                <td>@(row.MeetingDateBs ?? "")</td>
+                                <td>@(row.MeetingDay ?? "")</td>
+                                <td>@(row.MeetingTime ?? "")</td>
+                                <td>@(row.CollectorName ?? "")</td>
+                                <td>@(row.GroupName ?? "")</td>
+                                <td>@(row.MemberId ?? "")</td>
+                                <td>@(row.MemberName ?? "")</td>
+                                <td>@(row.ContactNo ?? "")</td>
+                                <td>@(row.MeetingStatus ?? "")</td>
+                                <td>@(row.Remarks ?? "")</td>
+                            }
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="@(colCount - 1)" class="text-right"><strong>Total Records</strong></td>
+                        <td class="text-center"><strong>@totalRecords</strong></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="@colCount" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

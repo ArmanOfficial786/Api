@@ -1,0 +1,483 @@
+﻿@* Views/Report/Microfinance/CenterDetailReports/LoanEvaluationReport.cshtml *@
+@using NexgenCosysReport.Dtos.RequestDtos.Microfinance.CenterDetailReports;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var member = Model["Member"] as LoanEvaluationMemberDto;
+    var loanDetails = (Model["LoanDetails"] as List<LoanEvaluationLoanDetailDto>) ?? new List<LoanEvaluationLoanDetailDto>();
+    var assetLedger = (Model["AssetLedger"] as List<LoanEvaluationAssetLedgerDto>) ?? new List<LoanEvaluationAssetLedgerDto>();
+    var meeting = Model["Meeting"] as LoanEvaluationMeetingDto ?? new LoanEvaluationMeetingDto();
+    var incomes = (Model["Incomes"] as List<LoanEvaluationIncomeDto>) ?? new List<LoanEvaluationIncomeDto>();
+    var expenses = (Model["Expenses"] as List<LoanEvaluationExpenseDto>) ?? new List<LoanEvaluationExpenseDto>();
+    var loanIssues = (Model["LoanIssues"] as List<LoanEvaluationLoanIssueDto>) ?? new List<LoanEvaluationLoanIssueDto>();
+
+    var totalSaving = Model["TotalSaving"] as decimal? ?? 0;
+    var totalShare = Model["TotalShare"] as decimal? ?? 0;
+    var totalLoanIssue = Model["TotalLoanIssue"] as decimal? ?? 0;
+    var totalLoanRemaining = Model["TotalLoanRemaining"] as decimal? ?? 0;
+    var totalLoanDue = Model["TotalLoanDue"] as decimal? ?? 0;
+    var grandTotal = Model["GrandTotal"] as decimal? ?? 0;
+    var totalAssetCost = Model["TotalAssetCost"] as decimal? ?? 0;
+    var totalIncome = Model["TotalIncome"] as decimal? ?? 0;
+    var totalExpense = Model["TotalExpense"] as decimal? ?? 0;
+
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    const int colCount = 6;
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Loan Evaluation Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            .section-title {
+                font-family: "Times New Roman", Times, serif;
+                font-size: 12pt;
+                font-weight: bold;
+                background: #e8e8e8;
+                padding: 5px 8px;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                margin-top: 8px;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 3px 6px;
+                    vertical-align: middle;
+                }
+
+                .data-table th {
+                    background: #f9f9f9;
+                    border-top: 1px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                    white-space: nowrap;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
+
+            .detail-row-alt td {
+                background: #f9f9f9;
+                border-bottom: 1px solid #eee;
+            }
+
+            .subtotal-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 4px 6px;
+            }
+
+            .member-info-table td {
+                padding: 3px 6px;
+                border-bottom: 1px dotted #ccc;
+            }
+
+                .member-info-table td.label {
+                    width: 150px;
+                    font-weight: bold;
+                    background: #f9f9f9;
+                }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            .negative {
+                color: #CC0000;
+            }
+
+            .positive {
+                color: #006600;
+            }
+
+            @@media print {
+                .section-title {
+                    page-break-after: avoid;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table">
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="@colCount">Loan Evaluation Report</td>
+                </tr>
+            </tbody>
+        </table>
+
+        @* ============ Member Detail ============ *@
+        <div class="section-title">Member Detail</div>
+        <table class="data-table member-info-table">
+            <colgroup>
+                <col style="width:15%;" />
+                <col style="width:35%;" />
+                <col style="width:15%;" />
+                <col style="width:35%;" />
+            </colgroup>
+            <tbody>
+                @if (member != null)
+                {
+                    <tr>
+                        <td class="label">Member Id</td>
+                        <td>@(member.MemberId ?? "")</td>
+                        <td class="label">Member Name</td>
+                        <td>@(member.MemberName ?? "")</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Center</td>
+                        <td>@(member.CenterName ?? "")</td>
+                        <td class="label">Group</td>
+                        <td>@(member.GroupName ?? "")</td>
+                    </tr>
+                    <tr>
+                        <td class="label">District</td>
+                        <td>@(member.DistrictName ?? "")</td>
+                        <td class="label">VDC</td>
+                        <td>@(member.VDCName ?? "")</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Permanent Address</td>
+                        <td>@(member.PermanentAddress ?? "")</td>
+                        <td class="label">Temporary Address</td>
+                        <td>@(member.TemporaryAddress ?? "")</td>
+                    </tr>
+                    <tr>
+                        <td class="label">Contact No</td>
+                        <td colspan="3">@(member.ContactNo ?? "")</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="4" class="text-center">No member data</td></tr>
+                }
+            </tbody>
+        </table>
+
+        @* ============ Loan Detail ============ *@
+        <div class="section-title">Loan Detail</div>
+        <table class="data-table">
+            <colgroup>
+                <col style="width:5%;" />
+                <col style="width:25%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:10%;" />
+            </colgroup>
+            <thead>
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Loan Type</th>
+                    <th class="text-right">Saving</th>
+                    <th class="text-right">Share</th>
+                    <th class="text-right">Loan Issue</th>
+                    <th class="text-right">Loan Remaining</th>
+                    <th class="text-right">Loan Due</th>
+                    <th class="text-right">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (loanDetails.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in loanDetails)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.LoanType ?? "")</td>
+                            <td class="text-right">@(row.Saving?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Share?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.LoanIssue?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.LoanRemaining?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.LoanDue?.ToString("N2") ?? "")</td>
+                            <td class="text-right positive">@(row.Total?.ToString("N2") ?? "")</td>
+                        </tr>
+                    }
+                    <tr class="subtotal-row">
+                        <td colspan="2" class="text-right">Grand Total</td>
+                        <td class="text-right">@totalSaving.ToString("N2")</td>
+                        <td class="text-right">@totalShare.ToString("N2")</td>
+                        <td class="text-right">@totalLoanIssue.ToString("N2")</td>
+                        <td class="text-right">@totalLoanRemaining.ToString("N2")</td>
+                        <td class="text-right">@totalLoanDue.ToString("N2")</td>
+                        <td class="text-right positive">@grandTotal.ToString("N2")</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="8" class="text-center">No loan data</td></tr>
+                }
+            </tbody>
+        </table>
+
+        @* ============ Asset Ledger ============ *@
+        <div class="section-title">Member Asset Ledger</div>
+        <table class="data-table">
+            <colgroup>
+                <col style="width:5%;" />
+                <col style="width:30%;" />
+                <col style="width:30%;" />
+                <col style="width:20%;" />
+                <col style="width:15%;" />
+            </colgroup>
+            <thead>
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Asset Ledger</th>
+                    <th>Detail</th>
+                    <th>Number/Area</th>
+                    <th class="text-right">Cost</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (assetLedger.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in assetLedger)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.AssetLedger ?? "")</td>
+                            <td>@(row.LastColumn ?? "")</td>
+                            <td>@(row.NumberArea ?? "")</td>
+                            <td class="text-right">@(row.Cost?.ToString("N2") ?? "")</td>
+                        </tr>
+                    }
+                    <tr class="subtotal-row">
+                        <td colspan="4" class="text-right">Total Asset Cost</td>
+                        <td class="text-right">@totalAssetCost.ToString("N2")</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="5" class="text-center">No asset data</td></tr>
+                }
+            </tbody>
+        </table>
+
+        @* ============ Meeting & Penalty Late ============ *@
+        <div class="section-title">Meeting &amp; Penalty Late</div>
+        <table class="data-table member-info-table">
+            <colgroup>
+                <col style="width:20%;" />
+                <col style="width:30%;" />
+                <col style="width:20%;" />
+                <col style="width:30%;" />
+            </colgroup>
+            <tbody>
+                <tr>
+                    <td class="label">Meeting Count</td>
+                    <td>@(meeting.MeetingCount ?? 0)</td>
+                    <td class="label">Meeting Attended</td>
+                    <td>@(meeting.MeetingAttendedCount ?? 0)</td>
+                </tr>
+                <tr>
+                    <td class="label">Meeting Percent</td>
+                    <td>@((meeting.MeetingPercent ?? 0).ToString("N2"))</td>
+                    <td class="label">Late (Last 2 Loans)</td>
+                    <td>@(meeting.LateForLast2Loan ?? "No")</td>
+                </tr>
+                <tr>
+                    <td class="label">Late Loan Payments (1 Yr)</td>
+                    <td colspan="3">@(meeting.LateLoanPaymentForAYear ?? 0)</td>
+                </tr>
+            </tbody>
+        </table>
+
+        @* ============ Income ============ *@
+        <div class="section-title">Income</div>
+        <table class="data-table">
+            <colgroup>
+                <col style="width:5%;" />
+                <col style="width:75%;" />
+                <col style="width:20%;" />
+            </colgroup>
+            <thead>
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Income Ledger</th>
+                    <th class="text-right">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (incomes.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in incomes)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.IncomeLedger ?? "")</td>
+                            <td class="text-right">@(row.Amount?.ToString("N2") ?? "")</td>
+                        </tr>
+                    }
+                    <tr class="subtotal-row">
+                        <td colspan="2" class="text-right">Total Income</td>
+                        <td class="text-right positive">@totalIncome.ToString("N2")</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="3" class="text-center">No income data</td></tr>
+                }
+            </tbody>
+        </table>
+
+        @* ============ Expense ============ *@
+        <div class="section-title">Expense</div>
+        <table class="data-table">
+            <colgroup>
+                <col style="width:5%;" />
+                <col style="width:75%;" />
+                <col style="width:20%;" />
+            </colgroup>
+            <thead>
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Expense Ledger</th>
+                    <th class="text-right">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (expenses.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in expenses)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.ExpenseLedger ?? "")</td>
+                            <td class="text-right">@(row.Amount?.ToString("N2") ?? "")</td>
+                        </tr>
+                    }
+                    <tr class="subtotal-row">
+                        <td colspan="2" class="text-right">Total Expense</td>
+                        <td class="text-right negative">@totalExpense.ToString("N2")</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="3" class="text-center">No expense data</td></tr>
+                }
+            </tbody>
+        </table>
+
+        @* ============ Loan Issue Detail ============ *@
+        <div class="section-title">Loan Issue Detail</div>
+        <table class="data-table">
+            <colgroup>
+                <col style="width:5%;" />
+                <col style="width:35%;" />
+                <col style="width:60%;" />
+            </colgroup>
+            <thead>
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Loan Issue Date (BS)</th>
+                    <th class="text-right">Loan Issue Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (loanIssues.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in loanIssues)
+                    {
+                        sn++;
+                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                            <td class="text-center">@sn</td>
+                            <td>@(row.LoanIssueOnBS ?? "")</td>
+                            <td class="text-right">@(row.LoanIssueAmount?.ToString("N2") ?? "")</td>
+                        </tr>
+                    }
+                    <tr class="subtotal-row">
+                        <td colspan="2" class="text-right">Total Loan Issue</td>
+                        <td class="text-right">@loanIssues.Sum(x => x.LoanIssueAmount ?? 0).ToString("N2")</td>
+                    </tr>
+                }
+                else
+                {
+                    <tr><td colspan="3" class="text-center">No loan issue data</td></tr>
+                }
+            </tbody>
+        </table>
+
+        <table class="data-table" style="margin-top:10px;">
+            <tbody>
+                <tr>
+                    <td class="text-right" style="font-size:9pt;">
+                        <strong>Report Generated On :</strong> @generatedOn
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+    </div>
+</body>
+</html>
