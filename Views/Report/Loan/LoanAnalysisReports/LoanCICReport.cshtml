@@ -7,35 +7,23 @@
     var rows = (Model["Rows"] as List<LoanCICRowDto>) ?? new List<LoanCICRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
-    var totalPriPaid = Model["TotalPriPaid"] as decimal? ?? 0;
     var totalPriBalance = Model["TotalPriBalance"] as decimal? ?? 0;
     var totalIntBalance = Model["TotalIntBalance"] as decimal? ?? 0;
-    var totalPenaltyBalance = Model["TotalPenaltyBalance"] as decimal? ?? 0;
-    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
     var totalGoodLoan = Model["TotalGoodLoan"] as decimal? ?? 0;
-    var totalLoanRisk30 = Model["TotalLoanRisk30"] as decimal? ?? 0;
-    var totalLoanRisk31to365 = Model["TotalLoanRisk31to365"] as decimal? ?? 0;
     var totalLoanRisk1to365 = Model["TotalLoanRisk1to365"] as decimal? ?? 0;
     var totalLoanRiskGt365 = Model["TotalLoanRiskGreaterThan365"] as decimal? ?? 0;
-    var tillDate = Model["TillDate"]?.ToString() ?? "";
+
+    var tillDate = Model.ContainsKey("TillDateAd") && !string.IsNullOrEmpty(Model["TillDateAd"]?.ToString())
+        ? Model["TillDateAd"]?.ToString()
+        : Model["TillDate"]?.ToString() ?? "";
+
     var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var loanTypeName = Model["LoanTypeName"]?.ToString() ?? "";
-    var provisionType = Model["ProvisionType"]?.ToString() ?? "S";
-    var provisionTypeName = Model["ProvisionTypeName"]?.ToString() ?? "Schedule Wise";
-    var enable1To30Days = Model["Enable1To30Days"] as bool? ?? false;
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
+    var isView = format == "VIEW";
+    var isExcel = format is "EXCEL" or "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var isLoanTypeFiltered = !string.IsNullOrEmpty(loanTypeName);
-
-    // Column layout:
-    // Fixed 19 cols: SN, MemberId, Name, PermAddr, TempAddr, Contact, Citizenship, LoanType, AccountNo,
-    //                IssueDate, Maturity, IssueAmt, IntRate, PriPaid, PriBal, IntBal, Penalty, Total, GoodLoan
-    // + 1 optional   : Risk 1-30 (when enable1To30Days)
-    // + 3 fixed      : Risk 31-365, Risk 1-365, Risk >365
-    // + 2 fixed      : Guaranteer, Guaranteer Citizenship
-    var colCount = 24 + (enable1To30Days ? 1 : 0);
+    const int totalCols = 20;
 }
 <!DOCTYPE html>
 <html>
@@ -52,74 +40,8 @@
             body {
                 font-family: Arial, sans-serif;
                 font-size: 7.5pt;
-                background: white;
+                background: @(isView ? "#d0d0d0" : "#fff");
                 color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 7.5pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 2px 3px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .detail-row-alt td {
-                background: #f9f9f9;
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 4px 5px;
             }
 
             .text-right {
@@ -130,35 +52,156 @@
                 text-align: center !important;
             }
 
-            .negative {
-                color: #CC0000;
+            .report-subheader {
+                width: 100%;
+                padding: 4px 6px 0 6px;
+                background: #fff;
             }
 
-            .positive {
-                color: #006600;
-            }
-
-            .provision-badge {
-                display: inline-block;
-                padding: 2px 10px;
-                border-radius: 3px;
-                font-size: 8pt;
+            .subheader-title {
+                text-align: center;
+                font-size: 13pt;
+                font-family: "Times New Roman", Times, serif;
                 font-weight: bold;
+                text-decoration: underline;
+                padding: 6px 4px 4px;
             }
 
-            .badge-schedule {
-                background: #d1ecf1;
-                color: #0c5460;
+            .subheader-meta {
+                display: flex;
+                justify-content: space-between;
+                font-size: 8pt;
+                padding: 2px 6px;
             }
 
-            .badge-remaining {
-                background: #fff3cd;
-                color: #856404;
+            .subheader-spacer {
+                height: 6px;
             }
 
-            .badge-maturity {
-                background: #f8d7da;
-                color: #721c24;
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                font-size: 7.5pt;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 2px 3px;
+                    vertical-align: middle;
+                    background: #fff;
+                    font-size: 7.5pt;
+                }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table th {
+                background: #f2f2f2;
+                border-top: 1.5px solid #000;
+                border-bottom: 1px solid #000;
+                font-weight: bold;
+                white-space: nowrap;
+            }
+
+            .group-header th {
+                text-align: center;
+                border-bottom: 1px solid #000;
+            }
+
+            .detail-row td {
+                color: #1a3d7c;
+                border-bottom: 1px solid #eee;
+            }
+
+            .grand-total td {
+                border-top: 1.5px solid #000;
+                border-bottom: 1.5px solid #000;
+                font-weight: bold;
+                color: #000;
+            }
+
+            /* ── Column widths ── */
+            col.c-sn {
+                width: 2%;
+            }
+
+            col.c-mid {
+                width: 6%;
+            }
+
+            col.c-name {
+                width: 8%;
+            }
+
+            col.c-paddr {
+                width: 6%;
+            }
+
+            col.c-taddr {
+                width: 6%;
+            }
+
+            col.c-citno {
+                width: 5%;
+            }
+
+            col.c-cissue {
+                width: 5%;
+            }
+
+            col.c-cdist {
+                width: 5%;
+            }
+
+            col.c-type {
+                width: 6%;
+            }
+
+            col.c-acno {
+                width: 5%;
+            }
+
+            col.c-lissue {
+                width: 5%;
+            }
+
+            col.c-mat {
+                width: 5%;
+            }
+
+            col.c-issprin {
+                width: 6%;
+            }
+
+            col.c-remprin {
+                width: 6%;
+            }
+
+            col.c-dueint {
+                width: 5%;
+            }
+
+            col.c-guar {
+                width: 8%;
+            }
+
+            col.c-guarcit {
+                width: 6%;
+            }
+
+            col.c-good {
+                width: 5%;
+            }
+
+            col.c-d1to365 {
+                width: 4%;
+            }
+
+            col.c-dgt365 {
+                width: 4%;
             }
 
             @@media print {
@@ -171,174 +214,499 @@
                     break-inside: avoid;
                 }
             }
+
+            /* ── VIEW chrome: horizontal-scroll paginated page cards,
+                             same pattern as MemberAllDetailReport / other reports ── */
+            .view-outer {
+                background: #d0d0d0;
+                padding: 2px 16px 20px 16px;
+                min-height: 100vh;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                cursor: grab;
+            }
+
+                .view-outer:active {
+                    cursor: grabbing;
+                }
+
+            .view-page {
+                background: #fff;
+                margin: 0 auto 24px auto;
+                box-shadow: 0 2px 8px rgba(0,0,0,.18);
+                width: 2600px;
+                height: 1587px;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .view-page-content {
+                flex: 1;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .view-page-footer {
+                background: #fff;
+                border-top: 1px solid #ccc;
+                text-align: center;
+                font-size: 9pt;
+                font-weight: bold;
+                padding: 6px 0;
+                flex-shrink: 0;
+            }
+
+            .common-header-wrap {
+                width: 2600px;
+                overflow: hidden;
+                flex-shrink: 0;
+            }
+
+            .page-subheader {
+                flex-shrink: 0;
+            }
+
+            .page-table-wrap {
+                flex: 1;
+                overflow: hidden;
+            }
+
+            #sourceWrap {
+                opacity: 0;
+                pointer-events: none;
+                width: 2600px;
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+
+            #commonHeaderSource {
+                visibility: hidden;
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 2600px;
+                pointer-events: none;
+            }
     </style>
 </head>
 <body>
-    <div class="report-container">
 
-        @if (!isExcel)
-        {
+    @if (!isExcel)
+    {
+        <div id="commonHeaderSource">
             @await Html.PartialAsync("_CommonHeader", Model)
-        }
+        </div>
+    }
 
-        <table class="data-table" data-sheet-name="LoanCIC">
-            <colgroup>
-                <col style="width:2%;" />   @* SN *@
-                <col style="width:5%;" />   @* MemberId *@
-                <col style="width:9%;" />   @* Name *@
-                <col style="width:7%;" />   @* PermAddr *@
-                <col style="width:7%;" />   @* TempAddr *@
-                <col style="width:5%;" />   @* Contact *@
-                <col style="width:5%;" />   @* Citizenship *@
-                <col style="width:6%;" />   @* Loan Type *@
-                <col style="width:6%;" />   @* Account No *@
-                <col style="width:5%;" />   @* Issue Date *@
-                <col style="width:5%;" />   @* Maturity *@
-                <col style="width:6%;" />   @* Issue Amt *@
-                <col style="width:4%;" />   @* Int Rate *@
-                <col style="width:6%;" />   @* Pri Paid *@
-                <col style="width:6%;" />   @* Pri Bal *@
-                <col style="width:5%;" />   @* Int Bal *@
-                <col style="width:5%;" />   @* Penalty *@
-                <col style="width:5%;" />   @* Total *@
-                <col style="width:5%;" />   @* Good Loan *@
-                @if (enable1To30Days)
-                {
-                    <col style="width:5%;" />  @* Risk 1-30 *@
-                }
-                <col style="width:5%;" />   @* Risk 31-365 *@
-                <col style="width:5%;" />   @* Risk 1-365 *@
-                <col style="width:5%;" />   @* Risk >365 *@
-                <col style="width:7%;" />   @* Guaranteer *@
-                <col style="width:7%;" />   @* Guaranteer Citizenship *@
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="@colCount">Loan CIC Report</td>
-                </tr>
+    @if (isView)
+    {
+        <div id="sourceWrap">
+            <div id="subheaderTemplate" class="report-subheader">
+                <div class="subheader-title">Loan CIC Report</div>
+                <div class="subheader-meta">
+                    <span><strong>Branch Name :</strong> @branchName</span>
+                    <span><strong>Till Date :</strong> @tillDate</span>
+                </div>
+                <div class="subheader-meta">
+                    <span><strong>Report Generated On :</strong> @generatedOn</span>
+                    <span></span>
+                </div>
+                <div class="subheader-spacer"></div>
+            </div>
 
-                <tr class="meta-row">
-                    <td colspan="12">
-                        <strong>Branch :</strong> @branchName
-                        &nbsp;&nbsp;
-                        <strong>Till Date :</strong> @tillDate
-                        @if (isLoanTypeFiltered)
-                        {
-                            <text>&nbsp;&nbsp;<strong>Loan Type :</strong> @loanTypeName</text>
-                        }
-                    </td>
-                    <td colspan="@(colCount - 12)" class="text-right">
-                        <strong>Provision Type :</strong>
-                        <span class="provision-badge @(provisionType == "S" ? "badge-schedule" : provisionType == "R" ? "badge-remaining" : "badge-maturity")">
-                            @provisionTypeName
-                        </span>
-                        &nbsp;&nbsp;
-                        <strong>Generated :</strong> @generatedOn
-                    </td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
-
-                <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Member Id</th>
-                    <th>Member Name</th>
-                    <th>Permanent Address</th>
-                    <th>Temporary Address</th>
-                    <th>Contact No</th>
-                    <th>Citizenship No</th>
-                    <th>Loan Type</th>
-                    <th>Account No</th>
-                    <th>Issue Date</th>
-                    <th>Maturity</th>
-                    <th class="text-right">Issue Amt</th>
-                    <th class="text-center">Int Rate</th>
-                    <th class="text-right">Pri Paid</th>
-                    <th class="text-right">Pri Bal</th>
-                    <th class="text-right">Int Bal</th>
-                    <th class="text-right">Penalty</th>
-                    <th class="text-right">Total</th>
-                    <th class="text-right">Good Loan</th>
-                    @if (enable1To30Days)
-                    {
-                        <th class="text-right">Risk 1-30</th>
+            <table class="data-table" id="mainTable">
+                <colgroup>
+                    <col class="c-sn" />
+                    <col class="c-mid" />
+                    <col class="c-name" />
+                    <col class="c-paddr" />
+                    <col class="c-taddr" />
+                    <col class="c-citno" />
+                    <col class="c-cissue" />
+                    <col class="c-cdist" />
+                    <col class="c-type" />
+                    <col class="c-acno" />
+                    <col class="c-lissue" />
+                    <col class="c-mat" />
+                    <col class="c-issprin" />
+                    <col class="c-remprin" />
+                    <col class="c-dueint" />
+                    <col class="c-guar" />
+                    <col class="c-guarcit" />
+                    <col class="c-good" />
+                    <col class="c-d1to365" />
+                    <col class="c-dgt365" />
+                </colgroup>
+                <thead>
+                    <tr id="groupHeaderRow" class="group-header">
+                        <th colspan="5"></th>
+                        <th colspan="3">Citizenship Detail</th>
+                        <th colspan="9">Loan Detail</th>
+                        <th></th>
+                        <th colspan="2">Delinquency Loan</th>
+                    </tr>
+                    <tr id="colHeaderRow">
+                        <th class="text-center">SN</th>
+                        <th>Member Id</th>
+                        <th>Member Name</th>
+                        <th>Permanent Address</th>
+                        <th>Temporary Address</th>
+                        <th>Citizen No.</th>
+                        <th>Issue On</th>
+                        <th>Issue District</th>
+                        <th>Loan Type</th>
+                        <th>Account No.</th>
+                        <th>Issue On</th>
+                        <th>Maturity On</th>
+                        <th class="text-right">Issued Principle</th>
+                        <th class="text-right">Remaining Principle</th>
+                        <th class="text-right">Due Interest</th>
+                        <th>Guarantor</th>
+                        <th>Guarantor Citizenship No.</th>
+                        <th class="text-right">Good Loan</th>
+                        <th class="text-right">1-365 Days</th>
+                        <th class="text-right">&gt;365 Days</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        int snV = 0;
                     }
-                    <th class="text-right">Risk 31-365</th>
-                    <th class="text-right">Risk 1-365</th>
-                    <th class="text-right">Risk &gt;365</th>
-                    <th>Guaranteer</th>
-                    <th>Guaranteer Citizenship</th>
-                </tr>
-
-                @if (rows.Any())
-                {
-                    var sn = 0;
-                    foreach (var row in rows)
+                    @foreach (var row in rows)
                     {
-                        sn++;
-                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
-                            <td class="text-center">@sn</td>
+                        snV++;
+                        <tr class="detail-row">
+                            <td class="text-center">@snV</td>
                             <td>@(row.MemberId ?? "")</td>
                             <td>@(row.FullName ?? "")</td>
                             <td>@(row.PermanentAddessDetail ?? "")</td>
                             <td>@(row.TemporaryAddressDetail ?? "")</td>
-                            <td>@(row.ContactNo ?? "")</td>
                             <td>@(row.CitizenshipNo ?? "")</td>
+                            <td>@(row.CitizenShipIssuedOnBs ?? "")</td>
+                            <td>@(row.CitizenShipIssuedDistrict ?? "")</td>
                             <td>@(row.LoanTypeName ?? "")</td>
                             <td>@(row.LoanAccountNo ?? "")</td>
                             <td>@(row.LoanIssueOnBs ?? "")</td>
                             <td>@(row.MaturityOnBs ?? "")</td>
                             <td class="text-right">@(row.LoanIssueAmount?.ToString("N2") ?? "")</td>
-                            <td class="text-center">@(row.InterestRate?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.PriPaid?.ToString("N2") ?? "")</td>
                             <td class="text-right">@(row.PriBalance?.ToString("N2") ?? "")</td>
                             <td class="text-right">@(row.IntBalance?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.PenaltyBalance?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.TotalBalance?.ToString("N2") ?? "")</td>
-                            <td class="text-right positive">@(row.GoodLoan?.ToString("N2") ?? "")</td>
-                            @if (enable1To30Days)
-                            {
-                                <td class="text-right">@(row.LoanRisk30?.ToString("N2") ?? "")</td>
-                            }
-                            <td class="text-right">@(row.LoanRisk31to365?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.LoanRisk1to365?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.LoanRiskGreaterThan365?.ToString("N2") ?? "")</td>
                             <td>@(row.Guaranteer ?? "")</td>
                             <td>@(row.GuaranteerCitizenshipNo ?? "")</td>
+                            <td class="text-right">@(row.GoodLoan?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.LoanRisk1to365?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.LoanRiskGreaterThan365?.ToString("N2") ?? "")</td>
                         </tr>
                     }
 
-                    <tr class="grand-total-row">
-                        <td colspan="12" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
-                        <td></td>
-                        <td class="text-right"><strong>@totalPriPaid.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalPriBalance.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalIntBalance.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalPenaltyBalance.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalBalance.ToString("N2")</strong></td>
-                        <td class="text-right positive"><strong>@totalGoodLoan.ToString("N2")</strong></td>
-                        @if (enable1To30Days)
-                        {
-                            <td class="text-right"><strong>@totalLoanRisk30.ToString("N2")</strong></td>
-                        }
-                        <td class="text-right"><strong>@totalLoanRisk31to365.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalLoanRisk1to365.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalLoanRiskGt365.ToString("N2")</strong></td>
+                    <tr class="grand-total" id="grandTotalRow">
+                        <td colspan="12">Grand Total (@totalRecords)</td>
+                        <td class="text-right">@totalLoanIssueAmount.ToString("N2")</td>
+                        <td class="text-right">@totalPriBalance.ToString("N2")</td>
+                        <td class="text-right">@totalIntBalance.ToString("N2")</td>
                         <td colspan="2"></td>
+                        <td class="text-right">@totalGoodLoan.ToString("N2")</td>
+                        <td class="text-right">@totalLoanRisk1to365.ToString("N2")</td>
+                        <td class="text-right">@totalLoanRiskGt365.ToString("N2")</td>
                     </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="@(colCount - 1)" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="view-outer" id="viewOuter"></div>
+    }
+
+    @if (!isView)
+    {
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+
+            <div class="report-subheader">
+                <div class="subheader-title">Loan CIC Report</div>
+                <div class="subheader-meta">
+                    <span><strong>Branch Name :</strong> @branchName</span>
+                    <span><strong>Till Date :</strong> @tillDate</span>
+                </div>
+                <div class="subheader-meta">
+                    <span><strong>Report Generated On :</strong> @generatedOn</span>
+                    <span></span>
+                </div>
+                <div class="subheader-spacer"></div>
+            </div>
+        }
+
+        <table class="data-table" id="mainTable"
+            @(isExcel ? Html.Raw("data-sheet-name=\"LoanCIC\"") : Html.Raw(""))>
+            <colgroup>
+                <col class="c-sn" />
+                <col class="c-mid" />
+                <col class="c-name" />
+                <col class="c-paddr" />
+                <col class="c-taddr" />
+                <col class="c-citno" />
+                <col class="c-cissue" />
+                <col class="c-cdist" />
+                <col class="c-type" />
+                <col class="c-acno" />
+                <col class="c-lissue" />
+                <col class="c-mat" />
+                <col class="c-issprin" />
+                <col class="c-remprin" />
+                <col class="c-dueint" />
+                <col class="c-guar" />
+                <col class="c-guarcit" />
+                <col class="c-good" />
+                <col class="c-d1to365" />
+                <col class="c-dgt365" />
+            </colgroup>
+            @if (isExcel)
+            {
+                <thead>
+                    <tr class="text-center"><td colspan="@totalCols"><strong>Loan CIC Report</strong></td></tr>
+                    <tr><td colspan="@totalCols"><strong>Branch Name :</strong> @branchName</td></tr>
+                    <tr><td colspan="@totalCols"><strong>Till Date :</strong> @tillDate</td></tr>
+                    <tr><td colspan="@totalCols"></td></tr>
+                    <tr class="group-header">
+                        <th colspan="5"></th>
+                        <th colspan="3">Citizenship Detail</th>
+                        <th colspan="9">Loan Detail</th>
+                        <th></th>
+                        <th colspan="2">Delinquency Loan</th>
+                    </tr>
+                    <tr>
+                        <th class="text-center">SN</th>
+                        <th>Member Id</th>
+                        <th>Member Name</th>
+                        <th>Permanent Address</th>
+                        <th>Temporary Address</th>
+                        <th>Citizen No.</th>
+                        <th>Issue On</th>
+                        <th>Issue District</th>
+                        <th>Loan Type</th>
+                        <th>Account No.</th>
+                        <th>Issue On</th>
+                        <th>Maturity On</th>
+                        <th class="text-right">Issued Principle</th>
+                        <th class="text-right">Remaining Principle</th>
+                        <th class="text-right">Due Interest</th>
+                        <th>Guarantor</th>
+                        <th>Guarantor Citizenship No.</th>
+                        <th class="text-right">Good Loan</th>
+                        <th class="text-right">1-365 Days</th>
+                        <th class="text-right">&gt;365 Days</th>
+                    </tr>
+                </thead>
+            }
+            else
+            {
+                <thead>
+                    <tr class="group-header">
+                        <th colspan="5"></th>
+                        <th colspan="3">Citizenship Detail</th>
+                        <th colspan="9">Loan Detail</th>
+                        <th></th>
+                        <th colspan="2">Delinquency Loan</th>
+                    </tr>
+                    <tr>
+                        <th class="text-center">SN</th>
+                        <th>Member Id</th>
+                        <th>Member Name</th>
+                        <th>Permanent Address</th>
+                        <th>Temporary Address</th>
+                        <th>Citizen No.</th>
+                        <th>Issue On</th>
+                        <th>Issue District</th>
+                        <th>Loan Type</th>
+                        <th>Account No.</th>
+                        <th>Issue On</th>
+                        <th>Maturity On</th>
+                        <th class="text-right">Issued Principle</th>
+                        <th class="text-right">Remaining Principle</th>
+                        <th class="text-right">Due Interest</th>
+                        <th>Guarantor</th>
+                        <th>Guarantor Citizenship No.</th>
+                        <th class="text-right">Good Loan</th>
+                        <th class="text-right">1-365 Days</th>
+                        <th class="text-right">&gt;365 Days</th>
+                    </tr>
+                </thead>
+            }
+            <tbody>
+                @if (rows.Any())
+                {
+                    int snP = 0;
+                    foreach (var row in rows)
+                    {
+                        snP++;
+                        <tr class="detail-row">
+                            <td class="text-center">@snP</td>
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.FullName ?? "")</td>
+                            <td>@(row.PermanentAddessDetail ?? "")</td>
+                            <td>@(row.TemporaryAddressDetail ?? "")</td>
+                            <td>@(row.CitizenshipNo ?? "")</td>
+                            <td>@(row.CitizenShipIssuedOnBs ?? "")</td>
+                            <td>@(row.CitizenShipIssuedDistrict ?? "")</td>
+                            <td>@(row.LoanTypeName ?? "")</td>
+                            <td>@(row.LoanAccountNo ?? "")</td>
+                            <td>@(row.LoanIssueOnBs ?? "")</td>
+                            <td>@(row.MaturityOnBs ?? "")</td>
+                            <td class="text-right">@(row.LoanIssueAmount?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.PriBalance?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.IntBalance?.ToString("N2") ?? "")</td>
+                            <td>@(row.Guaranteer ?? "")</td>
+                            <td>@(row.GuaranteerCitizenshipNo ?? "")</td>
+                            <td class="text-right">@(row.GoodLoan?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.LoanRisk1to365?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.LoanRiskGreaterThan365?.ToString("N2") ?? "")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total">
+                        <td colspan="12">Grand Total (@totalRecords)</td>
+                        <td class="text-right">@totalLoanIssueAmount.ToString("N2")</td>
+                        <td class="text-right">@totalPriBalance.ToString("N2")</td>
+                        <td class="text-right">@totalIntBalance.ToString("N2")</td>
+                        <td colspan="2"></td>
+                        <td class="text-right">@totalGoodLoan.ToString("N2")</td>
+                        <td class="text-right">@totalLoanRisk1to365.ToString("N2")</td>
+                        <td class="text-right">@totalLoanRiskGt365.ToString("N2")</td>
                     </tr>
                 }
                 else
                 {
-                    <tr>
-                        <td colspan="@colCount" class="text-center">No data found for the selected criteria</td>
-                    </tr>
+                    <tr><td colspan="@totalCols" class="text-center">No data found for the selected criteria</td></tr>
                 }
             </tbody>
         </table>
-    </div>
+    }
+
+    @if (isView)
+    {
+        <script>
+                (function () {
+                    'use strict';
+                    var MAX_RETRIES = 5, RETRY_DELAY = 80, retryCount = 0;
+                    var PAGE_W = 2600, PAGE_H = 1587, FOOTER_H = 28;
+
+                    function buildPages() {
+                        var tbl = document.getElementById('mainTable');
+                        var grpHdrRow = document.getElementById('groupHeaderRow');
+                        var colHdrRow = document.getElementById('colHeaderRow');
+                        var grandTotalEl = document.getElementById('grandTotalRow');
+                        var subHdrTpl = document.getElementById('subheaderTemplate');
+
+                        if (!tbl || !colHdrRow || !subHdrTpl) {
+                            if (retryCount++ < MAX_RETRIES) setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+                            return;
+                        }
+
+                        var grpHdrH = grpHdrRow ? grpHdrRow.getBoundingClientRect().height : 0;
+                        var colHdrH = colHdrRow.getBoundingClientRect().height;
+                        var subHdrH = subHdrTpl.getBoundingClientRect().height;
+                        var gtH = grandTotalEl ? grandTotalEl.getBoundingClientRect().height : 0;
+                        var gtHtml = grandTotalEl ? grandTotalEl.outerHTML : '';
+
+                        var commonHdrEl = document.getElementById('commonHeaderSource');
+                        var commonHdrHtml = commonHdrEl ? commonHdrEl.innerHTML : '';
+                        var commonHdrH = commonHdrEl ? commonHdrEl.getBoundingClientRect().height : 0;
+
+                        var detailRows = tbl.querySelectorAll('tbody > tr.detail-row');
+                        var rowData = Array.from(detailRows).map(function (r) {
+                            return { html: r.outerHTML, h: r.getBoundingClientRect().height };
+                        });
+
+                        var allZero = rowData.length > 0 && rowData.every(function (r) { return r.h === 0; });
+                        if (allZero) {
+                            if (retryCount++ < MAX_RETRIES) setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+                            return;
+                        }
+
+                        var colgroupHtml = tbl.querySelector('colgroup').outerHTML;
+                        var grpHdrHtml = grpHdrRow ? grpHdrRow.outerHTML : '';
+                        var colHdrHtml = colHdrRow.outerHTML;
+                        var subHdrHtml = subHdrTpl.outerHTML;
+
+                        var availP1 = PAGE_H - FOOTER_H - commonHdrH - subHdrH - grpHdrH - colHdrH;
+                        var availPN = PAGE_H - FOOTER_H - grpHdrH - colHdrH;
+
+                        var pages = [], cur = [], usedH = 0, isFirstPage = true;
+                        for (var i = 0; i < rowData.length; i++) {
+                            var rh = rowData[i].h || 14;
+                            var avail = isFirstPage ? availP1 : availPN;
+                            var extra = (i === rowData.length - 1) ? gtH : 0;
+                            if (cur.length > 0 && usedH + rh + extra > avail) {
+                                pages.push(cur); cur = []; usedH = 0; isFirstPage = false;
+                            }
+                            cur.push(i); usedH += rh;
+                        }
+                        pages.push(cur);
+                        var totalPages = pages.length;
+
+                        var sourceWrap = document.getElementById('sourceWrap');
+                        if (sourceWrap) sourceWrap.parentNode.removeChild(sourceWrap);
+                        if (commonHdrEl) commonHdrEl.parentNode.removeChild(commonHdrEl);
+
+                        var viewOuter = document.getElementById('viewOuter');
+                        var fragment = document.createDocumentFragment();
+
+                        for (var p = 0; p < totalPages; p++) {
+                            var card = document.createElement('div');
+                            card.className = 'view-page';
+                            card.setAttribute('data-page', String(p + 1));
+
+                            var contentHtml = '<div class="view-page-content">';
+                            if (p === 0 && commonHdrHtml) contentHtml += '<div class="common-header-wrap">' + commonHdrHtml + '</div>';
+                            if (p === 0) contentHtml += '<div class="page-subheader">' + subHdrHtml + '</div>';
+
+                            contentHtml += '<div class="page-table-wrap">'
+                                         + '<table class="data-table" style="width:' + PAGE_W + 'px;">'
+                                         + colgroupHtml
+                                         + '<thead>' + grpHdrHtml + colHdrHtml + '</thead>'
+                                         + '<tbody>';
+
+                            var pageRows = pages[p];
+                            for (var r = 0; r < pageRows.length; r++) contentHtml += rowData[pageRows[r]].html;
+                            if (p === totalPages - 1 && gtHtml) contentHtml += gtHtml;
+
+                            contentHtml += '</tbody></table></div></div>';
+                            contentHtml += '<div class="view-page-footer">Page ' + (p + 1) + ' of ' + totalPages + '</div>';
+
+                            card.innerHTML = contentHtml;
+                            fragment.appendChild(card);
+                        }
+
+                        viewOuter.appendChild(fragment);
+
+                        (function (el) {
+                            var drag = false, sx = 0, ss = 0;
+                            el.addEventListener('mousedown', function (e) {
+                                if (e.button !== 0) return;
+                                drag = true; sx = e.clientX; ss = el.scrollLeft;
+                                el.style.userSelect = 'none'; e.preventDefault();
+                            });
+                            document.addEventListener('mousemove', function (e) { if (drag) el.scrollLeft = ss - (e.clientX - sx); });
+                            document.addEventListener('mouseup', function () { drag = false; el.style.userSelect = ''; });
+                        })(viewOuter);
+
+                        window.scrollToPage = function (pageNumber) {
+                            var target = document.querySelector('.view-page[data-page="' + pageNumber + '"]');
+                            if (!target) return;
+                            window.scrollTo({ top: target.offsetTop, behavior: 'smooth' });
+                        };
+
+                        if (window.parent && window.parent !== window) {
+                            window.parent.postMessage({ type: 'REPORT_PAGES_READY', totalPages: totalPages }, '*');
+                        }
+                    }
+
+                    requestAnimationFrame(function () { requestAnimationFrame(buildPages); });
+                }());
+        </script>
+    }
 </body>
 </html>
