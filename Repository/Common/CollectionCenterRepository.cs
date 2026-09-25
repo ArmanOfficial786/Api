@@ -1,6 +1,6 @@
-using NexgenCosysReport.Dtos.RequestDtos.Common;
-using NexgenCosysReport.DbContext;
 using Microsoft.EntityFrameworkCore;
+using NexgenCosysReport.DbContext;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 
 namespace NexgenCosysReport.Repository.Common
@@ -18,7 +18,7 @@ namespace NexgenCosysReport.Repository.Common
         public async Task<List<CollectionCenterResponseDto>> GetCollectionCenters(long lstOfficeId)
         {
             var data = await _context.SycCollectionCenters
-                .Where(x => x.UsmOfficeId == lstOfficeId)   // direct equality, not Contains
+                .Where(x => x.UsmOfficeId == lstOfficeId)
                 .OrderBy(x => Convert.ToInt64(x.CollectionCenterShortCode))
                 .Select(x => new CollectionCenterResponseDto
                 {
@@ -30,5 +30,7 @@ namespace NexgenCosysReport.Repository.Common
 
             return data;
         }
+
+
     }
 }

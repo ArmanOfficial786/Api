@@ -1,6 +1,5 @@
-using NexgenCosysReport.Dtos.RequestDtos.Common;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 
 namespace NexgenCosysReport.Controllers.Common
@@ -24,5 +23,7 @@ namespace NexgenCosysReport.Controllers.Common
             var result = await _collectionCenterService.GetCollectionCenters(request.LstOfficeId);
             return Ok(result);
         }
+
+
     }
 }

@@ -1,10 +1,10 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.MicroFinance.MicroFinanceReports
+﻿@* @using NexgenCosysReport.Dtos.RequestDtos.MicroFinance.MicroFinanceReports
 
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<CollectorWiseLoanAnalysisRowDto>) ?? new List<CollectorWiseLoanAnalysisRowDto>();
+    var rows = (Model["Rows"] as List<MCollectorWiseLoanAnalysisRowDto>) ?? new List<MCollectorWiseLoanAnalysisRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
     var totalPaidAmount = Model["TotalPaidAmount"] as decimal? ?? 0;
@@ -353,4 +353,4 @@
         </table>
     </div>
 </body>
-</html>
+</html> *@

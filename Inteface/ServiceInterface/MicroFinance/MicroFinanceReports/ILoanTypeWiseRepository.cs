@@ -1,10 +1,10 @@
-﻿// Inteface/ServiceInterface/Microfinance/MicrofinanceReport/ILoanTypeWiseRepository.cs
-using NexgenCosysReport.Dtos.RequestDtos.MicroFinance.MicroFinanceReports;
+﻿//// Inteface/ServiceInterface/Microfinance/MicrofinanceReport/ILoanTypeWiseRepository.cs
+//using NexgenCosysReport.Dtos.RequestDtos.MicroFinance.MicroFinanceReports;
 
-namespace NexgenCosysReport.Inteface.ServiceInterface.Microfinance.MicrofinanceReport
-{
-    public interface ILoanTypeWiseRepository
-    {
-        Task<LoanTypeWiseData> GetReportDataAsync(LoanTypeWiseRequestDto request);
-    }
-}
+//namespace NexgenCosysReport.Inteface.ServiceInterface.Microfinance.MicrofinanceReport
+//{
+//    public interface ILoanTypeWiseRepository
+//    {
+//        Task<LoanTypeWiseData> GetReportDataAsync(LoanTypeWiseRequestDto request);
+//    }
+//}
