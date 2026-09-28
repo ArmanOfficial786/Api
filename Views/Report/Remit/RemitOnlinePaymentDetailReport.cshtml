@@ -1,0 +1,250 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Remit;
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<RemitOnlinePaymentDetailRowDto>) ?? new List<RemitOnlinePaymentDetailRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalAmount = Model.ContainsKey("TotalAmount") ? (Model["TotalAmount"] as decimal? ?? 0) : 0;
+    var totalComission = Model.ContainsKey("TotalComission") ? (Model["TotalComission"] as decimal? ?? 0) : 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var remittanceGroupName = Model["RemittanceGroupName"]?.ToString() ?? "All";
+    var isPaid = Model["IsPaid"]?.ToString() ?? "A";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var paidLabel = isPaid == "P" ? "Paid" : (isPaid == "U" ? "Unpaid" : "All");
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Remittance Online Payment Detail Report</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 8pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 8pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    overflow: hidden;
+                    padding: 3px 4px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+                text-align: left;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: normal;
+                line-height: 1.2;
+                vertical-align: bottom;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #ccc;
+            }
+
+            .sn-col {
+                text-align: center;
+                color: #555;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="RemitOnlinePaymentDetail">
+            <colgroup>
+                <col style="width:3%;" />
+                <col style="width:9%;" />
+                <col style="width:8%;" />
+                <col style="width:9%;" />
+                <col style="width:8%;" />
+                <col style="width:6%;" />
+                <col style="width:7%;" />
+                <col style="width:6%;" />
+                <col style="width:7%;" />
+                <col style="width:6%;" />
+                <col style="width:8%;" />
+                <col style="width:6%;" />
+                <col style="width:5%;" />
+                <col style="width:6%;" />
+                <col style="width:6%;" />
+                <col style="width:6%;" />
+                <col style="width:6%;" />
+                <col style="width:4%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="18">Remittance Online Payment Detail Report</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="18"><strong>Branch Name :</strong> @branchName</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="18">
+                        <strong>From Date :</strong> @fromDate
+                        &nbsp;&nbsp;&nbsp;&nbsp;
+                        <strong>Till Date :</strong> @toDate
+                        &nbsp;&nbsp;&nbsp;&nbsp;
+                        <strong>Remittance Group :</strong> @remittanceGroupName
+                        &nbsp;&nbsp;&nbsp;&nbsp;
+                        <strong>Generate By :</strong> @paidLabel
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="18"><strong>Report Generated On :</strong> @generatedOn</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="18"></td></tr>
+
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Receiver</th>
+                    <th>Receiver No</th>
+                    <th>Sender</th>
+                    <th>Sender No</th>
+                    <th>Pin Code</th>
+                    <th>Ref Id</th>
+                    <th>Date</th>
+                    <th class="text-right">Amount</th>
+                    <th class="text-right">Comission</th>
+                    <th>Remit Group</th>
+                    <th>Payment Mode</th>
+                    <th>Currency</th>
+                    <th>Bank</th>
+                    <th>Branch</th>
+                    <th>Account</th>
+                    <th>User Name</th>
+                    <th class="text-center">Paid</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="detail-row">
+                            <td class="sn-col">@sn</td>
+                            <td>@(row.Receiver ?? "")</td>
+                            <td>@(row.ReceiverNo ?? "")</td>
+                            <td>@(row.Sender ?? "")</td>
+                            <td>@(row.SenderNo ?? "")</td>
+                            <td>@(row.PinCode ?? "")</td>
+                            <td>@(row.RefId ?? "")</td>
+                            <td>@(row.Date ?? "")</td>
+                            <td class="text-right">@(row.Amount?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Comission?.ToString("N2") ?? "")</td>
+                            <td>@(row.RemitGroup ?? "")</td>
+                            <td>@(row.PaymentMode ?? "")</td>
+                            <td>@(row.Currency ?? "")</td>
+                            <td>@(row.Bank ?? "")</td>
+                            <td>@(row.Branch ?? "")</td>
+                            <td>@(row.Account ?? "")</td>
+                            <td>@(row.UserName ?? "")</td>
+                            <td class="text-center">@(row.IsPaid == true ? "Yes" : "No")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="8" class="text-right">
+                            Total Records: @totalRecords
+                        </td>
+                        <td class="text-right">@totalAmount.ToString("N2")</td>
+                        <td class="text-right">@totalComission.ToString("N2")</td>
+                        <td colspan="8"></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="18" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
