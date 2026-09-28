@@ -107,7 +107,6 @@ namespace NexgenCosysReport.Controllers.Microfinance.MicrofinanceSheetReports
                     { "SavingSummary", data.SavingSummary },
                     { "LoanSummary", data.LoanSummary },
                     { "Evaluation", data.Evaluation ?? new CenterCollectionSheetEvaluationDto() },
-
                     { "TotalMembers", data.TotalMembers },
                     { "TotalSaving1", data.TotalSaving1 },
                     { "TotalSaving2", data.TotalSaving2 },
@@ -123,10 +122,8 @@ namespace NexgenCosysReport.Controllers.Microfinance.MicrofinanceSheetReports
                     { "TotalLoan5", data.TotalLoan5 },
                     { "TotalLoan6", data.TotalLoan6 },
                     { "TotalReceivable", data.TotalReceivable },
-
                     { "HeaderDataSet", headerData ?? new List<CommonHeader>() },
-                    { "TillDate", data.TillDateBs ?? "" },
-                    { "TillDateAd", data.TillDateAd ?? "" },
+                    { "TillDate", data.TillDateAd ?? data.TillDateBs ?? "" },
                     { "CollectionCenterName", data.CollectionCenterName ?? "" },
                     { "CollectionCenterAddress", data.CollectionCenterAddress ?? "" },
                     { "NextMeetingDate", data.NextMeetingDate ?? "" },

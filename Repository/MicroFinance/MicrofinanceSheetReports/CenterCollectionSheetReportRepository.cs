@@ -1,5 +1,4 @@
-﻿// Repository/Microfinance/MicrofinanceSheetReports/CenterCollectionSheetReportRepository.cs
-using Dapper;
+﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
