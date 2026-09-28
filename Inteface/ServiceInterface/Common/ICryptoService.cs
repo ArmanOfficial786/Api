@@ -1,6 +1,6 @@
 ﻿namespace NexgenCosysReport.Inteface.ServiceInterface.Common
 {
-    public interface ICryptorService
+    public interface ICryptoService
     {
         string Encrypt(string plainText, bool useHashing);
         string Decrypt(string cipherText, bool useHashing);

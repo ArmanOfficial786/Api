@@ -16,7 +16,7 @@ namespace NexgenCosysReport.Repository.Remit
     {
         private readonly AppDbContext _context;
         private readonly IDateConverterService _dateConverter;
-        private readonly ICryptorService _cryptorService;
+        private readonly ICryptoService _cryptorService;
         private readonly IHttpClientFactory _httpClientFactory;
         private readonly IConfiguration _configuration;
         private readonly ILogger<RemitReconcileReportRepository> _logger;
@@ -24,7 +24,7 @@ namespace NexgenCosysReport.Repository.Remit
         public RemitReconcileReportRepository(
             AppDbContext context,
             IDateConverterService dateConverter,
-            ICryptorService cryptorService,
+            ICryptoService cryptorService,
             IHttpClientFactory httpClientFactory,
             IConfiguration configuration,
             ILogger<RemitReconcileReportRepository> logger)

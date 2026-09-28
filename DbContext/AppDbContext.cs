@@ -61,6 +61,8 @@ public partial class AppDbContext : Microsoft.EntityFrameworkCore.DbContext
     public virtual DbSet<LmtPaymentDurationType> LmtPaymentDurationTypes { get; set; }
     public virtual DbSet<SycMemberType> SycMemberTypes { get; set; }
 
+    public virtual DbSet<RemRemittanceType> RemRemittanceTypes { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -693,6 +695,18 @@ public partial class AppDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_SycMemberType_IsActive");
             entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
             entity.Property(e => e.MemberTypeName).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<RemRemittanceType>(entity =>
+        {
+            entity.ToTable("RemRemittanceType");
+
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.CreatedOnBs).HasMaxLength(50);
+            entity.Property(e => e.Description).HasColumnType("ntext");
+            entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_RemRemittanceType_IsActive");
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.LastModifiedOnBs).HasMaxLength(50);
         });
 
 

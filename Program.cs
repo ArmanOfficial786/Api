@@ -192,9 +192,12 @@ var settingsCheck = builder.Configuration
 Console.WriteLine($"[Startup] WebRootPath = '{settingsCheck?.WebRootPath}'");
 
 // Services
+builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<CustomHeaderResponse>();
 builder.Services.AddHostedService<ProgressiveTempCleanupService>();
+
+
 
 builder.Services.AddRepositoriesAndServices(
     typeof(Program).Assembly
