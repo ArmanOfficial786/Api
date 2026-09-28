@@ -1,0 +1,234 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Asset
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<FamPurchaseReportRowDto>) ?? new List<FamPurchaseReportRowDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalAmount = Model.ContainsKey("TotalAmount") ? (Model["TotalAmount"] as decimal? ?? 0) : 0;
+    var totalLastDepreciatedValue = Model.ContainsKey("TotalLastDepreciatedValue") ? (Model["TotalLastDepreciatedValue"] as decimal? ?? 0) : 0;
+    var fromDate = Model["FromDate"]?.ToString() ?? "";
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var categoryName = Model["CategoryName"]?.ToString() ?? "All";
+    var reportType = Model["ReportType"]?.ToString() ?? "ASSET";
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var isAsset = reportType == "ASSET";
+    var reportTitle = isAsset ? "Assets Purchase Report" : "Stock Purchase Report";
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>@reportTitle</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    overflow: hidden;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+                text-align: left;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: normal;
+                line-height: 1.2;
+                vertical-align: bottom;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #ccc;
+            }
+
+            .sn-col {
+                text-align: center;
+                color: #555;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="FamPurchaseReport">
+            <colgroup>
+                <col style="width:4%;" />
+                <col style="width:9%;" />
+                <col style="width:16%;" />
+                <col style="width:9%;" />
+                <col style="width:9%;" />
+                <col style="width:11%;" />
+                <col style="width:9%;" />
+                <col style="width:10%;" />
+                <col style="width:8%;" />
+                <col style="width:7%;" />
+                <col style="width:8%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="11">@reportTitle</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="11"><strong>Branch Name :</strong> @branchName</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="11">
+                        <strong>From Date :</strong> @fromDate
+                        &nbsp;&nbsp;&nbsp;&nbsp;
+                        <strong>Till Date :</strong> @toDate
+                        &nbsp;&nbsp;&nbsp;&nbsp;
+                        <strong>Category :</strong> @categoryName
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="11"><strong>Report Generated On :</strong> @generatedOn</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="11"></td></tr>
+
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Code</th>
+                    <th>Asset Name</th>
+                    <th>Serial Number</th>
+                    <th>Model Name</th>
+                    <th>Identification Detail</th>
+                    <th class="text-right">Amount</th>
+                    <th>Purchase Type</th>
+                    <th>Purchase Date</th>
+                    <th>Transaction Date</th>
+                    @if (isAsset)
+                    {
+                        <th>Last Depreciated</th>
+                    }
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="detail-row">
+                            <td class="sn-col">@sn</td>
+                            <td>@(row.Code ?? "")</td>
+                            <td>@(row.FixedAssetsName ?? "")</td>
+                            <td>@(row.SerialNumber ?? "")</td>
+                            <td>@(row.ModelName ?? "")</td>
+                            <td>@(row.IdentificationDetail ?? "")</td>
+                            <td class="text-right">@(row.Amount?.ToString("N2") ?? "")</td>
+                            <td>@(row.PurchaseType ?? "")</td>
+                            <td>@(row.PurchaseDateOnBs ?? "")</td>
+                            <td>@(row.TransactionOnBs ?? "")</td>
+                            @if (isAsset)
+                            {
+                                <td>@(row.LastDepreciationDateOnBs ?? "")</td>
+                            }
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="6" class="text-right">
+                            Total Records: @totalRecords
+                        </td>
+                        <td class="text-right">@totalAmount.ToString("N2")</td>
+                        <td colspan="4"></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="11" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

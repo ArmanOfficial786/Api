@@ -62,7 +62,16 @@ public partial class AppDbContext : Microsoft.EntityFrameworkCore.DbContext
     public virtual DbSet<SycMemberType> SycMemberTypes { get; set; }
 
     public virtual DbSet<RemRemittanceType> RemRemittanceTypes { get; set; }
+    public virtual DbSet<FamAssetsCategory> FamAssetsCategories { get; set; }
+    public virtual DbSet<FamAssetsType> FamAssetsTypes { get; set; }
+    public virtual DbSet<FamDepreciationMethod> FamDepreciationMethods { get; set; }
 
+    public virtual DbSet<FamFixedAssetsDetail> FamFixedAssetsDetails { get; set; }
+
+    public virtual DbSet<FamPoolOfDepreciation> FamPoolOfDepreciations { get; set; }
+    public virtual DbSet<FamFixedAssetsClearanceStatus> FamFixedAssetsClearanceStatuses { get; set; }
+
+    //==============================================================================
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -707,6 +716,81 @@ public partial class AppDbContext : Microsoft.EntityFrameworkCore.DbContext
             entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_RemRemittanceType_IsActive");
             entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
             entity.Property(e => e.LastModifiedOnBs).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<FamAssetsCategory>(entity =>
+        {
+            entity.ToTable("FamAssetsCategory");
+
+            entity.Property(e => e.CategoryName).HasMaxLength(100);
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_FamAssestsCategory_IsActive");
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.Type)
+                .HasMaxLength(1)
+                .IsUnicode(false)
+                .IsFixedLength()
+                .HasComment("F= Fixed Assets, O=Other Assets")
+                .HasDefaultValue("F", "DF_FamAssetsCategory_Type");
+        });
+
+        modelBuilder.Entity<FamAssetsType>(entity =>
+        {
+            entity.ToTable("FamAssetsType");
+
+            entity.Property(e => e.FamAssetsTypeId).ValueGeneratedNever();
+            entity.Property(e => e.AssetTypeCode).HasMaxLength(10);
+            entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_FamAssestsType_IsActive");
+            entity.Property(e => e.TypeName).HasMaxLength(100);
+        });
+        modelBuilder.Entity<FamDepreciationMethod>(entity =>
+        {
+            entity.ToTable("FamDepreciationMethod");
+
+            entity.Property(e => e.FamDepreciationMethodId).ValueGeneratedNever();
+            entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_FamDepreciationMethod_IsActive");
+            entity.Property(e => e.MethodName).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<FamFixedAssetsDetail>(entity =>
+        {
+            entity.ToTable("FamFixedAssetsDetail");
+
+            entity.Property(e => e.Description).HasColumnType("ntext");
+            entity.Property(e => e.FixedAssetsName).HasMaxLength(100);
+            entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_FamFixedAssestDetail_IsActive");
+
+            entity.HasOne(d => d.FamDepreciationMethod).WithMany(p => p.FamFixedAssetsDetails)
+                .HasForeignKey(d => d.FamDepreciationMethodId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_FamFixedAssetsDetail_FamDepreciationMethod");
+
+            entity.HasOne(d => d.FamPoolOfDepreciation).WithMany(p => p.FamFixedAssetsDetails)
+                .HasForeignKey(d => d.FamPoolOfDepreciationId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_FamFixedAssetsDetail_FamPoolOfDepreciation");
+        });
+
+        modelBuilder.Entity<FamPoolOfDepreciation>(entity =>
+        {
+            entity.ToTable("FamPoolOfDepreciation");
+
+            entity.Property(e => e.FamPoolOfDepreciationId).ValueGeneratedNever();
+            entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_FamPoolOfDepreciation_IsActive");
+            entity.Property(e => e.Name).HasMaxLength(50);
+            entity.Property(e => e.Percentage).HasColumnType("numeric(18, 2)");
+        });
+
+        modelBuilder.Entity<FamFixedAssetsClearanceStatus>(entity =>
+        {
+            entity.ToTable("FamFixedAssetsClearanceStatus");
+
+            entity.Property(e => e.FamFixedAssetsClearanceStatusId).ValueGeneratedNever();
+            entity.Property(e => e.Description).HasMaxLength(50);
+            entity.Property(e => e.Status)
+                .HasMaxLength(1)
+                .IsUnicode(false)
+                .IsFixedLength();
         });
 
 

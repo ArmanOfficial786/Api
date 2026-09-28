@@ -1,0 +1,272 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Asset
+
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<FamDetailReportRowDto>) ?? new List<FamDetailReportRowDto>();
+    var summary = (Model["Summary"] as List<FamDetailReportSummaryDto>) ?? new List<FamDetailReportSummaryDto>();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalAmount = Model.ContainsKey("TotalAmount") ? (Model["TotalAmount"] as decimal? ?? 0) : 0;
+    var toDate = Model["ToDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var categoryName = Model["CategoryName"]?.ToString() ?? "All";
+    var assetName = Model["AssetName"]?.ToString() ?? "All";
+    var reportType = Model["ReportType"]?.ToString() ?? "ASSET";
+    var isTypeWise = Model["IsTypeWise"] as bool? ?? false;
+    var isSummary = Model["IsSummary"] as bool? ?? true;
+    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var isAsset = reportType == "ASSET";
+    var reportTitle = isAsset ? "Assets Detail Report" : "Stock Detail Report";
+    var showSummaryTable = isSummary && !isTypeWise && summary.Any();
+}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>@reportTitle</title>
+    <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 9pt;
+                background: white;
+                color: #000;
+            }
+
+            .report-container {
+                width: 100%;
+                overflow: visible;
+            }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+                table-layout: fixed;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    overflow: hidden;
+                    padding: 4px 6px;
+                    vertical-align: middle;
+                }
+
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 8px 6px;
+            }
+
+            .meta-row td {
+                padding: 3px 6px;
+                font-size: 9pt;
+                text-align: left;
+            }
+
+            .meta-spacer td {
+                height: 6px;
+            }
+
+            .section-title td {
+                font-size: 11pt;
+                font-weight: bold;
+                padding: 8px 6px 4px 6px;
+                text-decoration: underline;
+            }
+
+            .data-table th {
+                background: #f9f9f9;
+                border-top: 2px solid #000;
+                border-bottom: 1px solid #000;
+                text-align: left;
+                white-space: normal;
+                line-height: 1.2;
+                vertical-align: bottom;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #ccc;
+            }
+
+            .sn-col {
+                text-align: center;
+                color: #555;
+            }
+
+            .grand-total-row td {
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                font-weight: bold;
+                background: #f9f9f9;
+                padding: 5px 6px;
+            }
+
+            .text-right {
+                text-align: right !important;
+            }
+
+            .text-center {
+                text-align: center !important;
+            }
+
+            @@media print {
+                thead {
+                    display: table-row-group;
+                }
+
+                tr {
+                    page-break-inside: avoid;
+                    break-inside: avoid;
+                }
+            }
+    </style>
+</head>
+<body>
+    <div class="report-container">
+
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
+
+        <table class="data-table" data-sheet-name="FamDetailReport">
+            <colgroup>
+                <col style="width:4%;" />
+                <col style="width:9%;" />
+                <col style="width:16%;" />
+                <col style="width:10%;" />
+                <col style="width:9%;" />
+                <col style="width:10%;" />
+                <col style="width:10%;" />
+                <col style="width:10%;" />
+                <col style="width:10%;" />
+                <col style="width:12%;" />
+            </colgroup>
+            <tbody>
+                <tr class="meta-title">
+                    <td colspan="10">@reportTitle</td>
+                </tr>
+
+                <tr class="meta-row">
+                    <td colspan="10"><strong>Branch Name :</strong> @branchName</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="10">
+                        <strong>Till Date :</strong> @toDate
+                        &nbsp;&nbsp;&nbsp;&nbsp;
+                        <strong>Category :</strong> @categoryName
+                        &nbsp;&nbsp;&nbsp;&nbsp;
+                        <strong>Asset :</strong> @assetName
+                        &nbsp;&nbsp;&nbsp;&nbsp;
+                        <strong>Mode :</strong> @(isTypeWise ? "Type Wise" : (isSummary ? "Summary" : "Detail"))
+                    </td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="10"><strong>Report Generated On :</strong> @generatedOn</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="10"></td></tr>
+
+                <tr>
+                    <th class="text-center">S.N.</th>
+                    <th>Code</th>
+                    <th>Asset Name</th>
+                    <th>Transaction Type</th>
+                    <th class="text-right">Amount</th>
+                    <th>Date</th>
+                    <th>Purchase Status</th>
+                    <th>Verified To</th>
+                    <th>Transfer Out</th>
+                    <th>Transfer In / Clearance</th>
+                </tr>
+
+                @if (rows.Any())
+                {
+                    var sn = 0;
+                    foreach (var row in rows)
+                    {
+                        sn++;
+                        <tr class="detail-row">
+                            <td class="sn-col">@sn</td>
+                            <td>@(row.Code ?? "")</td>
+                            <td>@(row.FixedAssetsName ?? "")</td>
+                            <td>@(row.TransactionType ?? "")</td>
+                            <td class="text-right">@(row.Amount?.ToString("N2") ?? "")</td>
+                            <td>@(row.TransactionDateBS ?? "")</td>
+                            <td>@(row.PurchaseStatus ?? "")</td>
+                            <td>@(row.VerifiedTo ?? "")</td>
+                            <td>@(row.TransferredOut ?? "")</td>
+                            <td>@(!string.IsNullOrEmpty(row.TransferredIn) ? row.TransferredIn : (row.Clearance ?? ""))</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total-row">
+                        <td colspan="4" class="text-right">
+                            Total Records: @totalRecords
+                        </td>
+                        <td class="text-right">@totalAmount.ToString("N2")</td>
+                        <td colspan="5"></td>
+                    </tr>
+                }
+                else
+                {
+                    <tr>
+                        <td colspan="10" class="text-center">No data found for the selected criteria</td>
+                    </tr>
+                }
+
+                @if (showSummaryTable)
+                {
+                    <tr class="meta-spacer"><td colspan="10"></td></tr>
+                    <tr class="section-title">
+                        <td colspan="10">Summary</td>
+                    </tr>
+                    <tr>
+                        <th class="text-center">S.N.</th>
+                        <th colspan="2">Asset Name</th>
+                        <th class="text-right">Purchased</th>
+                        <th class="text-right">Verified</th>
+                        <th class="text-right">Transfer Out</th>
+                        <th class="text-right">Transfer In</th>
+                        <th class="text-right">Clearance</th>
+                        <th class="text-right">Balance</th>
+                        <th></th>
+                    </tr>
+                    var sn = 0;
+                    foreach (var s in summary)
+                    {
+                        sn++;
+                        <tr class="detail-row">
+                            <td class="sn-col">@sn</td>
+                            <td colspan="2">@(s.FixedAssetsName ?? "")</td>
+                            <td class="text-right">@(s.PurchaseStatusQty?.ToString() ?? "")</td>
+                            <td class="text-right">@(s.VerifiedToQty?.ToString() ?? "")</td>
+                            <td class="text-right">@(s.TransferredOutQty?.ToString() ?? "")</td>
+                            <td class="text-right">@(s.TransferredInQty?.ToString() ?? "")</td>
+                            <td class="text-right">@(s.ClearanceQty?.ToString() ?? "")</td>
+                            <td class="text-right">@(s.Balance?.ToString() ?? "")</td>
+                            <td></td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
