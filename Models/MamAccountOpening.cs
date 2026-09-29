@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace NexgenCosysReport.Models;
+﻿namespace NexgenCosysReport.Models;
 
 public partial class MamAccountOpening
 {
@@ -184,4 +181,5 @@ public partial class MamAccountOpening
     public virtual SycDepositType SycDepositType { get; set; } = null!;
 
     public virtual UsmOffice UsmOffice { get; set; } = null!;
+    public virtual ICollection<LmtLoanIssue> LmtLoanIssues { get; set; } = new List<LmtLoanIssue>();
 }

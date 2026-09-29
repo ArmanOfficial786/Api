@@ -2,9 +2,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Common
 {
     public class MemberLookUpRequest
     {
-        public int Page { get; set; } = 1;          // page number, default 1
-
-        // Optional column filters (same as stored procedure)
+        public int Page { get; set; } = 1;
         public string? MemberId { get; set; }
         public string? MemberName { get; set; }
         public string? GroupName { get; set; }

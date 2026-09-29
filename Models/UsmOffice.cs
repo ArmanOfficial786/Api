@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace NexgenCosysReport.Models;
+﻿namespace NexgenCosysReport.Models;
 
 public partial class UsmOffice
 {
@@ -68,4 +65,6 @@ public partial class UsmOffice
     public virtual ICollection<UsmRelationUserToOffice> UsmRelationUserToOffices { get; set; } = new List<UsmRelationUserToOffice>();
 
     public virtual ICollection<UsmRelationUserToOfficeLogin> UsmRelationUserToOfficeLogins { get; set; } = new List<UsmRelationUserToOfficeLogin>();
+
+    public virtual ICollection<LmtLoanIssue> LmtLoanIssues { get; set; } = new List<LmtLoanIssue>();
 }

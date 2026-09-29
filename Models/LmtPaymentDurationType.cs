@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace NexgenCosysReport.Models;
+﻿namespace NexgenCosysReport.Models;
 
 public partial class LmtPaymentDurationType
 {
@@ -10,4 +7,5 @@ public partial class LmtPaymentDurationType
     public string PaymentDurationType { get; set; } = null!;
 
     public string? Description { get; set; }
+    public virtual ICollection<LmtLoanIssue> LmtLoanIssues { get; set; } = new List<LmtLoanIssue>();
 }

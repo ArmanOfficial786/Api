@@ -71,6 +71,16 @@ public partial class AppDbContext : Microsoft.EntityFrameworkCore.DbContext
     public virtual DbSet<FamPoolOfDepreciation> FamPoolOfDepreciations { get; set; }
     public virtual DbSet<FamFixedAssetsClearanceStatus> FamFixedAssetsClearanceStatuses { get; set; }
 
+    public virtual DbSet<LmtLoanIssue> LmtLoanIssues { get; set; }
+
+    public virtual DbSet<LmtLoanPaymentMethod> LmtLoanPaymentMethods { get; set; }
+
+    public virtual DbSet<LmtLoanPaymentType> LmtLoanPaymentTypes { get; set; }
+
+    public virtual DbSet<LmtLoanStatus> LmtLoanStatuses { get; set; }
+
+    public virtual DbSet<SycSmsCategory> SycSmsCategories { get; set; }
+
     //==============================================================================
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) { }
 
@@ -792,6 +802,168 @@ public partial class AppDbContext : Microsoft.EntityFrameworkCore.DbContext
                 .IsUnicode(false)
                 .IsFixedLength();
         });
+
+        //============loan issue================
+        modelBuilder.Entity<LmtLoanIssue>(entity =>
+        {
+            entity.ToTable("LmtLoanIssue");
+
+            entity.HasIndex(e => e.LoanAccountNo, "IX_LmtLoanIssue");
+
+            entity.Property(e => e.CreatedOn).HasColumnType("datetime");
+            entity.Property(e => e.FirstInstallmentOnBs).HasMaxLength(10);
+            entity.Property(e => e.InstallamentAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.InstallmentType)
+                .HasMaxLength(5)
+                .HasComment("AOD (As On Date),ME (Monthly End)");
+            entity.Property(e => e.InterestRate).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.InterestReceivableAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.InterestReceivableTillDateOn).HasColumnType("datetime");
+            entity.Property(e => e.InterestReceivableTillDateOnBs).HasMaxLength(50);
+            entity.Property(e => e.IsActive).HasDefaultValue(true, "DF_LmtLoanIssue_IsActive");
+            entity.Property(e => e.LastModifiedOn).HasColumnType("datetime");
+            entity.Property(e => e.LmtLoanPaymentMethodId).HasComment("C - For Cash and B - for Bank");
+            entity.Property(e => e.LoanAccountNo).HasMaxLength(50);
+            entity.Property(e => e.LoanCloseOn).HasColumnType("datetime");
+            entity.Property(e => e.LoanCloseOnBs).HasMaxLength(50);
+            entity.Property(e => e.LoanGuarantee)
+                .HasMaxLength(40)
+                .IsUnicode(false);
+            entity.Property(e => e.LoanIssueAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.LoanIssueOnBs).HasMaxLength(50);
+            entity.Property(e => e.LoanOdorNormal)
+                .HasMaxLength(1)
+                .IsUnicode(false)
+                .IsFixedLength()
+                .HasComment("O=OverDraft Loan, N=Normal Loan")
+                .HasColumnName("LoanODorNormal");
+            entity.Property(e => e.LoanPaymentMethod).HasComment("1= As on Date, 2= Schedule Wise");
+            entity.Property(e => e.LoanRescheduleDateOnBs).HasMaxLength(10);
+            entity.Property(e => e.LoanSanctionAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.LoanScheduleDateType)
+                .HasMaxLength(1)
+                .IsUnicode(false)
+                .IsFixedLength();
+            entity.Property(e => e.LoanScheduleInterval).HasDefaultValue(1, "DF_LMTLOANISSUE_LoanScheduleInterval");
+            entity.Property(e => e.MaturityOn).HasColumnType("datetime");
+            entity.Property(e => e.MaturityOnBs).HasMaxLength(50);
+            entity.Property(e => e.NetPaidAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.PenaltyPaymentMethod).HasComment("1= Interest, 2= Principle, 3= Principle and Interest, 4= None");
+            entity.Property(e => e.PenaltyReceivableAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.PenaltyReceivableTillDateOn).HasColumnType("datetime");
+            entity.Property(e => e.PenaltyReceivableTillDateOnBs).HasMaxLength(50);
+            entity.Property(e => e.Period).HasColumnType("numeric(18, 0)");
+            entity.Property(e => e.PeriodType)
+                .HasMaxLength(1)
+                .IsUnicode(false)
+                .IsFixedLength();
+            entity.Property(e => e.PrinciplePaidAfterEach).HasColumnType("numeric(18, 0)");
+            entity.Property(e => e.PrinciplePaidFrom).HasColumnType("numeric(18, 0)");
+            entity.Property(e => e.ProcessedOn).HasColumnType("datetime");
+            entity.Property(e => e.ProcessedOnBs).HasMaxLength(10);
+            entity.Property(e => e.Remarks).HasColumnType("ntext");
+            entity.Property(e => e.RevolvingBalanceAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.RevolvingSanctionAmount).HasColumnType("numeric(18, 2)");
+            entity.Property(e => e.RevolvingSavingAcid).HasColumnName("RevolvingSavingACId");
+            entity.Property(e => e.TransStatus)
+                .HasMaxLength(1)
+                .IsUnicode(false)
+                .IsFixedLength()
+                .HasComment("I=Issue, U=Loan Overdraft Update, R=Loan Issue Renewed");
+            entity.Property(e => e.VerifiedBy).HasMaxLength(100);
+            entity.Property(e => e.VerifiedOn).HasColumnType("datetime");
+
+            entity.HasOne(d => d.LmtLoanPaymentMethod).WithMany(p => p.LmtLoanIssues)
+                .HasForeignKey(d => d.LmtLoanPaymentMethodId)
+                .HasConstraintName("FK_LmtLoanIssue_LmtLoanPaymentMethod");
+
+            entity.HasOne(d => d.LmtLoanPaymentType).WithMany(p => p.LmtLoanIssues)
+                .HasForeignKey(d => d.LmtLoanPaymentTypeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("FK_LmtLoanIssue_LmtLoanPaymentType");
+
+            entity.HasOne(d => d.LmtLoanStatus).WithMany(p => p.LmtLoanIssues)
+                .HasForeignKey(d => d.LmtLoanStatusId)
+                .HasConstraintName("FK_LmtLoanIssue_LmtLoanStatus");
+
+            entity.HasOne(d => d.SycSmsCategory).WithMany(p => p.LmtLoanIssues)
+                .HasForeignKey(d => d.SycSmsCategoryId)
+                .HasConstraintName("FK_LmtLoanIssue_SycSmsCategory");
+            //manually added
+            entity.HasOne(d => d.HurCollector).WithMany(p => p.LmtLoanIssues)
+                  .HasForeignKey(d => d.HurCollectorId)
+                  .HasConstraintName("FK_LmtLoanIssue_HurCollector");
+
+            entity.HasOne(d => d.LmtLoanTypeMaster).WithMany(p => p.LmtLoanIssues)
+                .HasForeignKey(d => d.LmtLoanTypeMasterId)
+                .HasConstraintName("FK_LmtLoanIssue_LmtLoanTypeMaster");
+
+            entity.HasOne(d => d.LmtPaymentDurationType).WithMany(p => p.LmtLoanIssues)
+                .HasForeignKey(d => d.LmtPaymentDurationTypeId)
+                .HasConstraintName("FK_LmtLoanIssue_LmtPaymentDurationType");
+
+            entity.HasOne(d => d.MamAccountOpening).WithMany(p => p.LmtLoanIssues)
+                .HasForeignKey(d => d.MamAccountOpeningId)
+                .HasConstraintName("FK_LmtLoanIssue_MamAccountOpening");
+
+            entity.HasOne(d => d.MemMemberRegistration).WithMany(p => p.LmtLoanIssues)
+                .HasForeignKey(d => d.MemMemberRegistrationId)
+                .HasConstraintName("FK_LmtLoanIssue_MemMemberRegistration");
+
+            entity.HasOne(d => d.SycCollectionCenter).WithMany(p => p.LmtLoanIssues)
+                .HasForeignKey(d => d.SycCollectionCenterId)
+                .HasConstraintName("FK_LmtLoanIssue_SycCollectionCenter");
+
+            entity.HasOne(d => d.SycMemberGroup).WithMany(p => p.LmtLoanIssues)
+                .HasForeignKey(d => d.SycMemberGroupId)
+                .HasConstraintName("FK_LmtLoanIssue_SycMemberGroup");
+
+            entity.HasOne(d => d.UsmOffice).WithMany(p => p.LmtLoanIssues)
+                .HasForeignKey(d => d.UsmOfficeId)
+                .HasConstraintName("FK_LmtLoanIssue_UsmOffice");
+        });
+
+        modelBuilder.Entity<LmtLoanPaymentMethod>(entity =>
+        {
+            entity.HasKey(e => e.LmtLoanPaymentMothodId);
+
+            entity.ToTable("LmtLoanPaymentMethod");
+
+            entity.Property(e => e.LmtLoanPaymentMothodId).ValueGeneratedNever();
+            entity.Property(e => e.Description).HasColumnType("ntext");
+            entity.Property(e => e.LoanPaymentMethod).HasMaxLength(50);
+        });
+
+        modelBuilder.Entity<LmtLoanPaymentType>(entity =>
+        {
+            entity.ToTable("LmtLoanPaymentType");
+
+            entity.Property(e => e.LmtLoanPaymentTypeId).ValueGeneratedNever();
+            entity.Property(e => e.Description).HasColumnType("ntext");
+            entity.Property(e => e.LoanPaymentTypeCode).HasMaxLength(10);
+        });
+
+        modelBuilder.Entity<LmtLoanStatus>(entity =>
+        {
+            entity.ToTable("LmtLoanStatus");
+
+            entity.Property(e => e.LmtLoanStatusId).ValueGeneratedNever();
+            entity.Property(e => e.Description).HasColumnType("ntext");
+            entity.Property(e => e.LoanStatus)
+                .HasMaxLength(1)
+                .IsUnicode(false)
+                .IsFixedLength();
+        });
+
+        modelBuilder.Entity<SycSmsCategory>(entity =>
+        {
+            entity.ToTable("SycSmsCategory");
+
+            entity.Property(e => e.SycSmsCategoryId).ValueGeneratedNever();
+            entity.Property(e => e.Description).HasColumnType("ntext");
+            entity.Property(e => e.SmsCategory).HasMaxLength(200);
+        });
+
 
 
 

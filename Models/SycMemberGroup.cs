@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace NexgenCosysReport.Models;
+﻿namespace NexgenCosysReport.Models;
 
 public partial class SycMemberGroup
 {
@@ -40,4 +37,6 @@ public partial class SycMemberGroup
     public virtual SycCollectionCenter? SycCollectionCenter { get; set; }
 
     public virtual UsmOffice? UsmOffice { get; set; }
+
+    public virtual ICollection<LmtLoanIssue> LmtLoanIssues { get; set; } = new List<LmtLoanIssue>();
 }
