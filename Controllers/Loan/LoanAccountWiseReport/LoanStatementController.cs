@@ -124,7 +124,8 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                     { "ShowDetailNarration", request.ShowDetailNarration },
                     { "ShowAccountCloseDetails", request.ShowAccountCloseDetails },
                     { "EnableBillNumber", request.EnableBillNumber },
-                    { "Format", upperFormat }
+                    { "Format", upperFormat },
+                    { "Language", request.Language }
                 };
 
 

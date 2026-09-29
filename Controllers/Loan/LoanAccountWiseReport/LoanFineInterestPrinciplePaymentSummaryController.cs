@@ -126,7 +126,8 @@ namespace NexgenCosysReport.Controllers.Loan.OtherReports
                     { "CollectorName", data.CollectorName ?? "" },
                     { "SelectAllOrOnlyCash", data.SelectAllOrOnlyCash ?? "-1" },
                     { "OrderBy", request.OrderBy },
-                    { "Format", upperFormat }
+                    { "Format", upperFormat },
+
                 };
 
 

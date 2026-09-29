@@ -124,7 +124,7 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                 )).AsList();
 
 
-                var guaranteeSp = request.ReportType == "Nepali"
+                var guaranteeSp = request.Language == "Nepali"
                     ? "sp_7_16_GetLoanStatementGuaranteeDetailNepali"
                     : "sp_7_16_GetLoanStatementGuaranteeDetail";
 

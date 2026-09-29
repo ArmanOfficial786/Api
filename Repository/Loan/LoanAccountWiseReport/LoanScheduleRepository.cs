@@ -1,14 +1,13 @@
-﻿
-using Dapper;
+﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
-using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Loan.OtherReports;
 using System.Data;
 
-namespace NexgenCosysReport.Repository.Loan.OtherReports
+namespace NexgenCosysReport.Repository.Loan.LoanAccountWiseReport
 {
     public class LoanScheduleRepository : ILoanScheduleRepository
     {
@@ -35,10 +34,11 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                     throw new ArgumentException("Account No is required.");
                 }
 
+                var accountNo = request.AccountNo.Trim();
+
                 var connectionString = _context.Database.GetConnectionString();
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
-
 
                 long loanIssueId = request.LoanIssueId;
 
@@ -51,17 +51,16 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                             AND IsActive = 1 
                             AND LmtLoanStatusId IN (1, 3)
                           ORDER BY LmtLoanIssueId DESC",
-                        new { AccountNo = request.AccountNo.Trim() }) ?? -1;
+                        new { AccountNo = accountNo }) ?? -1;
 
                     if (loanIssueId <= 0)
                     {
-                        throw new ArgumentException($"No active loan account found for Account No '{request.AccountNo}'.");
+                        throw new ArgumentException($"No active loan account found for Account No '{accountNo}'.");
                     }
                 }
 
-
                 var memberInfoParams = new DynamicParameters();
-                memberInfoParams.Add("@SqlFilterExp", $" AND ls.LoanAccountNo = '{request.AccountNo.Trim()}'", DbType.String, size: -1);
+                memberInfoParams.Add("@SqlFilterExp", $" AND ls.LoanAccountNo = '{accountNo}'", DbType.String, size: -1);
 
                 var memberInfo = await connection.QueryFirstOrDefaultAsync<LoanScheduleMemberInfoDto>(
                     "sp_7_16_MemberDetailForLoanSchedule",
@@ -70,17 +69,39 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                     commandTimeout: 120
                 );
 
+                var rows = await GetScheduleRowsAsync(connection, loanIssueId);
 
-                var scheduleParams = new DynamicParameters();
-                scheduleParams.Add("@SqlFilterExp", $" and ls.LmtLoanIssueId = {loanIssueId}", DbType.String, size: -1);
+                // --------------------------------------------------------------
+                // FIX: the LmtLoanIssueId picked above (most recent active row
+                // for this account) sometimes has no matching rows in
+                // LmtLoanSchedule at all - e.g. after a reschedule created a new
+                // LmtLoanIssue row while the schedule is still tied to an older
+                // one. Rather than failing outright, retry every LmtLoanIssueId
+                // ever recorded for this account and use whichever one actually
+                // has schedule rows.
+                // --------------------------------------------------------------
+                if (!rows.Any())
+                {
+                    var candidateIds = (await connection.QueryAsync<long>(
+                        @"SELECT LmtLoanIssueId 
+                          FROM LmtLoanIssue 
+                          WHERE LoanAccountNo = @AccountNo 
+                          ORDER BY LmtLoanIssueId DESC",
+                        new { AccountNo = accountNo })).ToList();
 
-                var rows = (await connection.QueryAsync<LoanScheduleRowDto>(
-                    "sp_7_16_LoanScheduleReport",
-                    scheduleParams,
-                    commandType: CommandType.StoredProcedure,
-                    commandTimeout: 120
-                )).AsList();
+                    foreach (var candidateId in candidateIds)
+                    {
+                        if (candidateId == loanIssueId) continue;
 
+                        var retryRows = await GetScheduleRowsAsync(connection, candidateId);
+                        if (retryRows.Any())
+                        {
+                            loanIssueId = candidateId;
+                            rows = retryRows;
+                            break;
+                        }
+                    }
+                }
 
                 return new LoanScheduleData
                 {
@@ -98,6 +119,19 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                 _logger.LogError(ex, "Error in GetReportDataAsync");
                 throw;
             }
+        }
+
+        private static async Task<List<LoanScheduleRowDto>> GetScheduleRowsAsync(SqlConnection connection, long loanIssueId)
+        {
+            var scheduleParams = new DynamicParameters();
+            scheduleParams.Add("@SqlFilterExp", $" and ls.LmtLoanIssueId = {loanIssueId}", DbType.String, size: -1);
+
+            return (await connection.QueryAsync<LoanScheduleRowDto>(
+                "sp_7_16_LoanScheduleReport",
+                scheduleParams,
+                commandType: CommandType.StoredProcedure,
+                commandTimeout: 120
+            )).AsList();
         }
     }
 }

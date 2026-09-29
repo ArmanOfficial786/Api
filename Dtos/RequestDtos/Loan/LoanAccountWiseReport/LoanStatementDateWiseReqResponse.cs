@@ -5,37 +5,28 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
     {
 
         public string AccountNo { get; set; } = string.Empty;
-
-
         public string? BranchIds { get; set; }
-
-
         public string FromDateBs { get; set; } = string.Empty;
         public string ToDateBs { get; set; } = string.Empty;
-
-
         public bool SameCompanyName { get; set; } = true;
-
-
         public bool VisualReport { get; set; } = false;
     }
 
     public class LoanStatementDateWiseMemberInfoDto
     {
         public string? MemberId { get; set; }
-        public string? MemberName { get; set; }
+        public string? FullName { get; set; }
+        public string? Address { get; set; }
+        public string? ContactNo { get; set; }
         public string? LoanAccountNo { get; set; }
         public string? LoanTypeName { get; set; }
         public decimal? LoanIssueAmount { get; set; }
-        public decimal? InterestRate { get; set; }
-        public string? LoanIssueOnBs { get; set; }
-        public string? MaturityOnBs { get; set; }
-        public string? ContactAddress { get; set; }
-        public string? ContactNo { get; set; }
-        public string? LoanType { get; set; }
+        public string? LoanIssueDate { get; set; }
+        public string? MaturityDateBs { get; set; }
         public string? Period { get; set; }
-        public string? AccountNo { get; set; }
-        public string? AccountStatus { get; set; }
+        public string? InterestRate { get; set; }
+        public string? PaymentType { get; set; }
+        public string? Remark { get; set; }
     }
 
 

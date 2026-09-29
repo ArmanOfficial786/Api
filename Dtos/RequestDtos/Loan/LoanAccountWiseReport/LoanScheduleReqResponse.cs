@@ -1,17 +1,12 @@
 ﻿
-namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport
 {
     public class LoanScheduleRequestDto
     {
 
         public string AccountNo { get; set; } = string.Empty;
-
-
         public long LoanIssueId { get; set; } = -1;
-
-
         public bool SameCompanyName { get; set; } = true;
-
         public bool VisualReport { get; set; } = false;
     }
 
@@ -50,6 +45,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
         public bool? IsPaid { get; set; }
         public bool? IsActive { get; set; }
         public string? Remarks { get; set; }
+        public int? NoOfDays { get; set; }
     }
 
     public class LoanScheduleData

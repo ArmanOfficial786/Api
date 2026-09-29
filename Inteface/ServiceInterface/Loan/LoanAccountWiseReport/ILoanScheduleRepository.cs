@@ -1,5 +1,5 @@
 ﻿// Inteface/ServiceInterface/Loan/OtherReports/ILoanScheduleRepository.cs
-using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport;
 
 namespace NexgenCosysReport.Inteface.ServiceInterface.Loan.OtherReports
 {

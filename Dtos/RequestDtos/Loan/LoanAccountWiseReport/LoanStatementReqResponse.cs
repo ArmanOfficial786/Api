@@ -5,28 +5,18 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
     {
 
         public string AccountNo { get; set; } = string.Empty;
-
         public string? BranchIds { get; set; }
-
         public string? FromDateBs { get; set; }
         public string? ToDateBs { get; set; }
-
         public string ReportType { get; set; } = "English";
-
         public bool ShowEntryBy { get; set; } = false;
-
         public bool ShowDetailNarration { get; set; } = false;
-
         public bool ShowAccountCloseDetails { get; set; } = false;
-
         public bool EnableBillNumber { get; set; } = false;
-
         public string NarrationType { get; set; } = "Default";
-
-
         public bool SameCompanyName { get; set; } = true;
-
         public bool VisualReport { get; set; } = false;
+        public string Language { get; set; } = "English";
     }
 
 
@@ -37,7 +27,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
         public string? LoanAccountNo { get; set; }
         public string? LoanTypeName { get; set; }
         public decimal? LoanIssueAmount { get; set; }
-        public decimal? InterestRate { get; set; }
+        public string? InterestRate { get; set; }
         public string? LoanIssueOnBs { get; set; }
         public string? MaturityOnBs { get; set; }
         public string? ContactAddress { get; set; }
@@ -46,6 +36,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
         public string? Period { get; set; }
         public string? AccountNo { get; set; }
         public string? AccountStatus { get; set; }
+        public string? Remark { get; set; }
     }
 
     public class LoanStatementTransactionDto
@@ -60,6 +51,9 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
         public decimal? CreditAmount { get; set; }
         public decimal? Balance { get; set; }
         public string? ChequeNo { get; set; }
+        public decimal? Principal { get; set; }
+        public decimal? Interest { get; set; }
+        public decimal? Penalty { get; set; }
     }
 
     public class LoanStatementGuaranteeDto
@@ -70,6 +64,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
         public string? GuaranteeShareAmount { get; set; }
         public string? GuaranteeDateOnBs { get; set; }
         public string? AccountNo { get; set; }
+        public string? ContactNo { get; set; }
     }
 
     public class LoanStatementClosingDueDto

@@ -43,6 +43,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
         public decimal? Principal { get; set; }
         public decimal? TotalAmount { get; set; }
         public string? CollectionCenterName { get; set; }
+        public string? DateOnBs { get; set; }
     }
 
     public class LoanFineInterestPrinciplePaymentSummaryData

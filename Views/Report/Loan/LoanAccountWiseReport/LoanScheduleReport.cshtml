@@ -1,16 +1,15 @@
-﻿
-@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport
+
 @model Dictionary<string, object>
 @{
     Layout = null;
 
     var memberInfo = Model["MemberInfo"] as LoanScheduleMemberInfoDto;
     var rows = (Model["Rows"] as List<LoanScheduleRowDto>) ?? new List<LoanScheduleRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalInstallmentAmount = Model["TotalInstallmentAmount"] as decimal? ?? 0;
     var totalPrincipleAmount = Model["TotalPrincipleAmount"] as decimal? ?? 0;
     var totalInterestAmount = Model["TotalInterestAmount"] as decimal? ?? 0;
-    var totalBalanceAmount = Model["TotalBalanceAmount"] as decimal? ?? 0;
+    var totalDays = rows.Sum(r => r.LmtLoanScheduleId.HasValue ? 0 : 0); // placeholder, replaced below
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
@@ -53,6 +52,7 @@
                 .data-table td, .data-table th {
                     word-wrap: break-word;
                     overflow-wrap: break-word;
+                    overflow: hidden;
                     padding: 4px 6px;
                     vertical-align: middle;
                 }
@@ -69,55 +69,49 @@
             .meta-row td {
                 padding: 3px 6px;
                 font-size: 9pt;
+                text-align: left;
             }
 
             .meta-spacer td {
-                height: 6px;
+                height: 8px;
             }
 
-            .section-header td {
-                background: #e8e8e8;
+            /* ── Bordered info box, same pattern as the Loan Statement report ── */
+            .info-box td {
+                border: 1px solid #000;
+                padding: 4px 8px;
+            }
+
+            .info-label {
                 font-weight: bold;
-                font-size: 10pt;
-                padding: 5px 6px;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
+                width: 15%;
+                white-space: nowrap;
             }
 
-            .member-info td {
-                padding: 3px 6px;
-                font-size: 9pt;
-                border-bottom: 1px solid #eee;
+            .info-value {
+                width: 35%;
             }
 
             .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
+                background: #fff;
                 border-bottom: 1px solid #000;
                 text-align: left;
-                white-space: nowrap;
+                white-space: normal;
+                line-height: 1.2;
+                vertical-align: bottom;
+                font-weight: bold;
             }
 
             .detail-row td {
                 border-bottom: 1px solid #eee;
+                color: #1a3d7c;
             }
 
-            .detail-row-alt td {
-                background: #f9f9f9;
-                border-bottom: 1px solid #eee;
-            }
-
-            .paid-row td {
-                color: #888;
-                font-style: italic;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
+            .total-row td {
+                border-top: 1px solid #000;
                 font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
+                padding-top: 4px;
+                color: #000;
             }
 
             .text-right {
@@ -126,34 +120,6 @@
 
             .text-center {
                 text-align: center !important;
-            }
-
-            .positive {
-                color: #006600;
-            }
-
-            .negative {
-                color: #CC0000;
-            }
-
-            .paid-badge {
-                display: inline-block;
-                padding: 1px 6px;
-                background: #d4edda;
-                color: #155724;
-                border-radius: 3px;
-                font-size: 7pt;
-                font-weight: bold;
-            }
-
-            .unpaid-badge {
-                display: inline-block;
-                padding: 1px 6px;
-                background: #fff3cd;
-                color: #856404;
-                border-radius: 3px;
-                font-size: 7pt;
-                font-weight: bold;
             }
 
             @@media print {
@@ -178,129 +144,106 @@
 
         <table class="data-table" data-sheet-name="LoanSchedule">
             <colgroup>
-                <col style="width:5%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
                 <col style="width:9%;" />
-                <col style="width:16%;" />
+                <col style="width:15%;" />
+                <col style="width:13%;" />
+                <col style="width:14%;" />
+                <col style="width:15%;" />
+                <col style="width:12%;" />
+                <col style="width:12%;" />
+                <col style="width:10%;" />
             </colgroup>
             <tbody>
                 <!-- Report Title -->
                 <tr class="meta-title">
-                    <td colspan="9">Loan Schedule Report</td>
+                    <td colspan="8">Loan Schedule Report</td>
                 </tr>
 
-                <!-- Metadata -->
                 <tr class="meta-row">
-                    <td colspan="5">
-                        <strong>Account No :</strong> @(memberInfo?.LoanAccountNo ?? "")
-                    </td>
-                    <td colspan="4" class="text-right">
-                        <strong>Report Generated On :</strong> @generatedOn
-                    </td>
+                    <td colspan="8"><strong>Report Generated On :</strong> @generatedOn</td>
                 </tr>
+                <tr class="meta-spacer"><td colspan="8"></td></tr>
 
-                <!-- Member Information Section -->
-                @if (memberInfo != null)
-                {
-                    <tr class="meta-spacer"><td colspan="9"></td></tr>
-                    <tr class="section-header">
-                        <td colspan="9"><strong>Member Information</strong></td>
-                    </tr>
-                    <tr class="member-info">
-                        <td colspan="2"><strong>Member Id :</strong> @memberInfo.MemberId</td>
-                        <td colspan="4"><strong>Member Name :</strong> @memberInfo.MemberName</td>
-                        <td colspan="3"><strong>Loan Type :</strong> @memberInfo.LoanTypeName</td>
-                    </tr>
-                    <tr class="member-info">
-                        <td colspan="2"><strong>Loan Amount :</strong> @(memberInfo.LoanIssueAmount?.ToString("N2"))</td>
-                        <td colspan="2"><strong>Interest Rate :</strong> @(memberInfo.InterestRate?.ToString("N2"))%</td>
-                        <td colspan="2"><strong>Issue Date :</strong> @memberInfo.LoanIssueOnBs</td>
-                        <td colspan="3"><strong>Maturity Date :</strong> @memberInfo.MaturityOnBs</td>
-                    </tr>
-                    <tr class="member-info">
-                        <td colspan="4"><strong>Address :</strong> @memberInfo.ContactAddress</td>
-                        <td colspan="3"><strong>Contact :</strong> @memberInfo.ContactNo</td>
-                        <td colspan="2"><strong>Status :</strong> @memberInfo.AccountStatus</td>
-                    </tr>
-                    <tr class="member-info">
-                        <td colspan="3"><strong>Period :</strong> @memberInfo.Period</td>
-                        <td colspan="3"><strong>Payment Duration :</strong> @memberInfo.PaymentDurationType</td>
-                        <td colspan="3"><strong>Loan Type :</strong> @memberInfo.LoanType</td>
-                    </tr>
-                    <tr class="meta-spacer"><td colspan="9"></td></tr>
-                }
+                <!-- Member / Loan info box -->
+                <tr class="info-box">
+                    <td class="info-label">MemberID</td>
+                    <td class="info-value">@memberInfo?.MemberId</td>
+                    <td class="info-label">Member Name</td>
+                    <td class="info-value" colspan="5">@memberInfo?.MemberName</td>
+                </tr>
+                <tr class="info-box">
+                    <td class="info-label">Address</td>
+                    <td class="info-value">@memberInfo?.ContactAddress</td>
+                    <td class="info-label">Contact No</td>
+                    <td class="info-value" colspan="5">@memberInfo?.ContactNo</td>
+                </tr>
+                <tr class="info-box">
+                    <td class="info-label">Account No</td>
+                    <td class="info-value" colspan="7">@memberInfo?.LoanAccountNo</td>
+                </tr>
+                <tr class="info-box">
+                    <td class="info-label">Loan Type</td>
+                    <td class="info-value">@memberInfo?.LoanTypeName</td>
+                    <td class="info-label">Interest Rate</td>
+                    <td class="info-value" colspan="5">@memberInfo?.InterestRate</td>
+                </tr>
+                <tr class="info-box">
+                    <td class="info-label">Loan Issue Amount</td>
+                    <td class="info-value">@(memberInfo?.LoanIssueAmount?.ToString("N2"))</td>
+                    <td class="info-label">Loan Period</td>
+                    <td class="info-value" colspan="5">@memberInfo?.Period</td>
+                </tr>
+                <tr class="info-box">
+                    <td class="info-label">Loan Issue Date</td>
+                    <td class="info-value">@memberInfo?.LoanIssueOnBs</td>
+                    <td class="info-label">Loan Maturity Date</td>
+                    <td class="info-value" colspan="5">@memberInfo?.MaturityOnBs</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="8"></td></tr>
 
-                <!-- Table Header -->
+                <!-- Schedule table -->
                 <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Schedule Date (BS)</th>
-                    <th>Installment No</th>
-                    <th class="text-right">Installment Amount</th>
-                    <th class="text-right">Principal Amount</th>
-                    <th class="text-right">Interest Amount</th>
-                    <th class="text-right">Balance Amount</th>
-                    <th class="text-center">Status</th>
-                    <th>Remarks</th>
+                    <th>S.No.</th>
+                    <th class="text-right">Principal Amt</th>
+                    <th class="text-right">Interest Amt</th>
+                    <th class="text-right">Installment Amt</th>
+                    <th class="text-right">Principle Balance</th>
+                    <th class="text-center">ScheduleOn(AD)</th>
+                    <th class="text-center">ScheduleOn(BS)</th>
+                    <th class="text-right">Days</th>
                 </tr>
 
                 @if (rows.Any())
                 {
-                    var sn = 0;
                     foreach (var row in rows)
                     {
-                        sn++;
-                        var rowClass = row.IsPaid == true
-                            ? $"paid-row {(sn % 2 == 0 ? "detail-row" : "detail-row-alt")}"
-                            : (sn % 2 == 0 ? "detail-row" : "detail-row-alt");
-                        <tr class="@rowClass">
-                            <td class="text-center">@sn</td>
-                            <td>@(row.ScheduleDateOnBs ?? "")</td>
+                        <tr class="detail-row">
                             <td>@(row.LoanFrequency?.ToString() ?? "")</td>
-                            <td class="text-right">@(row.InstallmentAmount.HasValue ? row.InstallmentAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.PrincipleAmount.HasValue ? row.PrincipleAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.InterestAmount.HasValue ? row.InterestAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right @(row.PrincipleBalanceAmount.HasValue && row.PrincipleBalanceAmount.Value < 0 ? "negative" : "positive")">
-                                @(row.PrincipleBalanceAmount.HasValue ? row.PrincipleBalanceAmount.Value.ToString("N2") : "")
-                            </td>
-                            <td class="text-center">
-                                @if (row.IsPaid == true)
-                                {
-                                    <span class="paid-badge">Paid</span>
-                                }
-                                else
-                                {
-                                    <span class="unpaid-badge">Unpaid</span>
-                                }
-                            </td>
-                            <td>@(row.Remarks ?? "")</td>
+                            <td class="text-right">@(row.PrincipleAmount.HasValue ? row.PrincipleAmount.Value.ToString("N2") : "0.00")</td>
+                            <td class="text-right">@(row.InterestAmount.HasValue ? row.InterestAmount.Value.ToString("N2") : "0.00")</td>
+                            <td class="text-right">@(row.InstallmentAmount.HasValue ? row.InstallmentAmount.Value.ToString("N2") : "0.00")</td>
+                            <td class="text-right">@(row.PrincipleBalanceAmount.HasValue ? row.PrincipleBalanceAmount.Value.ToString("N2") : "0.00")</td>
+                            <td class="text-center">@(row.ScheduleDateOn.HasValue ? row.ScheduleDateOn.Value.ToString("yyyy/MM/dd") : "")</td>
+                            <td class="text-center">@(row.ScheduleDateOnBs ?? "")</td>
+                            <td class="text-right">@(row.NoOfDays?.ToString() ?? "")</td>
                         </tr>
                     }
 
-                    <!-- Grand Total Row -->
-                    <tr class="grand-total-row">
-                        <td colspan="3" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalInstallmentAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalPrincipleAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalInterestAmount.ToString("N2")</strong></td>
-                        <td class="text-right @(totalBalanceAmount < 0 ? "negative" : "positive")">
-                            <strong>@totalBalanceAmount.ToString("N2")</strong>
-                        </td>
-                        <td colspan="2"></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="8" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
+                    <tr class="total-row">
+                        <td class="text-right">Total:</td>
+                        <td class="text-right">@totalPrincipleAmount.ToString("N2")</td>
+                        <td class="text-right">@totalInterestAmount.ToString("N2")</td>
+                        <td class="text-right">@totalInstallmentAmount.ToString("N2")</td>
+                        <td></td>
+                        <td></td>
+                        <td></td>
+                        <td class="text-right">@(rows.Sum(r => r.NoOfDays ?? 0))</td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="9" class="text-center">No schedule found for the selected criteria</td>
+                        <td colspan="8" class="text-center">No schedule found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

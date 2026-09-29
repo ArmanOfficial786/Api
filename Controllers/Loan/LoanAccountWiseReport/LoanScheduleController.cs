@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
-using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Loan.OtherReports;
@@ -13,7 +13,7 @@ using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
 using System.Text.Json;
 
-namespace NexgenCosysReport.Controllers.Loan.OtherReports
+namespace NexgenCosysReport.Controllers.Loan.LoanAccountWiseReport
 {
     [ApiController]
     [Route("api/[controller]")]
