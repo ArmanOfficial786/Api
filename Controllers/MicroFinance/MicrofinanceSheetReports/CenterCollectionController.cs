@@ -103,26 +103,19 @@ namespace NexgenCosysReport.Controllers.Microfinance.MicrofinanceSheetReports
                 var reportData = new Dictionary<string, object>
                 {
                     { "Rows", data.Rows },
-                    { "SavingSummary", data.SavingSummary },
-                    { "LoanSummary", data.LoanSummary },
-
+                    { "Summary", data.Summary },
                     { "TotalRecords", data.TotalRecords },
-                    { "TotalLedgerBalance", data.TotalLedgerBalance },
-                    { "TotalNetBalance", data.TotalNetBalance },
-                    { "TotalSavingDue", data.TotalSavingDue },
-                    { "TotalLoanIssueAmount", data.TotalLoanIssueAmount },
-                    { "TotalRemainingPrinciple", data.TotalRemainingPrinciple },
-                    { "TotalDuePrinciple", data.TotalDuePrinciple },
-                    { "TotalDueInterest", data.TotalDueInterest },
-                    { "TotalDuePenalty", data.TotalDuePenalty },
-                    { "TotalInstallment", data.TotalInstallment },
-                    { "TotalCollection", data.TotalCollection },
-
+                    { "TotalDeposit", data.TotalDeposit },
+                    { "TotalWithdraw", data.TotalWithdraw },
+                    { "TotalLoanPrinciple", data.TotalLoanPrinciple },
+                    { "TotalLoanInterest", data.TotalLoanInterest },
+                    { "TotalLoanPenalty", data.TotalLoanPenalty },
+                    { "TotalLoan", data.TotalLoan },
                     { "HeaderDataSet", headerData ?? new List<CommonHeader>() },
                     { "TillDate", data.TillDateBs ?? "" },
                     { "TillDateAd", data.TillDateAd ?? "" },
                     { "CollectionCenterName", data.CollectionCenterName ?? "" },
-                    { "CollectionCenterAddress", data.CollectionCenterAddress ?? "" },
+                    { "CollectionCenterAddress", data.CollectionCenterAddress ??    "" },
                     { "PreviousMeetingDate", data.PreviousMeetingDate ?? "" },
                     { "Format", upperFormat }
                 };

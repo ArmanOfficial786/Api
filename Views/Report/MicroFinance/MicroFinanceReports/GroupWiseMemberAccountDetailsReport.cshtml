@@ -4,26 +4,40 @@
 @{
     Layout = null;
 
+    string Get(string key, string alt = null)
+    {
+        if (Model.TryGetValue(key, out var v) && v != null) return v.ToString();
+        if (alt != null && Model.TryGetValue(alt, out var v2) && v2 != null) return v2.ToString();
+        return "";
+    }
+
     var rows = (Model["Rows"] as List<GroupWiseMemberAccountDetailsRowDto>) ?? new List<GroupWiseMemberAccountDetailsRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var collectionCenterName = Model["CollectionCenterName"]?.ToString() ?? "";
-    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "-1";
+    var totalRecords = Model["TotalRecords"] as int? ?? rows.Count;
+    var totalBalance = Model["TotalBalance"] as decimal? ?? rows.Sum(r => r.Balance ?? 0);
+    var fromDate = Get("FromDate", "FromDateBs");
+    var toDate = Get("ToDate", "ToDateBs");
     var groupByCollectionCenter = Model["GroupByCollectionCenter"] as bool? ?? false;
     var groupByMemberGroup = Model["GroupByMemberGroup"] as bool? ?? false;
     var groupByBranch = Model["GroupByBranch"] as bool? ?? false;
-    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var format = Get("Format");
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var colCount = 8;
+    var isGrouped = groupByBranch || groupByCollectionCenter || groupByMemberGroup;
 
-    var isCollectionCenterFiltered = !string.IsNullOrEmpty(collectionCenterName);
-    var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName);
+    // Group key (stable: keeps the SP's order inside each group)
+    string KeyOf(GroupWiseMemberAccountDetailsRowDto r)
+    {
+        var parts = new List<string>();
+        if (groupByBranch) parts.Add("Office : " + r.OfficeName);
+        if (groupByCollectionCenter) parts.Add("Collection Center : " + r.CollectionCenterName);
+        if (groupByMemberGroup) parts.Add("Group : " + r.GroupCode + " " + r.GroupName);
+        return string.Join("      ", parts);
+    }
 
-    var colCount = 9;
+    var groups = isGrouped
+        ? rows.GroupBy(KeyOf).Select(g => (Key: g.Key, Items: g.ToList())).ToList()
+        : new List<(string Key, List<GroupWiseMemberAccountDetailsRowDto> Items)> { (Key: "", Items: rows) };
 }
 <!DOCTYPE html>
 <html>
@@ -38,8 +52,8 @@
             }
 
             body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 10pt;
                 background: white;
                 color: #000;
             }
@@ -49,65 +63,71 @@
                 overflow: visible;
             }
 
-            thead {
-                display: table-row-group;
+            .meta {
+                padding: 8px 10px 6px 10px;
+            }
+
+            .meta-line {
+                margin-bottom: 8px;
+            }
+
+                .meta-line .lbl {
+                    font-weight: bold;
+                    margin-right: 6px;
+                }
+
+                .meta-line .gap {
+                    display: inline-block;
+                    width: 60px;
+                }
+
+            .meta-gen {
+                font-size: 8pt;
+                font-weight: bold;
+                margin-top: 10px;
             }
 
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 9pt;
                 table-layout: fixed;
             }
 
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
+                .data-table th,
+                .data-table td {
+                    padding: 6px 4px;
                     vertical-align: middle;
+                    text-align: left;
+                    word-wrap: break-word;
+                    overflow-wrap: anywhere;
                 }
 
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
+                .data-table th {
+                    font-weight: bold;
+                    border-top: 1px solid #000;
+                    border-bottom: 1px solid #000;
+                    white-space: nowrap;
+                }
+
+                .data-table td {
+                    border-bottom: 1px solid #000;
+                    height: 28px;
+                }
+
+            .group-row td {
                 font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
                 border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
+                padding-top: 8px;
             }
 
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .detail-row-alt td {
-                background: #f9f9f9;
-                border-bottom: 1px solid #eee;
+            .sub-total-row td {
+                font-weight: bold;
             }
 
             .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
                 font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
+                border-top: 1px solid #000;
+                border-bottom: 1px solid #000;
             }
 
             .text-right {
@@ -118,13 +138,9 @@
                 text-align: center !important;
             }
 
-            .positive {
-                color: #006600;
-            }
-
             @@media print {
                 thead {
-                    display: table-row-group;
+                    display: table-header-group;
                 }
 
                 tr {
@@ -142,90 +158,78 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
+        <div class="meta">
+            <div class="meta-line">
+                <span class="lbl">From Date :</span> @fromDate
+                <span class="gap"></span>
+                <span class="lbl">To Date :</span> @toDate
+            </div>
+            <div class="meta-gen">Report Generated On:&nbsp; @generatedOn</div>
+        </div>
+
         <table class="data-table" data-sheet-name="GroupWiseMemberAccountDetails">
             <colgroup>
                 <col style="width:4%;" />
-                <col style="width:14%;" />
-                <col style="width:14%;" />
-                <col style="width:8%;" />
-                <col style="width:14%;" />
+                <col style="width:17%;" />
+                <col style="width:7%;" />
+                <col style="width:19%;" />
                 <col style="width:10%;" />
+                <col style="width:16%;" />
+                <col style="width:13%;" />
                 <col style="width:14%;" />
-                <col style="width:12%;" />
-                <col style="width:10%;" />
             </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="@colCount">Group Wise Member Account Details Report</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="5">
-                        <strong>Branch :</strong> @branchName
-                        &nbsp;&nbsp;
-                        <strong>From :</strong> @fromDate
-                        &nbsp;&nbsp;
-                        <strong>To :</strong> @toDate
-                    </td>
-                    <td colspan="4" class="text-right">
-                        <strong>Report Generated On :</strong> @generatedOn
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="9">
-                        @if (isCollectionCenterFiltered)
-                        {
-                            <strong>Collection Center :</strong> 
-                            @collectionCenterName
-                            <text>&nbsp;&nbsp;</text>
-                        }
-                        @if (isMemberGroupFiltered)
-                        {
-                            <strong>Member Group :</strong> 
-                            @memberGroupName
-                        }
-                    </td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
-
+            <thead>
                 <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Office</th>
-                    <th>Collection Center</th>
-                    <th>Group Code</th>
+                    <th>S.N.</th>
+                    <th>Collection Center Name</th>
+                    <th>G. code</th>
                     <th>Group Name</th>
                     <th>Member Id</th>
                     <th>Member Name</th>
                     <th>Account No</th>
                     <th class="text-right">Balance</th>
                 </tr>
-
+            </thead>
+            <tbody>
                 @if (rows.Any())
                 {
                     var sn = 0;
-                    foreach (var row in rows)
+                    foreach (var g in groups)
                     {
-                        sn++;
-                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
-                            <td class="text-center">@sn</td>
-                            <td>@(row.OfficeName ?? "")</td>
-                            <td>@(row.CollectionCenterName ?? "")</td>
-                            <td>@(row.GroupCode ?? "")</td>
-                            <td>@(row.GroupName ?? "")</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td class="text-right">@(row.Balance?.ToString("N2") ?? "")</td>
-                        </tr>
+                        if (isGrouped)
+                        {
+                            <tr class="group-row">
+                                <td colspan="@colCount">@g.Key</td>
+                            </tr>
+                        }
+
+                        foreach (var row in g.Items)
+                        {
+                            sn++;
+                            <tr>
+                                <td>@sn</td>
+                                <td>@(row.CollectionCenterName ?? "")</td>
+                                <td>@(row.GroupCode ?? "")</td>
+                                <td>@(row.GroupName ?? "")</td>
+                                <td>@(row.MemberId ?? "")</td>
+                                <td>@(row.MemberName ?? "")</td>
+                                <td>@(row.AccountNo ?? "")</td>
+                                <td class="text-right">@((row.Balance ?? 0).ToString("N2"))</td>
+                            </tr>
+                        }
+
+                        if (isGrouped)
+                        {
+                            <tr class="sub-total-row">
+                                <td colspan="7" class="text-right">Sub Total (@g.Items.Count)</td>
+                                <td class="text-right">@g.Items.Sum(x => x.Balance ?? 0).ToString("N2")</td>
+                            </tr>
+                        }
                     }
 
                     <tr class="grand-total-row">
-                        <td colspan="8" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalBalance.ToString("N2")</strong></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="8" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
+                        <td colspan="7" class="text-right">Grand Total (@totalRecords)</td>
+                        <td class="text-right">@totalBalance.ToString("N2")</td>
                     </tr>
                 }
                 else

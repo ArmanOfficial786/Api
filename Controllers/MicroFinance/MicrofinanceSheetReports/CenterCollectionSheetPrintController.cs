@@ -3,15 +3,13 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.Microfinance.MicrofinanceSheetReports;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Microfinance.MicrofinanceSheetReports;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Microfinance.MicrofinanceSheetReports
 {
@@ -25,8 +23,12 @@ namespace NexgenCosysReport.Controllers.Microfinance.MicrofinanceSheetReports
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
+        private readonly IReportFileResponse _reportFileResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
         private readonly ILogger<CenterCollectionSheetPrintController> _logger;
+
+        private static readonly PageSizeSetting PageSetting =
+          PageSizeSetting.Custom(250, 297, PageUnit.mm, landscape: false);
 
         public CenterCollectionSheetPrintController(
             ICenterCollectionSheetPrintRepository repository,
@@ -35,7 +37,8 @@ namespace NexgenCosysReport.Controllers.Microfinance.MicrofinanceSheetReports
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<CenterCollectionSheetPrintController> logger)
+            ILogger<CenterCollectionSheetPrintController> logger,
+            IReportFileResponse reportFileResponse)
         {
             _repository = repository;
             _commonHeaderRepository = commonHeaderRepository;
@@ -44,12 +47,14 @@ namespace NexgenCosysReport.Controllers.Microfinance.MicrofinanceSheetReports
             _headerResponse = headerResponse;
             _reportSettings = reportSettings;
             _logger = logger;
+            _reportFileResponse = reportFileResponse;
         }
 
         [HttpPost]
         public async Task<IActionResult> GenerateReport(
             [FromBody] CenterCollectionSheetPrintRequestDto request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
             try
             {
@@ -101,30 +106,36 @@ namespace NexgenCosysReport.Controllers.Microfinance.MicrofinanceSheetReports
                     headerData, nameof(CommonHeader.CompanyLogo), webRoot);
 
                 var reportData = new Dictionary<string, object>
-                {
-                    { "Header", data.Header ?? new CenterCollectionSheetHeaderDto() },
-                    { "Rows", data.Rows },
-                    { "TotalRecords", data.TotalRecords },
-
-                    { "TotalSavingRemBalance", data.TotalSavingRemBalance },
-                    { "TotalSavingPayableDeposit", data.TotalSavingPayableDeposit },
-                    { "TotalSavingPayableWithdrawal", data.TotalSavingPayableWithdrawal },
-                    { "TotalSavingPayableInt", data.TotalSavingPayableInt },
-                    { "TotalLoanRemPrinciple", data.TotalLoanRemPrinciple },
-                    { "TotalLoanPayablePri", data.TotalLoanPayablePri },
-                    { "TotalLoanPayableInt", data.TotalLoanPayableInt },
-
-                    { "HeaderDataSet", headerData ?? new List<CommonHeader>() },
-                    { "TillDate", data.TillDateBs ?? "" },
-                    { "TillDateAd", data.TillDateAd ?? "" },
-                    { "SheetType", data.SheetType ?? "A" },
-                    { "SheetTypeName", data.SheetTypeName ?? "Saving And Loan" },
-                    { "Format", upperFormat }
-                };
+               {
+               { "Header", data.Header ?? new CenterCollectionSheetHeaderDto() },
+               { "Rows", data.Rows },
+               { "TotalSaving1Balance", data.TotalSaving1Balance },
+               { "TotalSaving2Balance", data.TotalSaving2Balance },
+               { "TotalSaving3Balance", data.TotalSaving3Balance },
+               { "TotalSaving4Balance", data.TotalSaving4Balance },
+               { "TotalLoan1RemPrinciple", data.TotalLoan1RemPrinciple },
+               { "TotalLoan1PayablePri", data.TotalLoan1PayablePri },
+               { "TotalLoan1PayableInt", data.TotalLoan1PayableInt },
+               { "TotalLoan2RemPrinciple", data.TotalLoan2RemPrinciple },
+               { "TotalLoan2PayablePri", data.TotalLoan2PayablePri },
+               { "TotalLoan2PayableInt", data.TotalLoan2PayableInt },
+               { "TotalLoan3RemPrinciple", data.TotalLoan3RemPrinciple },
+               { "TotalLoan3PayablePri", data.TotalLoan3PayablePri },
+               { "TotalLoan3PayableInt", data.TotalLoan3PayableInt },
+               { "TotalLoan4RemPrinciple", data.TotalLoan4RemPrinciple },
+               { "TotalLoan4PayablePri", data.TotalLoan4PayablePri },
+               { "TotalLoan4PayableInt", data.TotalLoan4PayableInt },
+               { "HeaderDataSet", headerData ?? new List<CommonHeader>() },
+               { "TillDate", data.TillDateBs ?? "" },
+               { "TillDateAd", data.TillDateAd ?? "" },
+               { "SheetType", data.SheetType ?? "A" },
+               { "SheetTypeName", data.SheetTypeName ?? "Saving And Loan" },
+               { "Format", upperFormat }
+               };
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/Microfinance/VCenterCollectionSheetPrintReport.cshtml"
-                    : "Views/Report/Microfinance/MicrofinanceSheetReports/CenterCollectionSheetPrintReport.cshtml";
+                    : "Views/Report/MicroFinance/MicrofinanceSheetReports/CenterCollectionSheetPrintReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -132,35 +143,28 @@ namespace NexgenCosysReport.Controllers.Microfinance.MicrofinanceSheetReports
                         reportPath: viewPath,
                         data: reportData));
 
+
                 if (upperFormat == "VIEW")
                 {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.Rows.Count
-                    };
+                    var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
+                        htmlContent, reportKey, ct);
 
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
+                    _logger.LogInformation("VIEW — jsreport Html recipe, {Bytes:N0} chars", viewHtml.Length);
+                    return Content(viewHtml, "text/html");
                 }
 
+                // Handle PDF format
+                if (upperFormat == "PDF")
+                {
+                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
+                        htmlContent, "PDF", reportKey, PageSetting, ct);
+                    return _reportFileResponse.BuildPdfResponse(pdfBytes);
+                }
+
+                // Handle other formats
                 return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat,
-                    reportName,
-                    _jsReportService, _logger);
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, StatusCode = 400, message = ex.Message });
+                    reportKey, upperFormat, "MemberAccountDetail",
+                    _jsReportService, _logger, PageSetting, ct); ;
             }
             catch (Exception ex)
             {

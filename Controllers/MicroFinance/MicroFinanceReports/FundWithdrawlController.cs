@@ -126,7 +126,7 @@ namespace NexgenCosysReport.Controllers.Microfinance.MicrofinanceReport
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/Microfinance/VFundWithdrawlReport.cshtml"
-                    : "Views/Report/Microfinance/MicrofinanceReport/FundWithdrawlReport.cshtml";
+                    : "Views/Report/MicroFinance/MicroFinanceReports/FundWithdrawlReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

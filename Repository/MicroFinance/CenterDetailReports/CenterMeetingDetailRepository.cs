@@ -26,19 +26,6 @@ namespace NexgenCosysReport.Repository.Microfinance
             _logger = logger;
         }
 
-        private static string SanitizeIdList(string? ids)
-        {
-            if (string.IsNullOrWhiteSpace(ids) || ids == "-1" || ids == "string")
-                return "-1";
-
-            var validIds = ids
-                .Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(id => long.TryParse(id, out _));
-
-            var joined = string.Join(",", validIds);
-            return string.IsNullOrEmpty(joined) ? "-1" : joined;
-        }
-
         private static string GetMeetingTypeName(string meetingType) =>
             meetingType?.Trim() switch
             {
@@ -58,30 +45,33 @@ namespace NexgenCosysReport.Repository.Microfinance
                 if (string.IsNullOrWhiteSpace(request.ToDateBs) || request.ToDateBs == "-1")
                     throw new ArgumentException("To Date is required.");
 
-                var branchId = "-1";
+                // SP checks "<> -1" for both office and center, so -1 IS the sentinel —
+                // never send DBNull here, since NULL <> -1 evaluates to UNKNOWN and
+                // silently (and confusingly) behaves as "no filter" for the wrong reason.
+                var officeId = -1;
                 if (!string.IsNullOrEmpty(request.BranchId) &&
                     request.BranchId != "-1" &&
-                    long.TryParse(request.BranchId, out var bId))
+                    int.TryParse(request.BranchId, out var oId))
                 {
-                    branchId = bId.ToString();
+                    officeId = oId;
                 }
 
-                var collectionCenterId = "-1";
+                var centerId = -1;
                 if (!string.IsNullOrEmpty(request.CollectionCenterId) &&
                     request.CollectionCenterId != "-1" &&
-                    long.TryParse(request.CollectionCenterId, out var cId))
+                    int.TryParse(request.CollectionCenterId, out var cId))
                 {
-                    collectionCenterId = cId.ToString();
+                    centerId = cId;
                 }
 
                 var meetingType = request.MeetingType?.Trim();
                 if (meetingType != "rbNext" && meetingType != "rbCenterWise" && meetingType != "rbDetail")
                     meetingType = "rbNext";
 
-                if (meetingType == "rbCenterWise" && collectionCenterId == "-1")
+                if (meetingType == "rbCenterWise" && centerId == -1)
                     throw new ArgumentException("Please select a collection center.");
 
-                if (meetingType == "rbDetail" && branchId == "-1")
+                if (meetingType == "rbDetail" && officeId == -1)
                     throw new ArgumentException("Please select an office.");
 
                 var connectionString = _context.Database.GetConnectionString();
@@ -91,38 +81,52 @@ namespace NexgenCosysReport.Repository.Microfinance
                 var fromDateAd = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
                 var toDateAd = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
 
-                var spName = meetingType == "rbDetail"
-                    ? "sp_GetCenterFieldVisitScheduleReport"
-                    : "sp_GetCenterMeetingDetailReport";
+                // SP parameters are nvarchar(100), compared against date columns via
+                // dynamic SQL string concatenation — 'yyyy-MM-dd' is the one unambiguous
+                // format regardless of server locale/date-format settings.
+                var fromDateStr = fromDateAd.ToString("yyyy-MM-dd");
+                var toDateStr = toDateAd.ToString("yyyy-MM-dd");
 
+                List<CenterMeetingDetailRowDto> rows;
+
+                if (meetingType == "rbDetail")
+                {
+                    // Field visit schedule — different SP, different (pivoted) shape.
+                    // Not wired into this DTO/view; needs its own model once the
+                    // expected report layout for it is confirmed.
+                    throw new NotSupportedException(
+                        "Field visit schedule report uses a different data shape and is not yet implemented against this endpoint.");
+                }
+
+                // sp_4_113_GetCenterMeetingDetailReport — exact parameter names as declared
                 var parameters = new DynamicParameters();
-                parameters.Add("@BranchId", branchId == "-1" ? (object)DBNull.Value : long.Parse(branchId), DbType.Int64);
-                parameters.Add("@CenterId", collectionCenterId == "-1" ? (object)DBNull.Value : long.Parse(collectionCenterId), DbType.Int64);
-                parameters.Add("@FromDate", fromDateAd.Date, DbType.Date);
-                parameters.Add("@ToDate", toDateAd.Date, DbType.Date);
-                parameters.Add("@IsNextMeeting", meetingType == "rbNext" ? 1 : 0, DbType.Int32);
+                parameters.Add("@SqlFilterExpOfficeId", officeId, DbType.Int32);
+                parameters.Add("@SqlFilterExpCenterId", centerId, DbType.Int32);
+                parameters.Add("@SqlFilterExpFromDate", fromDateStr, DbType.String, size: 100);
+                parameters.Add("@SqlFilterExpToDate", toDateStr, DbType.String, size: 100);
+                parameters.Add("@SqlFilterExpIsNextMeeting", meetingType == "rbNext" ? 1 : 0, DbType.Int32);
 
-                var rows = (await connection.QueryAsync<CenterMeetingDetailRowDto>(
-                    spName,
+                rows = (await connection.QueryAsync<CenterMeetingDetailRowDto>(
+                    "sp_4_113_GetCenterMeetingDetailReport",
                     parameters,
                     commandType: CommandType.StoredProcedure,
                     commandTimeout: 600
                 )).AsList();
 
                 string branchName = "All";
-                if (branchId != "-1")
+                if (officeId != -1)
                 {
                     branchName = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT OfficeName FROM UsmOffice WHERE UsmOfficeId = @Id",
-                        new { Id = long.Parse(branchId) }) ?? "All";
+                        new { Id = officeId }) ?? "All";
                 }
 
                 string? collectionCenterName = null;
-                if (collectionCenterId != "-1")
+                if (centerId != -1)
                 {
                     collectionCenterName = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT CollectionCenterName FROM SycCollectionCenter WHERE SycCollectionCenterId = @Id",
-                        new { Id = long.Parse(collectionCenterId) });
+                        new { Id = centerId });
                 }
 
                 return new CenterMeetingDetailData
@@ -131,8 +135,8 @@ namespace NexgenCosysReport.Repository.Microfinance
                     TotalRecords = rows.Count,
                     FromDateBs = request.FromDateBs,
                     ToDateBs = request.ToDateBs,
-                    FromDateAd = fromDateAd.ToString("yyyy-MM-dd"),
-                    ToDateAd = toDateAd.ToString("yyyy-MM-dd"),
+                    FromDateAd = fromDateStr,
+                    ToDateAd = toDateStr,
                     BranchName = branchName,
                     CollectionCenterName = collectionCenterName,
                     MeetingType = meetingType,

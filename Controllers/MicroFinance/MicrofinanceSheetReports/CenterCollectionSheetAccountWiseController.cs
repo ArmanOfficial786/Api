@@ -107,7 +107,6 @@ namespace NexgenCosysReport.Controllers.Microfinance.MicrofinanceSheetReports
                     { "SavingSummary", data.SavingSummary },
                     { "LoanSummary", data.LoanSummary },
                     { "Evaluation", data.Evaluation ?? new CenterCollectionSheetAccountEvaluationDto() },
-
                     { "TotalMembers", data.TotalMembers },
                     { "TotalSaving1", data.TotalSaving1 },
                     { "TotalSaving2", data.TotalSaving2 },
@@ -123,12 +122,19 @@ namespace NexgenCosysReport.Controllers.Microfinance.MicrofinanceSheetReports
                     { "TotalLoan5", data.TotalLoan5 },
                     { "TotalLoan6", data.TotalLoan6 },
                     { "TotalReceivable", data.TotalReceivable },
-
                     { "HeaderDataSet", headerData ?? new List<CommonHeader>() },
                     { "TillDate", data.TillDateBs ?? "" },
                     { "TillDateAd", data.TillDateAd ?? "" },
                     { "CollectionCenterName", data.CollectionCenterName ?? "" },
-                    { "Format", upperFormat }
+                    { "Format", upperFormat },
+                    { "Saving1SchemeName", data.Saving1SchemeName ?? "" },
+                    { "Loan1SchemeName", data.Loan1SchemeName ?? "" },
+                    { "Loan2SchemeName", data.Loan2SchemeName ?? "" },
+                    { "Loan3SchemeName", data.Loan3SchemeName ?? "" },
+                    { "AgentName", data.AgentName ?? "-" },
+                    { "MeetingDateBs", data.MeetingDateBs ?? "-" },
+                    { "ChangedDateBs", data.ChangedDateBs ?? "-" },
+                    { "NextMeetingDateBs", data.NextMeetingDateBs ?? "-" }
                 };
 
                 string viewPath = request.VisualReport

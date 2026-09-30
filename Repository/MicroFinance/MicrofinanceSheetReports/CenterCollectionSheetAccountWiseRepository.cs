@@ -84,6 +84,28 @@ namespace NexgenCosysReport.Repository.Microfinance.MicrofinanceSheetReports
                         new { Id = long.Parse(collectionCenterId) });
                 }
 
+                // --------------------------------------------------------------
+                // Scheme display names for the table header ("General Loan" /
+                // "Seasonal Loan" / "Emergency Loan" / "Per Sv" in the reference
+                // image). The SP builds these same three loan schemes and one
+                // saving scheme as internal SQL variables (@Saving1, @Loan1,
+                // @Loan2, @Loan3) to pivot its data, but never SELECTs them as
+                // output columns in any of its 5 result sets - so per the rule
+                // "SP data first, table only when the SP doesn't have it", this
+                // is the one piece of table data that's actually required here,
+                // fetched the same way and in the same order the SP itself
+                // reads SycCollectionCenterSceme (by SycCollectionCenterScemeId).
+                // --------------------------------------------------------------
+                var schemeNames = (await connection.QueryAsync<(string? SavingName, string? LoanName)>(
+                    @"SELECT TOP 3 SavingName, LoanName 
+                      FROM SycCollectionCenterSceme 
+                      ORDER BY SycCollectionCenterScemeId")).ToList();
+
+                var saving1SchemeName = schemeNames.ElementAtOrDefault(0).SavingName;
+                var loan1SchemeName = schemeNames.ElementAtOrDefault(0).LoanName;
+                var loan2SchemeName = schemeNames.ElementAtOrDefault(1).LoanName;
+                var loan3SchemeName = schemeNames.ElementAtOrDefault(2).LoanName;
+
                 return new CenterCollectionSheetAccountWiseData
                 {
                     Members = members,
@@ -110,7 +132,19 @@ namespace NexgenCosysReport.Repository.Microfinance.MicrofinanceSheetReports
 
                     TillDateBs = request.TillDateBs,
                     TillDateAd = tillDateAd.ToString("yyyy-MM-dd"),
-                    CollectionCenterName = collectionCenterName
+                    CollectionCenterName = collectionCenterName,
+
+                    Saving1SchemeName = saving1SchemeName,
+                    Loan1SchemeName = loan1SchemeName,
+                    Loan2SchemeName = loan2SchemeName,
+                    Loan3SchemeName = loan3SchemeName,
+
+                    // No column in any of the SP's 5 result sets, and no known
+                    // table, backs these three - left null rather than guessed.
+                    AgentName = null,
+                    MeetingDateBs = request.TillDateBs,
+                    ChangedDateBs = null,
+                    NextMeetingDateBs = null
                 };
             }
             catch (Exception ex)

@@ -112,26 +112,30 @@ namespace NexgenCosysReport.Repository.Microfinance.MicrofinanceSheetReports
                     rows = (await multi.ReadAsync<CenterCollectionSheetRowDto>()).AsList();
                 }
 
+                // Add/replace the totals block inside GetReportDataAsync, sheetType "A"/"S"/"L" branch:
                 return new CenterCollectionSheetPrintData
                 {
                     Header = header,
                     Rows = rows,
                     TotalRecords = rows.Count,
 
-                    TotalSavingRemBalance = rows.Sum(r => r.SavingRemBalance ?? 0),
-                    TotalSavingPayableDeposit = rows.Sum(r => r.SavingPayableDeposit ?? 0),
-                    TotalSavingPayableWithdrawal = rows.Sum(r => r.SavingPayableWithdrawal ?? 0),
-                    TotalSavingPayableInt = rows.Sum(r => r.SavingPayableInt ?? 0),
+                    TotalSaving1Balance = rows.Sum(r => r.Saving1Balance ?? 0),
+                    TotalSaving2Balance = rows.Sum(r => r.Saving2Balance ?? 0),
+                    TotalSaving3Balance = rows.Sum(r => r.Saving3Balance ?? 0),
+                    TotalSaving4Balance = rows.Sum(r => r.Saving4Balance ?? 0),
 
-                    TotalLoanRemPrinciple = rows.Sum(r =>
-                        (r.Loan1RemPrinciple ?? 0) + (r.Loan2RemPrinciple ?? 0) +
-                        (r.Loan3RemPrinciple ?? 0) + (r.Loan4RemPrinciple ?? 0)),
-                    TotalLoanPayablePri = rows.Sum(r =>
-                        (r.Loan1PayablePri ?? 0) + (r.Loan2PayablePri ?? 0) +
-                        (r.Loan3PayablePri ?? 0) + (r.Loan4PayablePri ?? 0)),
-                    TotalLoanPayableInt = rows.Sum(r =>
-                        (r.Loan1PayableInt ?? 0) + (r.Loan2PayableInt ?? 0) +
-                        (r.Loan3PayableInt ?? 0) + (r.Loan4PayableInt ?? 0)),
+                    TotalLoan1RemPrinciple = rows.Sum(r => r.Loan1RemPrinciple ?? 0),
+                    TotalLoan1PayablePri = rows.Sum(r => r.Loan1PayablePri ?? 0),
+                    TotalLoan1PayableInt = rows.Sum(r => r.Loan1PayableInt ?? 0),
+                    TotalLoan2RemPrinciple = rows.Sum(r => r.Loan2RemPrinciple ?? 0),
+                    TotalLoan2PayablePri = rows.Sum(r => r.Loan2PayablePri ?? 0),
+                    TotalLoan2PayableInt = rows.Sum(r => r.Loan2PayableInt ?? 0),
+                    TotalLoan3RemPrinciple = rows.Sum(r => r.Loan3RemPrinciple ?? 0),
+                    TotalLoan3PayablePri = rows.Sum(r => r.Loan3PayablePri ?? 0),
+                    TotalLoan3PayableInt = rows.Sum(r => r.Loan3PayableInt ?? 0),
+                    TotalLoan4RemPrinciple = rows.Sum(r => r.Loan4RemPrinciple ?? 0),
+                    TotalLoan4PayablePri = rows.Sum(r => r.Loan4PayablePri ?? 0),
+                    TotalLoan4PayableInt = rows.Sum(r => r.Loan4PayableInt ?? 0),
 
                     TillDateBs = request.TillDateBs,
                     TillDateAd = tillDateAd.ToString("MM-dd-yyyy"),

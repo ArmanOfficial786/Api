@@ -155,5 +155,13 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Microfinance.MicrofinanceSheetRepor
         public string? TillDateBs { get; set; }
         public string? TillDateAd { get; set; }
         public string? CollectionCenterName { get; set; }
+        public string? Saving1SchemeName { get; set; }
+        public string? Loan1SchemeName { get; set; }
+        public string? Loan2SchemeName { get; set; }
+        public string? Loan3SchemeName { get; set; }
+        public string? AgentName { get; set; }
+        public string? MeetingDateBs { get; set; }
+        public string? ChangedDateBs { get; set; }
+        public string? NextMeetingDateBs { get; set; }
     }
 }
