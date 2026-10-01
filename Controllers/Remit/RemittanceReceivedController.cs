@@ -118,7 +118,7 @@ namespace NexgenCosysReport.Controllers.Remit
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VRemittanceReceivedReport.cshtml"
-                    : "Views/Report/Remittance/Reports/RemittanceReceivedReport.cshtml";
+                    : "Views/Report/Remit/RemittanceReceivedReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(

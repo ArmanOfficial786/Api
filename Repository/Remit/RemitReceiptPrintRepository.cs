@@ -38,6 +38,24 @@ namespace NexgenCosysReport.Repository.Remit
             return string.Join(",", validIds);
         }
 
+        // Maps whatever the caller sends ("Payment"/"Received", "0"/"1",
+        // "true"/"false", etc.) to the bit value the IsReceived column
+        // actually needs. CASE WHEN IsReceived=1 THEN ReceiverName ELSE
+        // SenderName END in the stored procedure confirms 1 = Received,
+        // 0 = Payment/sent. Concatenating an unrecognized raw string here
+        // previously produced invalid SQL (e.g. "And IsReceived = Payment"),
+        // which is what threw the syntax error — this normalizes to a safe
+        // bit literal before it ever reaches the SQL text.
+        private static string NormalizeIsReceived(string value)
+        {
+            return value.Trim().ToLowerInvariant() switch
+            {
+                "1" or "true" or "received" or "yes" => "1",
+                "0" or "false" or "payment" or "sent" or "no" => "0",
+                _ => "0", // unrecognized input defaults to Payment, matching the DTO's default "0"
+            };
+        }
+
         private static string ConvertToWords(decimal amount)
         {
             var units = new[] { "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
@@ -94,9 +112,10 @@ namespace NexgenCosysReport.Repository.Remit
                     sqlFilterExp.Append(" And RD.UsmOfficeId in ( ").Append(branchIds).Append(" )");
                 }
 
-                if (!string.IsNullOrEmpty(request.IsReceived))
+                if (!string.IsNullOrWhiteSpace(request.IsReceived))
                 {
-                    sqlFilterExp.Append(" And IsReceived = ").Append(request.IsReceived);
+                    var isReceivedBit = NormalizeIsReceived(request.IsReceived);
+                    sqlFilterExp.Append(" And IsReceived = ").Append(isReceivedBit);
                 }
 
                 if (request.RemittanceDetailId != -1)

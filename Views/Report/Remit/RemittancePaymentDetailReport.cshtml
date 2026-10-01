@@ -5,22 +5,26 @@
 
     var rows = (Model["Rows"] as List<RemittancePaymentDetailRowDto>) ?? new List<RemittancePaymentDetailRowDto>();
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalAmount = Model.ContainsKey("TotalAmount") ? (Model["TotalAmount"] as decimal? ?? 0) : 0;
+    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var branchName = Model["BranchName"]?.ToString() ?? "All";
     var remittanceTypeName = Model["RemittanceTypeName"]?.ToString() ?? "All";
-    var remittanceServiceType = Model["RemittanceServiceType"]?.ToString() ?? "-1";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-    var serviceLabel = remittanceServiceType == "O" ? "Online" : (remittanceServiceType == "F" ? "Offline" : "All");
+
+    // Grouped by Receiver — Receiver shown once as a bold group header, each
+    // payment row underneath, then a "Total :" subtotal row summing Amount
+    // for that group. Rows must arrive pre-sorted by Receiver since GroupBy
+    // preserves first-seen order, not sorted order.
+    var receiverGroups = rows.GroupBy(r => r.Receiver ?? "").ToList();
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Remittance Payment Detail Report</title>
+    <title>Remittance Payment Detail Reports</title>
     <style>
             * {
                 margin: 0;
@@ -29,8 +33,8 @@
             }
 
             body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 9.5pt;
                 background: white;
                 color: #000;
             }
@@ -40,61 +44,78 @@
                 overflow: visible;
             }
 
-            thead {
-                display: table-row-group;
+            .report-title {
+                text-align: center;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 4px 0 10px 0;
+            }
+
+            .meta-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: 8px;
+            }
+
+                .meta-table td {
+                    padding: 2px 6px;
+                    font-size: 9.5pt;
+                    white-space: nowrap;
+                    vertical-align: top;
+                }
+
+            .meta-left {
+                text-align: left;
+                width: 50%;
+            }
+
+            .meta-right {
+                text-align: right;
+                width: 50%;
             }
 
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 9pt;
+                font-size: 9.5pt;
                 table-layout: fixed;
             }
 
                 .data-table td, .data-table th {
                     word-wrap: break-word;
                     overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 4px 6px;
-                    vertical-align: middle;
+                    padding: 3px 6px;
+                    vertical-align: top;
                 }
 
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
+                .data-table th {
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                    text-align: left;
+                    font-weight: bold;
+                }
+
+            .receiver-row td {
                 font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
+                padding-top: 10px;
+                padding-bottom: 2px;
+                border: none;
             }
 
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-                text-align: left;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: normal;
-                line-height: 1.2;
-                vertical-align: bottom;
+            .receiver-row.first-group td {
+                padding-top: 4px;
             }
 
             .detail-row td {
-                border-bottom: 1px solid #ccc;
+                border: none;
             }
 
-            .sn-col {
-                text-align: center;
-                color: #555;
+            .subtotal-row td {
+                border-top: 1px solid #000;
+                font-weight: bold;
+                padding-top: 3px;
+                padding-bottom: 6px;
             }
 
             .grand-total-row td {
@@ -114,10 +135,6 @@
             }
 
             @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
                 tr {
                     page-break-inside: avoid;
                     break-inside: avoid;
@@ -133,89 +150,80 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
+        <div class="report-title">Remittance Payment Detail Reports</div>
+
+        <table class="meta-table">
+            <tr>
+                <td class="meta-left"><strong>RemittanceType :</strong> @remittanceTypeName</td>
+                <td class="meta-right"><strong>From Date:</strong> @fromDate &nbsp;&nbsp;&nbsp; <strong>To Date :</strong> @toDate</td>
+            </tr>
+            <tr>
+                <td class="meta-left"><strong>Report Generated On :</strong> @generatedOn</td>
+                <td class="meta-right"><strong>Branch Name :</strong> @branchName</td>
+            </tr>
+        </table>
+
         <table class="data-table" data-sheet-name="RemittancePaymentDetail">
             <colgroup>
-                <col style="width:4%;" />
-                <col style="width:12%;" />
-                <col style="width:13%;" />
-                <col style="width:13%;" />
-                <col style="width:11%;" />
-                <col style="width:10%;" />
-                <col style="width:10%;" />
-                <col style="width:10%;" />
-                <col style="width:9%;" />
-                <col style="width:8%;" />
+                <col style="width:14%;" />
+                <col style="width:16%;" />
+                <col style="width:20%;" />
+                <col style="width:16%;" />
+                <col style="width:16%;" />
+                <col style="width:18%;" />
             </colgroup>
             <tbody>
-                <tr class="meta-title">
-                    <td colspan="10">Remittance Payment Detail Report</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="10"><strong>Branch Name :</strong> @branchName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="10">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Till Date :</strong> @toDate
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Service Type :</strong> @serviceLabel
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Remittance Type :</strong> @remittanceTypeName
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="10"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="10"></td></tr>
-
                 <tr>
-                    <th class="text-center">S.N.</th>
                     <th>Receiver</th>
                     <th>Sender</th>
-                    <th>IME Code No</th>
-                    <th class="text-right">Amount</th>
+                    <th>Payment By</th>
+                    <th class="text-right">Payment Amount(Rs</th>
                     <th>Date</th>
                     <th>Cash Teller</th>
-                    <th>Remittance Type</th>
-                    <th>Payment By</th>
-                    <th class="text-center">Remit Detail Id</th>
                 </tr>
 
-                @if (rows.Any())
+                @if (receiverGroups.Any())
                 {
-                    var sn = 0;
-                    foreach (var row in rows)
+                    bool isFirstGroup = true;
+                    foreach (var group in receiverGroups)
                     {
-                        sn++;
-                        <tr class="detail-row">
-                            <td class="sn-col">@sn</td>
-                            <td>@(row.Receiver ?? "")</td>
-                            <td>@(row.Sender ?? "")</td>
-                            <td>@(row.IMECodeNo ?? "")</td>
-                            <td class="text-right">@(row.Amount?.ToString("N2") ?? "")</td>
-                            <td>@(row.Date ?? "")</td>
-                            <td>@(row.CashTeller ?? "")</td>
-                            <td>@(row.RemittanceType ?? "")</td>
-                            <td>@(row.PaymentBy ?? "")</td>
-                            <td class="text-center">@(row.RemittanceDetailId?.ToString() ?? "")</td>
+                        var groupRows = group.ToList();
+
+                        <tr class="receiver-row @(isFirstGroup ? "first-group" : "")">
+                            <td colspan="6">@group.Key</td>
+                        </tr>
+                        isFirstGroup = false;
+
+                        foreach (var row in groupRows)
+                        {
+                            <tr class="detail-row">
+                                <td></td>
+                                <td>@(row.Sender ?? "")</td>
+                                <td>@(row.PaymentBy ?? "")</td>
+                                <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "0.00")</td>
+                                <td>@(row.Date ?? "")</td>
+                                <td>@(row.CashTeller ?? "")</td>
+                            </tr>
+                        }
+
+                        <tr class="subtotal-row">
+                            <td colspan="2"></td>
+                            <td class="text-right">Total :</td>
+                            <td class="text-right">@groupRows.Sum(r => r.Amount ?? 0m).ToString("N2")</td>
+                            <td colspan="2"></td>
                         </tr>
                     }
 
                     <tr class="grand-total-row">
-                        <td colspan="3" class="text-right">
-                            Total Records: @totalRecords
-                        </td>
-                        <td></td>
+                        <td colspan="3" class="text-right">Grand Total</td>
                         <td class="text-right">@totalAmount.ToString("N2")</td>
-                        <td colspan="5"></td>
+                        <td colspan="2"></td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="10" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="6" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

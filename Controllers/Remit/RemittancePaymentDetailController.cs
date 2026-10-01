@@ -66,11 +66,6 @@ namespace NexgenCosysReport.Controllers.Remit
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
                 }
 
-                if (string.IsNullOrEmpty(request.BranchIds))
-                {
-                    return BadRequest(new { success = false, StatusCode = 400, message = "select Branch Office" });
-                }
-
                 var reportName = "RemittancePaymentDetail";
                 var upperFormat = format.ToUpper();
 
