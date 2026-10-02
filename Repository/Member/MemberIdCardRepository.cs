@@ -1,7 +1,7 @@
 using Dapper;
-using NexgenCosysReport.DbContext;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using NexgenCosysReport.DbContext;
 using NexgenCosysReport.Dtos.RequestDtos.Member;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Member;
@@ -24,7 +24,6 @@ namespace NexgenCosysReport.Repository.Member
         {
             var sqlFilterExp = await BuildSqlFilter(request);
             var sqlOrderBy = BuildOrderBy(request.orderby);
-            //var sqlOrderBy = request.orderby;
 
             var connectionString = _context.Database.GetConnectionString();
 
@@ -67,7 +66,7 @@ namespace NexgenCosysReport.Repository.Member
 
             if (!string.IsNullOrEmpty(request.fromDate) && !string.IsNullOrEmpty(request.toDate))
             {
-                //sqlFilterExp += $" And MR.RegistrationOn between '{request.fromDate}' And '{request.toDate}'";
+
                 string fromDateAd = await _dateConverter.BsToAdStringAsync(request.fromDate);
                 string toDateAd = await _dateConverter.BsToAdStringAsync(request.toDate);
 
@@ -77,39 +76,7 @@ namespace NexgenCosysReport.Repository.Member
 
             return sqlFilterExp;
         }
-        // ================= ORDER BY BUILDER =================
-        //private static string BuildOrderBy(string? orderBy)
-        //{
-        //    //if (string.IsNullOrWhiteSpace(orderBy) || orderBy == "-1")
-        //    //    return $`ORDER BY MR.{ orderBy} ASC`;
-        //    //        " ORDER BY MR.RegistrationOn ASC";
 
-        //    //switch (orderBy.Trim().ToLower())
-        //    //{
-
-        //    //    case "membername":
-        //    //        return " ORDER BY Name ASC";
-
-        //    //    case "sex":
-        //    //        return " ORDER BY Sex ASC"; //alias of Geneder
-
-        //    //    case "memberid":
-        //    //        return " ORDER BY MR.MemberId ASC";
-
-        //    //    case "birthonbs":
-        //    //        return " ORDER BY MR.BirthOnBS ASC";
-
-        //    //    case "registrationon":
-        //    //        return " ORDER BY MR.RegistrationOn ASC";
-
-        //    //    default:
-        //    //        return " ORDER BY MR.RegistrationOn ASC";
-        //    //}
-
-
-
-
-        //}
 
         private static string BuildOrderBy(string? orderBy)
         {

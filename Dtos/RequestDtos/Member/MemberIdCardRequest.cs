@@ -1,5 +1,3 @@
-using System.Text.Json.Serialization;
-
 namespace NexgenCosysReport.Dtos.RequestDtos.Member
 {
     public class MemberIdCardRequest
@@ -12,7 +10,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Member
         public long memberGroupId { get; set; }
         public int currentPage { get; set; } = 0;
         public int pageSize { get; set; } = 0;
-        
+
     }
     public class MemberIdCardModel
     {
