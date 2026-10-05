@@ -58,7 +58,11 @@ namespace NexgenCosysReport.Controllers.Account.AccountingReports
 
 
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                //var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+
+                var reportKey = request.VisualReport
+                 ? ReportUtils.GenerateReportKey(request, reportName, "VISUAL")
+                 : ReportUtils.GenerateReportKey(request, reportName);
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
