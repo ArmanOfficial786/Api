@@ -88,7 +88,8 @@ namespace NexgenCosysReport.Repository.Account.AccountingReport
             var rows = await connection.QueryAsync<SummaryTrialBalanceRowDto>(
                 spName,
                 parameters,
-                commandType: CommandType.StoredProcedure
+                commandType: CommandType.StoredProcedure,
+                commandTimeout: 300
             );
 
             // For SubLedger, we could attach the outputs to a property, but we'll just return the rows.
