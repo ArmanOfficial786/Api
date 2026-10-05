@@ -1,4 +1,4 @@
-﻿@* Views/Report/MemberAllDetailReport.cshtml - Visual Report *@
+﻿@* Views/VisualReport/Member/VMemberRegistrationReport.cshtml *@
 @model Dictionary<string, object>
 @using NexgenCosysReport.Dtos.ReportDtos
 @using NexgenCosysReport.Dtos.RequestDtos.Member
@@ -6,96 +6,48 @@
 @{
     Layout = null;
 
-    var dataSet = (Model["StudentDataSet"] as IEnumerable<MemberAllDetailSpResponse>)?.ToList()
-                  ?? new List<MemberAllDetailSpResponse>();
+    IEnumerable<MemberRegistrationDetail>? source = null;
+    if (Model.ContainsKey("MemberAllDetailDataSet"))
+        source = Model["MemberAllDetailDataSet"] as IEnumerable<MemberRegistrationDetail>;
+    if (source == null && Model.ContainsKey("StudentDataSet"))
+        source = Model["StudentDataSet"] as IEnumerable<MemberRegistrationDetail>;
 
-    var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "All";
-    var fromDate = Model.ContainsKey("FromDate") ? Model["FromDate"]?.ToString() : "";
-    var toDate = Model.ContainsKey("ToDate") ? Model["ToDate"]?.ToString() : "";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var dataSet = source?.ToList() ?? new List<MemberRegistrationDetail>();
+
+    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
+    var isExcel = format == "EXCEL" || format == "XLSX";
 
     int totalRecords = Model.ContainsKey("TotalRecords")
                        ? Convert.ToInt32(Model["TotalRecords"])
                        : dataSet.Count;
 
-    // ── Selected columns ──────────────────────────────────────────────────
-    var selectedColumns = Model.ContainsKey("SelectedColumns")
-        ? (Model["SelectedColumns"] as IEnumerable<string>)?.ToList()
-        : null;
-    bool showAllColumns = selectedColumns == null || selectedColumns.Count == 0;
-
-    var allColumns = new List<(string Key, string Header, string CssClass, Func<MemberAllDetailSpResponse, object?> Render)>
-    {
-        ("MemberId",                  "Member ID",               "c-mid",     r => r.MemberId),
-        ("FullName",                  "Full Name",               "c-name",    r => r.FullName),
-        ("MemberType",                "Member Type",             "c-mtype",   r => r.MemberType),
-        ("BirthOnBS",                 "DOB (BS)",                "c-dob",     r => r.BirthOnBS),
-        ("PermanentAddress",          "Perm. Address",           "c-paddr",   r => r.PermanentAddress),
-        ("TemporaryAddress",          "Temp. Address",           "c-taddr",   r => r.TemporaryAddress),
-        ("PhoneNo",                   "Phone",                   "c-phone",   r => r.PhoneNo),
-        ("MobileNo",                  "Mobile",                  "c-mob",     r => r.MobileNo),
-        ("EmailAddress",              "Email",                   "c-email",   r => r.EmailAddress),
-        ("Nationality",               "Nationality",             "c-nat",     r => r.Nationality),
-        ("CitizenshipNo",             "Citizenship No",          "c-cit",     r => r.CitizenshipNo),
-        ("PassportNo",                "Passport No",             "c-pass",    r => r.PassportNo),
-        ("Occupation",                "Occupation",              "c-occ",     r => r.Occupation),
-        ("Religion",                  "Religion",                "c-reli",    r => r.Religion),
-        ("MaritalStatus",             "Marital Status",          "c-marital", r => r.MaritalStatus),
-        ("GrandFatherMotherName",     "Grandfather/Mother",      "c-gfmo",    r => r.GrandFatherMotherName),
-        ("FatherName",                "Father",                  "c-father",  r => r.FatherName),
-        ("MotherName",                "Mother",                  "c-mother",  r => r.MotherName),
-        ("SpouseName",                "Spouse",                  "c-spouse",  r => r.SpouseName),
-        ("Caste",                     "Caste",                   "c-caste",   r => r.Caste),
-        ("Gender",                    "Gender",                  "c-gender",  r => r.Gender),
-        ("Vdc",                       "VDC",                     "c-vdc",     r => r.Vdc),
-        ("RegistrationOnBS",          "Reg. Date (BS)",          "c-reg",     r => r.RegistrationOnBS),
-        ("Status",                    "Status",                  "c-status",  r => r.Status),
-        ("MemberGroup",               "Member Group",            "c-mgroup",  r => r.MemberGroup),
-        ("CitizenShipIssuedOnBs",     "Cit. Issued On (BS)",     "c-citiss",  r => r.CitizenShipIssuedOnBs),
-        ("CitizenShipIssuedDistrict", "Cit. Issued District",    "c-citdist", r => r.CitizenShipIssuedDistrict),
-        ("ElectricityNo",             "Electricity No",          "c-elec",    r => r.ElectricityNo),
-        ("WaterSupplyNo",             "Water Supply No",         "c-water",   r => r.WaterSupplyNo),
-        ("Education",                 "Education",               "c-edu",     r => r.Education),
-        ("IncomeRange",               "Income Range",            "c-income",  r => r.IncomeRange),
-        ("StateVDC",                  "State VDC",               "c-svdc",    r => r.StateVDC),
-        ("MemberYearlyPaymentTillDateOnBs", "Yearly Paymt Till (BS)", "c-paytill", r => r.MemberYearlyPaymentTillDateOnBs),
-        ("NameInNepali",              "Name (Nepali)",            "c-namenp",  r => r.NameInNepali),
-        ("AddressInNepali",           "Address (Nepali)",         "c-addrnp",  r => r.AddressInNepali),
-    };
-
-    var columns = showAllColumns
-        ? allColumns
-        : allColumns.Where(c => selectedColumns!.Contains(c.Key, StringComparer.OrdinalIgnoreCase)).ToList();
-
-    int totalVisibleCols = columns.Count + 2; // S.N. + Photo
-
-    // ── Chart data ─────────────────────────────────────────────────────────
-    var memberTypeGroups = dataSet
-        .Where(r => !string.IsNullOrEmpty(r.MemberType))
-        .GroupBy(r => r.MemberType.Trim())
+    var genderGroups = dataSet
+        .Where(r => !string.IsNullOrEmpty(r.Sex))
+        .GroupBy(r => r.Sex.Trim().ToUpperInvariant())
         .Select(g => new { Label = g.Key, Count = g.Count() })
-        .OrderByDescending(x => x.Count)
         .ToList();
 
-    var statusGroups = dataSet
-        .Where(r => !string.IsNullOrEmpty(r.Status))
-        .GroupBy(r => r.Status.Trim())
+    var districtGroups = dataSet
+        .Where(r => !string.IsNullOrEmpty(r.District))
+        .GroupBy(r => r.District.Trim())
         .Select(g => new { Label = g.Key, Count = g.Count() })
         .OrderByDescending(x => x.Count)
+        .Take(10)
         .ToList();
 
-    var memberTypeLabelsJson = JsonConvert.SerializeObject(memberTypeGroups.Select(x => x.Label));
-    var memberTypeCountsJson = JsonConvert.SerializeObject(memberTypeGroups.Select(x => x.Count));
-    var statusLabelsJson = JsonConvert.SerializeObject(statusGroups.Select(x => x.Label));
-    var statusCountsJson = JsonConvert.SerializeObject(statusGroups.Select(x => x.Count));
+    var genderLabelsJson = JsonConvert.SerializeObject(genderGroups.Select(x => x.Label));
+    var genderCountsJson = JsonConvert.SerializeObject(genderGroups.Select(x => x.Count));
+    var districtLabelsJson = JsonConvert.SerializeObject(districtGroups.Select(x => x.Label));
+    var districtCountsJson = JsonConvert.SerializeObject(districtGroups.Select(x => x.Count));
+
+    int districtHeight = Math.Max(240, districtGroups.Count * 38 + 80);
 }
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="utf-8" />
-    <title>Member All Detail Report</title>
+    <title>Member Registration Report</title>
     <style>
-            /* ── Reset & base ───────────────────────────────────────────────── */
             * {
                 margin: 0;
                 padding: 0;
@@ -103,51 +55,31 @@
             }
 
             body {
+                margin-top: 35px;
                 font-family: Arial, sans-serif;
                 font-size: 7pt;
-                background: #d0d0d0;
-                padding: 16px;
+                background: #fff !important;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
 
-            .report-container {
-                max-width: 100%;
+            .view-outer {
                 background: #fff;
-                padding: 16px;
-                border-radius: 6px;
-                box-shadow: 0 2px 12px rgba(0,0,0,0.1);
-            }
-
-            /* ── Sub-header ──────────────────────────────────────────────────── */
-            .report-subheader {
-                width: 100%;
-                padding: 4px 6px 0 6px;
-                background: #fff;
-            }
-
-            .subheader-title {
-                text-align: center;
-                font-size: 13pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 6px 4px 4px;
-            }
-
-            .subheader-meta {
+                min-height: 100vh;
                 display: flex;
-                justify-content: space-between;
-                font-size: 7.5pt;
-                padding: 2px 4px;
+                flex-direction: column;
             }
 
-            .subheader-spacer {
-                height: 10px;
+            .report-card {
+                background: #fff;
+                margin: 16px 16px 0 16px;
+                border: 1px solid #ccc;
+                border-bottom: none;
+                overflow: hidden;
             }
 
-            /* ── Charts ──────────────────────────────────────────────────────── */
             .chart-stack {
-                padding: 16px 0;
-                border-bottom: 1px solid #ccc;
-                margin-bottom: 16px;
+                padding: 16px;
             }
 
             .chart-block {
@@ -158,14 +90,16 @@
                 .chart-block h4 {
                     margin: 0 0 8px;
                     font-size: 10pt;
-                    font-weight: 600;
-                    color: #333;
                 }
 
-            canvas {
-                width: 100% !important;
-                max-height: 400px;
+            .chart-wrap {
+                position: relative;
+                width: 100%;
             }
+
+                .chart-wrap.gender {
+                    height: 380px;
+                }
 
             .no-data-msg {
                 padding: 20px;
@@ -174,208 +108,8 @@
                 font-size: 10pt;
             }
 
-            /* ── Data table ──────────────────────────────────────────────────── */
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                table-layout: fixed;
-                font-size: 7pt;
-                margin-top: 8px;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    word-break: break-word;
-                    white-space: normal;
-                    vertical-align: middle;
-                    background: #fff;
-                    padding: 3px 4px;
-                    border: none;
-                    font-size: 7pt;
-                    line-height: 1.3;
-                }
-
-                .data-table th {
-                    border-top: 1.5px solid #000;
-                    border-bottom: 1px solid #000;
-                    font-weight: bold;
-                    background: #f2f2f2;
-                    font-size: 6.8pt;
-                    white-space: nowrap;
-                    padding: 4px;
-                }
-
-            .detail-row td {
-                border-bottom: 1px solid #e0e0e0;
-            }
-
-            .grand-total td {
-                border-top: 1.5px solid #000;
-                border-bottom: 1.5px solid #000;
-                font-weight: bold;
-                background: #fff;
-            }
-
-            .member-photo {
-                width: 28px;
-                height: 32px;
-                object-fit: cover;
-                display: block;
-            }
-
-            /* Column widths (same as original) */
-            col.c-sn {
-                width: 1.20%;
-            }
-
-            col.c-photo {
-                width: 2.20%;
-            }
-
-            col.c-mid {
-                width: 3.10%;
-            }
-
-            col.c-name {
-                width: 4.20%;
-            }
-
-            col.c-mtype {
-                width: 2.90%;
-            }
-
-            col.c-dob {
-                width: 2.90%;
-            }
-
-            col.c-paddr {
-                width: 4.20%;
-            }
-
-            col.c-taddr {
-                width: 4.20%;
-            }
-
-            col.c-phone {
-                width: 2.90%;
-            }
-
-            col.c-mob {
-                width: 3.10%;
-            }
-
-            col.c-email {
-                width: 4.50%;
-            }
-
-            col.c-nat {
-                width: 2.50%;
-            }
-
-            col.c-cit {
-                width: 3.30%;
-            }
-
-            col.c-pass {
-                width: 2.90%;
-            }
-
-            col.c-occ {
-                width: 2.90%;
-            }
-
-            col.c-reli {
-                width: 2.40%;
-            }
-
-            col.c-marital {
-                width: 2.60%;
-            }
-
-            col.c-gfmo {
-                width: 3.30%;
-            }
-
-            col.c-father {
-                width: 2.90%;
-            }
-
-            col.c-mother {
-                width: 2.90%;
-            }
-
-            col.c-spouse {
-                width: 2.90%;
-            }
-
-            col.c-caste {
-                width: 2.40%;
-            }
-
-            col.c-gender {
-                width: 2.00%;
-            }
-
-            col.c-vdc {
-                width: 2.40%;
-            }
-
-            col.c-reg {
-                width: 2.60%;
-            }
-
-            col.c-status {
-                width: 2.20%;
-            }
-
-            col.c-mgroup {
-                width: 3.10%;
-            }
-
-            col.c-citiss {
-                width: 2.60%;
-            }
-
-            col.c-citdist {
-                width: 3.10%;
-            }
-
-            col.c-elec {
-                width: 2.40%;
-            }
-
-            col.c-water {
-                width: 2.40%;
-            }
-
-            col.c-edu {
-                width: 2.60%;
-            }
-
-            col.c-income {
-                width: 3.30%;
-            }
-
-            col.c-svdc {
-                width: 2.40%;
-            }
-
-            col.c-paytill {
-                width: 2.90%;
-            }
-
-            col.c-namenp {
-                width: 3.30%;
-            }
-
-            col.c-addrnp {
-                width: 4.20%;
-            }
-
-            /* ── Pagination bar (static) ───────────────────────────────────── */
             .pagination-bar {
-                margin-top: 12px;
+                margin: 0 16px 16px 16px;
                 background: #fff;
                 border: 1px solid #ccc;
                 border-top: 1px solid #999;
@@ -386,221 +120,151 @@
                 font-size: 9pt;
                 font-weight: bold;
                 user-select: none;
+                flex-shrink: 0;
             }
     </style>
-
-    @* Load Chart.js and datalabels plugin *@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 </head>
 <body>
-    <div class="report-container">
+    <div class="view-outer">
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+        }
 
-        @* ── Sub-header ────────────────────────────────────────────────── *@
-        <div class="report-subheader">
-            <div class="subheader-title">Member All Detail Report</div>
-            <div class="subheader-meta">
-                <span><strong>Branch Name :</strong> @branchName</span>
-                <span><strong>From Date :</strong> @fromDate</span>
-            </div>
-            <div class="subheader-meta">
-                <span><strong>Report Generated On :</strong> @generatedOn</span>
-                <span><strong>To Date :</strong> @toDate</span>
-            </div>
-            <div class="subheader-spacer"></div>
-        </div>
-
-        @* ── Charts ─────────────────────────────────────────────────────── *@
-        <div class="chart-stack">
-            <div class="chart-block">
-                <h4>Member Type Distribution</h4>
-                <canvas id="memberTypeChart"></canvas>
-            </div>
-            <div class="chart-block">
-                <h4>Member Status – Colour indicates frequency</h4>
-                <canvas id="statusChart"></canvas>
+        <div class="report-card">
+            <div class="chart-stack">
+                <div class="chart-block">
+                    <h4>Top Territories (Districts) – Colour indicates performance</h4>
+                    <div class="chart-wrap" id="districtWrap" style="height:@(districtHeight)px">
+                        <canvas id="districtChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-block">
+                    <h4>Gender Distribution with Percentage</h4>
+                    <div class="chart-wrap gender" id="genderWrap">
+                        <canvas id="genderChart"></canvas>
+                    </div>
+                </div>
             </div>
         </div>
 
-        @* ── Data table ────────────────────────────────────────────────── *@
-        <table class="data-table">
-            <colgroup>
-                <col class="c-sn" />
-                <col class="c-photo" />
-                @foreach (var col in columns)
-                {
-                    <col class="@col.CssClass" />
-                }
-            </colgroup>
-            <thead>
-                <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Photo</th>
-                    @foreach (var col in columns)
-                    {
-                        <th>@col.Header</th>
-                    }
-                </tr>
-            </thead>
-            <tbody>
-                @{
-                    int sn = 0;
-                }
-                @foreach (var row in dataSet)
-                {
-                    sn++;
-                    <tr class="detail-row">
-                        <td class="text-center">@sn</td>
-                        <td class="text-center">
-                            @if (!string.IsNullOrEmpty(row.MemberImage))
-                            {
-                                <img class="member-photo" src="@row.MemberImage" />
-                            }
-                        </td>
-                        @foreach (var col in columns)
-                        {
-                            <td>@col.Render(row)</td>
-                        }
-                    </tr>
-                }
-                <tr class="grand-total">
-                    <td colspan="2">Total Records :</td>
-                    <td colspan="@(totalVisibleCols - 2)">@totalRecords</td>
-                </tr>
-            </tbody>
-        </table>
-
-        @* ── Static pagination bar ─────────────────────────────────────── *@
-        <div class="pagination-bar">
-            Page 1 of 1
-        </div>
+        <div class="pagination-bar">Page 1 of 1 &nbsp;|&nbsp; Total Records : @totalRecords</div>
     </div>
 
-    @* ── JavaScript to render charts ──────────────────────────────────── *@
     <script>
-        document.addEventListener('DOMContentLoaded', function () {
-        if (typeof Chart === 'undefined') {
-        document.querySelector('.chart-stack').innerHTML = '<div class="no-data-msg">Charts cannot be loaded.</div>';
-        return;
-        }
-        if (typeof ChartDataLabels !== 'undefined') {
-        Chart.register(ChartDataLabels);
-        }
+            window.chartsReady = false;
 
-        // ── Plugin to draw total in the center of doughnut ──────────
-        const centerTextPlugin = {
-        id: 'centerText',
-        afterDraw: function(chart) {
-        var ctx = chart.ctx;
-        var total = chart.data.datasets[0].data.reduce(function(a, b) { return a + b; }, 0);
-        ctx.save();
-        ctx.font = 'bold 18px Arial';
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('Total: ' + total, chart.width/2, chart.height/2);
-        ctx.restore();
-        }
-        };
+            document.addEventListener('DOMContentLoaded', function () {
+                function noData(id, msg) {
+                    var w = document.getElementById(id);
+                    w.style.height = 'auto';
+                    w.innerHTML = '<div class="no-data-msg">' + msg + '</div>';
+                }
 
-        // ── Member Type Donut Chart ──────────────────────────────────
-        var memberTypeData = @Html.Raw(memberTypeCountsJson);
-        var memberTypeLabels = @Html.Raw(memberTypeLabelsJson);
+                if (typeof Chart === 'undefined') {
+                    noData('districtWrap', 'Charts cannot be loaded (Chart.js CDN unreachable).');
+                    noData('genderWrap', 'Charts cannot be loaded (Chart.js CDN unreachable).');
+                    window.chartsReady = true;
+                    return;
+                }
+                if (typeof ChartDataLabels !== 'undefined') {
+                    Chart.register(ChartDataLabels);
+                }
 
-        if (memberTypeData.length > 0) {
-        var palette = ['#4e73df', '#1cc88a', '#f6c23e', '#e74a3b', '#858796', '#36b9cc', '#fd7e14'];
-        var colors = memberTypeData.map(function(_, i) { return palette[i % palette.length]; });
+                function sum(a) { return a.reduce(function (x, y) { return x + y; }, 0); }
 
-        new Chart(document.getElementById('memberTypeChart'), {
-        type: 'doughnut',
-        data: {
-        labels: memberTypeLabels,
-        datasets: [{
-        data: memberTypeData,
-        backgroundColor: colors,
-        borderWidth: 2
-        }]
-        },
-        options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-        legend: {
-        position: 'bottom',
-        labels: { font: { size: 10 }, usePointStyle: true }
-        },
-        datalabels: {
-        color: '#fff',
-        font: { weight: 'bold', size: 12 },
-        formatter: function(value, ctx) {
-        var total = ctx.dataset.data.reduce(function(a, b) { return a + b; }, 0);
-        if (total === 0) return '0%';
-        return ((value / total) * 100).toFixed(1) + '%';
-        },
-        anchor: 'center',
-        align: 'center',
-        offset: 0
-        }
-        }
-        },
-        plugins: [centerTextPlugin]
-        });
-        } else {
-        document.getElementById('memberTypeChart').parentElement.innerHTML = '<div class="no-data-msg">No member type data available.</div>';
-        }
+                var centerTextPlugin = {
+                    id: 'centerText',
+                    afterDraw: function (chart) {
+                        var ctx = chart.ctx, area = chart.chartArea;
+                        ctx.save();
+                        ctx.font = 'bold 18px Arial';
+                        ctx.fillStyle = '#333333';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText('Total: ' + sum(chart.data.datasets[0].data),
+                            (area.left + area.right) / 2, (area.top + area.bottom) / 2);
+                        ctx.restore();
+                    }
+                };
 
-        // ── Status Horizontal Bar Chart with gradient ────────────────
-        var statusData = @Html.Raw(statusCountsJson);
-        var statusLabels = @Html.Raw(statusLabelsJson);
+                // ── District horizontal bar ──
+                var districtData = @Html.Raw(districtCountsJson);
+                var districtLabels = @Html.Raw(districtLabelsJson);
 
-        if (statusData.length > 0) {
-        var minVal = Math.min.apply(null, statusData);
-        var maxVal = Math.max.apply(null, statusData);
-        function valueToColor(value, min, max) {
-        var diff = max - min;
-        if (diff === 0) diff = 1;
-        var ratio = (value - min) / diff;
-        var hue = 120 * ratio;
-        return 'hsl(' + hue + ', 70%, 45%)';
-        }
-        var bgColors = statusData.map(function(v) { return valueToColor(v, minVal, maxVal); });
-        var borderColors = bgColors.map(function(c) { return c.replace('45%', '35%'); });
+                if (districtData.length > 0) {
+                    var minVal = Math.min.apply(null, districtData);
+                    var maxVal = Math.max.apply(null, districtData);
 
-        new Chart(document.getElementById('statusChart'), {
-        type: 'bar',
-        data: {
-        labels: statusLabels,
-        datasets: [{
-        label: 'Members',
-        data: statusData,
-        backgroundColor: bgColors,
-        borderColor: borderColors,
-        borderWidth: 1,
-        borderRadius: 3
-        }]
-        },
-        options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-        x: { beginAtZero: true, title: { display: true, text: 'Number of Members' } },
-        y: { ticks: { font: { size: 10 } } }
-        },
-        plugins: {
-        legend: { display: false },
-        tooltip: {
-        callbacks: {
-        label: function(ctx) { return ctx.parsed.x + ' members'; }
-        }
-        }
-        }
-        }
-        });
-        } else {
-        document.getElementById('statusChart').parentElement.innerHTML = '<div class="no-data-msg">No status data available.</div>';
-        }
-        });
+                    function valueToColor(v, min, max) {
+                        var diff = max - min; if (diff === 0) diff = 1;
+                        return 'hsl(' + (120 * ((v - min) / diff)) + ', 70%, 45%)';
+                    }
+
+                    var bg = districtData.map(function (v) { return valueToColor(v, minVal, maxVal); });
+                    var bd = bg.map(function (c) { return c.replace('45%', '35%'); });
+
+                    new Chart(document.getElementById('districtChart'), {
+                        type: 'bar',
+                        data: {
+                            labels: districtLabels,
+                            datasets: [{ label: 'Members', data: districtData, backgroundColor: bg,
+                                         borderColor: bd, borderWidth: 1, borderRadius: 3 }]
+                        },
+                        options: {
+                            indexAxis: 'y', responsive: true, maintainAspectRatio: false, animation: false,
+                            scales: {
+                                x: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Number of Members' } },
+                                y: { ticks: { font: { size: 10 } } }
+                            },
+                            plugins: {
+                                legend: { display: false },
+                                datalabels: { anchor: 'end', align: 'end', color: '#333', font: { weight: 'bold', size: 10 } },
+                                tooltip: { callbacks: { label: function (c) { return c.parsed.x + ' members'; } } }
+                            }
+                        }
+                    });
+                } else {
+                    noData('districtWrap', 'No district data available.');
+                }
+
+                // ── Gender doughnut ──
+                var genderData = @Html.Raw(genderCountsJson);
+                var genderLabels = @Html.Raw(genderLabelsJson);
+
+                if (genderData.length > 0) {
+                    var palette = ['#4e73df', '#1cc88a', '#f6c23e', '#e74a3b', '#858796'];
+                    new Chart(document.getElementById('genderChart'), {
+                        type: 'doughnut',
+                        data: {
+                            labels: genderLabels,
+                            datasets: [{ data: genderData,
+                                         backgroundColor: genderData.map(function (_, i) { return palette[i % palette.length]; }),
+                                         borderWidth: 2 }]
+                        },
+                        options: {
+                            responsive: true, maintainAspectRatio: false, animation: false,
+                            plugins: {
+                                legend: { position: 'bottom', labels: { font: { size: 10 }, usePointStyle: true } },
+                                datalabels: {
+                                    color: '#fff', font: { weight: 'bold', size: 12 },
+                                    formatter: function (v, ctx) {
+                                        var t = sum(ctx.dataset.data);
+                                        return t === 0 ? '0%' : ((v / t) * 100).toFixed(1) + '%';
+                                    }
+                                }
+                            }
+                        },
+                        plugins: [centerTextPlugin]
+                    });
+                } else {
+                    noData('genderWrap', 'No gender data available.');
+                }
+
+                window.chartsReady = true;
+            });
     </script>
 </body>
 </html>

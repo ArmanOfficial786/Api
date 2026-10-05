@@ -16,15 +16,18 @@ namespace NexgenCosysReport.Utils.Report
     {
         // -- Deterministic cache key -----------------------------------------------
         public static string GenerateReportKey<TRequest>(
-            TRequest request,
-            string reportPrefix = "Report"
-           )
+      TRequest request,
+      string reportPrefix = "Report",
+      string variant = "")
         {
             var json = JsonSerializer.Serialize(request,
                 new JsonSerializerOptions { WriteIndented = false });
-            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
+            var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(json + "|" + variant));
             var hash = Convert.ToHexString(bytes)[..16];
-            return $"{reportPrefix}_{hash}";
+            return string.IsNullOrWhiteSpace(variant)
+              ? $"{reportPrefix}_{hash}"
+              : $"{reportPrefix}_{variant}_{hash}";
+            //return $"{reportPrefix}_{hash}";
         }
 
         // -- Resolve wwwroot path --------------------------------------------------
