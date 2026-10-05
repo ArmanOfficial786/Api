@@ -1,5 +1,4 @@
-﻿// Controllers/Loan/LoanAnalysisReport/CollectorWiseLoanAnalysisController.cs
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -112,7 +111,9 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     branchIdForHeader = request.BranchIds;
                 }
 
-                var dataTask = _repository.GetReportDataAsync(request);
+                //var dataTask = _repository.GetReportDataAsync(request);
+                var dataTask = _repository.GetSummaryReportDataAsync(request);
+
                 var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
 
                 await Task.WhenAll(dataTask, headerTask);
@@ -131,37 +132,28 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     headerData, nameof(CommonHeader.CompanyLogo), webRoot);
 
                 var reportData = new Dictionary<string, object>
-                {
-                    { "Rows", data.Rows },
-                    { "TotalRecords", data.TotalRecords },
-                    { "TotalLoanIssueAmount", data.TotalLoanIssueAmount },
-                    { "TotalPaidAmount", data.TotalPaidAmount },
-                    { "TotalBalanceAmount", data.TotalBalanceAmount },
-                    { "TotalGoodloan", data.TotalGoodloan },
-                    { "TotalArrear", data.TotalArrear },
-                    { "TotalArrearfrm1to365", data.TotalArrearfrm1to365 },
-                    { "TotalArreargrtthan365", data.TotalArreargrtthan365 },
-                    { "TotalOverDue", data.TotalOverDue },
-                    { "TotalProvision", data.TotalProvision },
-                    { "TotalOpeningBalance", data.TotalOpeningBalance },
-                    { "TotalClosingBalance", data.TotalClosingBalance },
-                    { "HeaderDataSet", headerData ?? new List<CommonHeader>() },
-                    { "FromDate", data.FromDateBs ?? "" },
-                    { "ToDate", data.ToDateBs ?? "" },
-                    { "FromDateAd", data.FromDateAd ?? "" },
-                    { "ToDateAd", data.ToDateAd ?? "" },
-                    { "BranchName", data.BranchName ?? "All" },
-                    { "CollectorName", data.CollectorName ?? "" },
-                    { "CollectionCenterName", data.CollectionCenterName ?? "" },
-                    { "PenaltyType", data.PenaltyType ?? "S" },
-                    { "PenaltyTypeName", data.PenaltyTypeName ?? "Schedule Wise" },
-                    { "OrderBy", data.OrderBy ?? "-1" },
-                    { "EnableCollectionCenter", data.EnableCollectionCenter },
-                    { "ReportMode", data.ReportMode ?? "1" },
-                    { "ReportModeName", data.ReportModeName ?? "Summary" },
-                    { "Format", upperFormat }
-                };
-
+               {
+                   { "Rows", data.Rows },
+                   { "TotalOpeningBalance", data.TotalOpeningBalance },
+                   { "TotalOpeningActiveCount", data.TotalOpeningActiveCount },
+                   { "TotalDisburseAmount", data.TotalDisburseAmount },
+                   { "TotalPaymentAmount", data.TotalPaymentAmount },
+                   { "TotalBalanceAmount", data.TotalBalanceAmount },
+                   { "TotalBalanceActiveCount", data.TotalBalanceActiveCount },
+                   { "TotalClosingBalance", data.TotalClosingBalance },
+                   { "TotalClosingActiveCount", data.TotalClosingActiveCount },
+                   { "TotalGoodAmt", data.TotalGoodAmt },
+                   { "TotalDueAmt", data.TotalDueAmt },
+                   { "TotalDue1To365", data.TotalDue1To365 },
+                   { "TotalDueGt365", data.TotalDueGt365 },
+                   { "HeaderDataSet", headerData ?? new List<CommonHeader>() },
+                   { "FromDate", data.FromDateBs ?? "" },
+                   { "ToDate", data.ToDateBs ?? "" },
+                   { "FromDateAd", data.FromDateAd ?? "" },
+                   { "ToDateAd", data.ToDateAd ?? "" },
+                   { "BranchName", data.BranchName ?? "All" },
+                   { "Format", upperFormat },
+               };
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/Loan/VCollectorWiseLoanAnalysisReport.cshtml"
                     : "Views/Report/Loan/LoanAnalysisReports/CollectorWiseLoanAnalysisReport.cshtml";
@@ -198,10 +190,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     reportName,
                     _jsReportService, _logger);
             }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, StatusCode = 400, message = ex.Message });
-            }
+
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generating CollectorWiseLoanAnalysis report");

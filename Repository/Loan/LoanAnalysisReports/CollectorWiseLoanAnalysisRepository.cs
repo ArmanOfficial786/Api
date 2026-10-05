@@ -86,7 +86,6 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                 var branchIds = SanitizeIdList(request.BranchIds);
                 var collectionCenterIds = SanitizeIdList(request.CollectionCenterIds);
 
-                // Validate collector
                 string collectorId = "-1";
                 if (!string.IsNullOrEmpty(request.CollectorId) &&
                     request.CollectorId != "-1" &&
@@ -107,7 +106,6 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
 
                 var sqlFilterExpOrderBy = BuildSqlOrderBy(request.OrderBy);
 
-                // Penalty type is validated against known values (defaults to S)
                 var penaltyType = request.PenaltyType?.Trim().ToUpper();
                 if (penaltyType != "S" && penaltyType != "R" && penaltyType != "A")
                     penaltyType = "S";
@@ -128,7 +126,6 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                     commandTimeout: 600
                 )).AsList();
 
-                // Resolve Branch name
                 string branchName = "All";
                 if (branchIds != "-1")
                 {
@@ -138,7 +135,6 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                     branchName = nameList.Count > 0 ? string.Join(", ", nameList) : "All";
                 }
 
-                // Resolve Collector name
                 string? collectorName = null;
                 if (collectorId != "-1")
                 {
@@ -147,7 +143,6 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                         new { Id = long.Parse(collectorId) });
                 }
 
-                // Resolve Collection Center name
                 string? collectionCenterName = null;
                 if (collectionCenterIds != "-1")
                 {
@@ -192,6 +187,55 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                 _logger.LogError(ex, "Error in GetReportDataAsync (CollectorWiseLoanAnalysis)");
                 throw;
             }
+        }
+
+
+        public async Task<CollectorWiseLoanAnalysisSummaryData> GetSummaryReportDataAsync(CollectorWiseLoanAnalysisRequestDto request)
+        {
+            var detail = await GetReportDataAsync(request);
+
+            var grouped = detail.Rows
+                .GroupBy(r => r.CollectorName ?? "Unassigned")
+                .Select(g => new CollectorWiseLoanAnalysisSummaryRowDto
+                {
+                    GroupName = g.Key,
+                    OpeningBalance = g.Sum(r => r.OpeningBalance ?? 0),
+                    OpeningActiveCount = g.Sum(r => r.OpeningActiveLoanCount ?? 0),
+                    DisburseAmount = g.Sum(r => r.LoanIssueAmount ?? 0),
+                    PaymentAmount = g.Sum(r => r.PaidAmount ?? 0),
+                    BalanceAmount = g.Sum(r => r.BalanceAmount ?? 0),
+                    BalanceActiveCount = g.Sum(r => r.CurrentActiveLoanCount ?? 0),
+                    ClosingBalance = g.Sum(r => r.ClosingBalance ?? 0),
+                    ClosingActiveCount = g.Sum(r => r.TotalActiveLoanCount ?? 0),
+                    GoodAmt = g.Sum(r => r.Goodloan ?? 0),
+                    DueAmt = g.Sum(r => r.OverDue ?? 0),
+                    Due1To365 = g.Sum(r => r.Arrearfrm1to365 ?? 0),
+                    DueGt365 = g.Sum(r => r.Arreargrtthan365 ?? 0)
+                })
+                .OrderBy(r => r.GroupName)
+                .ToList();
+
+            return new CollectorWiseLoanAnalysisSummaryData
+            {
+                Rows = grouped,
+                TotalOpeningBalance = grouped.Sum(r => r.OpeningBalance),
+                TotalOpeningActiveCount = grouped.Sum(r => r.OpeningActiveCount),
+                TotalDisburseAmount = grouped.Sum(r => r.DisburseAmount),
+                TotalPaymentAmount = grouped.Sum(r => r.PaymentAmount),
+                TotalBalanceAmount = grouped.Sum(r => r.BalanceAmount),
+                TotalBalanceActiveCount = grouped.Sum(r => r.BalanceActiveCount),
+                TotalClosingBalance = grouped.Sum(r => r.ClosingBalance),
+                TotalClosingActiveCount = grouped.Sum(r => r.ClosingActiveCount),
+                TotalGoodAmt = grouped.Sum(r => r.GoodAmt),
+                TotalDueAmt = grouped.Sum(r => r.DueAmt),
+                TotalDue1To365 = grouped.Sum(r => r.Due1To365),
+                TotalDueGt365 = grouped.Sum(r => r.DueGt365),
+                FromDateBs = detail.FromDateBs,
+                ToDateBs = detail.ToDateBs,
+                FromDateAd = detail.FromDateAd,
+                ToDateAd = detail.ToDateAd,
+                BranchName = detail.BranchName
+            };
         }
     }
 }

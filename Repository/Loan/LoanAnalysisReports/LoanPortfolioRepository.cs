@@ -61,19 +61,43 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                     commandTimeout: 120
                 )).AsList();
 
-                var particulars = (await connection.QueryAsync<LoanPortfolioParticularsDto>(
+                // ── Particulars: SP returns one row of counts; pivot into rows ──
+                var particularsRaw = await connection.QueryFirstOrDefaultAsync<LoanPortfolioParticularsDto>(
                     "sp_7_16_LoanProtfolioParticulars",
                     parameters,
                     commandType: CommandType.StoredProcedure,
                     commandTimeout: 120
-                )).AsList();
+                );
 
-                var outstanding = (await connection.QueryAsync<LoanPortfolioOutstandingDto>(
+                var particulars = particularsRaw == null
+                    ? new List<LoanPortfolioParticularsDto>()
+                    : new List<LoanPortfolioParticularsDto>
+                    {
+                new() { Particulars = "Total Member Registration", NoofLoan = particularsRaw.TotalMemberRegistration },
+                new() { Particulars = "Loan Disburse (Account No Wise)", NoofLoan = particularsRaw.LoanDisburseAccountNoWise },
+                new() { Particulars = "Loanee (Member Wise)", NoofLoan = particularsRaw.LoaneeMemberWise },
+                new() { Particulars = "Male Loanee", NoofLoan = particularsRaw.MaleLoanee },
+                new() { Particulars = "Women Loanee", NoofLoan = particularsRaw.WomenLoanee },
+                new() { Particulars = "Others Loanee", NoofLoan = particularsRaw.OthersLoanee },
+                    };
+
+                // ── Outstanding: same pivot pattern ──
+                var outstandingRaw = await connection.QueryFirstOrDefaultAsync<LoanPortfolioOutstandingDto>(
                     "sp_7_16_LoanProtfolioOutstanding",
                     parameters,
                     commandType: CommandType.StoredProcedure,
                     commandTimeout: 120
-                )).AsList();
+                );
+
+                var outstanding = outstandingRaw == null
+                    ? new List<LoanPortfolioOutstandingDto>()
+                    : new List<LoanPortfolioOutstandingDto>
+                    {
+                new() { Particulars = "Male Loanee", NoofLoan = outstandingRaw.MaleLoanee },
+                new() { Particulars = "Women Loanee", NoofLoan = outstandingRaw.WomenLoanee },
+                new() { Particulars = "Others Loanee", NoofLoan = outstandingRaw.OthersLoanee },
+                new() { Particulars = "Outstanding", NoofLoan = outstandingRaw.Outstanding },
+                    };
 
                 string branchName = "All";
                 if (branchIds != "-1")

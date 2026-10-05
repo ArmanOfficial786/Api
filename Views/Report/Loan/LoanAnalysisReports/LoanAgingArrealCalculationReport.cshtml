@@ -8,11 +8,16 @@
     var totalRecords = Model["TotalRecords"] as int? ?? 0;
     var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
     var totalBalanceAmount = Model["TotalBalanceAmount"] as decimal? ?? 0;
-    var totalOverDue = Model["TotalOverDue"] as decimal? ?? 0;
-    var totalGoodLoan = Model["TotalGoodLoan"] as decimal? ?? 0;
+    var totalGoodloan = Model["TotalGoodloan"] as decimal? ?? 0;
     var totalArrear = Model["TotalArrear"] as decimal? ?? 0;
+    var totalArrearFor0 = Model["TotalArrearFor0"] as decimal? ?? 0;
+    var totalArrearfrm1to365 = Model["TotalArrearfrm1to365"] as decimal? ?? 0;
+    var totalArreargrtthan365 = Model["TotalArreargrtthan365"] as decimal? ?? 0;
+    var totalGoodAmt = Model["TotalGoodAmt"] as decimal? ?? 0;
     var totalFrm1to365 = Model["TotalFrm1to365"] as decimal? ?? 0;
     var totalGrtthan365 = Model["TotalGrtthan365"] as decimal? ?? 0;
+    var totalProvision = Model["TotalProvision"] as decimal? ?? 0;
+    var totalRescheduleAmt = Model["TotalRescheduleAmt"] as decimal? ?? 0;
     var tillDate = Model["TillDate"]?.ToString() ?? "";
     var branchName = Model["BranchName"]?.ToString() ?? "All";
     var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "All";
@@ -22,14 +27,24 @@
     var collectorName = Model["CollectorName"]?.ToString() ?? "";
     var enable1To30Days = Model["Enable1To30Days"] as bool? ?? false;
     var enableCollectionCenter = Model["EnableCollectionCenter"] as bool? ?? false;
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
+    var isView = format == "VIEW";
+    var isExcel = format is "EXCEL" or "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
     var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName) && memberGroupName != "All";
     var isCollectionCenterFiltered = !string.IsNullOrEmpty(collectionCenterName);
     var isCollectorFiltered = !string.IsNullOrEmpty(collectorName);
-    var reportTitle = enable1To30Days ? "Loan Ageing Arrear 1 to 30 Days Calculation Report" : "Loan Ageing Arrear Calculation Report";
+
+    // Title matches the reference report exactly, regardless of which SP
+    // (0-365 vs 1-to-30) produced the rows.
+    var reportTitle = "Loan Arrear Risk Calculation Report";
+
+    // 18 columns total: S.No, Member Id, Full Name, Loan A/C No, Pay Mode,
+    // Disburse Amt, Balance Amt, Good Amt, Risk Amt, Risk 0, Risk 1-365,
+    // Risk >365, [Arrear Days: Good Loan, 1 to 365, >365], Total Provision Amt,
+    // Reschedule Amt, Days, Last Payment
+    const int totalCols = 18;
 }
 <!DOCTYPE html>
 <html>
@@ -46,82 +61,7 @@
             body {
                 font-family: Arial, sans-serif;
                 font-size: 8pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 8pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 3px 4px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .detail-row-alt td {
-                background: #f9f9f9;
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .collection-center-header td {
-                background: #e8f0f8;
-                font-weight: bold;
-                padding: 5px 6px;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
+                background: @(isView ? "#d0d0d0" : "#fff");
             }
 
             .text-right {
@@ -132,35 +72,149 @@
                 text-align: center !important;
             }
 
-            .positive {
-                color: #006600;
+            .report-subheader {
+                width: 100%;
+                padding: 4px 6px 0 6px;
+                background: #fff;
             }
 
-            .negative {
-                color: #CC0000;
-            }
-
-            .penalty-badge {
-                display: inline-block;
-                padding: 2px 10px;
-                border-radius: 3px;
-                font-size: 8pt;
+            .subheader-title {
+                text-align: center;
+                font-size: 13pt;
                 font-weight: bold;
+                text-decoration: underline;
+                padding: 6px 4px 4px;
             }
 
-            .badge-schedule {
-                background: #d1ecf1;
-                color: #0c5460;
+            .subheader-meta {
+                font-size: 8.5pt;
+                padding: 2px 6px;
             }
 
-            .badge-remaining {
-                background: #fff3cd;
-                color: #856404;
+            .subheader-spacer {
+                height: 5px;
             }
 
-            .badge-maturity {
-                background: #f8d7da;
-                color: #721c24;
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                font-size: 7.5pt;
+            }
+
+                .data-table td, .data-table th {
+                    word-wrap: break-word;
+                    overflow-wrap: break-word;
+                    padding: 3px 4px;
+                    vertical-align: middle;
+                    background: #fff;
+                    font-size: 7.5pt;
+                }
+
+            thead {
+                display: table-row-group;
+            }
+
+            .data-table th {
+                background: #f2f2f2;
+                border-top: 1.5px solid #000;
+                border-bottom: 1px solid #000;
+                font-weight: bold;
+                white-space: nowrap;
+            }
+
+            .group-header th {
+                text-align: center;
+                border-bottom: 1px solid #000;
+                background: #fff;
+            }
+
+            .detail-row td {
+                border-bottom: 1px solid #e0e0e0;
+            }
+
+            .grand-total td {
+                border-top: 1.5px solid #000;
+                border-bottom: 1.5px solid #000;
+                font-weight: bold;
+                background: #fff;
+            }
+
+            /* ── Column widths ── */
+            col.c-sn {
+                width: 2.2%;
+            }
+
+            col.c-mid {
+                width: 5.5%;
+            }
+
+            col.c-name {
+                width: 7.5%;
+            }
+
+            col.c-acno {
+                width: 5.5%;
+            }
+
+            col.c-mode {
+                width: 4.5%;
+            }
+
+            col.c-disb {
+                width: 6.0%;
+            }
+
+            col.c-bal {
+                width: 6.0%;
+            }
+
+            col.c-good {
+                width: 6.0%;
+            }
+
+            col.c-risk {
+                width: 5.5%;
+            }
+
+            col.c-risk0 {
+                width: 6.0%;
+            }
+
+            col.c-risk1 {
+                width: 5.5%;
+            }
+
+            col.c-riskg {
+                width: 5.5%;
+            }
+
+            col.c-agood {
+                width: 5.5%;
+            }
+
+            col.c-a1to365 {
+                width: 5.5%;
+            }
+
+            col.c-agt365 {
+                width: 5.5%;
+            }
+
+            col.c-provis {
+                width: 6.0%;
+            }
+
+            col.c-resch {
+                width: 5.5%;
+            }
+
+            col.c-days {
+                width: 3.5%;
+            }
+
+            col.c-lastpay {
+                width: 6.0%;
             }
 
             @@media print {
@@ -173,153 +227,525 @@
                     break-inside: avoid;
                 }
             }
+
+            /* ── VIEW chrome: horizontal-scroll page cards, same pattern as
+                             MemberAllDetailReport.cshtml ── */
+            .view-outer {
+                background: #d0d0d0;
+                padding: 2px 16px 20px 16px;
+                min-height: 100vh;
+                overflow-x: auto;
+                -webkit-overflow-scrolling: touch;
+                cursor: grab;
+            }
+
+                .view-outer:active {
+                    cursor: grabbing;
+                }
+
+            .view-page {
+                background: #fff;
+                margin: 0 auto 24px auto;
+                box-shadow: 0 2px 8px rgba(0,0,0,.18);
+                width: 2600px;
+                height: 1587px;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .view-page-content {
+                flex: 1;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+            }
+
+            .view-page-footer {
+                background: #fff;
+                border-top: 1px solid #ccc;
+                text-align: center;
+                font-size: 9pt;
+                font-weight: bold;
+                padding: 6px 0;
+                flex-shrink: 0;
+            }
+
+            .common-header-wrap {
+                width: 2600px;
+                overflow: hidden;
+                flex-shrink: 0;
+            }
+
+            .page-subheader {
+                flex-shrink: 0;
+            }
+
+            .page-table-wrap {
+                flex: 1;
+                overflow: hidden;
+            }
+
+            #sourceWrap {
+                opacity: 0;
+                pointer-events: none;
+                width: 2600px;
+                position: absolute;
+                top: 0;
+                left: 0;
+            }
+
+            #commonHeaderSource {
+                visibility: hidden;
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 2600px;
+                pointer-events: none;
+            }
     </style>
 </head>
 <body>
-    <div class="report-container">
 
-        @if (!isExcel)
-        {
+    @if (!isExcel)
+    {
+        <div id="commonHeaderSource">
             @await Html.PartialAsync("_CommonHeader", Model)
-        }
+        </div>
+    }
 
-        <table class="data-table" data-sheet-name="LoanAgingArrealCalculation">
-            <colgroup>
-                <col style="width:4%;" />
-                <col style="width:8%;" />
-                <col style="width:12%;" />
-                <col style="width:9%;" />
-                <col style="width:8%;" />
-                <col style="width:8%;" />
-                <col style="width:7%;" />
-                <col style="width:6%;" />
-                <col style="width:6%;" />
-                <col style="width:6%;" />
-                <col style="width:6%;" />
-                <col style="width:6%;" />
-                <col style="width:6%;" />
-                <col style="width:8%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="14">@reportTitle</td>
-                </tr>
+    @{
+        // ── Shared markup fragments, used both in the hidden source table
+        // (VIEW mode, sliced into pages by JS) and directly (PDF/Excel) ──
+    }
 
-                <tr class="meta-row">
-                    <td colspan="5">
-                        <strong>Branch :</strong> @branchName
-                        &nbsp;&nbsp;
-                        <strong>Till Date :</strong> @tillDate
-                    </td>
-                    <td colspan="9" class="text-right">
-                        <strong>Penalty Type :</strong>
-                        <span class="penalty-badge @(penaltyType == "S" ? "badge-schedule" : penaltyType == "R" ? "badge-remaining" : "badge-maturity")">
-                            @penaltyTypeName
-                        </span>
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="5">
-                        @if (isMemberGroupFiltered)
-                        {
-                            <strong>Member Group :</strong> 
-                            @memberGroupName
-                        }
-                        @if (isCollectionCenterFiltered)
-                        {
-                            <text>&nbsp;&nbsp;</text>
-                            <strong>Collection Center :</strong> 
-                            @collectionCenterName
-                        }
-                    </td>
-                    <td colspan="9" class="text-right">
-                        @if (isCollectorFiltered)
-                        {
-                            <strong>Collector :</strong> 
-                            @collectorName
-                            <text>&nbsp;&nbsp;</text>
-                        }
-                        <strong>Report Generated On :</strong> @generatedOn
-                    </td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="14"></td></tr>
-
-                <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Member Id</th>
-                    <th>Full Name</th>
-                    <th>Loan A/c No</th>
-                    <th class="text-right">Loan Amount</th>
-                    <th class="text-right">Paid</th>
-                    <th class="text-right">Balance</th>
-                    <th class="text-right">Good Loan</th>
-                    <th class="text-right">Arrear</th>
-                    <th class="text-right">Overdue</th>
-                    <th class="text-right">1-365</th>
-                    <th class="text-right">&gt;365</th>
-                    <th class="text-center">Days</th>
-                    <th>Last Payment</th>
-                </tr>
-
-                @if (rows.Any())
-                {
-                    var sn = 0;
-                    var currentCollectionCenter = string.Empty;
-
-                    foreach (var row in rows)
+    @if (isView)
+    {
+        <div id="sourceWrap">
+            <div id="subheaderTemplate" class="report-subheader">
+                <div class="subheader-title">@reportTitle</div>
+                <div class="subheader-meta"><strong>Branch Name:</strong> @branchName</div>
+                <div class="subheader-meta"><strong>Report Generated On:</strong> @generatedOn</div>
+                <div class="subheader-meta">
+                    <strong>Filter By:-</strong> Tilldate: @tillDate
+                    @if (isMemberGroupFiltered)
                     {
-                        if (enableCollectionCenter && !string.IsNullOrEmpty(row.CollectionCenterName) && currentCollectionCenter != row.CollectionCenterName)
-                        {
-                            currentCollectionCenter = row.CollectionCenterName;
-                            <tr class="collection-center-header">
-                                <td colspan="14"><strong>Collection Center: @currentCollectionCenter</strong></td>
-                            </tr>
-                        }
+                        <text>&nbsp;&nbsp;<strong>Member Group:</strong> @memberGroupName</text>
+                    }
+                    @if (isCollectionCenterFiltered)
+                    {
+                        <text>&nbsp;&nbsp;<strong>Collection Center:</strong> @collectionCenterName</text>
+                    }
+                    @if (isCollectorFiltered)
+                    {
+                        <text>&nbsp;&nbsp;<strong>Collector:</strong> @collectorName</text>
+                    }
+                    &nbsp;&nbsp;<strong>Penalty Type:</strong> @penaltyTypeName
+                </div>
+                <div class="subheader-spacer"></div>
+            </div>
 
-                        sn++;
-                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
-                            <td class="text-center">@sn</td>
+            <table class="data-table" id="mainTable">
+                <colgroup>
+                    <col class="c-sn" />
+                    <col class="c-mid" />
+                    <col class="c-name" />
+                    <col class="c-acno" />
+                    <col class="c-mode" />
+                    <col class="c-disb" />
+                    <col class="c-bal" />
+                    <col class="c-good" />
+                    <col class="c-risk" />
+                    <col class="c-risk0" />
+                    <col class="c-risk1" />
+                    <col class="c-riskg" />
+                    <col class="c-agood" />
+                    <col class="c-a1to365" />
+                    <col class="c-agt365" />
+                    <col class="c-provis" />
+                    <col class="c-resch" />
+                    <col class="c-days" />
+                    <col class="c-lastpay" />
+                </colgroup>
+                <thead>
+                    <tr id="groupHeaderRow" class="group-header">
+                        <th colspan="12"></th>
+                        <th colspan="3">Arrear Days</th>
+                        <th colspan="4"></th>
+                    </tr>
+                    <tr id="colHeaderRow">
+                        <th class="text-center">S.No</th>
+                        <th>Member Id</th>
+                        <th>Full Name</th>
+                        <th>Loan A/C No</th>
+                        <th>Pay Mode</th>
+                        <th class="text-right">Disburse Amt.</th>
+                        <th class="text-right">Balance Amt.</th>
+                        <th class="text-right">Good Amt.</th>
+                        <th class="text-right">Risk Amt.</th>
+                        <th class="text-right">Risk 0</th>
+                        <th class="text-right">Risk 1-365</th>
+                        <th class="text-right">Risk &gt;365</th>
+                        <th class="text-right">Good Loan</th>
+                        <th class="text-right">1 to 365</th>
+                        <th class="text-right">&gt;365</th>
+                        <th class="text-right">Total Provision Amt</th>
+                        <th class="text-right">Reschedule Amt</th>
+                        <th class="text-center">Days</th>
+                        <th>Last Payment</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @{
+                        int snV = 0;
+                    }
+                    @foreach (var row in rows)
+                    {
+                        snV++;
+                        <tr class="detail-row">
+                            <td class="text-center">@snV</td>
                             <td>@(row.MemberId ?? "")</td>
                             <td>@(row.FullName ?? "")</td>
                             <td>@(row.LoanAccountNo ?? "")</td>
-                            <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.PaidAmount.HasValue ? row.PaidAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.BalanceAmount.HasValue ? row.BalanceAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.Goodloan.HasValue ? row.Goodloan.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.Arrear.HasValue ? row.Arrear.Value.ToString("N2") : "")</td>
-                            <td class="text-right @(row.OverDue.HasValue && row.OverDue.Value > 0 ? "negative" : "")">@(row.OverDue.HasValue ? row.OverDue.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.Frm1to365.HasValue ? row.Frm1to365.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.Grtrhan365.HasValue ? row.Grtrhan365.Value.ToString("N2") : "")</td>
+                            <td>@(row.PaymentMode ?? "")</td>
+                            <td class="text-right">@(row.LoanIssueAmount?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.BalanceAmount?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Goodloan?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Arrear?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.ArrearFor0?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Arrearfrm1to365?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Arreargrtthan365?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.GoodAmt?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Frm1to365?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Grtthan365?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.TotalProvision?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.RescheduleAmt?.ToString("N2") ?? "")</td>
                             <td class="text-center">@(row.Noofdays ?? 0)</td>
                             <td>@(row.LastPaymentDate ?? "")</td>
                         </tr>
                     }
 
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
+                    <tr class="grand-total" id="grandTotalRow">
+                        <td colspan="5">Grand Total</td>
+                        <td class="text-right">@totalLoanIssueAmount.ToString("N2")</td>
+                        <td class="text-right">@totalBalanceAmount.ToString("N2")</td>
+                        <td class="text-right">@totalGoodloan.ToString("N2")</td>
+                        <td class="text-right">@totalArrear.ToString("N2")</td>
+                        <td class="text-right">@totalArrearFor0.ToString("N2")</td>
+                        <td class="text-right">@totalArrearfrm1to365.ToString("N2")</td>
+                        <td class="text-right">@totalArreargrtthan365.ToString("N2")</td>
+                        <td class="text-right">@totalGoodAmt.ToString("N2")</td>
+                        <td class="text-right">@totalFrm1to365.ToString("N2")</td>
+                        <td class="text-right">@totalGrtthan365.ToString("N2")</td>
+                        <td class="text-right">@totalProvision.ToString("N2")</td>
+                        <td class="text-right">@totalRescheduleAmt.ToString("N2")</td>
+                        <td class="text-center">@totalRecords</td>
                         <td></td>
-                        <td class="text-right"><strong>@totalBalanceAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalGoodLoan.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalArrear.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalOverDue.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalFrm1to365.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalGrtthan365.ToString("N2")</strong></td>
-                        <td colspan="2"></td>
                     </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="13" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="view-outer" id="viewOuter"></div>
+    }
+
+    @if (!isView)
+    {
+        @if (!isExcel)
+        {
+            @await Html.PartialAsync("_CommonHeader", Model)
+
+            <div class="report-subheader">
+                <div class="subheader-title">@reportTitle</div>
+                <div class="subheader-meta"><strong>Branch Name:</strong> @branchName</div>
+                <div class="subheader-meta"><strong>Report Generated On:</strong> @generatedOn</div>
+                <div class="subheader-meta">
+                    <strong>Filter By:-</strong> Tilldate: @tillDate
+                    @if (isMemberGroupFiltered)
+                    {
+                        <text>&nbsp;&nbsp;<strong>Member Group:</strong> @memberGroupName</text>
+                    }
+                    @if (isCollectionCenterFiltered)
+                    {
+                        <text>&nbsp;&nbsp;<strong>Collection Center:</strong> @collectionCenterName</text>
+                    }
+                    @if (isCollectorFiltered)
+                    {
+                        <text>&nbsp;&nbsp;<strong>Collector:</strong> @collectorName</text>
+                    }
+                    &nbsp;&nbsp;<strong>Penalty Type:</strong> @penaltyTypeName
+                </div>
+                <div class="subheader-spacer"></div>
+            </div>
+        }
+
+        <table class="data-table" id="mainTable"
+            @(isExcel ? Html.Raw("data-sheet-name=\"LoanAgingArrealCalculation\"") : Html.Raw(""))>
+            <colgroup>
+                <col class="c-sn" />
+                <col class="c-mid" />
+                <col class="c-name" />
+                <col class="c-acno" />
+                <col class="c-mode" />
+                <col class="c-disb" />
+                <col class="c-bal" />
+                <col class="c-good" />
+                <col class="c-risk" />
+                <col class="c-risk0" />
+                <col class="c-risk1" />
+                <col class="c-riskg" />
+                <col class="c-agood" />
+                <col class="c-a1to365" />
+                <col class="c-agt365" />
+                <col class="c-provis" />
+                <col class="c-resch" />
+                <col class="c-days" />
+                <col class="c-lastpay" />
+            </colgroup>
+            @if (isExcel)
+            {
+                <thead>
+                    <tr class="text-center"><td colspan="@totalCols"><strong>@reportTitle</strong></td></tr>
+                    <tr><td colspan="@totalCols"><strong>Branch Name:</strong> @branchName</td></tr>
+                    <tr><td colspan="@totalCols"><strong>Filter By:-</strong> Tilldate: @tillDate</td></tr>
+                    <tr><td colspan="@totalCols"></td></tr>
+                    <tr class="group-header">
+                        <th colspan="12"></th>
+                        <th colspan="3">Arrear Days</th>
+                        <th colspan="4"></th>
+                    </tr>
+                    <tr>
+                        <th class="text-center">S.No</th>
+                        <th>Member Id</th>
+                        <th>Full Name</th>
+                        <th>Loan A/C No</th>
+                        <th>Pay Mode</th>
+                        <th class="text-right">Disburse Amt.</th>
+                        <th class="text-right">Balance Amt.</th>
+                        <th class="text-right">Good Amt.</th>
+                        <th class="text-right">Risk Amt.</th>
+                        <th class="text-right">Risk 0</th>
+                        <th class="text-right">Risk 1-365</th>
+                        <th class="text-right">Risk &gt;365</th>
+                        <th class="text-right">Good Loan</th>
+                        <th class="text-right">1 to 365</th>
+                        <th class="text-right">&gt;365</th>
+                        <th class="text-right">Total Provision Amt</th>
+                        <th class="text-right">Reschedule Amt</th>
+                        <th class="text-center">Days</th>
+                        <th>Last Payment</th>
+                    </tr>
+                </thead>
+            }
+            else
+            {
+                <thead>
+                    <tr class="group-header">
+                        <th colspan="12"></th>
+                        <th colspan="3">Arrear Days</th>
+                        <th colspan="4"></th>
+                    </tr>
+                    <tr>
+                        <th class="text-center">S.No</th>
+                        <th>Member Id</th>
+                        <th>Full Name</th>
+                        <th>Loan A/C No</th>
+                        <th>Pay Mode</th>
+                        <th class="text-right">Disburse Amt.</th>
+                        <th class="text-right">Balance Amt.</th>
+                        <th class="text-right">Good Amt.</th>
+                        <th class="text-right">Risk Amt.</th>
+                        <th class="text-right">Risk 0</th>
+                        <th class="text-right">Risk 1-365</th>
+                        <th class="text-right">Risk &gt;365</th>
+                        <th class="text-right">Good Loan</th>
+                        <th class="text-right">1 to 365</th>
+                        <th class="text-right">&gt;365</th>
+                        <th class="text-right">Total Provision Amt</th>
+                        <th class="text-right">Reschedule Amt</th>
+                        <th class="text-center">Days</th>
+                        <th>Last Payment</th>
+                    </tr>
+                </thead>
+            }
+            <tbody>
+                @if (rows.Any())
+                {
+                    int snP = 0;
+                    foreach (var row in rows)
+                    {
+                        snP++;
+                        <tr class="detail-row">
+                            <td class="text-center">@snP</td>
+                            <td>@(row.MemberId ?? "")</td>
+                            <td>@(row.FullName ?? "")</td>
+                            <td>@(row.LoanAccountNo ?? "")</td>
+                            <td>@(row.PaymentMode ?? "")</td>
+                            <td class="text-right">@(row.LoanIssueAmount?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.BalanceAmount?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Goodloan?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Arrear?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.ArrearFor0?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Arrearfrm1to365?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Arreargrtthan365?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.GoodAmt?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Frm1to365?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.Grtthan365?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.TotalProvision?.ToString("N2") ?? "")</td>
+                            <td class="text-right">@(row.RescheduleAmt?.ToString("N2") ?? "")</td>
+                            <td class="text-center">@(row.Noofdays ?? 0)</td>
+                            <td>@(row.LastPaymentDate ?? "")</td>
+                        </tr>
+                    }
+
+                    <tr class="grand-total">
+                        <td colspan="5">Grand Total</td>
+                        <td class="text-right">@totalLoanIssueAmount.ToString("N2")</td>
+                        <td class="text-right">@totalBalanceAmount.ToString("N2")</td>
+                        <td class="text-right">@totalGoodloan.ToString("N2")</td>
+                        <td class="text-right">@totalArrear.ToString("N2")</td>
+                        <td class="text-right">@totalArrearFor0.ToString("N2")</td>
+                        <td class="text-right">@totalArrearfrm1to365.ToString("N2")</td>
+                        <td class="text-right">@totalArreargrtthan365.ToString("N2")</td>
+                        <td class="text-right">@totalGoodAmt.ToString("N2")</td>
+                        <td class="text-right">@totalFrm1to365.ToString("N2")</td>
+                        <td class="text-right">@totalGrtthan365.ToString("N2")</td>
+                        <td class="text-right">@totalProvision.ToString("N2")</td>
+                        <td class="text-right">@totalRescheduleAmt.ToString("N2")</td>
+                        <td class="text-center">@totalRecords</td>
+                        <td></td>
                     </tr>
                 }
                 else
                 {
-                    <tr>
-                        <td colspan="14" class="text-center">No data found for the selected criteria</td>
-                    </tr>
+                    <tr><td colspan="@totalCols" class="text-center">No data found for the selected criteria</td></tr>
                 }
             </tbody>
         </table>
-    </div>
+    }
+
+    @if (isView)
+    {
+        <script>
+                (function () {
+                    'use strict';
+                    var MAX_RETRIES = 5, RETRY_DELAY = 80, retryCount = 0;
+                    var PAGE_W = 2600, PAGE_H = 1587, FOOTER_H = 28;
+
+                    function buildPages() {
+                        var tbl = document.getElementById('mainTable');
+                        var grpHdrRow = document.getElementById('groupHeaderRow');
+                        var colHdrRow = document.getElementById('colHeaderRow');
+                        var grandTotalEl = document.getElementById('grandTotalRow');
+                        var subHdrTpl = document.getElementById('subheaderTemplate');
+
+                        if (!tbl || !colHdrRow || !subHdrTpl) {
+                            if (retryCount++ < MAX_RETRIES) setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+                            return;
+                        }
+
+                        var grpHdrH = grpHdrRow ? grpHdrRow.getBoundingClientRect().height : 0;
+                        var colHdrH = colHdrRow.getBoundingClientRect().height;
+                        var subHdrH = subHdrTpl.getBoundingClientRect().height;
+                        var gtH = grandTotalEl ? grandTotalEl.getBoundingClientRect().height : 0;
+                        var gtHtml = grandTotalEl ? grandTotalEl.outerHTML : '';
+
+                        var commonHdrEl = document.getElementById('commonHeaderSource');
+                        var commonHdrHtml = commonHdrEl ? commonHdrEl.innerHTML : '';
+                        var commonHdrH = commonHdrEl ? commonHdrEl.getBoundingClientRect().height : 0;
+
+                        var detailRows = tbl.querySelectorAll('tr.detail-row');
+                        var rowData = Array.from(detailRows).map(function (r) {
+                            return { html: r.outerHTML, h: r.getBoundingClientRect().height };
+                        });
+
+                        var allZero = rowData.length > 0 && rowData.every(function (r) { return r.h === 0; });
+                        if (allZero) {
+                            if (retryCount++ < MAX_RETRIES) setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
+                            return;
+                        }
+
+                        var colgroupHtml = tbl.querySelector('colgroup').outerHTML;
+                        var grpHdrHtml = grpHdrRow ? grpHdrRow.outerHTML : '';
+                        var colHdrHtml = colHdrRow.outerHTML;
+                        var subHdrHtml = subHdrTpl.outerHTML;
+
+                        var availP1 = PAGE_H - FOOTER_H - commonHdrH - subHdrH - grpHdrH - colHdrH;
+                        var availPN = PAGE_H - FOOTER_H - grpHdrH - colHdrH;
+
+                        var pages = [], cur = [], usedH = 0, isFirstPage = true;
+                        for (var i = 0; i < rowData.length; i++) {
+                            var rh = rowData[i].h || 14;
+                            var avail = isFirstPage ? availP1 : availPN;
+                            var extra = (i === rowData.length - 1) ? gtH : 0;
+                            if (cur.length > 0 && usedH + rh + extra > avail) {
+                                pages.push(cur); cur = []; usedH = 0; isFirstPage = false;
+                            }
+                            cur.push(i); usedH += rh;
+                        }
+                        pages.push(cur);
+                        var totalPages = pages.length;
+
+                        var sourceWrap = document.getElementById('sourceWrap');
+                        if (sourceWrap) sourceWrap.parentNode.removeChild(sourceWrap);
+                        if (commonHdrEl) commonHdrEl.parentNode.removeChild(commonHdrEl);
+
+                        var viewOuter = document.getElementById('viewOuter');
+                        var fragment = document.createDocumentFragment();
+
+                        for (var p = 0; p < totalPages; p++) {
+                            var card = document.createElement('div');
+                            card.className = 'view-page';
+                            card.setAttribute('data-page', String(p + 1));
+
+                            var contentHtml = '<div class="view-page-content">';
+                            if (p === 0 && commonHdrHtml) contentHtml += '<div class="common-header-wrap">' + commonHdrHtml + '</div>';
+                            if (p === 0) contentHtml += '<div class="page-subheader">' + subHdrHtml + '</div>';
+
+                            contentHtml += '<div class="page-table-wrap">'
+                                         + '<table class="data-table" style="width:' + PAGE_W + 'px;">'
+                                         + colgroupHtml
+                                         + '<thead>' + grpHdrHtml + colHdrHtml + '</thead>'
+                                         + '<tbody>';
+
+                            var pageRows = pages[p];
+                            for (var r = 0; r < pageRows.length; r++) contentHtml += rowData[pageRows[r]].html;
+                            if (p === totalPages - 1 && gtHtml) contentHtml += gtHtml;
+
+                            contentHtml += '</tbody></table></div></div>';
+                            contentHtml += '<div class="view-page-footer">Page ' + (p + 1) + ' of ' + totalPages + '</div>';
+
+                            card.innerHTML = contentHtml;
+                            fragment.appendChild(card);
+                        }
+
+                        viewOuter.appendChild(fragment);
+
+                        (function (el) {
+                            var drag = false, sx = 0, ss = 0;
+                            el.addEventListener('mousedown', function (e) {
+                                if (e.button !== 0) return;
+                                drag = true; sx = e.clientX; ss = el.scrollLeft;
+                                el.style.userSelect = 'none'; e.preventDefault();
+                            });
+                            document.addEventListener('mousemove', function (e) { if (drag) el.scrollLeft = ss - (e.clientX - sx); });
+                            document.addEventListener('mouseup', function () { drag = false; el.style.userSelect = ''; });
+                        })(viewOuter);
+
+                        window.scrollToPage = function (pageNumber) {
+                            var target = document.querySelector('.view-page[data-page="' + pageNumber + '"]');
+                            if (!target) return;
+                            window.scrollTo({ top: target.offsetTop, behavior: 'smooth' });
+                        };
+
+                        if (window.parent && window.parent !== window) {
+                            window.parent.postMessage({ type: 'REPORT_PAGES_READY', totalPages: totalPages }, '*');
+                        }
+                    }
+
+                    requestAnimationFrame(function () { requestAnimationFrame(buildPages); });
+                }());
+        </script>
+    }
 </body>
 </html>

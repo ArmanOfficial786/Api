@@ -93,4 +93,50 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
         public string? ReportMode { get; set; }
         public string? ReportModeName { get; set; }
     }
+
+    public class CollectorWiseLoanAnalysisSummaryRowDto
+    {
+        public string? GroupName { get; set; }   // collector name — shown under "Loan Type" header per the image
+
+        public decimal OpeningBalance { get; set; }
+        public int OpeningActiveCount { get; set; }
+
+        public decimal DisburseAmount { get; set; }
+        public decimal PaymentAmount { get; set; }
+
+        public decimal BalanceAmount { get; set; }
+        public int BalanceActiveCount { get; set; }
+
+        public decimal ClosingBalance { get; set; }
+        public int ClosingActiveCount { get; set; }
+
+        public decimal GoodAmt { get; set; }
+        public decimal DueAmt { get; set; }
+        public decimal Due1To365 { get; set; }
+        public decimal DueGt365 { get; set; }
+    }
+
+    public class CollectorWiseLoanAnalysisSummaryData
+    {
+        public List<CollectorWiseLoanAnalysisSummaryRowDto> Rows { get; set; } = [];
+
+        public decimal TotalOpeningBalance { get; set; }
+        public int TotalOpeningActiveCount { get; set; }
+        public decimal TotalDisburseAmount { get; set; }
+        public decimal TotalPaymentAmount { get; set; }
+        public decimal TotalBalanceAmount { get; set; }
+        public int TotalBalanceActiveCount { get; set; }
+        public decimal TotalClosingBalance { get; set; }
+        public int TotalClosingActiveCount { get; set; }
+        public decimal TotalGoodAmt { get; set; }
+        public decimal TotalDueAmt { get; set; }
+        public decimal TotalDue1To365 { get; set; }
+        public decimal TotalDueGt365 { get; set; }
+
+        public string? FromDateBs { get; set; }
+        public string? ToDateBs { get; set; }
+        public string? FromDateAd { get; set; }
+        public string? ToDateAd { get; set; }
+        public string? BranchName { get; set; }
+    }
 }

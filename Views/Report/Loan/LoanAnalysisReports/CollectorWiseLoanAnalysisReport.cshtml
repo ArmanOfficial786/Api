@@ -1,40 +1,32 @@
-﻿@* Views/Report/Loan/LoanAnalysisReport/CollectorWiseLoanAnalysisReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<CollectorWiseLoanAnalysisRowDto>) ?? new List<CollectorWiseLoanAnalysisRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
-    var totalPaidAmount = Model["TotalPaidAmount"] as decimal? ?? 0;
-    var totalBalanceAmount = Model["TotalBalanceAmount"] as decimal? ?? 0;
-    var totalGoodloan = Model["TotalGoodloan"] as decimal? ?? 0;
-    var totalArrear = Model["TotalArrear"] as decimal? ?? 0;
-    var totalArrearfrm1to365 = Model["TotalArrearfrm1to365"] as decimal? ?? 0;
-    var totalArreargrtthan365 = Model["TotalArreargrtthan365"] as decimal? ?? 0;
-    var totalOverDue = Model["TotalOverDue"] as decimal? ?? 0;
-    var totalProvision = Model["TotalProvision"] as decimal? ?? 0;
+    var summaryRows = (Model["Rows"] as List<CollectorWiseLoanAnalysisSummaryRowDto>) ?? new List<CollectorWiseLoanAnalysisSummaryRowDto>();
     var totalOpeningBalance = Model["TotalOpeningBalance"] as decimal? ?? 0;
+    var totalOpeningActiveCount = Model["TotalOpeningActiveCount"] as int? ?? 0;
+    var totalDisburseAmount = Model["TotalDisburseAmount"] as decimal? ?? 0;
+    var totalPaymentAmount = Model["TotalPaymentAmount"] as decimal? ?? 0;
+    var totalBalanceAmount = Model["TotalBalanceAmount"] as decimal? ?? 0;
+    var totalBalanceActiveCount = Model["TotalBalanceActiveCount"] as int? ?? 0;
     var totalClosingBalance = Model["TotalClosingBalance"] as decimal? ?? 0;
+    var totalClosingActiveCount = Model["TotalClosingActiveCount"] as int? ?? 0;
+    var totalGoodAmt = Model["TotalGoodAmt"] as decimal? ?? 0;
+    var totalDueAmt = Model["TotalDueAmt"] as decimal? ?? 0;
+    var totalDue1To365 = Model["TotalDue1To365"] as decimal? ?? 0;
+    var totalDueGt365 = Model["TotalDueGt365"] as decimal? ?? 0;
+
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var collectorName = Model["CollectorName"]?.ToString() ?? "";
-    var collectionCenterName = Model["CollectionCenterName"]?.ToString() ?? "";
-    var penaltyType = Model["PenaltyType"]?.ToString() ?? "S";
-    var penaltyTypeName = Model["PenaltyTypeName"]?.ToString() ?? "Schedule Wise";
-    var enableCollectionCenter = Model["EnableCollectionCenter"] as bool? ?? false;
-    var reportMode = Model["ReportMode"]?.ToString() ?? "1";
-    var reportModeName = Model["ReportModeName"]?.ToString() ?? "Summary";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
+    var isExcel = format is "EXCEL" or "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var isCollectorFiltered = !string.IsNullOrEmpty(collectorName);
-    var isCollectionCenterFiltered = !string.IsNullOrEmpty(collectionCenterName);
-
-    var colCount = enableCollectionCenter ? 14 : 13;
+    // Row-level %: amount / that row's ClosingBalance × 100 — verified against
+    // the reference image's figures (e.g. 716,812.41 / 2,455,284.26 = 29.19%).
+    string Pct(decimal amt, decimal closing) => closing == 0 ? "0.00" : (amt / closing * 100m).ToString("N2");
 }
 <!DOCTYPE html>
 <html>
@@ -49,8 +41,8 @@
             }
 
             body {
-                font-family: Arial, sans-serif;
-                font-size: 8pt;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 8.5pt;
                 background: white;
                 color: #000;
             }
@@ -67,7 +59,7 @@
             .data-table {
                 width: 100%;
                 border-collapse: collapse;
-                font-size: 8pt;
+                font-size: 8.5pt;
                 table-layout: fixed;
             }
 
@@ -80,16 +72,16 @@
 
             .meta-title td {
                 text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
+                font-size: 13pt;
                 font-weight: bold;
                 text-decoration: underline;
-                padding: 8px 6px;
+                padding: 6px 6px 8px;
             }
 
             .meta-row td {
-                padding: 3px 6px;
+                padding: 2px 6px;
                 font-size: 9pt;
+                font-weight: bold;
             }
 
             .meta-spacer td {
@@ -97,28 +89,26 @@
             }
 
             .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
+                border-top: 1.5px solid #000;
+                border-bottom: 1.5px solid #000;
+                text-align: center;
+                font-weight: bold;
+                background: #fff;
+            }
+
+            .sub-header th {
+                border-top: none;
+                font-weight: bold;
             }
 
             .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .detail-row-alt td {
-                background: #f9f9f9;
+                color: #1a3d7c;
                 border-bottom: 1px solid #eee;
             }
 
             .grand-total-row td {
                 border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
                 font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
             }
 
             .text-right {
@@ -129,35 +119,9 @@
                 text-align: center !important;
             }
 
-            .negative {
-                color: #CC0000;
-            }
-
-            .positive {
-                color: #006600;
-            }
-
-            .penalty-badge {
-                display: inline-block;
-                padding: 2px 10px;
-                border-radius: 3px;
-                font-size: 8pt;
-                font-weight: bold;
-            }
-
-            .badge-schedule {
-                background: #d1ecf1;
-                color: #0c5460;
-            }
-
-            .badge-remaining {
-                background: #fff3cd;
-                color: #856404;
-            }
-
-            .badge-maturity {
-                background: #f8d7da;
-                color: #721c24;
+            .pct {
+                font-size: 7.5pt;
+                color: #444;
             }
 
             @@media print {
@@ -180,142 +144,121 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        <table class="data-table" data-sheet-name="CollectorWiseLoanAnalysis">
+        <table class="data-table" data-sheet-name="CollectorWiseLoanAnalysisSummary">
             <colgroup>
-                <col style="width:3%;" />
-                <col style="width:7%;" />
                 <col style="width:12%;" />
                 <col style="width:8%;" />
-                @if (enableCollectionCenter)
-                {
-                    <col style="width:9%;" />
-                }
-                <col style="width:10%;" />
-                <col style="width:8%;" />
-                <col style="width:8%;" />
-                <col style="width:8%;" />
-                <col style="width:8%;" />
-                <col style="width:8%;" />
-                <col style="width:8%;" />
-                <col style="width:8%;" />
-                <col style="width:7%;" />
+                <col style="width:5%;" />
+                <col style="width:9%;" />
+                <col style="width:9%;" />
+                <col style="width:9%;" />
+                <col style="width:5%;" />
+                <col style="width:9%;" />
+                <col style="width:5%;" />
+                <col style="width:6%;" />
+                <col style="width:4%;" />
+                <col style="width:6%;" />
+                <col style="width:4%;" />
+                <col style="width:6%;" />
+                <col style="width:4%;" />
+                <col style="width:6%;" />
+                <col style="width:4%;" />
             </colgroup>
             <tbody>
                 <tr class="meta-title">
-                    <td colspan="@colCount">Collector Wise Loan Analysis Report (@reportModeName)</td>
+                    <td colspan="17">Collector Wise Loan Analysis Report</td>
                 </tr>
 
                 <tr class="meta-row">
-                    <td colspan="7">
-                        <strong>Branch :</strong> @branchName
-                        &nbsp;&nbsp;
-                        <strong>From :</strong> @fromDate
-                        &nbsp;&nbsp;
-                        <strong>To :</strong> @toDate
-                    </td>
-                    <td colspan="7" class="text-right">
-                        <strong>Penalty Type :</strong>
-                        <span class="penalty-badge @(penaltyType == "S" ? "badge-schedule" : penaltyType == "R" ? "badge-remaining" : "badge-maturity")">
-                            @penaltyTypeName
-                        </span>
-                    </td>
+                    <td colspan="17"><strong>Branch Name :</strong> @branchName</td>
                 </tr>
                 <tr class="meta-row">
-                    <td colspan="7">
-                        @if (isCollectorFiltered)
-                        {
-                            <strong>Collector :</strong> 
-                            @collectorName
-                        }
-                        @if (isCollectionCenterFiltered)
-                        {
-                            <text>&nbsp;&nbsp;<strong>Collection Center :</strong> @collectionCenterName</text>
-                        }
-                    </td>
-                    <td colspan="7" class="text-right">
-                        <strong>Report Generated On :</strong> @generatedOn
-                    </td>
+                    <td colspan="9"><strong>From Date :</strong>&nbsp;&nbsp;@fromDate</td>
+                    <td colspan="8"><strong>To Date :</strong>&nbsp;&nbsp;@toDate</td>
                 </tr>
-                <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
+                <tr class="meta-row">
+                    <td colspan="17"><strong>Report Generated On :</strong>&nbsp;&nbsp;@generatedOn</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="17"></td></tr>
 
                 <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Member Id</th>
-                    <th>Member Name</th>
-                    <th>Loan Account No</th>
-                    @if (enableCollectionCenter)
-                    {
-                        <th>Coll. Center</th>
-                    }
-                    <th>Loan Type</th>
-                    <th>Collector</th>
-                    <th class="text-right">Disburse</th>
-                    <th class="text-right">Paid</th>
-                    <th class="text-right">Balance</th>
-                    <th class="text-right">Good Loan</th>
-                    <th class="text-right">Due 1-365</th>
-                    <th class="text-right">Due &gt; 365</th>
-                    <th class="text-right">Provision</th>
+                    <th rowspan="2">Loan Type</th>
+                    <th colspan="2">Opening</th>
+                    <th rowspan="2">Disburse<br />Amount</th>
+                    <th rowspan="2">Payment<br />Amount</th>
+                    <th colspan="2">Balance</th>
+                    <th colspan="2">Closing</th>
+                    <th colspan="2">Good Amt</th>
+                    <th colspan="2">Due Amt</th>
+                    <th colspan="2">Due(1-365)</th>
+                    <th colspan="2">Due(&gt;365)</th>
+                </tr>
+                <tr class="sub-header">
+                    <th>Balance</th>
+                    <th>Active<br />Count</th>
+                    <th>Amount</th>
+                    <th>Active<br />Count</th>
+                    <th>Balance</th>
+                    <th>Active<br />Count</th>
+                    <th>Amt</th>
+                    <th>%</th>
+                    <th>Amt</th>
+                    <th>%</th>
+                    <th>Amt</th>
+                    <th>%</th>
+                    <th>Amt</th>
+                    <th>%</th>
                 </tr>
 
-                @if (rows.Any())
+                @if (summaryRows.Any())
                 {
-                    var sn = 0;
-                    foreach (var row in rows)
+                    foreach (var row in summaryRows)
                     {
-                        sn++;
-                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
-                            <td class="text-center">@sn</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.FullName ?? "")</td>
-                            <td>@(row.LoanAccountNo ?? "")</td>
-                            @if (enableCollectionCenter)
-                            {
-                                <td>@(row.CollectionCenterName ?? "")</td>
-                            }
-                            <td>@(row.LoanType ?? "")</td>
-                            <td>@(row.CollectorName ?? "")</td>
-                            <td class="text-right">@(row.LoanIssueAmount?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.PaidAmount?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.BalanceAmount?.ToString("N2") ?? "")</td>
-                            <td class="text-right positive">@(row.Goodloan?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.Arrearfrm1to365?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.Arreargrtthan365?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.TotalProvision?.ToString("N2") ?? "")</td>
+                        <tr class="detail-row">
+                            <td>@(row.GroupName ?? "")</td>
+                            <td class="text-right">@(row.OpeningBalance.ToString("N2"))</td>
+                            <td class="text-center">@(row.OpeningActiveCount)</td>
+                            <td class="text-right">@(row.DisburseAmount.ToString("N2"))</td>
+                            <td class="text-right">@(row.PaymentAmount.ToString("N2"))</td>
+                            <td class="text-right">@(row.BalanceAmount.ToString("N2"))</td>
+                            <td class="text-center">@(row.BalanceActiveCount)</td>
+                            <td class="text-right">@(row.ClosingBalance.ToString("N2"))</td>
+                            <td class="text-center">@(row.ClosingActiveCount)</td>
+                            <td class="text-right">@(row.GoodAmt.ToString("N2"))</td>
+                            <td class="text-right pct">@(Pct(row.GoodAmt, row.ClosingBalance))</td>
+                            <td class="text-right">@(row.DueAmt.ToString("N2"))</td>
+                            <td class="text-right pct">@(Pct(row.DueAmt, row.ClosingBalance))</td>
+                            <td class="text-right">@(row.Due1To365.ToString("N2"))</td>
+                            <td class="text-right pct">@(Pct(row.Due1To365, row.ClosingBalance))</td>
+                            <td class="text-right">@(row.DueGt365.ToString("N2"))</td>
+                            <td class="text-right pct">@(Pct(row.DueGt365, row.ClosingBalance))</td>
                         </tr>
                     }
 
                     <tr class="grand-total-row">
-                        <td colspan="@(enableCollectionCenter ? 8 : 7)" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalPaidAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalBalanceAmount.ToString("N2")</strong></td>
-                        <td class="text-right positive"><strong>@totalGoodloan.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalArrearfrm1to365.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalArreargrtthan365.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalProvision.ToString("N2")</strong></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="@(enableCollectionCenter ? 10 : 9)" class="text-right"><strong>Total Overdue</strong></td>
-                        <td colspan="2" class="text-right"><strong>@totalOverDue.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>Arrear</strong></td>
-                        <td colspan="2" class="text-right"><strong>@totalArrear.ToString("N2")</strong></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="@(enableCollectionCenter ? 10 : 9)" class="text-right"><strong>Opening Balance</strong></td>
-                        <td colspan="2" class="text-right"><strong>@totalOpeningBalance.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>Closing Balance</strong></td>
-                        <td colspan="2" class="text-right"><strong>@totalClosingBalance.ToString("N2")</strong></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="@(colCount - 1)" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
+                        <td>Grand Total :</td>
+                        <td class="text-right">@(totalOpeningBalance.ToString("N2"))</td>
+                        <td class="text-center">@(totalOpeningActiveCount)</td>
+                        <td class="text-right">@(totalDisburseAmount.ToString("N2"))</td>
+                        <td class="text-right">@(totalPaymentAmount.ToString("N2"))</td>
+                        <td class="text-right">@(totalBalanceAmount.ToString("N2"))</td>
+                        <td class="text-center">@(totalBalanceActiveCount)</td>
+                        <td class="text-right">@(totalClosingBalance.ToString("N2"))</td>
+                        <td class="text-center">@(totalClosingActiveCount)</td>
+                        <td class="text-right">@(totalGoodAmt.ToString("N2"))</td>
+                        <td class="text-right pct">@(Pct(totalGoodAmt, totalClosingBalance))</td>
+                        <td class="text-right">@(totalDueAmt.ToString("N2"))</td>
+                        <td class="text-right pct">@(Pct(totalDueAmt, totalClosingBalance))</td>
+                        <td class="text-right">@(totalDue1To365.ToString("N2"))</td>
+                        <td class="text-right pct">@(Pct(totalDue1To365, totalClosingBalance))</td>
+                        <td class="text-right">@(totalDueGt365.ToString("N2"))</td>
+                        <td class="text-right pct">@(Pct(totalDueGt365, totalClosingBalance))</td>
                     </tr>
                 }
                 else
                 {
                     <tr>
-                        <td colspan="@colCount" class="text-center">No data found for the selected criteria</td>
+                        <td colspan="17" class="text-center">No data found for the selected criteria</td>
                     </tr>
                 }
             </tbody>

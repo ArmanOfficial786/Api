@@ -6,5 +6,6 @@ namespace NexgenCosysReport.Inteface.ServiceInterface.Loan.LoanAnalysisReport
     public interface ICollectorWiseLoanAnalysisRepository
     {
         Task<CollectorWiseLoanAnalysisData> GetReportDataAsync(CollectorWiseLoanAnalysisRequestDto request);
+        Task<CollectorWiseLoanAnalysisSummaryData> GetSummaryReportDataAsync(CollectorWiseLoanAnalysisRequestDto request);
     }
 }

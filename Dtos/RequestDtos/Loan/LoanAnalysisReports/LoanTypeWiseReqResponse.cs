@@ -44,6 +44,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
         public string? CollectionCenterName { get; set; }
         public string? GroupName { get; set; }
         public string? OfficeName { get; set; }
+
     }
 
     public class LoanTypeWiseData
@@ -65,5 +66,6 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
         public string? LoanGuarantee { get; set; }
         public string? OrderBy { get; set; }
         public bool ShowOpeningBalance { get; set; }
+        public bool ShowDetail { get; set; }
     }
 }

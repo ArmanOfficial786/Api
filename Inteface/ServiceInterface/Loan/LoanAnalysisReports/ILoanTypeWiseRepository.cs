@@ -1,5 +1,4 @@
-﻿
-using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+﻿using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
 
 namespace NexgenCosysReport.Inteface.ServiceInterface.Loan.LoanAnalysisReport
 {

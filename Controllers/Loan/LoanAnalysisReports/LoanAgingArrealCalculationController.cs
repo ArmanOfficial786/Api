@@ -1,18 +1,14 @@
-﻿
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Loan.LoanAnalysisReport;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
-using System.Text;
-using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 {
@@ -26,8 +22,13 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
         private readonly IJsReportService _jsReportService;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly CustomHeaderResponse _headerResponse;
+        private readonly IReportFileResponse _reportFileResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
         private readonly ILogger<LoanAgingArrealCalculationController> _logger;
+
+
+        private static readonly PageSizeSetting PageSetting =
+       PageSizeSetting.Custom(594, 420, PageUnit.mm, landscape: true);
 
         public LoanAgingArrealCalculationController(
             ILoanAgingArrealCalculationRepository repository,
@@ -36,7 +37,8 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<LoanAgingArrealCalculationController> logger)
+            ILogger<LoanAgingArrealCalculationController> logger,
+            IReportFileResponse reportFileResponse)
         {
             _repository = repository;
             _commonHeaderRepository = commonHeaderRepository;
@@ -45,12 +47,14 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
             _headerResponse = headerResponse;
             _reportSettings = reportSettings;
             _logger = logger;
+            _reportFileResponse = reportFileResponse;
         }
 
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] LoanAgingArrealCalculationRequestDto request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
             try
             {
@@ -64,8 +68,6 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                 {
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
                 }
-
-
 
                 var reportName = "LoanAgingArrealCalculation";
                 var upperFormat = format.ToUpper();
@@ -114,11 +116,16 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     { "TotalRecords", data.TotalRecords },
                     { "TotalLoanIssueAmount", data.TotalLoanIssueAmount },
                     { "TotalBalanceAmount", data.TotalBalanceAmount },
-                    { "TotalOverDue", data.TotalOverDue },
-                    { "TotalGoodLoan", data.TotalGoodLoan },
+                    { "TotalGoodloan", data.TotalGoodloan },
                     { "TotalArrear", data.TotalArrear },
+                    { "TotalArrearFor0", data.TotalArrearFor0 },
+                    { "TotalArrearfrm1to365", data.TotalArrearfrm1to365 },
+                    { "TotalArreargrtthan365", data.TotalArreargrtthan365 },
+                    { "TotalGoodAmt", data.TotalGoodAmt },
                     { "TotalFrm1to365", data.TotalFrm1to365 },
                     { "TotalGrtthan365", data.TotalGrtthan365 },
+                    { "TotalProvision", data.TotalProvision },
+                    { "TotalRescheduleAmt", data.TotalRescheduleAmt },
                     { "HeaderDataSet", headerData ?? new List<CommonHeader>() },
                     { "TillDate", data.TillDateBs ?? "" },
                     { "BranchName", data.BranchName ?? "All" },
@@ -145,33 +152,26 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 
                 if (upperFormat == "VIEW")
                 {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.Rows.Count
-                    };
+                    var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
+                     htmlContent, reportKey, ct);
 
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
+                    _logger.LogInformation("?? VIEW — jsreport Html recipe, {Bytes:N0} chars", viewHtml.Length);
+                    return Content(viewHtml, "text/html");
 
-                    return new FileContentResult(pdfBytes, "application/pdf");
                 }
+
+                if (upperFormat == "PDF")
+                {
+                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
+                        htmlContent, "PDF", reportKey, PageSetting, ct);
+                    return _reportFileResponse.BuildPdfResponse(pdfBytes);
+                }
+
                 return await ReportExportHelper.ExportFromCacheAsync(
-                 reportKey, upperFormat,
-                 reportName,
-                 _jsReportService, _logger);
+                    reportKey, upperFormat, "MemberDetailReport",
+                    _jsReportService, _logger, PageSetting, ct);
             }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, StatusCode = 400, message = ex.Message });
-            }
+
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generating LoanAgingArrealCalculation report");
@@ -184,88 +184,6 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
             }
         }
 
-        [HttpPost("export-excel")]
-        public async Task<IActionResult> ExportExcel(
-            [FromBody] LoanAgingArrealCalculationRequestDto request)
-        {
-            try
-            {
-                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                {
-                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                }
 
-                if (request == null || !ModelState.IsValid)
-                {
-                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
-                }
-
-                if (string.IsNullOrWhiteSpace(request.TillDateBs) || request.TillDateBs == "-1")
-                {
-                    return BadRequest(new { success = false, StatusCode = 400, message = "Please select Till Date" });
-                }
-
-                if (string.IsNullOrEmpty(request.BranchIds) || request.BranchIds == "-1")
-                {
-                    return BadRequest(new { success = false, StatusCode = 400, message = "Please select Branch Name" });
-                }
-
-                var rows = await _repository.GetExcelExportDataAsync(request);
-
-                if (!rows.Any())
-                {
-                    return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
-                }
-
-                var sb = new StringBuilder();
-
-                sb.AppendLine("Member Id\tLoan Account No\tFull Name\tLoan Type\tLoan Issue Date (BS)\tLoan Issue Amount\tPayment Mode\tMaturity Date (BS)\tLast Installment Date\tDefaulter Days\tPrinciple Paid Amount\tLoan Balance\tGood Loan\tBetween 0-30 Days\tBetween 31-365 Days\tGreater Than 365 Days\tOverdue");
-
-                foreach (var row in rows)
-                {
-                    sb.AppendLine(string.Join("\t",
-                        row.MemberId ?? "",
-                        row.LoanAccountNo ?? "",
-                        row.FullName ?? "",
-                        row.LoanTypeName ?? "",
-                        row.LoanIssueOnBs ?? "",
-                        row.LoanIssueAmount?.ToString("N2") ?? "",
-                        row.PaymentMode ?? "",
-                        row.MaturityOnBs ?? "",
-                        row.LastInstallmentDate ?? "",
-                        row.DefaulterDay?.ToString() ?? "0",
-                        row.PrinciplePaidAmt?.ToString("N2") ?? "",
-                        row.LoanBalance?.ToString("N2") ?? "",
-                        row.Goodloan?.ToString("N2") ?? "",
-                        row.Between0to30Days?.ToString("N2") ?? "",
-                        row.Between31to365Days?.ToString("N2") ?? "",
-                        row.GraterThan365Days?.ToString("N2") ?? "",
-                        row.Overdue?.ToString("N2") ?? ""
-                    ));
-                }
-
-                var bytes = Encoding.UTF8.GetBytes(sb.ToString());
-
-                _headerResponse.SetResponseHeaders(true, 200, "Excel exported successfully.");
-                Response.Headers.Append("Content-Disposition", "attachment; filename=LoanAgeing.xls");
-
-                return new FileContentResult(bytes, "application/vnd.ms-excel");
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, StatusCode = 400, message = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error exporting LoanAgingArrealCalculation report to Excel");
-                return StatusCode(500, new
-                {
-                    message = ex.Message,
-                    inner = ex.InnerException?.Message,
-                    stack = ex.StackTrace
-                });
-            }
-        }
     }
 }

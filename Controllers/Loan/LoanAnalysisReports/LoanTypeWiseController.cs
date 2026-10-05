@@ -1,5 +1,4 @@
-﻿// Controllers/Loan/LoanAnalysisReport/LoanTypeWiseController.cs
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;

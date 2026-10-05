@@ -10,32 +10,18 @@
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var branchName = Model["BranchName"]?.ToString() ?? "All";
     var paymentTypeName = Model["PaymentTypeName"]?.ToString() ?? "Principle Payment";
-    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "";
     var format = Model["Format"]?.ToString() ?? "VIEW";
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName);
-    var hasDateRange = !string.IsNullOrEmpty(fromDate) && !string.IsNullOrEmpty(toDate);
-
-    // ── Group consecutive rows by member so the member's Id/Name/Account
-    // columns render once per group (via rowspan), matching the target
-    // layout, instead of repeating on every transaction row.
-    var groups = new List<List<LoanPrinciplePaymentRowDto>>();
-    foreach (var r in rows)
-    {
-        var last = groups.Count > 0 ? groups[groups.Count - 1] : null;
-        if (last != null
-            && last[0].MemberId == r.MemberId
-            && last[0].LoanAccountNo == r.LoanAccountNo)
-        {
-            last.Add(r);
-        }
-        else
-        {
-            groups.Add(new List<LoanPrinciplePaymentRowDto> { r });
-        }
-    }
+    // Grouped by Member Id + Name + Loan A/C No + Loan Type — matches the image:
+    // each member/account combo's identifying columns are shown once, with a
+    // numbered payment list (SN, Date, Paid Amount) nested underneath. Rows must
+    // arrive pre-sorted so a member's/account's rows are contiguous, since
+    // GroupBy preserves first-seen order rather than sorting.
+    var accountGroups = rows
+        .GroupBy(r => new { r.MemberId, r.FullName, r.LoanAccountNo, r.LoanTypeName })
+        .ToList();
 }
 <!DOCTYPE html>
 <html>
@@ -75,8 +61,8 @@
                 .data-table td, .data-table th {
                     word-wrap: break-word;
                     overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
+                    padding: 3px 6px;
+                    vertical-align: top;
                 }
 
             .meta-title td {
@@ -89,29 +75,30 @@
             }
 
             .meta-row td {
-                padding: 3px 6px;
+                padding: 2px 6px;
                 font-size: 9pt;
             }
 
             .meta-spacer td {
-                height: 6px;
+                height: 10px;
             }
 
             .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
+                border-top: 1px solid #000;
                 border-bottom: 1px solid #000;
                 text-align: left;
                 white-space: nowrap;
+                font-weight: bold;
             }
 
-            /* Every transaction/detail cell gets a thin bottom rule. Because
-                           the member-info cells use rowspan, their single bottom border
-                           naturally lands at the bottom of the last transaction row in
-                           that member's group — producing the group separator seen in
-                           the target image with no extra markup needed. */
-            .data-table td {
-                border-bottom: 1px solid #ddd;
+            .account-row td {
+                border-top: 1px solid #eee;
+                padding-top: 6px;
+                font-weight: bold;
+            }
+
+            .payment-row td {
+                padding: 1px 6px;
             }
 
             .grand-total-row td {
@@ -153,46 +140,29 @@
         <table class="data-table" data-sheet-name="LoanPrinciplePayment">
             <colgroup>
                 <col style="width:10%;" />
-                <col style="width:20%;" />
-                <col style="width:15%;" />
-                <col style="width:15%;" />
-                <col style="width:8%;" />
-                <col style="width:15%;" />
-                <col style="width:17%;" />
+                <col style="width:18%;" />
+                <col style="width:14%;" />
+                <col style="width:16%;" />
+                <col style="width:6%;" />
+                <col style="width:14%;" />
+                <col style="width:22%;" />
             </colgroup>
             <tbody>
-                <!-- Report Title -->
                 <tr class="meta-title">
                     <td colspan="7">Loan @paymentTypeName Report</td>
                 </tr>
 
-                <!-- Metadata -->
                 <tr class="meta-row">
-                    <td colspan="7"><strong>Branch Name :</strong> @branchName</td>
+                    <td colspan="7"><strong>Branch Name:</strong> &nbsp;&nbsp;@branchName</td>
                 </tr>
-                <tr class="meta-spacer"><td colspan="7"></td></tr>
-                @if (hasDateRange)
-                {
-                    <tr class="meta-row">
-                        <td colspan="7">
-                            <strong>From Date :</strong> @fromDate
-                            <text>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</text>
-                            <strong>Till Date :</strong> @toDate
-                        </td>
-                    </tr>
-                }
-                @if (isMemberGroupFiltered)
-                {
-                    <tr class="meta-row">
-                        <td colspan="7"><strong>Member Group :</strong> @memberGroupName</td>
-                    </tr>
-                }
                 <tr class="meta-row">
-                    <td colspan="7"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="7"><strong>From Date:</strong> &nbsp;&nbsp;@fromDate &nbsp;&nbsp;&nbsp;&nbsp; <strong>Till Date:</strong> &nbsp;&nbsp;@toDate</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="7"><strong>Report Generated On:</strong> &nbsp;&nbsp;@generatedOn</td>
                 </tr>
                 <tr class="meta-spacer"><td colspan="7"></td></tr>
 
-                <!-- Table Header -->
                 <tr>
                     <th>Member Id</th>
                     <th>Name</th>
@@ -203,37 +173,41 @@
                     <th class="text-right">Paid Amount (p)</th>
                 </tr>
 
-                @if (rows.Any())
+                @if (accountGroups.Any())
                 {
-                    foreach (var group in groups)
+                    foreach (var account in accountGroups)
                     {
-                        var count = group.Count;
-                        for (var i = 0; i < count; i++)
+                        <tr class="account-row">
+                            <td>@(account.Key.MemberId ?? "")</td>
+                            <td>@(account.Key.FullName ?? "")</td>
+                            <td>@(account.Key.LoanAccountNo ?? "")</td>
+                            <td>@(account.Key.LoanTypeName ?? "")</td>
+                            <td colspan="3"></td>
+                        </tr>
+
+                        var sn = 0;
+                        foreach (var row in account)
                         {
-                            var row = group[i];
-                            <tr>
-                                @if (i == 0)
-                                {
-                                    <td rowspan="@count">@(row.MemberId ?? "")</td>
-                                    <td rowspan="@count">@(row.FullName ?? "")</td>
-                                    <td rowspan="@count">@(row.LoanAccountNo ?? "")</td>
-                                    <td rowspan="@count">@(row.LoanTypeName ?? "")</td>
-                                }
-                                <td class="text-center">@(i + 1)</td>
+                            sn++;
+                            <tr class="payment-row">
+                                <td></td>
+                                <td></td>
+                                <td></td>
+                                <td></td>
+                                <td>@sn</td>
                                 <td>@(row.Date ?? "")</td>
                                 <td class="text-right">@(row.PaidAmount.HasValue ? row.PaidAmount.Value.ToString("N2") : "")</td>
                             </tr>
                         }
                     }
 
-                    <!-- Grand Total Row -->
                     <tr class="grand-total-row">
-                        <td colspan="6" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalPaidAmount.ToString("N2")</strong></td>
+                        <td colspan="6" class="text-right">Grand Total</td>
+                        <td class="text-right">@totalPaidAmount.ToString("N2")</td>
                     </tr>
                     <tr class="grand-total-row">
-                        <td colspan="6" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
+                        <td colspan="6" class="text-right">Total Records</td>
+                        <td class="text-center">@totalRecords</td>
                     </tr>
                 }
                 else

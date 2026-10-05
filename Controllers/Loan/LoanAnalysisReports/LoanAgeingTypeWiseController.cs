@@ -1,5 +1,4 @@
-﻿// Controllers/Loan/LoanAnalysisReport/LoanAgeingTypeWiseController.cs
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
@@ -112,6 +111,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     { "TotalRecords", data.TotalRecords },
                     { "TotalLoans", data.TotalLoans },
                     { "TotalMembers", data.TotalMembers },
+                    { "TotalBalance", data.TotalBalance },
                     { "TotalLoanIssueAmount", data.TotalLoanIssueAmount },
                     { "TotalRepaid", data.TotalRepaid },
                     { "TotalOverdue", data.TotalOverdue },
