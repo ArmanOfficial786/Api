@@ -99,7 +99,7 @@ namespace NexgenCosysReport.Controllers.Member
 
                 var reportData = new Dictionary<string, object>
                 {
-                    { "StudentDataSet", allMemberData       },
+                    { "MemberAllDetailDataSet", allMemberData       },
                     { "HeaderDataSet",  headerData          },
                     { "TotalRecords",   allMemberData.Count },
                     { "Format",         upperFormat         },

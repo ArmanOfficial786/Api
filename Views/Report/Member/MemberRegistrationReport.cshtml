@@ -5,7 +5,7 @@
 @{
     Layout = null;
 
-    var dataSet = (Model["StudentDataSet"] as IEnumerable<MemberRegistrationDetail>)?.ToList()
+    var dataSet = (Model["MemberAllDetailDataSet"] as IEnumerable<MemberRegistrationDetail>)?.ToList()
                   ?? new List<MemberRegistrationDetail>();
 
     var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "All";
