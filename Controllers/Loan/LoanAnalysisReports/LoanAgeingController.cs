@@ -138,11 +138,11 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                 }
                 else if (request.IsNepaliReport)
                 {
-                    viewPath = "Views/Report/Loan/LoanAnalysisReport/LoanAgeingNepaliReport.cshtml";
+                    viewPath = "Views/Report/Loan/LoanAnalysisReports/LoanAgeingNepaliReport.cshtml";
                 }
                 else
                 {
-                    viewPath = "Views/Report/Loan/LoanAnalysisReport/LoanAgeingReport.cshtml";
+                    viewPath = "Views/Report/Loan/LoanAnalysisReports/LoanAgeingReport.cshtml";
                 }
 
                 var htmlContent = await Task.Run(() =>

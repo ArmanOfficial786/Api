@@ -125,7 +125,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/Loan/VLoanInformationReport.cshtml"
-                    : "Views/Report/Loan/LoanAnalysisReport/LoanInformationReport.cshtml";
+                    : "Views/Report/Loan/LoanAnalysisReports/LoanInformationReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
