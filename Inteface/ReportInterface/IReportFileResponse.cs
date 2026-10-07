@@ -10,5 +10,7 @@ namespace NexgenCosysReport.Inteface.ReportInterface
 
         static int CountPdfPagesFromFile(string pdfPath) =>
             ReportFileResponse.CountPdfPagesFromFile(pdfPath);
+
+        void AppendPaginationHeaders(int totalPages, int? totalRecords = null);
     }
 }

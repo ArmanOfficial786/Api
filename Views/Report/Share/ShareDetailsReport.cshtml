@@ -1,4 +1,5 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.Share;
+@using NexgenCosysReport.Services.ReportService;
 @model Dictionary<string, object>
 @{
     Layout = null;
@@ -20,9 +21,54 @@
     var format = Model["Format"]?.ToString() ?? "VIEW";
 
     var isView = format == "VIEW";
-    var isExcel = format is "EXCEL" or "XLSX";
     var isNepali = reportType == "NEPALI";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var pg = (Model.TryGetValue("VisualLayout", out var pgObj) ? pgObj as VisualSheetLayout : null)
+             ?? throw new InvalidOperationException("VisualLayout is missing. Add { \"VisualLayout\", Layout } in the controller.");
+
+    string Mm(double v) => VisualSheetLayout.Mm(v);
+
+    // ── Pagination constants (keep in sync with the CSS below) ─────────────
+    const double RowMm = 8.0;
+    const double TheadMm = 8.0;
+    const double FooterMm = 9.0;
+    const double SafetyMm = 2.0;
+    const double FirstPageExtraMm = 75.0;  // common header + title + meta (page 1). Tune if page 1 clips
+
+    double bodyMm = pg.SheetHeightMm - pg.MarginTopMm - pg.MarginBottomMm - FooterMm;
+    int firstCap = Math.Max(1, (int)Math.Floor((bodyMm - FirstPageExtraMm - TheadMm - SafetyMm) / RowMm));
+    int nextCap = Math.Max(2, (int)Math.Floor((bodyMm - SafetyMm) / RowMm));
+
+    var pageChunks = new List<List<ShareDetailsRowDto>>();
+    var idx = 0;
+    while (pageChunks.Count == 0 || idx < rows.Count)
+    {
+        var cap = pageChunks.Count == 0 ? firstCap : nextCap;
+        var take = Math.Min(cap, rows.Count - idx);
+        pageChunks.Add(rows.Skip(idx).Take(take).ToList());
+        idx += take;
+    }
+    var lastChunk = pageChunks[^1];
+    var lastCap = pageChunks.Count == 1 ? firstCap : nextCap;
+    if (lastChunk.Count >= lastCap && lastChunk.Count > 1)
+    {
+        var moved = lastChunk[^1];
+        lastChunk.RemoveAt(lastChunk.Count - 1);
+        pageChunks.Add(new List<ShareDetailsRowDto> { moved });
+    }
+    var totalPages = pageChunks.Count;
+
+    // Column widths in mm. 0 = text column (shares remaining width)
+    var cols = new List<double> { 10, 18, 0, 12, 10, 20, 24, 0, 20, 0, 0, 0, 0, 0, 22, 22 };
+    if (enableCollectionCenter) cols.Add(0);
+    if (enableGroup) cols.Add(0);
+    cols.AddRange(new double[] { 22, 22, 0, 12, 0, 16, 24, 0 });
+
+    var colCount = cols.Count;
+    var leftSpan = colCount / 2;
+    var rightSpan = colCount - leftSpan;
+    var labelSpan = colCount - 3;
 }
 <!DOCTYPE html>
 <html>
@@ -30,572 +76,460 @@
     <meta charset="utf-8" />
     <title>Share Details Report</title>
     <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+        :root { --sheet-w: @Mm(pg.WidthMm); --sheet-h: @Mm(pg.SheetHeightMm); --row: @Mm(RowMm); }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 8.5pt;
-                background: @(isView ? "#d0d0d0" : "#fff");
-                color: #000;
-                @(isView ? "" : "margin-top: 25px;")
-            }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
-            .text-right {
-                text-align: right !important;
-            }
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 8.5pt;
+            color: #000;
+            background: @(isView ? "#e1e1e5" : "#fff");
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
 
-            .text-center {
-                text-align: center !important;
-            }
+        .text-right { text-align: right !important; }
+        .text-center { text-align: center !important; }
+        .text-left { text-align: left !important; }
 
-            /* ── Sub-header (title + meta) – sits ABOVE the table ──────────────── */
-            .report-subheader {
-                width: 100%;
-                padding: 4px 6px 0 6px;
-                background: #fff;
-            }
+        .view-outer {
+            background: @(isView ? "#e1e1e5" : "#fff");
+            padding: @(isView ? "12px 16px 20px" : "0");
+            @(isView ? "height: 100vh; height: 100dvh; overflow: auto;" : "")
+        }
 
-            .subheader-title {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
+        .report-page {
+            width: var(--sheet-w);
+            height: var(--sheet-h);
+            padding: @Mm(pg.MarginTopMm) @Mm(pg.MarginRightMm) @Mm(pg.MarginBottomMm) @Mm(pg.MarginLeftMm);
+            margin: 0 auto @(isView ? "24px" : "0") auto;
+            background: #fff;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            page-break-after: always;
+            break-after: page;
+            @(isView ? "box-shadow: 0 2px 8px rgba(0,0,0,.18);" : "")
+        }
+        .report-page:last-child { page-break-after: auto; break-after: auto; }
 
-            .subheader-meta {
-                font-size: 9pt;
-                padding: 3px 6px;
-            }
+        .sheet-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 
-            .subheader-spacer {
-                height: 6px;
-            }
+        .page-footer {
+            flex: none;
+            border-top: 1px solid #ccc;
+            text-align: center;
+            font-size: 9pt;
+            font-weight: bold;
+            padding: 4px 0 0;
+            margin-top: 6px;
+        }
 
-            /* ── Table layout ───────────────────────────────────────────────── */
-            .table-wrap {
-                overflow-x: auto;
-                width: 100%;
-                padding: 0 6px;
-            }
+        .common-header-wrap { flex: none; width: 100%; overflow: hidden; }
 
-            table.report-table {
-                border-collapse: collapse;
-                width: max-content;
-                min-width: 100%;
-                background: #fff;
-            }
+        .subheader-title {
+            text-align: center;
+            font-family: "Times New Roman", Times, serif;
+            font-size: 14pt;
+            font-weight: bold;
+            text-decoration: underline;
+            padding: 6px 6px;
+        }
+        .subheader-meta { font-size: 9pt; padding: 2px 6px; }
+        .subheader-spacer { height: 6px; }
 
-                table.report-table th,
-                table.report-table td {
-                    border: 1px solid #999;
-                    padding: 4px 6px;
-                    white-space: nowrap;
-                    vertical-align: middle;
-                }
+        table.report-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: #fff; }
+        table.report-table th, table.report-table td {
+            border: 1px solid #999;
+            padding: 0 4px;
+            vertical-align: middle;
+            overflow: hidden;
+        }
+        table.report-table thead th { height: @Mm(TheadMm); background: #f2f2f2; font-weight: bold; text-align: center; border: 1px solid #000; }
+        table.report-table tbody tr { height: var(--row); }
+        table.report-table tbody tr.alt { background: #fafafa; }
 
-                    table.report-table td.wrap {
-                        white-space: normal;
-                    }
+        .c {
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            line-clamp: 2;
+            overflow: hidden;
+            line-height: 3.5mm;
+            max-height: 7mm;
+            word-break: break-word;
+        }
 
-                table.report-table thead th {
-                    background: #f2f2f2;
-                    font-weight: bold;
-                    text-align: center;
-                    border: 1px solid #000;
-                }
+        .grand-total-box {
+            flex: none;
+            height: var(--row);
+            display: flex;
+            align-items: center;
+            white-space: nowrap;
+            overflow: hidden;
+            border-top: 2px solid #000;
+            border-bottom: 2px solid #000;
+            background: #f9f9f9;
+            padding: 0 8px;
+            font-weight: bold;
+        }
 
-                table.report-table tbody tr:nth-child(even) {
-                    background: #fafafa;
-                }
+        /* Excel source: hidden in VIEW/PDF, un-hidden by the service for Excel export */
+        #excelSource { display: none; }
+        .data-table { width: 100%; border-collapse: collapse; table-layout: auto; font-family: Arial, sans-serif; font-size: 9pt; }
+        .data-table td, .data-table th { padding: 3px 5px; vertical-align: middle; background: #fff; border: none; }
+        .data-table th { border-top: 1.5px solid #000; border-bottom: 1px solid #000; font-weight: bold; background: #f2f2f2; white-space: nowrap; }
+        .data-table .meta-title td { text-align: center; font-family: "Times New Roman", Times, serif; font-size: 14pt; font-weight: bold; text-decoration: underline; padding: 8px 6px; }
+        .data-table .meta-row td { padding: 3px 6px; font-size: 9pt; }
+        .data-table .meta-spacer td { height: 6px; }
+        .data-table .detail-row td { border-bottom: 1px solid #e0e0e0; }
+        .data-table .grand-total td { border-top: 1.5px solid #000; border-bottom: 1.5px solid #000; font-weight: bold; background: #f9f9f9; }
 
-            .grand-total-box {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                background: #f9f9f9;
-                padding: 6px 8px;
-                font-weight: bold;
-                margin: 10px 6px 0 6px;
-            }
-
-            @@media print {
-                table.report-table {
-                    page-break-inside: auto;
-                }
-
-                    table.report-table tr {
-                        page-break-inside: avoid;
-                        break-inside: avoid;
-                    }
-            }
-
-            /* ── VIEW chrome (paged, horizontally-scrollable canvas) ───────────── */
-            .view-outer {
-                background: #d0d0d0;
-                padding: 2px 16px 20px 16px;
-                min-height: 100vh;
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
-                cursor: grab;
-            }
-
-                .view-outer:active {
-                    cursor: grabbing;
-                }
-
-            .view-page {
-                background: #fff;
-                margin: 0 auto 24px auto;
-                box-shadow: 0 2px 8px rgba(0,0,0,.18);
-                width: 1200px;
-                height: 1587px;
-                overflow: hidden;
-                display: flex;
-                flex-direction: column;
-            }
-
-            .view-page-content {
-                flex: 1;
-                overflow: hidden;
-                display: flex;
-                flex-direction: column;
-            }
-
-            .view-page-footer {
-                background: #fff;
-                border-top: 1px solid #ccc;
-                text-align: center;
-                font-size: 9pt;
-                font-weight: bold;
-                padding: 6px 0;
-                flex-shrink: 0;
-            }
-
-            .common-header-wrap {
-                width: 1200px;
-                overflow: hidden;
-                flex-shrink: 0;
-            }
-
-            .page-subheader {
-                flex-shrink: 0;
-            }
-
-            .page-table-wrap {
-                flex: 1;
-                overflow: hidden;
-            }
-
-            #sourceWrap {
-                opacity: 0;
-                pointer-events: none;
-                width: 1200px;
-                position: absolute;
-                top: 0;
-                left: 0;
-            }
-
-            #commonHeaderSource {
-                visibility: hidden;
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 1200px;
-                pointer-events: none;
-            }
+        @@page { size: @Mm(pg.WidthMm) @Mm(pg.HeightMm); margin: 0; }
+        @@media print {
+            html, body { background: #fff; margin: 0; padding: 0; }
+            .view-outer { background: #fff; padding: 0; height: auto !important; overflow: visible !important; }
+            .report-page { box-shadow: none; margin: 0; }
+        }
     </style>
 </head>
 <body>
-
-    @* Common header — rendered for VIEW and PDF, skipped for Excel *@
-    @if (!isExcel)
+@{
+    void RenderSubheader()
     {
-        <div id="commonHeaderSource">
-            @await Html.PartialAsync("_CommonHeader", Model)
-        </div>
-    }
-
-    @{
-        void RenderSubheader()
-        {
-            <div class="report-subheader" id="subheaderTemplate">
-                <div class="subheader-title">@(isNepali ? "सेयर विवरण प्रतिवेदन" : "Share Details Report")</div>
-                <div class="subheader-meta"><strong>@(isNepali ? "शाखा" : "Branch") :</strong> @branchName</div>
-                <div class="subheader-meta">
-                    <strong>@(isNepali ? "मिति सम्म" : "Till Date") :</strong> @tillDate
-                    &nbsp;&nbsp;&nbsp;&nbsp;
-                    <strong>@(isNepali ? "सेयर प्रकार" : "Share Type") :</strong> @shareTypeName
-                    &nbsp;&nbsp;&nbsp;&nbsp;
-                    <strong>@(isNepali ? "सदस्य प्रकार" : "Member Type") :</strong> @memberTypeName
-                </div>
-                @if (enableCollectionCenter || enableGroup)
-                {
-                    <div class="subheader-meta">
-                        @if (enableCollectionCenter)
-                        {
-                            <span><strong>@(isNepali ? "संकलन केन्द्र" : "Collection Center") :</strong> @collectionCenterName &nbsp;&nbsp;&nbsp;&nbsp;</span>
-                        }
-                        @if (enableGroup)
-                        {
-                            <span><strong>@(isNepali ? "समूह" : "Member Group") :</strong> @memberGroupName</span>
-                        }
-                    </div>
-                }
-                <div class="subheader-meta"><strong>@(isNepali ? "प्रतिवेदन मिति" : "Report Generated On") :</strong> @generatedOn</div>
-                <div class="subheader-spacer"></div>
+        <div class="report-subheader">
+            <div class="subheader-title">@(isNepali ? "सेयर विवरण प्रतिवेदन" : "Share Details Report")</div>
+            <div class="subheader-meta"><strong>@(isNepali ? "शाखा" : "Branch") :</strong> @branchName</div>
+            <div class="subheader-meta">
+                <strong>@(isNepali ? "मिति सम्म" : "Till Date") :</strong> @tillDate
+                &nbsp;&nbsp;&nbsp;&nbsp;
+                <strong>@(isNepali ? "सेयर प्रकार" : "Share Type") :</strong> @shareTypeName
+                &nbsp;&nbsp;&nbsp;&nbsp;
+                <strong>@(isNepali ? "सदस्य प्रकार" : "Member Type") :</strong> @memberTypeName
             </div>
-        }
-
-        void RenderTableHeader()
-        {
-            <thead id="theadTemplate">
-                <tr>
-                    <th>@(isNepali ? "क्र.सं." : "SN")</th>
-                    <th>@(isNepali ? "सदस्य नं." : "Member ID")</th>
-                    <th>@(isNepali ? "सदस्यको नाम" : "Member Name")</th>
-                    <th>@(isNepali ? "लिङ्ग" : "Gender")</th>
-                    <th>@(isNepali ? "उमेर" : "Age")</th>
-                    <th>@(isNepali ? "जन्म मिति" : "DOB")</th>
-                    <th>@(isNepali ? "नागरिकता नं." : "Citizenship No")</th>
-                    <th>@(isNepali ? "नागरिकता जिल्ला" : "Citizenship Dist.")</th>
-                    <th>@(isNepali ? "नागरिकता मिति" : "Citizenship Date")</th>
-                    <th>@(isNepali ? "बाजे/हजुरआमा" : "GrandFather/Mother")</th>
-                    <th>@(isNepali ? "बुबा" : "Father")</th>
-                    <th>@(isNepali ? "पति/पत्नी" : "Spouse")</th>
-                    <th>@(isNepali ? "पेशा" : "Occupation")</th>
-                    <th>@(isNepali ? "ठेगाना" : "Address")</th>
-                    <th>@(isNepali ? "मोबाइल नं." : "Mobile No")</th>
-                    <th>@(isNepali ? "सम्पर्क नं." : "Contact No")</th>
+            @if (enableCollectionCenter || enableGroup)
+            {
+                <div class="subheader-meta">
                     @if (enableCollectionCenter)
                     {
-                        <th>@(isNepali ? "संकलन केन्द्र" : "Collection Center")</th>
+                        <span><strong>@(isNepali ? "संकलन केन्द्र" : "Collection Center") :</strong> @collectionCenterName &nbsp;&nbsp;&nbsp;&nbsp;</span>
                     }
                     @if (enableGroup)
                     {
-                        <th>@(isNepali ? "समूह" : "Member Group")</th>
+                        <span><strong>@(isNepali ? "समूह" : "Member Group") :</strong> @memberGroupName</span>
                     }
-                    <th>@(isNepali ? "दर्ता मिति (वि.सं.)" : "Reg. Date (BS)")</th>
-                    <th>@(isNepali ? "दर्ता मिति (ई.सं.)" : "Reg. On (AD)")</th>
-                    <th>@(isNepali ? "इच्छाइएको व्यक्ति" : "Nominee Name")</th>
-                    <th>@(isNepali ? "इच्छाइएको उमेर" : "Nominee Age")</th>
-                    <th>@(isNepali ? "इच्छाइएको ठेगाना" : "Nominee Address")</th>
-                    <th>@(isNepali ? "सेयर संख्या" : "Share No")</th>
-                    <th>@(isNepali ? "सेयर रकम" : "Share Amount")</th>
-                    <th>@(isNepali ? "कैफियत" : "Remarks")</th>
-                </tr>
-            </thead>
-        }
-
-        void RenderMemberRow(ShareDetailsRowDto row, int sn)
-        {
-            <tr>
-                <td class="text-right">@sn</td>
-                <td>@(row.MemberId ?? "")</td>
-                <td class="wrap">@(row.MemberName ?? "")</td>
-                <td>@(row.Gender ?? "")</td>
-                <td class="text-right">@(row.MemberAge ?? "")</td>
-                <td>@(row.DateOfBirth ?? "")</td>
-                <td>@(row.CitizenShipNo ?? "")</td>
-                <td class="wrap">@(row.CitizenShipDistrict ?? "")</td>
-                <td>@(row.CitizenShipDate ?? "")</td>
-                <td class="wrap">@(row.GrandFatherName ?? "")</td>
-                <td class="wrap">@(row.FatherName ?? "")</td>
-                <td class="wrap">@(row.SpouceName ?? "")</td>
-                <td class="wrap">@(row.Occupation ?? "")</td>
-                <td class="wrap">@(row.MemberAddress ?? "")</td>
-                <td>@(row.MobileNo ?? "")</td>
-                <td>@(row.ContactNo ?? "")</td>
-                @if (enableCollectionCenter)
-                {
-                    <td class="wrap">@(row.Center ?? "")</td>
-                }
-                @if (enableGroup)
-                {
-                    <td class="wrap">@(row.MemberGroup ?? "")</td>
-                }
-                <td>@(row.RegistrationDate ?? "")</td>
-                <td>@(row.RegistrationOn ?? "")</td>
-                <td class="wrap">@(row.NomineeName ?? "")</td>
-                <td class="text-right">@(row.NomineeAge ?? "")</td>
-                <td class="wrap">@(row.NomineeAddress ?? "")</td>
-                <td class="text-right">@(row.TotalShare?.ToString("N0") ?? "")</td>
-                <td class="text-right">@(row.TotalShareAmount?.ToString("N2") ?? "")</td>
-                <td class="wrap">@(row.Remarks ?? "")</td>
-            </tr>
-        }
-
-        void RenderGrandTotal()
-        {
-            <div class="grand-total-box" id="grandTotalRow">
-                @(isNepali ? "कुल सदस्य" : "Total Members"): @totalMembers
-                &nbsp;|&nbsp;
-                @(isNepali ? "कुल रेकर्ड" : "Total Records"): @totalRecords
-                &nbsp;|&nbsp;
-                @(isNepali ? "कुल सेयर संख्या" : "Total Share No"): @totalShare.ToString("N0")
-                &nbsp;|&nbsp;
-                @(isNepali ? "कुल सेयर रकम" : "Total Share Amount"): @totalShareAmount.ToString("N2")
-            </div>
-        }
+                </div>
+            }
+            <div class="subheader-meta"><strong>@(isNepali ? "प्रतिवेदन मिति" : "Report Generated On") :</strong> @generatedOn</div>
+            <div class="subheader-spacer"></div>
+        </div>
     }
 
-    @if (isView)
+    void RenderColGroup()
     {
-        <div id="sourceWrap">
-            @{
-                RenderSubheader();
-            }
-
-            <table id="tableSource">
-                @{
-                    RenderTableHeader();
-                }
-                <tbody id="tbodySource">
-                    @if (rows.Any())
-                    {
-                        var snV = 0;
-                        foreach (var row in rows)
-                        {
-                            snV++;
-                            RenderMemberRow(row, snV);
-                        }
-                    }
-                </tbody>
-            </table>
-
-            @if (!rows.Any())
+        <colgroup>
+            @foreach (var w in cols)
             {
-                <div class="subheader-meta text-center" id="noDataTemplate">@(isNepali ? "कुनै डाटा फेला परेन" : "No data found for the selected criteria")</div>
+                if (w > 0)
+                {
+                    <col style="width:@Mm(w);" />
+                }
+                else
+                {
+                    <col />
+                }
             }
-
-            @{
-                RenderGrandTotal();
-            }
-        </div>
-
-        <div class="view-outer" id="viewOuter"></div>
+        </colgroup>
     }
 
-    @if (!isView)
+    void RenderTableHeader()
     {
-        if (!isExcel)
-        {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+        <thead>
+            <tr>
+                <th><div class="c">@(isNepali ? "क्र.सं." : "SN")</div></th>
+                <th><div class="c">@(isNepali ? "सदस्य नं." : "Member ID")</div></th>
+                <th><div class="c">@(isNepali ? "सदस्यको नाम" : "Member Name")</div></th>
+                <th><div class="c">@(isNepali ? "लिङ्ग" : "Gender")</div></th>
+                <th><div class="c">@(isNepali ? "उमेर" : "Age")</div></th>
+                <th><div class="c">@(isNepali ? "जन्म मिति" : "DOB")</div></th>
+                <th><div class="c">@(isNepali ? "नागरिकता नं." : "Citizenship No")</div></th>
+                <th><div class="c">@(isNepali ? "नागरिकता जिल्ला" : "Citizenship Dist.")</div></th>
+                <th><div class="c">@(isNepali ? "नागरिकता मिति" : "Citizenship Date")</div></th>
+                <th><div class="c">@(isNepali ? "बाजे/हजुरआमा" : "GrandFather/Mother")</div></th>
+                <th><div class="c">@(isNepali ? "बुबा" : "Father")</div></th>
+                <th><div class="c">@(isNepali ? "पति/पत्नी" : "Spouse")</div></th>
+                <th><div class="c">@(isNepali ? "पेशा" : "Occupation")</div></th>
+                <th><div class="c">@(isNepali ? "ठेगाना" : "Address")</div></th>
+                <th><div class="c">@(isNepali ? "मोबाइल नं." : "Mobile No")</div></th>
+                <th><div class="c">@(isNepali ? "सम्पर्क नं." : "Contact No")</div></th>
+                @if (enableCollectionCenter) { <th><div class="c">@(isNepali ? "संकलन केन्द्र" : "Collection Center")</div></th> }
+                @if (enableGroup) { <th><div class="c">@(isNepali ? "समूह" : "Member Group")</div></th> }
+                <th><div class="c">@(isNepali ? "दर्ता मिति (वि.सं.)" : "Reg. Date (BS)")</div></th>
+                <th><div class="c">@(isNepali ? "दर्ता मिति (ई.सं.)" : "Reg. On (AD)")</div></th>
+                <th><div class="c">@(isNepali ? "इच्छाइएको व्यक्ति" : "Nominee Name")</div></th>
+                <th><div class="c">@(isNepali ? "इच्छाइएको उमेर" : "Nominee Age")</div></th>
+                <th><div class="c">@(isNepali ? "इच्छाइएको ठेगाना" : "Nominee Address")</div></th>
+                <th><div class="c">@(isNepali ? "सेयर संख्या" : "Share No")</div></th>
+                <th><div class="c">@(isNepali ? "सेयर रकम" : "Share Amount")</div></th>
+                <th><div class="c">@(isNepali ? "कैफियत" : "Remarks")</div></th>
+            </tr>
+        </thead>
+    }
 
-        RenderSubheader();
+    void RenderMemberRow(ShareDetailsRowDto row, int sn)
+    {
+        <tr class="@(sn % 2 == 0 ? "alt" : "")">
+            <td class="text-right"><div class="c">@sn</div></td>
+            <td><div class="c">@(row.MemberId ?? "")</div></td>
+            <td><div class="c">@(row.MemberName ?? "")</div></td>
+            <td><div class="c">@(row.Gender ?? "")</div></td>
+            <td class="text-right"><div class="c">@(row.MemberAge ?? "")</div></td>
+            <td><div class="c">@(row.DateOfBirth ?? "")</div></td>
+            <td><div class="c">@(row.CitizenShipNo ?? "")</div></td>
+            <td><div class="c">@(row.CitizenShipDistrict ?? "")</div></td>
+            <td><div class="c">@(row.CitizenShipDate ?? "")</div></td>
+            <td><div class="c">@(row.GrandFatherName ?? "")</div></td>
+            <td><div class="c">@(row.FatherName ?? "")</div></td>
+            <td><div class="c">@(row.SpouceName ?? "")</div></td>
+            <td><div class="c">@(row.Occupation ?? "")</div></td>
+            <td><div class="c">@(row.MemberAddress ?? "")</div></td>
+            <td><div class="c">@(row.MobileNo ?? "")</div></td>
+            <td><div class="c">@(row.ContactNo ?? "")</div></td>
+            @if (enableCollectionCenter) { <td><div class="c">@(row.Center ?? "")</div></td> }
+            @if (enableGroup) { <td><div class="c">@(row.MemberGroup ?? "")</div></td> }
+            <td><div class="c">@(row.RegistrationDate ?? "")</div></td>
+            <td><div class="c">@(row.RegistrationOn ?? "")</div></td>
+            <td><div class="c">@(row.NomineeName ?? "")</div></td>
+            <td class="text-right"><div class="c">@(row.NomineeAge ?? "")</div></td>
+            <td><div class="c">@(row.NomineeAddress ?? "")</div></td>
+            <td class="text-right"><div class="c">@(row.TotalShare?.ToString("N0") ?? "")</div></td>
+            <td class="text-right"><div class="c">@(row.TotalShareAmount?.ToString("N2") ?? "")</div></td>
+            <td><div class="c">@(row.Remarks ?? "")</div></td>
+        </tr>
+    }
 
-        <div class="table-wrap">
-            <table class="report-table">
-                { RenderTableHeader(); }
-                <tbody>
-                    @if (rows.Any())
-                    {
-                        var snP = 0;
-                        foreach (var row in rows)
+    void RenderGrandTotal()
+    {
+        <div class="grand-total-box">
+            @(isNepali ? "कुल सदस्य" : "Total Members"): @totalMembers
+            &nbsp;|&nbsp;
+            @(isNepali ? "कुल रेकर्ड" : "Total Records"): @totalRecords
+            &nbsp;|&nbsp;
+            @(isNepali ? "कुल सेयर संख्या" : "Total Share No"): @totalShare.ToString("N0")
+            &nbsp;|&nbsp;
+            @(isNepali ? "कुल सेयर रकम" : "Total Share Amount"): @totalShareAmount.ToString("N2")
+        </div>
+    }
+}
+
+@* ═══ VIEW / PDF: fixed sheets (one .report-page = one page) ═══ *@
+<div class="view-outer" id="viewOuter" data-fixed-sheets
+     data-sheet-w="@VisualSheetLayout.Num(pg.WidthMm)" data-sheet-h="@VisualSheetLayout.Num(pg.HeightMm)">
+
+    @{ var sn = 0; }
+    @for (var p = 0; p < pageChunks.Count; p++)
+    {
+        var chunk = pageChunks[p];
+        var isFirst = p == 0;
+        var isLast = p == pageChunks.Count - 1;
+
+        <div class="report-page" data-page="@(p + 1)">
+            <div class="sheet-body">
+                @if (isFirst)
+                {
+                    <div class="common-header-wrap">
+                        @await Html.PartialAsync("_CommonHeader", Model)
+                    </div>
+                    RenderSubheader();
+                }
+
+                @if (chunk.Count > 0)
+                {
+                    <table class="report-table">
+                        @{ RenderColGroup(); }
+                        @if (isFirst)
                         {
-                            snP++;
-                            RenderMemberRow(row, snP);
+                            RenderTableHeader();
                         }
-                    }
-                </tbody>
-            </table>
+                        <tbody>
+                            @foreach (var row in chunk)
+                            {
+                                sn++;
+                                RenderMemberRow(row, sn);
+                            }
+                        </tbody>
+                    </table>
+                }
+
+                @if (!rows.Any() && isFirst)
+                {
+                    <div class="subheader-meta text-center">@(isNepali ? "कुनै डाटा फेला परेन" : "No data found for the selected criteria")</div>
+                }
+
+                @if (isLast && rows.Any())
+                {
+                    RenderGrandTotal();
+                }
+            </div>
+            <div class="page-footer">Page @(p + 1) of @totalPages</div>
         </div>
-
-        if (rows.Any())
-        {
-            RenderGrandTotal();
-        }
-        else
-        {
-            <div class="subheader-meta text-center">@(isNepali ? "कुनै डाटा फेला परेन" : "No data found for the selected criteria")</div>
-        }
     }
+</div>
 
-    @if (isView)
-    {
-        <script>
-                (function () {
-                    'use strict';
-
-                    var MAX_RETRIES  = 5;
-                    var RETRY_DELAY  = 80;
-                    var retryCount   = 0;
-                    var PAGE_W       = 1200;
-                    // Fixed page height: 420 mm @@ 96 dpi = 1587 px
-                    var PAGE_H       = 1587;
-                    var FOOTER_H     = 28;
-
-                    function buildPages() {
-                        var tbodySource = document.getElementById('tbodySource');
-                        var subHdrTpl   = document.getElementById('subheaderTemplate');
-                        var theadTpl    = document.getElementById('theadTemplate');
-
-                        if (!tbodySource || !subHdrTpl || !theadTpl) {
-                            if (retryCount++ < MAX_RETRIES)
-                                setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
-                            return;
+@* ═══ EXCEL source: ONE table. Hidden here; JsReportService.PrepareForExcel removes #viewOuter and un-hides this ═══ *@
+<div id="excelSource">
+    <table class="data-table" data-sheet-name="ShareDetailsReport">
+        <colgroup>
+            @for (var ci = 0; ci < colCount; ci++)
+            {
+                <col />
+            }
+        </colgroup>
+        <thead>
+            <tr>
+                <th class="text-center">@(isNepali ? "क्र.सं." : "SN")</th>
+                <th>@(isNepali ? "सदस्य नं." : "Member ID")</th>
+                <th>@(isNepali ? "सदस्यको नाम" : "Member Name")</th>
+                <th>@(isNepali ? "लिङ्ग" : "Gender")</th>
+                <th>@(isNepali ? "उमेर" : "Age")</th>
+                <th>@(isNepali ? "जन्म मिति" : "DOB")</th>
+                <th>@(isNepali ? "नागरिकता नं." : "Citizenship No")</th>
+                <th>@(isNepali ? "नागरिकता जिल्ला" : "Citizenship Dist.")</th>
+                <th>@(isNepali ? "नागरिकता मिति" : "Citizenship Date")</th>
+                <th>@(isNepali ? "बाजे/हजुरआमा" : "GrandFather/Mother")</th>
+                <th>@(isNepali ? "बुबा" : "Father")</th>
+                <th>@(isNepali ? "पति/पत्नी" : "Spouse")</th>
+                <th>@(isNepali ? "पेशा" : "Occupation")</th>
+                <th>@(isNepali ? "ठेगाना" : "Address")</th>
+                <th>@(isNepali ? "मोबाइल नं." : "Mobile No")</th>
+                <th>@(isNepali ? "सम्पर्क नं." : "Contact No")</th>
+                @if (enableCollectionCenter) { <th>@(isNepali ? "संकलन केन्द्र" : "Collection Center")</th> }
+                @if (enableGroup) { <th>@(isNepali ? "समूह" : "Member Group")</th> }
+                <th>@(isNepali ? "दर्ता मिति (वि.सं.)" : "Reg. Date (BS)")</th>
+                <th>@(isNepali ? "दर्ता मिति (ई.सं.)" : "Reg. On (AD)")</th>
+                <th>@(isNepali ? "इच्छाइएको व्यक्ति" : "Nominee Name")</th>
+                <th>@(isNepali ? "इच्छाइएको उमेर" : "Nominee Age")</th>
+                <th>@(isNepali ? "इच्छाइएको ठेगाना" : "Nominee Address")</th>
+                <th>@(isNepali ? "सेयर संख्या" : "Share No")</th>
+                <th>@(isNepali ? "सेयर रकम" : "Share Amount")</th>
+                <th>@(isNepali ? "कैफियत" : "Remarks")</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr class="meta-title"><td colspan="@colCount">@(isNepali ? "सेयर विवरण प्रतिवेदन" : "Share Details Report")</td></tr>
+            <tr class="meta-row">
+                <td colspan="@leftSpan"><strong>@(isNepali ? "शाखा" : "Branch") :</strong> @branchName</td>
+                <td colspan="@rightSpan" class="text-right"><strong>@(isNepali ? "मिति सम्म" : "Till Date") :</strong> @tillDate</td>
+            </tr>
+            <tr class="meta-row">
+                <td colspan="@leftSpan"><strong>@(isNepali ? "सेयर प्रकार" : "Share Type") :</strong> @shareTypeName</td>
+                <td colspan="@rightSpan" class="text-right"><strong>@(isNepali ? "सदस्य प्रकार" : "Member Type") :</strong> @memberTypeName</td>
+            </tr>
+            @if (enableCollectionCenter || enableGroup)
+            {
+                <tr class="meta-row">
+                    <td colspan="@leftSpan">
+                        @if (enableCollectionCenter)
+                        {
+                            <strong>@(isNepali ? "संकलन केन्द्र" : "Collection Center") :</strong> @collectionCenterName
                         }
-
-                        var subHdrH  = subHdrTpl.getBoundingClientRect().height;
-                        var theadH   = theadTpl.getBoundingClientRect().height;
-                        var theadHtml = theadTpl.outerHTML;
-
-                        var grandTotalEl = document.getElementById('grandTotalRow');
-                        var gtH    = grandTotalEl ? grandTotalEl.getBoundingClientRect().height : 0;
-                        var gtHtml = grandTotalEl ? grandTotalEl.outerHTML : '';
-
-                        var noDataTpl  = document.getElementById('noDataTemplate');
-                        var noDataHtml = noDataTpl ? noDataTpl.outerHTML : '';
-
-                        var commonHdrEl   = document.getElementById('commonHeaderSource');
-                        var commonHdrHtml = commonHdrEl ? commonHdrEl.innerHTML : '';
-                        var commonHdrH    = commonHdrEl ? commonHdrEl.getBoundingClientRect().height : 0;
-
-                        // Each <tr> is treated as one atomic, unsplittable unit.
-                        var rowEls = tbodySource.querySelectorAll('tr');
-                        var rowData = Array.from(rowEls).map(function (r) {
-                            return { html: r.outerHTML, h: r.getBoundingClientRect().height };
-                        });
-
-                        var allZero = rowData.length > 0 && rowData.every(function (r) { return r.h === 0; });
-                        if (allZero) {
-                            if (retryCount++ < MAX_RETRIES)
-                                setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
-                            return;
+                    </td>
+                    <td colspan="@rightSpan" class="text-right">
+                        @if (enableGroup)
+                        {
+                            <strong>@(isNepali ? "समूह" : "Member Group") :</strong> @memberGroupName
                         }
+                    </td>
+                </tr>
+            }
+            <tr class="meta-row">
+                <td colspan="@leftSpan"><strong>@(isNepali ? "प्रतिवेदन मिति" : "Report Generated On") :</strong> @generatedOn</td>
+                <td colspan="@rightSpan"></td>
+            </tr>
+            <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
 
-                        var subHdrHtml = subHdrTpl.outerHTML;
+            @{ var snX = 0; }
+            @foreach (var row in rows)
+            {
+                snX++;
+                <tr class="detail-row">
+                    <td class="text-center">@snX</td>
+                    <td>@(row.MemberId ?? "")</td>
+                    <td>@(row.MemberName ?? "")</td>
+                    <td>@(row.Gender ?? "")</td>
+                    <td class="text-right">@(row.MemberAge ?? "")</td>
+                    <td>@(row.DateOfBirth ?? "")</td>
+                    <td>@(row.CitizenShipNo ?? "")</td>
+                    <td>@(row.CitizenShipDistrict ?? "")</td>
+                    <td>@(row.CitizenShipDate ?? "")</td>
+                    <td>@(row.GrandFatherName ?? "")</td>
+                    <td>@(row.FatherName ?? "")</td>
+                    <td>@(row.SpouceName ?? "")</td>
+                    <td>@(row.Occupation ?? "")</td>
+                    <td>@(row.MemberAddress ?? "")</td>
+                    <td>@(row.MobileNo ?? "")</td>
+                    <td>@(row.ContactNo ?? "")</td>
+                    @if (enableCollectionCenter) { <td>@(row.Center ?? "")</td> }
+                    @if (enableGroup) { <td>@(row.MemberGroup ?? "")</td> }
+                    <td>@(row.RegistrationDate ?? "")</td>
+                    <td>@(row.RegistrationOn ?? "")</td>
+                    <td>@(row.NomineeName ?? "")</td>
+                    <td class="text-right">@(row.NomineeAge ?? "")</td>
+                    <td>@(row.NomineeAddress ?? "")</td>
+                    <td class="text-right">@(row.TotalShare?.ToString("N0") ?? "")</td>
+                    <td class="text-right">@(row.TotalShareAmount?.ToString("N2") ?? "")</td>
+                    <td>@(row.Remarks ?? "")</td>
+                </tr>
+            }
 
-                        var availP1 = PAGE_H - FOOTER_H - commonHdrH - subHdrH - theadH;
-                        var availPN = PAGE_H - FOOTER_H - theadH;
+            @if (rows.Any())
+            {
+                <tr class="grand-total">
+                    <td colspan="@labelSpan" class="text-right">@(isNepali ? "कुल सदस्य" : "Total Members") : @totalMembers &nbsp;&nbsp; @(isNepali ? "कुल रेकर्ड" : "Total Records") : @totalRecords &nbsp;&nbsp; @(isNepali ? "कुल" : "Grand Total") :</td>
+                    <td class="text-right">@totalShare.ToString("N0")</td>
+                    <td class="text-right">@totalShareAmount.ToString("N2")</td>
+                    <td></td>
+                </tr>
+            }
+            else
+            {
+                <tr><td colspan="@colCount" class="text-center">@(isNepali ? "कुनै डाटा फेला परेन" : "No data found for the selected criteria")</td></tr>
+            }
+        </tbody>
+    </table>
+</div>
 
-                        // ── Paginate table rows ──────────────────────────────────
-                        var pages = [], cur = [], usedH = 0;
-                        var isFirstPage = true;
+<script>
+(function () {
+    'use strict';
+    window.__chartsReady = true;
+    window.JSREPORT_READY_TO_START = true;   // jsreport waits for this (WaitForJS = true)
 
-                        if (rowData.length === 0) {
-                            pages.push([]);
-                        } else {
-                            for (var i = 0; i < rowData.length; i++) {
-                                var rh    = rowData[i].h || 24;
-                                var avail = isFirstPage ? availP1 : availPN;
-                                var extra = (i === rowData.length - 1) ? gtH : 0;
+    var box = document.getElementById('viewOuter');
 
-                                if (cur.length > 0 && usedH + rh + extra > avail) {
-                                    pages.push(cur);
-                                    cur   = [];
-                                    usedH = 0;
-                                    isFirstPage = false;
-                                }
-                                cur.push(i);
-                                usedH += rh;
-                            }
-                            pages.push(cur);
-                        }
+    window.scrollToPage = function (n) {
+        var t = document.querySelector('.report-page[data-page="' + n + '"]');
+        if (t && box) box.scrollTo({ top: t.offsetTop, behavior: 'smooth' });
+    };
 
-                        var totalPages = pages.length;
+    if (!(window.parent && window.parent !== window)) return;   // only inside the app iframe
 
-                        // ── Remove source DOM ────────────────────────────────────
-                        var sourceWrap = document.getElementById('sourceWrap');
-                        if (sourceWrap)  sourceWrap.parentNode.removeChild(sourceWrap);
-                        if (commonHdrEl) commonHdrEl.parentNode.removeChild(commonHdrEl);
+    window.parent.postMessage({ type: 'REPORT_PAGES_READY', totalPages: @totalPages }, '*');
 
-                        var viewOuter = document.getElementById('viewOuter');
-                        var fragment  = document.createDocumentFragment();
-
-                        for (var p = 0; p < totalPages; p++) {
-                            var card = document.createElement('div');
-                            card.className = 'view-page';
-                            card.setAttribute('data-page', String(p + 1));
-
-                            var contentHtml = '<div class="view-page-content">';
-
-                            if (p === 0 && commonHdrHtml) {
-                                contentHtml += '<div class="common-header-wrap">' + commonHdrHtml + '</div>';
-                            }
-
-                            if (p === 0) {
-                                contentHtml += '<div class="page-subheader">' + subHdrHtml + '</div>';
-                            }
-
-                            contentHtml += '<div class="page-table-wrap"><div class="table-wrap"><table class="report-table">';
-                            contentHtml += theadHtml;
-                            contentHtml += '<tbody>';
-
-                            var pageRows = pages[p];
-                            for (var b = 0; b < pageRows.length; b++) {
-                                contentHtml += rowData[pageRows[b]].html;
-                            }
-
-                            contentHtml += '</tbody></table></div></div>'; // .table-wrap, .page-table-wrap
-
-                            if (rowData.length === 0 && p === 0 && noDataHtml) {
-                                contentHtml += noDataHtml;
-                            }
-
-                            if (p === totalPages - 1 && gtHtml) {
-                                contentHtml += gtHtml;
-                            }
-
-                            contentHtml += '</div>'; // .view-page-content
-
-                            contentHtml += '<div class="view-page-footer">Page '
-                                         + (p + 1) + ' of ' + totalPages
-                                         + '</div>';
-
-                            card.innerHTML = contentHtml;
-                            fragment.appendChild(card);
-                        }
-
-                        viewOuter.appendChild(fragment);
-
-                        // ── Drag-to-scroll (mouse-slide horizontal pan) ──────────
-                        (function (el) {
-                            var drag = false, sx = 0, ss = 0;
-                            el.addEventListener('mousedown', function (e) {
-                                if (e.button !== 0) return;
-                                drag = true; sx = e.clientX; ss = el.scrollLeft;
-                                el.style.userSelect = 'none';
-                                e.preventDefault();
-                            });
-                            document.addEventListener('mousemove', function (e) {
-                                if (drag) el.scrollLeft = ss - (e.clientX - sx);
-                            });
-                            document.addEventListener('mouseup', function () {
-                                drag = false; el.style.userSelect = '';
-                            });
-                        })(viewOuter);
-
-                        // ── Scroll-to-page helper ────────────────────────────────
-                        window.scrollToPage = function (pageNumber) {
-                            var target = document.querySelector(
-                                '.view-page[data-page="' + pageNumber + '"]'
-                            );
-                            if (!target) return;
-                            window.scrollTo({ top: target.offsetTop, behavior: 'smooth' });
-                        };
-
-                        // ── Notify parent iframe ─────────────────────────────────
-                        if (window.parent && window.parent !== window) {
-                            window.parent.postMessage(
-                                { type: 'REPORT_PAGES_READY', totalPages: totalPages },
-                                '*'
-                            );
-                        }
-
-                    } // end buildPages
-
-                    requestAnimationFrame(function () {
-                        requestAnimationFrame(buildPages);
-                    });
-
-                }());
-        </script>
-    }
+    // keep the parent's "Page x of y" in sync while scrolling
+    var last = 1;
+    box.addEventListener('scroll', function () {
+        var cur = 1, mid = box.scrollTop + box.clientHeight / 3;
+        box.querySelectorAll('.report-page').forEach(function (p, i) {
+            if (p.offsetTop <= mid) cur = i + 1;
+        });
+        if (cur !== last) {
+            last = cur;
+            window.parent.postMessage({ type: 'REPORT_PAGE_CHANGED', page: cur }, '*');
+        }
+    }, { passive: true });
+}());
+</script>
 </body>
 </html>

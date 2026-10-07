@@ -16,7 +16,6 @@
     var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-   
     var memberGroups = rows
         .GroupBy(r => new { r.MemberId, r.Name })
         .ToList();
@@ -27,142 +26,96 @@
     <meta charset="utf-8" />
     <title>Share Purchase Report</title>
     <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 9pt;
+            background: white;
+            color: #000;
+        }
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
+        .report-container { width: 100%; overflow: visible; }
 
-            thead {
-                display: table-row-group;
-            }
+        thead { display: table-row-group; }
 
-            .report-title {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 9pt;
+            table-layout: fixed;
+        }
 
-            /* Own auto-layout table for the subheader so labels never wrap
-                           or overlap — same fix applied throughout this thread. */
-            .meta-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 6px;
-            }
+        .data-table td, .data-table th {
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            padding: 4px 6px;
+            vertical-align: middle;
+        }
 
-                .meta-table td {
-                    padding: 3px 6px;
-                    font-size: 9pt;
-                    white-space: nowrap;
-                    vertical-align: top;
-                }
+        .data-table th {
+            border-top: none;
+            border-bottom: 1px solid #000;
+            text-align: left;
+            white-space: normal;
+            font-weight: bold;
+        }
 
-            .meta-left {
-                text-align: left;
-                width: 50%;
-            }
+        .data-table th.text-right,
+        .data-table td.text-right { text-align: right; }
 
-            .meta-right {
-                text-align: right;
-                width: 50%;
-            }
+        /* title + meta rows (inside the single table) */
+        .meta-title td {
+            text-align: center;
+            font-family: "Times New Roman", Times, serif;
+            font-size: 14pt;
+            font-weight: bold;
+            text-decoration: underline;
+            padding: 8px 6px;
+        }
 
-            .meta-spacer td {
-                height: 8px;
-            }
+        .meta-row td {
+            padding: 3px 6px;
+            font-size: 9pt;
+            white-space: nowrap;
+            vertical-align: top;
+        }
 
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
+        .meta-spacer td { height: 8px; padding: 0; }
 
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
+        .member-row td {
+            font-weight: bold;
+            padding-top: 8px;
+            padding-bottom: 2px;
+            border: none;
+        }
 
-                .data-table th {
-                    border-top: none;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                    white-space: normal;
-                    font-weight: bold;
-                }
+        .member-row.first-group td { padding-top: 2px; }
 
-                    .data-table th.text-right,
-                    .data-table td.text-right {
-                        text-align: right;
-                    }
+        .detail-row td { padding-left: 20px; border: none; }
 
-            .member-row td {
-                font-weight: bold;
-                padding-top: 8px;
-                padding-bottom: 2px;
-                border: none;
-            }
+        .subtotal-row td {
+            border-top: 1px solid #000;
+            font-weight: bold;
+            padding-top: 3px;
+            padding-bottom: 6px;
+        }
 
-            .member-row.first-group td {
-                padding-top: 2px;
-            }
+        .grand-total-row td {
+            border-top: 2px solid #000;
+            border-bottom: 2px solid #000;
+            font-weight: bold;
+            background: #f9f9f9;
+            padding: 5px 6px;
+        }
 
-            .detail-row td {
-                padding-left: 20px;
-                border: none;
-            }
+        .text-right { text-align: right !important; }
+        .text-center { text-align: center !important; }
 
-            .subtotal-row td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-                padding-top: 3px;
-                padding-bottom: 6px;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
+        @@media print {
+            thead { display: table-row-group; }
+            tr { page-break-inside: avoid; break-inside: avoid; }
+        }
     </style>
 </head>
 <body>
@@ -173,20 +126,7 @@
             @await Html.PartialAsync("_CommonHeader", Model)
         }
 
-        <div class="report-title">Share Purchase Report</div>
-
-        <table class="meta-table">
-            <tr>
-                <td class="meta-left"><strong>Report Generated On :</strong> @generatedOn</td>
-                <td class="meta-right"><strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp; <strong>To Date :</strong> @toDate</td>
-            </tr>
-            <tr>
-                <td class="meta-left"></td>
-                <td class="meta-right"><strong>Branch Name :</strong> @officeName</td>
-            </tr>
-            <tr class="meta-spacer"><td colspan="2"></td></tr>
-        </table>
-
+        @* ONE table only -> one Excel sheet *@
         <table class="data-table" data-sheet-name="SharePurchase">
             <colgroup>
                 <col style="width:11%;" />
@@ -199,6 +139,19 @@
                 <col style="width:13%;" />
             </colgroup>
             <tbody>
+                <tr class="meta-title">
+                    <td colspan="8">Share Purchase Report</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="4"><strong>Report Generated On :</strong> @generatedOn</td>
+                    <td colspan="4" class="text-right"><strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp; <strong>To Date :</strong> @toDate</td>
+                </tr>
+                <tr class="meta-row">
+                    <td colspan="4"></td>
+                    <td colspan="4" class="text-right"><strong>Branch Name :</strong> @officeName</td>
+                </tr>
+                <tr class="meta-spacer"><td colspan="8"></td></tr>
+
                 <tr>
                     <th>Member Id</th>
                     <th>Member Name</th>

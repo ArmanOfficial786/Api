@@ -6,6 +6,7 @@ using NexgenCosysReport.Dtos.RequestDtos.Share;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Share;
+using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
@@ -28,7 +29,8 @@ namespace NexgenCosysReport.Controllers.Share
         private readonly IReportFileResponse _reportFileResponse;
 
         private static readonly PageSizeSetting PageSetting =
-          PageSizeSetting.Custom(594, 420, PageUnit.mm, landscape: true);
+          PageSizeSetting.Custom(500, 297, PageUnit.mm, landscape: true);
+        private static readonly VisualSheetLayout Layout = VisualSheetLayout.From(PageSetting);
 
 
         public ShareDetailsController(
@@ -84,7 +86,12 @@ namespace NexgenCosysReport.Controllers.Share
                 var reportName = "ShareDetails";
                 var upperFormat = format.ToUpper();
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName, request.VisualReport ? "VISUAL" : "");
+
+                //var reportKey = isVisual
+                //     ? ReportUtils.GenerateReportKey(request, reportName, $"VISUAL_{Layout.CacheTag}")
+                //     : ReportUtils.GenerateReportKey(request, reportName, $"NORMAL_{Layout.CacheTag}");
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -94,7 +101,7 @@ namespace NexgenCosysReport.Controllers.Share
                     return await ReportExportHelper.ExportFromCacheAsync(
                         reportKey, upperFormat,
                         reportName,
-                        _jsReportService, _logger);
+                        _jsReportService, _logger, PageSetting, ct);
                 }
 
                 var dataTask = _repository.GetReportDataAsync(request);
@@ -133,7 +140,8 @@ namespace NexgenCosysReport.Controllers.Share
                     { "EnableGroup", request.EnableGroup },
                     { "ReportType", data.ReportType ?? "ENGLISH" },
                     { "OrderBy", request.OrderBy },
-                    { "Format", upperFormat }
+                    { "Format", upperFormat },
+                    { "VisualLayout", Layout }
                 };
 
                 string viewPath = request.VisualReport
@@ -151,18 +159,18 @@ namespace NexgenCosysReport.Controllers.Share
                 {
                     var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
                      htmlContent, reportKey, PageSetting, ct);
-
-                    _logger.LogInformation("?? VIEW — jsreport Html recipe, {Bytes:N0} chars", viewHtml.Length);
+                    var vPagination = VisualSheetLayout.CountSheets(viewHtml);
+                    _reportFileResponse.AppendPaginationHeaders(vPagination, data.Rows.Count);
                     return Content(viewHtml, "text/html");
 
                 }
 
-                if (upperFormat == "PDF")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
-                        htmlContent, "PDF", reportKey, PageSetting, ct);
-                    return _reportFileResponse.BuildPdfResponse(pdfBytes);
-                }
+                //if (upperFormat == "PDF")
+                //{
+                //    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
+                //        htmlContent, "PDF", reportKey, PageSetting, ct);
+                //    return _reportFileResponse.BuildPdfResponse(pdfBytes);
+                //}
 
                 return await ReportExportHelper.ExportFromCacheAsync(
                     reportKey, upperFormat, "MemberDetailReport",

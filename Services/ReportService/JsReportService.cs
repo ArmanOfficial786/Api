@@ -115,7 +115,8 @@ namespace NexgenCosysReport.Services.ReportService
             // 🔹 For Excel, strip header rows from the HTML before rendering
             if (fmt is "EXCEL" or "XLSX")
             {
-                htmlContent = RemoveHeaderRows(htmlContent);
+                //htmlContent = RemoveHeaderRows(htmlContent);
+                htmlContent = PrepareForExcel(htmlContent);
             }
 
             var rawBytes = await RenderHtmlToBytesAsync(htmlContent, fmt, pageSetting, sheet, ct).ConfigureAwait(false);
@@ -231,5 +232,26 @@ namespace NexgenCosysReport.Services.ReportService
             }
             return doc.DocumentNode.OuterHtml;
         }
+        private static string PrepareForExcel(string html)
+        {
+            var doc = new HtmlDocument();
+            doc.LoadHtml(html);
+
+            // Server-paged visual report: keep ONLY the single Excel table
+            var table = doc.GetElementbyId("excelSource")?.SelectSingleNode(".//table");
+            if (table != null)
+            {
+                var body = doc.DocumentNode.SelectSingleNode("//body");
+                body.RemoveAllChildren();
+                body.AppendChild(table);
+                return doc.DocumentNode.OuterHtml;
+            }
+
+            // Normal reports (Member Registration etc.): unchanged behaviour
+            doc.DocumentNode.SelectNodes("//*[contains(@class,'common-header-table')]")
+                ?.ToList().ForEach(n => n.Remove());
+            return doc.DocumentNode.OuterHtml;
+        }
+
     }
 }
