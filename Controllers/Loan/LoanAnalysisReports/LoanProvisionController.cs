@@ -70,8 +70,14 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 
                 var reportName = "LoanProvision";
                 var upperFormat = format.ToUpper();
+                bool isVisual = request.VisualReport;
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                //var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+
+                var reportKey = isVisual
+                    ? ReportUtils.GenerateReportKey(request, reportName, "VISUAL")
+                    : ReportUtils.GenerateReportKey(request, reportName);
+
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -126,7 +132,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                 };
 
                 string viewPath = request.VisualReport
-                    ? "Views/VisualReport/Loan/VLoanProvisionReport.cshtml"
+                    ? "Views/VisualReport/Loan/LoanAnalysisReports/VLoanProvisionReport.cshtml"
                     : "Views/Report/Loan/LoanAnalysisReports/LoanProvisionReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
@@ -137,6 +143,12 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 
                 if (upperFormat == "VIEW")
                 {
+                    if (isVisual)
+                    {
+                        var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(htmlContent, reportKey);
+                        return Content(viewHtml, "text/html");
+                    }
+
                     var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
                     var totalPages = JsReportService.CountPdfPages(pdfBytes);
                     var pagination = new Pagination
