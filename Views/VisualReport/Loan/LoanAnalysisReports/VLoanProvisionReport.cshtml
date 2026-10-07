@@ -1,6 +1,8 @@
-﻿@* Views/Report/LoanProvisionVisualReport.cshtml *@
+﻿@* Views/VisualReport/Loan/LoanAnalysisReports/VLoanProvisionReport.cshtml *@
 @using System.Text.Json
+@using NexgenCosysReport.Dtos.ReportDtos
 @using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+@using NexgenCosysReport.Services.ReportService
 @model Dictionary<string, object>
 @{
     Layout = null;
@@ -46,7 +48,16 @@
         provision = r.ProvisionAmount ?? 0
     }).ToList());
 
-    const int TotalPages = 2;
+    // ── Page geometry: built in the controller from its PageSetting ────────
+    var pg = (Model.TryGetValue("VisualLayout", out var pgObj) ? pgObj as VisualSheetLayout : null)
+             ?? throw new InvalidOperationException("VisualLayout is missing from the report data. Add { \"VisualLayout\", Layout } in the controller.");
+
+    string Mm(double v) => VisualSheetLayout.Mm(v);
+
+    // ── Page plan: 1 = KPIs + donuts, 2 = bar charts, 3..N = detail table ──
+    var rowsPerDetailPage = pg.DetailRowsPerPage;
+    var detailChunks = rows.Chunk(rowsPerDetailPage).ToList();
+    var totalPages = pg.TotalPages(rows.Count);
 }
 <!DOCTYPE html>
 <html>
@@ -59,57 +70,70 @@
         <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
     }
     <style>
+        :root { --sheet-w: @Mm(pg.WidthMm); --sheet-h: @Mm(pg.SheetHeightMm); }
+
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: Arial, sans-serif;
             font-size: 9pt;
             color: #222;
-            background: @(isView ? "#d0d0d0" : "#fff");
+            background: #fff;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
         }
 
         .text-right { text-align: right !important; }
         .text-center { text-align: center !important; }
 
+        /* Scroll container (view only). Reset in the print block below. */
         .view-outer {
-            background: @(isView ? "#d0d0d0" : "#fff");
+            background: #fff;
             padding: @(isView ? "8px 16px 20px" : "0");
-            overflow-x: auto;
-            min-height: 100vh;
+            @(isView ? "height: 100vh; height: 100dvh; overflow: auto;" : "overflow-x: auto;")
         }
 
+        /* ── One sheet = one page (identical in browser and PDF) ───────── */
         .report-page {
-            width: 1120px;
+            width: var(--sheet-w);
+            height: var(--sheet-h);
+            padding: @Mm(pg.MarginTopMm) @Mm(pg.MarginRightMm) @Mm(pg.MarginBottomMm) @Mm(pg.MarginLeftMm);
             margin: 0 auto @(isView ? "24px" : "0") auto;
             background: #fff;
-            padding: 16px 20px 8px;
-            @(isView ? "box-shadow: 0 2px 8px rgba(0,0,0,.18);" : "")
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
             page-break-after: always;
             break-after: page;
+            @(isView ? "box-shadow: 0 2px 8px rgba(0,0,0,.18);" : "")
         }
         .report-page:last-child { page-break-after: auto; break-after: auto; }
 
+        .sheet-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+
         .page-footer {
+            flex: none;
             border-top: 1px solid #ccc;
             text-align: center;
             font-size: 9pt;
             font-weight: bold;
-            padding: 6px 0 2px;
-            margin-top: 12px;
+            padding: 4px 0 0;
+            margin-top: 6px;
         }
 
-        .common-header-wrap { width: 100%; overflow: hidden; margin-bottom: 8px; }
+        .common-header-wrap { flex: none; width: 100%; overflow: hidden; margin-bottom: 6px; }
 
         .rpt-title {
+            flex: none;
             text-align: center;
             font-family: "Times New Roman", Times, serif;
             font-size: 15pt;
             font-weight: bold;
             text-decoration: underline;
-            margin: 6px 0 8px;
+            margin: 4px 0 6px;
         }
-        .rpt-meta { display: flex; justify-content: space-between; font-size: 9pt; margin-bottom: 12px; }
-        .rpt-meta div { line-height: 1.7; }
+        .rpt-meta { flex: none; display: flex; justify-content: space-between; font-size: 9pt; margin-bottom: 8px; }
+        .rpt-meta div { line-height: 1.6; }
 
         .penalty-badge { display: inline-block; padding: 2px 10px; border-radius: 3px; font-size: 8pt; font-weight: bold; }
         .badge-schedule { background: #d1ecf1; color: #0c5460; }
@@ -117,8 +141,8 @@
         .badge-maturity { background: #f8d7da; color: #721c24; }
 
         /* KPI cards */
-        .kpi-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 14px; }
-        .kpi { border: 1px solid #ddd; border-left: 4px solid #2563eb; border-radius: 4px; padding: 8px 10px; background: #fafafa; }
+        .kpi-row { flex: none; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 10px; }
+        .kpi { border: 1px solid #ddd; border-left: 4px solid #2563eb; border-radius: 4px; padding: 6px 10px; background: #fafafa; }
         .kpi:nth-child(2) { border-left-color: #0ea5e9; }
         .kpi:nth-child(3) { border-left-color: #ef4444; }
         .kpi:nth-child(4) { border-left-color: #f59e0b; }
@@ -127,36 +151,37 @@
         .kpi .v { font-size: 15pt; font-weight: bold; line-height: 1.3; word-break: break-word; }
         .kpi .s { font-size: 7.5pt; color: #888; }
 
-        /* Chart grid */
-        .grid { display: grid; gap: 12px; margin-bottom: 12px; }
-        .g3 { grid-template-columns: repeat(3, 1fr); }
+        /* Chart grids fill whatever height is left on the sheet */
+        .grid { display: grid; gap: 10px; }
+        .grid.fill { flex: 1; min-height: 0; }
+        .g3 { grid-template-columns: repeat(3, 1fr); grid-template-rows: minmax(0, 1fr); }
         .g2 { grid-template-columns: repeat(2, 1fr); }
-        .card { border: 1px solid #ddd; border-radius: 4px; padding: 8px 10px; background: #fff; break-inside: avoid; page-break-inside: avoid; }
-        .card h3 { font-size: 9.5pt; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px solid #eee; }
-        .chart-box { position: relative; width: 100%; height: 270px; }
-        .chart-box.tall { height: 330px; }
+        .g2.rows2 { grid-template-rows: repeat(2, minmax(0, 1fr)); }
+        .card { border: 1px solid #ddd; border-radius: 4px; padding: 6px 10px; background: #fff; display: flex; flex-direction: column; min-height: 0; }
+        .card h3 { flex: none; font-size: 9.5pt; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #eee; }
+        .chart-box { position: relative; flex: 1; min-height: 0; width: 100%; overflow: hidden; }
 
         .empty { text-align: center; padding: 60px 0; color: #888; font-size: 11pt; }
         #chartError { display: none; background: #fee2e2; color: #991b1b; padding: 8px; margin-bottom: 10px; border-radius: 4px; }
 
-        /* Tables */
+        /* Tables: fixed row height (6mm) so rows-per-page is exact. Keep in sync with VisualSheetLayout.RowMm */
         .data-table { width: 100%; border-collapse: collapse; font-size: 9pt; table-layout: fixed; }
-        .data-table td, .data-table th { padding: 4px 6px; vertical-align: middle; word-wrap: break-word; }
-        .data-table th { background: #f9f9f9; border-top: 2px solid #000; border-bottom: 1px solid #000; text-align: left; white-space: nowrap; }
+        .data-table th, .data-table td { height: 6mm; padding: 0 6px; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .data-table th { background: #f9f9f9; border-top: 2px solid #000; border-bottom: 1px solid #000; text-align: left; }
         .detail-row td { border-bottom: 1px solid #eee; }
         .detail-row-alt td { background: #f9f9f9; border-bottom: 1px solid #eee; }
-        .grand-total-row td { border-top: 2px solid #000; border-bottom: 2px solid #000; font-weight: bold; background: #f9f9f9; padding: 5px 6px; }
-        .meta-title td { text-align: center; font-family: "Times New Roman", Times, serif; font-size: 14pt; font-weight: bold; text-decoration: underline; padding: 8px 6px; }
-        .meta-row td { padding: 3px 6px; font-size: 9pt; }
+        .grand-total-row td { border-top: 2px solid #000; border-bottom: 2px solid #000; font-weight: bold; background: #f9f9f9; }
+        .meta-title td { text-align: center; font-family: "Times New Roman", Times, serif; font-size: 14pt; font-weight: bold; text-decoration: underline; padding: 8px 6px; height: auto; }
+        .meta-row td { padding: 3px 6px; font-size: 9pt; height: auto; }
         .meta-spacer td { height: 6px; }
-        .tbl-title { font-size: 10pt; font-weight: bold; margin: 8px 0 6px; }
+        .tbl-title { font-size: 10pt; font-weight: bold; height: 8mm; line-height: 8mm; }
 
-        @@page { size: A4 landscape; margin: 8mm; }
+        /* ── Print / PDF: must stay LAST, after .report-page ───────────── */
+        @@page { size: @Mm(pg.WidthMm) @Mm(pg.HeightMm); margin: 0; }
         @@media print {
-            body { background: #fff; }
-            .view-outer { background: #fff; padding: 0; }
-            .report-page { box-shadow: none; margin: 0 auto; }
-            tr { page-break-inside: avoid; break-inside: avoid; }
+            html, body { background: #fff; margin: 0; padding: 0; }
+            .view-outer { background: #fff; padding: 0; height: auto !important; overflow: visible !important; }
+            .report-page { box-shadow: none; margin: 0; }
         }
     </style>
 </head>
@@ -219,117 +244,134 @@
 }
 else
 {
-    <div class="view-outer" id="viewOuter">
+    @* data-fixed-sheets / data-sheet-w / data-sheet-h are read by the PDF exporter (keep this attribute order) *@
+    <div class="view-outer" id="viewOuter" data-fixed-sheets
+         data-sheet-w="@VisualSheetLayout.Num(pg.WidthMm)" data-sheet-h="@VisualSheetLayout.Num(pg.HeightMm)">
 
-        @* ═══════════════ PAGE 1 — KPIs & distribution ═══════════════ *@
+        @* ═══════════════ PAGE 1 — header, KPIs, distribution donuts ═══════════════ *@
         <div class="report-page" data-page="1">
-            <div class="common-header-wrap">
-                @await Html.PartialAsync("_CommonHeader", Model)
-            </div>
+            <div class="sheet-body">
+                <div class="common-header-wrap">
+                    @await Html.PartialAsync("_CommonHeader", Model)
+                </div>
 
-            <div class="rpt-title">Loan Provision Report — Visual Summary</div>
-            <div class="rpt-meta">
-                <div>
-                    <div><strong>Branch :</strong> @branchName</div>
+                <div class="rpt-title">Loan Provision Report — Visual Summary</div>
+                <div class="rpt-meta">
                     <div>
-                        <strong>Penalty Type :</strong>
-                        <span class="penalty-badge @(penaltyType == "S" ? "badge-schedule" : penaltyType == "R" ? "badge-remaining" : "badge-maturity")">@penaltyTypeName</span>
+                        <div><strong>Branch :</strong> @branchName</div>
+                        <div>
+                            <strong>Penalty Type :</strong>
+                            <span class="penalty-badge @(penaltyType == "S" ? "badge-schedule" : penaltyType == "R" ? "badge-remaining" : "badge-maturity")">@penaltyTypeName</span>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <div><strong>Till Date :</strong> @tillDate</div>
+                        <div>
+                            @if (isMemberGroupFiltered)
+                            {
+                                <strong>Member Group :</strong> @memberGroupName <text>&nbsp;&nbsp;&nbsp;</text>
+                            }
+                            <strong>Report Generated On :</strong> @generatedOn
+                        </div>
                     </div>
                 </div>
-                <div class="text-right">
-                    <div><strong>Till Date :</strong> @tillDate</div>
-                    <div>
-                        @if (isMemberGroupFiltered)
-                        {
-                            <strong>Member Group :</strong> @memberGroupName <text>&nbsp;&nbsp;&nbsp;</text>
-                        }
-                        <strong>Report Generated On :</strong> @generatedOn
+
+                <div id="chartError">Chart library could not be loaded. Check network access to the Chart.js file.</div>
+
+                @if (!rows.Any())
+                {
+                    <div class="empty">No data found for the selected criteria</div>
+                }
+                else
+                {
+                    <div class="kpi-row">
+                        <div class="kpi"><div class="l">Total Loans</div><div class="v">@totalLoans.ToString("N0")</div><div class="s">@rows.Count provision categories</div></div>
+                        <div class="kpi"><div class="l">Loan Outstanding</div><div class="v">@totalAmount.ToString("N2")</div><div class="s">avg @avgLoan.ToString("N2") / loan</div></div>
+                        <div class="kpi"><div class="l">Total Provision</div><div class="v">@totalProvisionAmount.ToString("N2")</div><div class="s">required provision</div></div>
+                        <div class="kpi"><div class="l">Provision Coverage</div><div class="v">@coverage.ToString("0.00")%</div><div class="s">provision / outstanding</div></div>
+                        <div class="kpi"><div class="l">Highest Provision</div><div class="v" style="font-size:12pt">@topName</div><div class="s">@topShare.ToString("0.0")% of total provision</div></div>
                     </div>
-                </div>
+
+                    <div class="grid g3 fill">
+                        <div class="card"><h3>No. of Loans by Category</h3><div class="chart-box"><canvas id="cLoans"></canvas></div></div>
+                        <div class="card"><h3>Outstanding Amount Share</h3><div class="chart-box"><canvas id="cAmountShare"></canvas></div></div>
+                        <div class="card"><h3>Provision Amount Share</h3><div class="chart-box"><canvas id="cProvShare"></canvas></div></div>
+                    </div>
+                }
             </div>
-
-            <div id="chartError">Chart library could not be loaded. Check network access to the Chart.js file.</div>
-
-            @if (!rows.Any())
-            {
-                <div class="empty">No data found for the selected criteria</div>
-            }
-            else
-            {
-                <div class="kpi-row">
-                    <div class="kpi"><div class="l">Total Loans</div><div class="v">@totalLoans.ToString("N0")</div><div class="s">@rows.Count provision categories</div></div>
-                    <div class="kpi"><div class="l">Loan Outstanding</div><div class="v">@totalAmount.ToString("N2")</div><div class="s">avg @avgLoan.ToString("N2") / loan</div></div>
-                    <div class="kpi"><div class="l">Total Provision</div><div class="v">@totalProvisionAmount.ToString("N2")</div><div class="s">required provision</div></div>
-                    <div class="kpi"><div class="l">Provision Coverage</div><div class="v">@coverage.ToString("0.00")%</div><div class="s">provision / outstanding</div></div>
-                    <div class="kpi"><div class="l">Highest Provision</div><div class="v" style="font-size:12pt">@topName</div><div class="s">@topShare.ToString("0.0")% of total provision</div></div>
-                </div>
-
-                <div class="grid g3">
-                    <div class="card"><h3>No. of Loans by Category</h3><div class="chart-box"><canvas id="cLoans"></canvas></div></div>
-                    <div class="card"><h3>Outstanding Amount Share</h3><div class="chart-box"><canvas id="cAmountShare"></canvas></div></div>
-                    <div class="card"><h3>Provision Amount Share</h3><div class="chart-box"><canvas id="cProvShare"></canvas></div></div>
-                </div>
-
-                <div class="grid g2">
-                    <div class="card"><h3>Outstanding vs Provision Amount</h3><div class="chart-box tall"><canvas id="cCompare"></canvas></div></div>
-                    <div class="card"><h3>Provision Rate (%) by Category</h3><div class="chart-box tall"><canvas id="cPct"></canvas></div></div>
-                </div>
-            }
-            <div class="page-footer">Page 1 of @(rows.Any() ? TotalPages : 1)</div>
+            <div class="page-footer">Page 1 of @totalPages</div>
         </div>
 
         @if (rows.Any())
         {
-            @* ═══════════════ PAGE 2 — Average loan size + detail table ═══════════════ *@
+            @* ═══════════════ PAGE 2 — four bar charts ═══════════════ *@
             <div class="report-page" data-page="2">
-                <div class="grid g2">
-                    <div class="card"><h3>Average Loan Size by Category</h3><div class="chart-box"><canvas id="cAvg"></canvas></div></div>
-                    <div class="card"><h3>Provision Amount by Category</h3><div class="chart-box"><canvas id="cProvBar"></canvas></div></div>
+                <div class="sheet-body">
+                    <div class="grid g2 rows2 fill">
+                        <div class="card"><h3>Outstanding vs Provision Amount</h3><div class="chart-box"><canvas id="cCompare"></canvas></div></div>
+                        <div class="card"><h3>Provision Rate (%) by Category</h3><div class="chart-box"><canvas id="cPct"></canvas></div></div>
+                        <div class="card"><h3>Average Loan Size by Category</h3><div class="chart-box"><canvas id="cAvg"></canvas></div></div>
+                        <div class="card"><h3>Provision Amount by Category</h3><div class="chart-box"><canvas id="cProvBar"></canvas></div></div>
+                    </div>
                 </div>
-
-                <div class="tbl-title">Detail</div>
-                <table class="data-table">
-                    <colgroup>
-                        <col style="width:7%;" /><col style="width:27%;" /><col style="width:11%;" />
-                        <col style="width:11%;" /><col style="width:17%;" /><col style="width:17%;" /><col style="width:10%;" />
-                    </colgroup>
-                    <thead>
-                        <tr>
-                            <th class="text-center">S.N.</th>
-                            <th>Provision Name</th>
-                            <th class="text-right">Provision %</th>
-                            <th class="text-center">No. of Loans</th>
-                            <th class="text-right">Amount</th>
-                            <th class="text-right">Provision Amount</th>
-                            <th class="text-right">Share</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @{ var sn = 0; }
-                        @foreach (var row in rows)
-                        {
-                            sn++;
-                            <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
-                                <td class="text-center">@sn</td>
-                                <td>@(row.ProvisionName ?? "")</td>
-                                <td class="text-right">@(row.ProvisionPercentage.HasValue ? row.ProvisionPercentage.Value.ToString("N2") : "")</td>
-                                <td class="text-center">@(row.NoofLoan ?? 0)</td>
-                                <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
-                                <td class="text-right">@(row.ProvisionAmount.HasValue ? row.ProvisionAmount.Value.ToString("N2") : "")</td>
-                                <td class="text-right">@Share(row.ProvisionAmount ?? 0, totalProvisionAmount)</td>
-                            </tr>
-                        }
-                        <tr class="grand-total-row">
-                            <td colspan="3" class="text-right">Grand Total</td>
-                            <td class="text-center">@totalLoans</td>
-                            <td class="text-right">@totalAmount.ToString("N2")</td>
-                            <td class="text-right">@totalProvisionAmount.ToString("N2")</td>
-                            <td class="text-right">100%</td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div class="page-footer">Page 2 of @TotalPages</div>
+                <div class="page-footer">Page 2 of @totalPages</div>
             </div>
+
+            @* ═══════════════ PAGES 3..N — detail table, split by rowsPerDetailPage ═══════════════ *@
+            var sn = 0;
+            for (var p = 0; p < detailChunks.Count; p++)
+            {
+                var chunk = detailChunks[p];
+                var isLast = p == detailChunks.Count - 1;
+                <div class="report-page" data-page="@(p + 3)">
+                    <div class="sheet-body">
+                        <div class="tbl-title">Detail</div>
+                        <table class="data-table">
+                            <colgroup>
+                                <col style="width:7%;" /><col style="width:27%;" /><col style="width:11%;" />
+                                <col style="width:11%;" /><col style="width:17%;" /><col style="width:17%;" /><col style="width:10%;" />
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th class="text-center">S.N.</th>
+                                    <th>Provision Name</th>
+                                    <th class="text-right">Provision %</th>
+                                    <th class="text-center">No. of Loans</th>
+                                    <th class="text-right">Amount</th>
+                                    <th class="text-right">Provision Amount</th>
+                                    <th class="text-right">Share</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in chunk)
+                                {
+                                    sn++;
+                                    <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
+                                        <td class="text-center">@sn</td>
+                                        <td>@(row.ProvisionName ?? "")</td>
+                                        <td class="text-right">@(row.ProvisionPercentage.HasValue ? row.ProvisionPercentage.Value.ToString("N2") : "")</td>
+                                        <td class="text-center">@(row.NoofLoan ?? 0)</td>
+                                        <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
+                                        <td class="text-right">@(row.ProvisionAmount.HasValue ? row.ProvisionAmount.Value.ToString("N2") : "")</td>
+                                        <td class="text-right">@Share(row.ProvisionAmount ?? 0, totalProvisionAmount)</td>
+                                    </tr>
+                                }
+                                @if (isLast)
+                                {
+                                    <tr class="grand-total-row">
+                                        <td colspan="3" class="text-right">Grand Total</td>
+                                        <td class="text-center">@totalLoans</td>
+                                        <td class="text-right">@totalAmount.ToString("N2")</td>
+                                        <td class="text-right">@totalProvisionAmount.ToString("N2")</td>
+                                        <td class="text-right">100%</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="page-footer">Page @(p + 3) of @totalPages</div>
+                </div>
+            }
         }
     </div>
 
@@ -338,20 +380,24 @@ else
         'use strict';
 
         var ROWS = @Html.Raw(chartJson);
-        var TOTAL_PAGES = @(rows.Any() ? TotalPages : 1);
+        var TOTAL_PAGES = @totalPages;
         var PALETTE = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9',
                        '#ec4899', '#14b8a6', '#84cc16', '#f97316', '#6366f1', '#94a3b8'];
 
         function notifyReady() {
-            window.__chartsReady = true;   // PDF generators can wait on this flag
+            if (window.__chartsReady) return;
+            window.__chartsReady = true;                 // PDF generators can wait on this flag
+            window.JSREPORT_READY_TO_START = true;       // jsreport waits for this (WaitForJS = true)
             if (window.parent && window.parent !== window) {
                 window.parent.postMessage({ type: 'REPORT_PAGES_READY', totalPages: TOTAL_PAGES }, '*');
             }
         }
+        setTimeout(notifyReady, 20000);                  // safety net: never hang the PDF render
 
         window.scrollToPage = function (pageNumber) {
             var t = document.querySelector('.report-page[data-page="' + pageNumber + '"]');
-            if (t) window.scrollTo({ top: t.offsetTop, behavior: 'smooth' });
+            var box = document.getElementById('viewOuter');
+            if (t && box) box.scrollTo({ top: t.offsetTop, behavior: 'smooth' });
         };
 
         if (typeof Chart === 'undefined') {
@@ -362,7 +408,7 @@ else
         }
         if (!ROWS || ROWS.length === 0) { notifyReady(); return; }
 
-        Chart.defaults.animation = false;                 // required for PDF capture
+        Chart.defaults.animation = false;                // required for PDF capture
         Chart.defaults.responsive = true;
         Chart.defaults.maintainAspectRatio = false;
         Chart.defaults.font.family = 'Arial, sans-serif';
@@ -441,6 +487,7 @@ else
         donut('cAmountShare', 'amount', true);
         donut('cProvShare', 'provision', true);
 
+        // ── Page 2 ─────────────────────────────────────────────────────────
         // Grouped bars: outstanding vs provision
         (function () {
             var el = document.getElementById('cCompare'); if (!el) return;
@@ -483,7 +530,7 @@ else
             });
         })();
 
-        // ── Page 2 ─────────────────────────────────────────────────────────
+        // Average loan size per category
         (function () {
             var el = document.getElementById('cAvg'); if (!el) return;
             var avg = ROWS.map(function (r) { return r.loans > 0 ? r.amount / r.loans : 0; });

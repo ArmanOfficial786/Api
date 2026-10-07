@@ -149,7 +149,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                 if (upperFormat == "VIEW")
                 {
                     var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
-                     htmlContent, reportKey, ct);
+                     htmlContent, reportKey, PageSetting, ct);
 
                     _logger.LogInformation("?? VIEW — jsreport Html recipe, {Bytes:N0} chars", viewHtml.Length);
                     return Content(viewHtml, "text/html");
