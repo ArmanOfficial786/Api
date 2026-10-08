@@ -24,10 +24,10 @@
     var isNepali = reportType == "NEPALI";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var pg = (Model.TryGetValue("VisualLayout", out var pgObj) ? pgObj as VisualSheetLayout : null)
+    var pg = (Model.TryGetValue("VisualLayout", out var pgObj) ? pgObj as SheetLayout : null)
              ?? throw new InvalidOperationException("VisualLayout is missing. Add { \"VisualLayout\", Layout } in the controller.");
 
-    string Mm(double v) => VisualSheetLayout.Mm(v);
+    string Mm(double v) => SheetLayout.Mm(v);
 
     // ── Pagination constants (keep in sync with the CSS below) ─────────────
     const double RowMm = 8.0;
@@ -325,7 +325,7 @@
 
 @* ═══ VIEW / PDF: fixed sheets (one .report-page = one page) ═══ *@
 <div class="view-outer" id="viewOuter" data-fixed-sheets
-     data-sheet-w="@VisualSheetLayout.Num(pg.WidthMm)" data-sheet-h="@VisualSheetLayout.Num(pg.HeightMm)">
+     data-sheet-w="@SheetLayout.Num(pg.WidthMm)" data-sheet-h="@SheetLayout.Num(pg.HeightMm)">
 
     @{ var sn = 0; }
     @for (var p = 0; p < pageChunks.Count; p++)

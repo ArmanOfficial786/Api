@@ -379,9 +379,9 @@
     var isView = format == "VIEW";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var pg = (Model.TryGetValue("VisualLayout", out var pgObj) ? pgObj as VisualSheetLayout : null)
+    var pg = (Model.TryGetValue("VisualLayout", out var pgObj) ? pgObj as SheetLayout : null)
              ?? throw new InvalidOperationException("VisualLayout is missing. Add { \"VisualLayout\", Layout } in the controller.");
-    string Mm(double v) => VisualSheetLayout.Mm(v);
+    string Mm(double v) => SheetLayout.Mm(v);
 
     string FormatAmount(decimal a) => a < 0 ? $"({Math.Abs(a):N2})" : a.ToString("N2");
     string NullDisplay(string? v) => string.IsNullOrWhiteSpace(v) ? "-" : v;
@@ -665,7 +665,7 @@
 
 @* ═══ VIEW / PDF: fixed sheets (one .report-page = one page) ═══ *@
 <div class="view-outer" id="viewOuter" data-fixed-sheets
-     data-sheet-w="@VisualSheetLayout.Num(pg.WidthMm)" data-sheet-h="@VisualSheetLayout.Num(pg.HeightMm)">
+     data-sheet-w="@SheetLayout.Num(pg.WidthMm)" data-sheet-h="@SheetLayout.Num(pg.HeightMm)">
 
     @for (var p = 0; p < pages.Count; p++)
     {

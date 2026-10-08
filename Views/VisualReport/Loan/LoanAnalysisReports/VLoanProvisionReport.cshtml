@@ -49,10 +49,10 @@
     }).ToList());
 
     // ── Page geometry: built in the controller from its PageSetting ────────
-    var pg = (Model.TryGetValue("VisualLayout", out var pgObj) ? pgObj as VisualSheetLayout : null)
+    var pg = (Model.TryGetValue("VisualLayout", out var pgObj) ? pgObj as SheetLayout : null)
              ?? throw new InvalidOperationException("VisualLayout is missing from the report data. Add { \"VisualLayout\", Layout } in the controller.");
 
-    string Mm(double v) => VisualSheetLayout.Mm(v);
+    string Mm(double v) => SheetLayout.Mm(v);
 
     // ── Page plan: 1 = KPIs + donuts, 2 = bar charts, 3..N = detail table ──
     var rowsPerDetailPage = pg.DetailRowsPerPage;
@@ -164,7 +164,7 @@
         .empty { text-align: center; padding: 60px 0; color: #888; font-size: 11pt; }
         #chartError { display: none; background: #fee2e2; color: #991b1b; padding: 8px; margin-bottom: 10px; border-radius: 4px; }
 
-        /* Tables: fixed row height (6mm) so rows-per-page is exact. Keep in sync with VisualSheetLayout.RowMm */
+        /* Tables: fixed row height (6mm) so rows-per-page is exact. Keep in sync with SheetLayout.RowMm */
         .data-table { width: 100%; border-collapse: collapse; font-size: 9pt; table-layout: fixed; }
         .data-table th, .data-table td { height: 6mm; padding: 0 6px; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .data-table th { background: #f9f9f9; border-top: 2px solid #000; border-bottom: 1px solid #000; text-align: left; }
@@ -246,7 +246,7 @@ else
 {
     @* data-fixed-sheets / data-sheet-w / data-sheet-h are read by the PDF exporter (keep this attribute order) *@
     <div class="view-outer" id="viewOuter" data-fixed-sheets
-         data-sheet-w="@VisualSheetLayout.Num(pg.WidthMm)" data-sheet-h="@VisualSheetLayout.Num(pg.HeightMm)">
+         data-sheet-w="@SheetLayout.Num(pg.WidthMm)" data-sheet-h="@SheetLayout.Num(pg.HeightMm)">
 
         @* ═══════════════ PAGE 1 — header, KPIs, distribution donuts ═══════════════ *@
         <div class="report-page" data-page="1">
