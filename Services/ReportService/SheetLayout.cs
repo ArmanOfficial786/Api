@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 
 namespace NexgenCosysReport.Services.ReportService
 {
-    public class VisualSheetLayout
+    public class SheetLayout
     {
         public const double RowMm = 6.0;        // table row height (must match the view's CSS)
         public const double ReservedMm = 24.0;  // "Detail" title + table header + page footer
@@ -30,7 +30,7 @@ namespace NexgenCosysReport.Services.ReportService
         public string CacheTag => $"{Num(WidthMm)}x{Num(HeightMm)}";
 
         // ── Build from your existing PageSizeSetting ──────────────────────
-        public static VisualSheetLayout From(PageSizeSetting s)
+        public static SheetLayout From(PageSizeSetting s)
         {
             double w, h;
             if (s.Format == PageFormat.Custom && s.CustomWidth.HasValue && s.CustomHeight.HasValue)
@@ -60,7 +60,7 @@ namespace NexgenCosysReport.Services.ReportService
 
             if (s.Landscape && h > w) (w, h) = (h, w);   // landscape guarantees width >= height
 
-            return new VisualSheetLayout
+            return new SheetLayout
             {
                 WidthMm = Math.Round(w, 2),
                 HeightMm = Math.Round(h, 2),

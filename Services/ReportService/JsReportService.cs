@@ -109,7 +109,7 @@ namespace NexgenCosysReport.Services.ReportService
             }
             //add for visual report
             (double W, double H)? sheet = null;
-            if (isPdf && VisualSheetLayout.TryReadSize(htmlContent, out var sw, out var sh))
+            if (isPdf && SheetLayout.TryReadSize(htmlContent, out var sw, out var sh))
                 sheet = (sw, sh);
 
             // 🔹 For Excel, strip header rows from the HTML before rendering
@@ -177,9 +177,9 @@ namespace NexgenCosysReport.Services.ReportService
             // The HTML already contains fixed sheets (one .report-page = one page).
 
             // Optional guard: warn if this HTML was built for a different page size (stale cache)
-            if (pageSetting != null && VisualSheetLayout.TryReadSize(htmlContent, out var w, out var h))
+            if (pageSetting != null && SheetLayout.TryReadSize(htmlContent, out var w, out var h))
             {
-                var expected = VisualSheetLayout.From(pageSetting);
+                var expected = SheetLayout.From(pageSetting);
                 if (Math.Abs(w - expected.WidthMm) > 0.01 || Math.Abs(h - expected.HeightMm) > 0.01)
                 {
                     _logger.LogWarning(

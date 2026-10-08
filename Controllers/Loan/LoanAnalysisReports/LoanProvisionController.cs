@@ -227,7 +227,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
             PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         // Derived once from PageSetting (sheet size, margins, rows per page)
-        private static readonly VisualSheetLayout Layout = VisualSheetLayout.From(PageSetting);
+        private static readonly SheetLayout Layout = SheetLayout.From(PageSetting);
 
         public LoanProvisionController(
             ILoanProvisionRepository repository,
@@ -339,7 +339,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                         var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
                             htmlContent, reportKey, PageSetting);
 
-                        var sheets = VisualSheetLayout.CountSheets(viewHtml);   // same count the PDF will have
+                        var sheets = SheetLayout.CountSheets(viewHtml);   // same count the PDF will have
                         var vPagination = new Pagination
                         {
                             currentPage = 1,
@@ -374,7 +374,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 
                     var viewHtmlNormal = await _jsReportService.ExportReportToRawHtmlAsync(
                    htmlContent, reportKey, PageSetting);
-                    var Pagination = VisualSheetLayout.CountSheets(viewHtmlNormal);
+                    var Pagination = SheetLayout.CountSheets(viewHtmlNormal);
                     _reportFileResponse.AppendPaginationHeaders(Pagination, data.Rows.Count);
                     return Content(viewHtmlNormal, "text/html");
 
