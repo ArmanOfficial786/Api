@@ -38,6 +38,7 @@ public static class DependencyInjectionExtensions
             .SelectMany(a => a.GetTypes())
             .Where(t => t.IsClass
                         && !t.IsAbstract
+                        && !t.IsGenericTypeDefinition
                         && t.Namespace is not null
                         && ScanNamespaceRoots.Any(root =>
                                t.Namespace == root || t.Namespace.StartsWith(root + ".")));

@@ -321,7 +321,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     { "PenaltyType", data.PenaltyType ?? "S" },
                     { "PenaltyTypeName", data.PenaltyTypeName ?? "Schedule Wise" },
                     { "Format", upperFormat },
-                    { "VisualLayout", Layout }              // read by the visual view only
+                    { "SheetLayout", Layout }              // read by the visual view only
                 };
 
                 string viewPath = isVisual

@@ -49,8 +49,8 @@
     }).ToList());
 
     // ── Page geometry: built in the controller from its PageSetting ────────
-    var pg = (Model.TryGetValue("VisualLayout", out var pgObj) ? pgObj as SheetLayout : null)
-             ?? throw new InvalidOperationException("VisualLayout is missing from the report data. Add { \"VisualLayout\", Layout } in the controller.");
+    var pg = (Model.TryGetValue("SheetLayout", out var pgObj) ? pgObj as SheetLayout : null)
+             ?? throw new InvalidOperationException("SheetLayout is missing from the report data. Add { \"SheetLayout\", Layout } in the controller.");
 
     string Mm(double v) => SheetLayout.Mm(v);
 

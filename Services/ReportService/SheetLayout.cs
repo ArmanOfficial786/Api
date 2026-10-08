@@ -75,7 +75,8 @@ namespace NexgenCosysReport.Services.ReportService
         private static readonly Regex SizeRegex = new(
             "data-fixed-sheets\\s+data-sheet-w=\"(?<w>[0-9.]+)\"\\s+data-sheet-h=\"(?<h>[0-9.]+)\"",
             RegexOptions.Compiled);
-        private static readonly Regex SheetRegex = new("class=\"report-page\"", RegexOptions.Compiled);
+        //private static readonly Regex SheetRegex = new("class=\"report-page\"", RegexOptions.Compiled);
+        private static readonly Regex SheetRegex = new("class=\"(report-page|pg)\"", RegexOptions.Compiled);
 
         public static bool TryReadSize(string html, out double w, out double h)
         {

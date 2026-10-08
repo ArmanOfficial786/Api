@@ -232,22 +232,99 @@ namespace NexgenCosysReport.Services.ReportService
             }
             return doc.DocumentNode.OuterHtml;
         }
+        //private static string PrepareForExcel(string html)
+        //{
+        //    var doc = new HtmlDocument();
+        //    doc.LoadHtml(html);
+
+        //    // Server-paged visual report: keep ONLY the single Excel table
+        //    var table = doc.GetElementbyId("excelSource")?.SelectSingleNode(".//table");
+        //    if (table != null)
+        //    {
+        //        var body = doc.DocumentNode.SelectSingleNode("//body");
+        //        body.RemoveAllChildren();
+        //        body.AppendChild(table);
+        //        return doc.DocumentNode.OuterHtml;
+        //    }
+
+        //    // Normal reports (Member Registration etc.): unchanged behaviour
+        //    doc.DocumentNode.SelectNodes("//*[contains(@class,'common-header-table')]")
+        //        ?.ToList().ForEach(n => n.Remove());
+        //    return doc.DocumentNode.OuterHtml;
+        //}
+
+        //private static string PrepareForExcel(string html)
+        //{
+        //    var doc = new HtmlDocument();
+        //    doc.LoadHtml(html);
+
+        //    var src = doc.GetElementbyId("excelSource");
+        //    var table = src?.SelectSingleNode(".//table");
+        //    if (src != null && table != null)
+        //    {
+        //        var name = src.GetAttributeValue("data-sheet-name", "");
+        //        if (!string.IsNullOrEmpty(name) && !table.Attributes.Contains("data-sheet-name"))
+        //            table.SetAttributeValue("data-sheet-name", name);
+
+        //        var body = doc.DocumentNode.SelectSingleNode("//body");
+        //        table.Remove();
+        //        body.RemoveAllChildren();
+        //        body.AppendChild(table);          // body = ONLY this table -> one sheet
+        //        return doc.DocumentNode.OuterHtml;
+        //    }
+
+        //    // Reports still on the old pattern: unchanged behaviour
+        //    doc.DocumentNode.SelectNodes("//*[contains(@class,'common-header-table')]")
+        //        ?.ToList().ForEach(n => n.Remove());
+        //    return doc.DocumentNode.OuterHtml;
+        //}
+
         private static string PrepareForExcel(string html)
         {
             var doc = new HtmlDocument();
             doc.LoadHtml(html);
 
-            // Server-paged visual report: keep ONLY the single Excel table
-            var table = doc.GetElementbyId("excelSource")?.SelectSingleNode(".//table");
+            // tabular reports: the one visible table; visual reports: the hidden Excel table
+            var table = doc.DocumentNode.SelectSingleNode("//table[contains(@class,'sheet-table')]")
+                        ?? doc.DocumentNode.SelectSingleNode("//div[@id='excelSource']//table");
+
             if (table != null)
             {
+                // drop layout-only rows: logo header, page filler, "Page X of N"
+                table.SelectNodes(".//tr[contains(@class,'no-xl')]")?.ToList().ForEach(r => r.Remove());
+
+                // merge the per-page <tbody> groups into one <tbody>
+                var bodies = table.SelectNodes("./tbody")?.ToList();
+                if (bodies != null && bodies.Count > 1)
+                {
+                    var first = bodies[0];
+                    foreach (var b in bodies.Skip(1))
+                    {
+                        foreach (var tr in b.ChildNodes.Where(c => c.Name == "tr").ToList())
+                            first.AppendChild(tr);
+                        b.Remove();
+                    }
+                }
+
+                // sheet name
+                if (!table.Attributes.Contains("data-sheet-name"))
+                {
+                    var src = doc.GetElementbyId("excelSource");
+                    var name = src?.GetAttributeValue("data-sheet-name", "") ?? "";
+                    if (!string.IsNullOrEmpty(name)) table.SetAttributeValue("data-sheet-name", name);
+                }
+
+                // no scripts (no Chart.js download, no ready-flag wait)
+                doc.DocumentNode.Descendants("script").ToList().ForEach(s => s.Remove());
+
                 var body = doc.DocumentNode.SelectSingleNode("//body");
+                table.Remove();
                 body.RemoveAllChildren();
-                body.AppendChild(table);
+                body.AppendChild(table);                 // body = ONLY this table -> one sheet
                 return doc.DocumentNode.OuterHtml;
             }
 
-            // Normal reports (Member Registration etc.): unchanged behaviour
+            // old-style reports: unchanged behaviour
             doc.DocumentNode.SelectNodes("//*[contains(@class,'common-header-table')]")
                 ?.ToList().ForEach(n => n.Remove());
             return doc.DocumentNode.OuterHtml;

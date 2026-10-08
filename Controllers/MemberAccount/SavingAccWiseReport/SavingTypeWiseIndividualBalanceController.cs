@@ -116,7 +116,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
                     { "ViewDetail", request.ViewDetail },
                     { "OrderBy", request.OrderBy },
                     { "Format", upperFormat },
-                    { "VisualLayout", Layout }
+                    { "SheetLayout", Layout }
                 };
 
                 var htmlContent = await Task.Run(() =>
