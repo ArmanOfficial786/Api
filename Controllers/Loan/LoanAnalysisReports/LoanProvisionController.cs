@@ -220,6 +220,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
         private readonly IOptions<ReportSettings> _reportSettings;
         private readonly ILogger<LoanProvisionController> _logger;
         private readonly IDateConverterService _dateConverter;
+        private readonly IReportFileResponse _reportFileResponse;
 
         // Visual report page only. Change it here: HTML view and PDF both follow it.
         private static readonly PageSizeSetting PageSetting =
@@ -236,7 +237,8 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
             ILogger<LoanProvisionController> logger,
-            IDateConverterService dateConverter)
+            IDateConverterService dateConverter,
+            IReportFileResponse reportFileResponse)
         {
             _repository = repository;
             _commonHeaderRepository = commonHeaderRepository;
@@ -246,6 +248,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
             _reportSettings = reportSettings;
             _logger = logger;
             _dateConverter = dateConverter;
+            _reportFileResponse = reportFileResponse;
         }
 
         [HttpPost()]
@@ -352,22 +355,29 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     }
 
                     // ═════════ NORMAL: PDF + iText page count (unchanged) ═════════
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.Rows.Count
-                    };
+                    //var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
+                    //var totalPages = JsReportService.CountPdfPages(pdfBytes);
+                    //var pagination = new Pagination
+                    //{
+                    //    currentPage = 1,
+                    //    totalPages = totalPages,
+                    //    pageSize = 1,
+                    //    hasNextPage = totalPages > 1,
+                    //    hasPreviousPage = false,
+                    //    totalRecord = data.Rows.Count
+                    //};
 
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
-                    return new FileContentResult(pdfBytes, "application/pdf");
+                    //_headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
+                    //Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
+                    //Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
+                    //return new FileContentResult(pdfBytes, "application/pdf");
+
+                    var viewHtmlNormal = await _jsReportService.ExportReportToRawHtmlAsync(
+                   htmlContent, reportKey, PageSetting);
+                    var Pagination = VisualSheetLayout.CountSheets(viewHtmlNormal);
+                    _reportFileResponse.AppendPaginationHeaders(Pagination, data.Rows.Count);
+                    return Content(viewHtmlNormal, "text/html");
+
                 }
 
                 return await ReportExportHelper.ExportFromCacheAsync(
