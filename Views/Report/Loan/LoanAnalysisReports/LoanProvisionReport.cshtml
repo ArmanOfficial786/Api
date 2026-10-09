@@ -1,4 +1,4 @@
-﻿
+﻿@* 
 @using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
 @model Dictionary<string, object>
 @{
@@ -250,4 +250,108 @@
         </table>
     </div>
 </body>
-</html>
+</html> *@
+
+
+
+
+
+@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService
+@using NexgenCosysReport.Dtos.ReportDtos
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<LoanProvisionRowDto>) ?? new List<LoanProvisionRowDto>();
+    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
+    var totalProvisionAmount = Model["TotalProvisionAmount"] as decimal? ?? 0;
+    var totalLoans = Model["TotalLoans"] as int? ?? 0;
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "All";
+    var penaltyType = Model["PenaltyType"]?.ToString() ?? "S";
+    var penaltyTypeName = Model["PenaltyTypeName"]?.ToString() ?? "Schedule Wise";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName) && memberGroupName != "All";
+
+    var lay = (PageSizeSetting)Model["PageSetting"];
+    var cw = lay.ContentWidthMm - 1;
+
+    // column widths in mm (same proportions as before: 8/30/12/12/19/19 %)
+    var cols = new[] { 8.0, 30, 12, 12, 19, 19 }.Select(p => Math.Round(cw * p / 100, 2)).ToArray();
+
+    Func<int, IHtmlContent> subheader = @<text>
+        <tr class="meta-title"><td colspan="6">Loan Provision Report</td></tr>
+        <tr class="meta-row">
+            <td colspan="3"><strong>Branch :</strong> @branchName</td>
+            <td colspan="3" class="text-right"><strong>Till Date :</strong> @tillDate</td>
+        </tr>
+        <tr class="meta-row">
+            <td colspan="3"><strong>Penalty Type :</strong>
+                <span class="penalty-badge @(penaltyType == "S" ? "badge-schedule" : penaltyType == "R" ? "badge-remaining" : "badge-maturity")">@penaltyTypeName</span></td>
+            <td colspan="3" class="text-right">
+                @if (isMemberGroupFiltered) { <text><strong>Member Group :</strong> @memberGroupName &nbsp;&nbsp;&nbsp;</text> }
+                <strong>Report Generated On :</strong> @generatedOn
+            </td>
+        </tr>
+        <tr class="meta-spacer"><td colspan="6"></td></tr>
+    </text>;
+
+    Func<int, IHtmlContent> colHeader = @<tr>
+        <th class="text-center">S.N.</th><th>Provision Name</th><th class="text-right">Provision %</th>
+        <th class="text-center">No. of Loans</th><th class="text-right">Amount</th><th class="text-right">Provision Amount</th>
+    </tr>;
+
+    // rows 0..n-1 = data, row n = grand total
+    Func<int, IHtmlContent> row = @<text>
+        @if (item < rows.Count)
+        {
+            var r = rows[item];
+            <tr class="@(item % 2 == 1 ? "detail-row" : "alt")">
+                <td class="text-center">@(item + 1)</td>
+                <td><div class="c">@(r.ProvisionName ?? "")</div></td>
+                <td class="text-right">@(r.ProvisionPercentage?.ToString("N2") ?? "")</td>
+                <td class="text-center">@(r.NoofLoan ?? 0)</td>
+                <td class="text-right">@(r.Amount?.ToString("N2") ?? "")</td>
+                <td class="text-right">@(r.ProvisionAmount?.ToString("N2") ?? "")</td>
+            </tr>
+        }
+        else
+        {
+            <tr class="grand-total">
+                <td colspan="3" class="text-right">Grand Total</td>
+                <td class="text-center">@totalLoans</td>
+                <td class="text-right">@totalAmount.ToString("N2")</td>
+                <td class="text-right">@totalProvisionAmount.ToString("N2")</td>
+            </tr>
+        }
+    </text>;
+
+    var css = @"
+        .penalty-badge { display: inline-block; padding: 2px 10px; border-radius: 3px; font-size: 8pt; font-weight: bold; }
+        .badge-schedule { background: #d1ecf1; color: #0c5460; }
+        .badge-remaining { background: #fff3cd; color: #856404; }
+        .badge-maturity { background: #f8d7da; color: #721c24; }
+        table.sheet-table th { background: #f9f9f9; }
+    ";
+
+    var sheet = new SheetReport
+    {
+        Data = Model,
+        Title = "Loan Provision Report",
+        SheetName = "LoanProvision",
+        Cols = cols,
+        RowCount = rows.Count + 1,          // data rows + grand total
+        Subheader = subheader,
+        ColHeader = colHeader,
+        Row = row,
+        KeepWithNext = i => i == rows.Count - 1 && false,
+        RowMm = 7,
+        HeaderMm = 8,
+        FirstPageExtraMm = 75,              // common header + title + meta rows on page 1
+        ExtraCss = css
+    };
+}
+@await Html.PartialAsync("_SheetReport", sheet)

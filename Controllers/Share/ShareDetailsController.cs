@@ -30,7 +30,6 @@ namespace NexgenCosysReport.Controllers.Share
 
         private static readonly PageSizeSetting PageSetting =
           PageSizeSetting.Custom(500, 297, PageUnit.mm, landscape: true);
-        private static readonly SheetLayout Layout = SheetLayout.From(PageSetting);
 
 
         public ShareDetailsController(
@@ -141,7 +140,7 @@ namespace NexgenCosysReport.Controllers.Share
                     { "ReportType", data.ReportType ?? "ENGLISH" },
                     { "OrderBy", request.OrderBy },
                     { "Format", upperFormat },
-                    { "VisualLayout", Layout }
+                    { "PageSetting", PageSetting }
                 };
 
                 string viewPath = request.VisualReport
@@ -159,7 +158,7 @@ namespace NexgenCosysReport.Controllers.Share
                 {
                     var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
                      htmlContent, reportKey, PageSetting, ct);
-                    var vPagination = SheetLayout.CountSheets(viewHtml);
+                    var vPagination = SheetHtml.CountSheets(viewHtml);
                     _reportFileResponse.AppendPaginationHeaders(vPagination, data.Rows.Count);
                     return Content(viewHtml, "text/html");
 

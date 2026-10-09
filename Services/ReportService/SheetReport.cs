@@ -12,7 +12,7 @@
 //    public interface ISheetReport
 //    {
 //        Dictionary<string, object> Data { get; }
-//        SheetLayout Layout { get; }
+//        PageSizeSetting  Layout { get; }
 //        string Title { get; }
 //        string SheetName { get; }
 //        bool RepeatHeader { get; }
@@ -70,10 +70,10 @@
 //        public string EmptyText { get; init; } = "No data found";
 
 //        // ── derived ────────────────────────────────────────────────────
-//        public SheetLayout Layout =>
-//            Data.TryGetValue("SheetLayout", out var l) && l is SheetLayout v
+//        public PageSizeSetting  Layout =>
+//            Data.TryGetValue("PageSizeSetting ", out var l) && l is PageSizeSetting  v
 //                ? v
-//                : throw new InvalidOperationException("SheetLayout missing. Add { \"SheetLayout\", Layout } in the controller.");
+//                : throw new InvalidOperationException("PageSizeSetting  missing. Add { \"PageSizeSetting \", Layout } in the controller.");
 
 //        public bool HasRows => Lines.Count > 0;
 
@@ -201,6 +201,7 @@
 //}
 
 using Microsoft.AspNetCore.Html;
+using NexgenCosysReport.Dtos.ReportDtos;
 
 namespace NexgenCosysReport.Services.ReportService
 {
@@ -210,7 +211,7 @@ namespace NexgenCosysReport.Services.ReportService
         public const double SafetyMm = 2;
 
         // ── required ──────────────────────────────────────────────
-        public required Dictionary<string, object> Data { get; init; }   // needs "VisualLayout" or "SheetLayout"
+        public required Dictionary<string, object> Data { get; init; }   // needs "VisualLayout" or "PageSizeSetting "
         public required string Title { get; init; }
         public required string SheetName { get; init; }
 
@@ -238,10 +239,10 @@ namespace NexgenCosysReport.Services.ReportService
         public string EmptyText { get; init; } = "No data found for the selected criteria";
 
         // ── derived ───────────────────────────────────────────────
-        public SheetLayout Layout =>
-            (Data.TryGetValue("VisualLayout", out var a) ? a as SheetLayout : null)
-            ?? (Data.TryGetValue("SheetLayout", out var b) ? b as SheetLayout : null)
-            ?? throw new InvalidOperationException("VisualLayout/SheetLayout missing in the report data.");
+        public PageSizeSetting Layout =>
+        Data.TryGetValue("PageSetting", out var p) && p is PageSizeSetting ps
+            ? ps
+            : throw new InvalidOperationException("PageSetting missing in the report data.");
 
         public int ColCount => Cols.Length;
 
@@ -261,7 +262,7 @@ namespace NexgenCosysReport.Services.ReportService
 
         /// <summary>Splits rowCount rows into pages. Also used by visual reports for their detail pages.</summary>
         public static List<(int Start, int Count)> Plan(
-            SheetLayout l, int rowCount, double rowMm,
+            PageSizeSetting l, int rowCount, double rowMm,
             double headerMm = 0, double firstExtraMm = 0,
             bool repeatHeader = false, Func<int, bool>? keepWithNext = null)
         {

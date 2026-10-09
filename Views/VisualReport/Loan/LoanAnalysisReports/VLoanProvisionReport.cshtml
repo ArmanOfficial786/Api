@@ -2,6 +2,7 @@
 @using System.Text.Json
 @using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
 @using NexgenCosysReport.Services.ReportService
+@using NexgenCosysReport.Dtos.ReportDtos
 @model Dictionary<string, object>
 @{
     Layout = null;
@@ -36,9 +37,8 @@
         amount = r.Amount ?? 0, provision = r.ProvisionAmount ?? 0
     }).ToList());
 
-    var pg = (Model.TryGetValue("SheetLayout", out var a) ? a as SheetLayout : null)
-             ?? (Model.TryGetValue("VisualLayout", out var b) ? b as SheetLayout : null)
-             ?? throw new InvalidOperationException("SheetLayout missing in the report data.");
+   var pg = (Model.TryGetValue("PageSetting", out var a) ? a as PageSizeSetting : null)
+         ?? throw new InvalidOperationException("PageSetting missing in the report data.");
     var detailChunks = rows.Chunk(pg.DetailRowsPerPage).ToList();
     var totalPages = pg.TotalPages(rows.Count);
 

@@ -37,8 +37,8 @@ namespace NexgenCosysReport.Services.ReportService
                     {
                         request.Template.Chrome = new Chrome
                         {
-                            Width = SheetLayout.Mm(sz.W),
-                            Height = SheetLayout.Mm(sz.H),
+                            Width = PageSizeSetting.Mm(sz.W),
+                            Height = PageSizeSetting.Mm(sz.H),
                             Landscape = false,            // orientation is already baked into width/height
                             MarginTop = "0",
                             MarginBottom = "0",

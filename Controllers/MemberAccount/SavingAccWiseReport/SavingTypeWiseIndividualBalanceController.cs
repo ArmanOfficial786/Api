@@ -46,7 +46,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
         }
 
         private static readonly PageSizeSetting PageSetting = PageSizeSetting.A4Portrait;
-        private static readonly SheetLayout Layout = SheetLayout.From(PageSetting);
+
 
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
@@ -116,7 +116,7 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
                     { "ViewDetail", request.ViewDetail },
                     { "OrderBy", request.OrderBy },
                     { "Format", upperFormat },
-                    { "SheetLayout", Layout }
+                    { "PageSetting", PageSetting }
                 };
 
                 var htmlContent = await Task.Run(() =>
@@ -148,8 +148,8 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
                     //return new FileContentResult(pdfBytes, "application/pdf");
 
                     var viewHtmlNormal = await _jsReportService.ExportReportToRawHtmlAsync(
-               htmlContent, reportKey, PageSetting, ct);
-                    var Pagination = SheetLayout.CountSheets(viewHtmlNormal);
+                      htmlContent, reportKey, PageSetting, ct);
+                    var Pagination = SheetHtml.CountSheets(viewHtmlNormal);
                     _reportFileResponse.AppendPaginationHeaders(Pagination, data.Rows.Count);
                     return Content(viewHtmlNormal, "text/html");
 

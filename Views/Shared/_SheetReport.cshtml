@@ -1,10 +1,11 @@
 ﻿@using NexgenCosysReport.Services.ReportService
+@using NexgenCosysReport.Dtos.ReportDtos
 @model SheetReport
 @{
     var l = Model.Layout;
     var n = Model.ColCount;
     var tableMode = Model.Body == null;
-    string Mm(double v) => SheetLayout.Mm(v);
+    string Mm(double v) => PageSizeSetting.Mm(v);
 
     void ColGroup()
     {
@@ -29,8 +30,8 @@
     // so html and pdf end up identical (no server-side estimate).
     window.fitFooters = function () {
         var px = 96 / 25.4,
-            page = @SheetLayout.Num(l.SheetHeightMm) * px,
-            min = (@SheetLayout.Num(SheetReport.FooterMm) + @SheetLayout.Num(l.MarginBottomMm)) * px;
+            page = @PageSizeSetting.Num(l.SheetHeightMm) * px,
+            min = (@PageSizeSetting.Num(SheetReport.FooterMm) + @PageSizeSetting.Num(l.MarginBottomMm)) * px;
         document.querySelectorAll('tbody.pg').forEach(function (b) {
             var pf = b.querySelector('tr.pf'); if (!pf) return;
             var used = 0;
@@ -178,7 +179,7 @@
 {
     var pages = Model.Pages;
     <div class="sheet" id="viewOuter" data-fixed-sheets
-         data-sheet-w="@SheetLayout.Num(l.WidthMm)" data-sheet-h="@SheetLayout.Num(l.HeightMm)">
+         data-sheet-w="@PageSizeSetting.Num(l.WidthMm)" data-sheet-h="@PageSizeSetting.Num(l.HeightMm)">
         <table class="sheet-table @(Model.Bordered ? "bordered" : "")" data-sheet-name="@Model.SheetName">
             @{ ColGroup(); }
             @for (var p = 0; p < pages.Count; p++)
@@ -216,7 +217,7 @@
 else
 {
     <div class="view-outer" id="viewOuter" data-fixed-sheets
-         data-sheet-w="@SheetLayout.Num(l.WidthMm)" data-sheet-h="@SheetLayout.Num(l.HeightMm)">
+         data-sheet-w="@PageSizeSetting.Num(l.WidthMm)" data-sheet-h="@PageSizeSetting.Num(l.HeightMm)">
         @Model.Body!(null)
     </div>
     @if (Model.ExcelBody != null)
