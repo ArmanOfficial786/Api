@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+@* @using Microsoft.AspNetCore.Html
 @using System.Text.Json
 @using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
 @using NexgenCosysReport.Services.ReportService
@@ -325,35 +325,6 @@
         </script>
     </text>;
 
-    // ── Excel: ONE table (hidden in html/pdf; PrepareForExcel keeps only this) ──
-    Func<object?, IHtmlContent> excel = @<table class="data-table">
-        <tbody>
-            <tr class="meta-title"><td colspan="6">Loan Provision Report</td></tr>
-            <tr class="meta-row"><td colspan="3"><strong>Branch :</strong> @branchName</td><td colspan="3" class="text-right"><strong>Till Date :</strong> @tillDate</td></tr>
-            <tr class="meta-row"><td colspan="3"><strong>Penalty Type :</strong> @penaltyTypeName</td>
-                <td colspan="3" class="text-right">@if (isMemberGroupFiltered) { <text><strong>Member Group :</strong> @memberGroupName &nbsp;&nbsp;</text> }<strong>Report Generated On :</strong> @generatedOn</td></tr>
-            <tr class="meta-spacer"><td colspan="6"></td></tr>
-            <tr><th class="text-center">S.N.</th><th>Provision Name</th><th class="text-right">Provision %</th>
-                <th class="text-center">No. of Loans</th><th class="text-right">Amount</th><th class="text-right">Provision Amount</th></tr>
-            @{ var snX = 0; }
-            @foreach (var row in rows)
-            {
-                snX++;
-                <tr>
-                    <td class="text-center">@snX</td><td>@(row.ProvisionName ?? "")</td>
-                    <td class="text-right">@(row.ProvisionPercentage?.ToString("N2") ?? "")</td>
-                    <td class="text-center">@(row.NoofLoan ?? 0)</td>
-                    <td class="text-right">@(row.Amount?.ToString("N2") ?? "")</td>
-                    <td class="text-right">@(row.ProvisionAmount?.ToString("N2") ?? "")</td>
-                </tr>
-            }
-            @if (rows.Any())
-            {
-                <tr class="grand-total"><td colspan="3" class="text-right">Grand Total</td><td class="text-center">@totalLoans</td>
-                    <td class="text-right">@totalAmount.ToString("N2")</td><td class="text-right">@totalProvisionAmount.ToString("N2")</td></tr>
-            }
-        </tbody>
-    </table>;
 
     var sheet = new SheetReport
     {
@@ -362,8 +333,216 @@
         SheetName = "LoanProvision",
         Head = head,
         Body = body,
-        ExcelBody = excel,
         DeferReady = true,        // the chart script calls window.reportReady() when the charts are drawn
+        RowMm = 6,                // keeps SheetLayout.RowMm / DetailRowsPerPage in sync with the CSS
+        HeaderMm = 6
+    };
+}
+@await Html.PartialAsync("_SheetReport", sheet) *@
+
+
+
+
+
+@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService
+@using NexgenCosysReport.Dtos.ReportDtos
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as List<LoanProvisionRowDto>) ?? new List<LoanProvisionRowDto>();
+    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
+    var totalProvisionAmount = Model["TotalProvisionAmount"] as decimal? ?? 0;
+    var totalLoans = Model["TotalLoans"] as int? ?? 0;
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "All";
+    var penaltyType = Model["PenaltyType"]?.ToString() ?? "S";
+    var penaltyTypeName = Model["PenaltyTypeName"]?.ToString() ?? "Schedule Wise";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName) && memberGroupName != "All";
+
+    if (totalLoans == 0) totalLoans = rows.Sum(r => r.NoofLoan ?? 0);
+    if (totalAmount == 0) totalAmount = rows.Sum(r => r.Amount ?? 0);
+    if (totalProvisionAmount == 0) totalProvisionAmount = rows.Sum(r => r.ProvisionAmount ?? 0);
+
+    var coverage = totalAmount == 0 ? 0 : Math.Round(totalProvisionAmount / totalAmount * 100, 2);
+    var avgLoan = totalLoans == 0 ? 0 : totalAmount / totalLoans;
+    var topRow = rows.OrderByDescending(r => r.ProvisionAmount ?? 0).FirstOrDefault();
+    var topName = topRow?.ProvisionName ?? "-";
+    var topShare = (topRow == null || totalProvisionAmount == 0)
+                   ? 0 : Math.Round((topRow.ProvisionAmount ?? 0) / totalProvisionAmount * 100, 1);
+    string Share(decimal v, decimal total) => total == 0 ? "0.0%" : Math.Round(v / total * 100, 1).ToString("0.0") + "%";
+
+    var pg = (Model.TryGetValue("PageSetting", out var a) ? a as PageSizeSetting : null)
+         ?? throw new InvalidOperationException("PageSetting missing in the report data.");
+    var detailChunks = rows.Chunk(pg.DetailRowsPerPage).ToList();
+
+    // ═══ CHARTS: only data + a list of chart specs. The drawing code lives in _VisualCharts.cshtml ═══
+    var chartSet = new VisualChartSet
+    {
+        Rows = rows.Select(r => new
+        {
+            name = r.ProvisionName ?? "",
+            pct = r.ProvisionPercentage ?? 0,
+            loans = r.NoofLoan ?? 0,
+            amount = r.Amount ?? 0,
+            provision = r.ProvisionAmount ?? 0,
+            avg = (r.NoofLoan ?? 0) > 0 ? (r.Amount ?? 0) / (r.NoofLoan ?? 0) : 0m
+        }).ToList(),
+        Charts =
+        [
+            VisualChart.Donut("cLoans", "loans"),
+            VisualChart.Donut("cAmountShare", "amount", money: true),
+            VisualChart.Donut("cProvShare", "provision", money: true),
+            VisualChart.Grouped("cCompare",
+                new VisualSeries("Amount", "amount", "#2563eb"),
+                new VisualSeries("Provision Amount", "provision", "#ef4444")),
+            VisualChart.BarLine("cPct", "pct", "#f59e0b", "#8b5cf6", format: "percent"),
+            VisualChart.Bar("cAvg", "avg", "#10b981", horizontal: true, thickness: 26),
+            VisualChart.Bar("cProvBar", "provision", "#ef4444", horizontal: true)
+        ]
+    };
+
+    // templates cannot await: render the partials once here, reuse them inside the body
+    var headerHtml = await Html.PartialAsync("_CommonHeader", Model);
+    var chartsHtml = await Html.PartialAsync("_VisualCharts", chartSet);
+
+    // ── extra <head>: only this report's own CSS (shared chart/card/KPI CSS comes from _VisualCharts) ──
+    Func<object?, IHtmlContent> head = @<text>
+        <style>
+            .penalty-badge { display: inline-block; padding: 2px 10px; border-radius: 3px; font-size: 8pt; font-weight: bold; }
+            .badge-schedule { background: #d1ecf1; color: #0c5460; }
+            .badge-remaining { background: #fff3cd; color: #856404; }
+            .badge-maturity { background: #f8d7da; color: #721c24; }
+        </style>
+    </text>;
+
+    // ── pages: header+KPIs+donuts / four bar charts / detail table ──
+    Func<object?, IHtmlContent> body = @<text>
+        <div class="report-page" data-page="1">
+            <div class="sheet-body">
+                <div class="common-header-wrap">@headerHtml</div>
+                <div class="rpt-title">Loan Provision Report — Visual Summary</div>
+                <div class="rpt-meta">
+                    <div>
+                        <div><strong>Branch :</strong> @branchName</div>
+                        <div><strong>Penalty Type :</strong>
+                            <span class="penalty-badge @(penaltyType == "S" ? "badge-schedule" : penaltyType == "R" ? "badge-remaining" : "badge-maturity")">@penaltyTypeName</span></div>
+                    </div>
+                    <div class="text-right">
+                        <div><strong>Till Date :</strong> @tillDate</div>
+                        <div>
+                            @if (isMemberGroupFiltered) { <strong>Member Group :</strong> @memberGroupName <text>&nbsp;&nbsp;&nbsp;</text> }
+                            <strong>Report Generated On :</strong> @generatedOn
+                        </div>
+                    </div>
+                </div>
+                <div id="chartError">Chart library could not be loaded. Check network access to the Chart.js file.</div>
+
+                @if (!rows.Any())
+                {
+                    <div class="empty">No data found for the selected criteria</div>
+                }
+                else
+                {
+                    <div class="kpi-row">
+                        <div class="kpi"><div class="l">Total Loans</div><div class="v">@totalLoans.ToString("N0")</div><div class="s">@rows.Count provision categories</div></div>
+                        <div class="kpi"><div class="l">Loan Outstanding</div><div class="v">@totalAmount.ToString("N2")</div><div class="s">avg @avgLoan.ToString("N2") / loan</div></div>
+                        <div class="kpi"><div class="l">Total Provision</div><div class="v">@totalProvisionAmount.ToString("N2")</div><div class="s">required provision</div></div>
+                        <div class="kpi"><div class="l">Provision Coverage</div><div class="v">@coverage.ToString("0.00")%</div><div class="s">provision / outstanding</div></div>
+                        <div class="kpi"><div class="l">Highest Provision</div><div class="v" style="font-size:12pt">@topName</div><div class="s">@topShare.ToString("0.0")% of total provision</div></div>
+                    </div>
+                    <div class="grid g3 fill">
+                        <div class="card"><h3>No. of Loans by Category</h3><div class="chart-box"><canvas id="cLoans"></canvas></div></div>
+                        <div class="card"><h3>Outstanding Amount Share</h3><div class="chart-box"><canvas id="cAmountShare"></canvas></div></div>
+                        <div class="card"><h3>Provision Amount Share</h3><div class="chart-box"><canvas id="cProvShare"></canvas></div></div>
+                    </div>
+                }
+            </div>
+            <div class="page-footer"></div>
+        </div>
+
+        @if (rows.Any())
+        {
+            <div class="report-page" data-page="2">
+                <div class="sheet-body">
+                    <div class="grid g2 rows2 fill">
+                        <div class="card"><h3>Outstanding vs Provision Amount</h3><div class="chart-box"><canvas id="cCompare"></canvas></div></div>
+                        <div class="card"><h3>Provision Rate (%) by Category</h3><div class="chart-box"><canvas id="cPct"></canvas></div></div>
+                        <div class="card"><h3>Average Loan Size by Category</h3><div class="chart-box"><canvas id="cAvg"></canvas></div></div>
+                        <div class="card"><h3>Provision Amount by Category</h3><div class="chart-box"><canvas id="cProvBar"></canvas></div></div>
+                    </div>
+                </div>
+                <div class="page-footer"></div>
+            </div>
+
+            var sn = 0;
+            @for (var p = 0; p < detailChunks.Count; p++)
+            {
+                var chunk = detailChunks[p];
+                var isLast = p == detailChunks.Count - 1;
+                <div class="report-page" data-page="@(p + 3)">
+                    <div class="sheet-body">
+                        <div class="tbl-title">Detail</div>
+                        <table class="report-table">
+                            <colgroup>
+                                <col style="width:7%;" /><col style="width:27%;" /><col style="width:11%;" />
+                                <col style="width:11%;" /><col style="width:17%;" /><col style="width:17%;" /><col style="width:10%;" />
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <th class="text-center">S.N.</th><th>Provision Name</th><th class="text-right">Provision %</th>
+                                    <th class="text-center">No. of Loans</th><th class="text-right">Amount</th>
+                                    <th class="text-right">Provision Amount</th><th class="text-right">Share</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var row in chunk)
+                                {
+                                    sn++;
+                                    <tr class="@(sn % 2 == 0 ? "" : "alt")">
+                                        <td class="text-center">@sn</td>
+                                        <td>@(row.ProvisionName ?? "")</td>
+                                        <td class="text-right">@(row.ProvisionPercentage?.ToString("N2") ?? "")</td>
+                                        <td class="text-center">@(row.NoofLoan ?? 0)</td>
+                                        <td class="text-right">@(row.Amount?.ToString("N2") ?? "")</td>
+                                        <td class="text-right">@(row.ProvisionAmount?.ToString("N2") ?? "")</td>
+                                        <td class="text-right">@Share(row.ProvisionAmount ?? 0, totalProvisionAmount)</td>
+                                    </tr>
+                                }
+                                @if (isLast)
+                                {
+                                    <tr class="grand-total">
+                                        <td colspan="3" class="text-right">Grand Total</td>
+                                        <td class="text-center">@totalLoans</td>
+                                        <td class="text-right">@totalAmount.ToString("N2")</td>
+                                        <td class="text-right">@totalProvisionAmount.ToString("N2")</td>
+                                        <td class="text-right">100%</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="page-footer"></div>
+                </div>
+            }
+        }
+
+        @* Chart.js + the generic chart engine (draws every chart from chartSet, then calls reportReady) *@
+        @chartsHtml
+    </text>;
+
+    var sheet = new SheetReport
+    {
+        Data = Model,
+        Title = "Loan Provision Visual Report",
+        SheetName = "LoanProvision",
+        Head = head,
+        Body = body,
+        DeferReady = true,        // the shared chart script calls window.reportReady() when the charts are drawn
         RowMm = 6,                // keeps SheetLayout.RowMm / DetailRowsPerPage in sync with the CSS
         HeaderMm = 6
     };

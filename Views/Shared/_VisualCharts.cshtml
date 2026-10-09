@@ -1,0 +1,198 @@
+﻿@using System.Text.Json
+@using NexgenCosysReport.Dtos.ReportDtos
+@{
+    Layout = null;
+    // JsonSerializer escapes < > & so the data can never close the <script> tag
+    var json = JsonSerializer.Serialize(new
+    {
+        rows = Model.Rows,
+        charts = Model.Charts,
+        labelKey = Model.LabelKey,
+        timeoutMs = Model.TimeoutMs
+    }, VisualChartSet.Json);
+}
+<script src="@Model.ChartJsUrl"></script>
+<style>
+    /* ── shared look for every visual report ── */
+    .common-header-wrap { margin-bottom: 6px; }
+    .rpt-title { flex: none; text-align: center; font-family: "Times New Roman", Times, serif; font-size: 15pt; font-weight: bold; text-decoration: underline; margin: 4px 0 6px; }
+    .rpt-meta { flex: none; display: flex; justify-content: space-between; font-size: 9pt; margin-bottom: 8px; }
+    .rpt-meta div { line-height: 1.6; }
+
+    .kpi-row { flex: none; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 10px; }
+    .kpi { border: 1px solid #ddd; border-left: 4px solid #2563eb; border-radius: 4px; padding: 6px 10px; background: #fafafa; }
+    .kpi:nth-child(2) { border-left-color: #0ea5e9; } .kpi:nth-child(3) { border-left-color: #ef4444; }
+    .kpi:nth-child(4) { border-left-color: #f59e0b; } .kpi:nth-child(5) { border-left-color: #8b5cf6; }
+    .kpi .l { font-size: 7.5pt; color: #666; text-transform: uppercase; letter-spacing: .4px; }
+    .kpi .v { font-size: 15pt; font-weight: bold; line-height: 1.3; word-break: break-word; }
+    .kpi .s { font-size: 7.5pt; color: #888; }
+
+    .grid { display: grid; gap: 10px; }
+    .grid.fill { flex: 1; min-height: 0; }
+    .g3 { grid-template-columns: repeat(3, 1fr); grid-template-rows: minmax(0, 1fr); }
+    .g2 { grid-template-columns: repeat(2, 1fr); }
+    .g2.rows2 { grid-template-rows: repeat(2, minmax(0, 1fr)); }
+    .card { border: 1px solid #ddd; border-radius: 4px; padding: 6px 10px; background: #fff; display: flex; flex-direction: column; min-height: 0; }
+    .card h3 { flex: none; font-size: 9.5pt; margin-bottom: 4px; padding-bottom: 3px; border-bottom: 1px solid #eee; }
+    .chart-box { position: relative; flex: 1; min-height: 0; width: 100%; overflow: hidden; }
+    .empty { text-align: center; padding: 60px 0; color: #888; font-size: 11pt; }
+    #chartError { display: none; background: #fee2e2; color: #991b1b; padding: 8px; margin-bottom: 10px; border-radius: 4px; }
+
+    /* detail table pages: fixed rows so rows-per-page is exact */
+    .report-table td, .report-table th { white-space: nowrap; text-overflow: ellipsis; }
+    .tbl-title { font-size: 10pt; font-weight: bold; height: 8mm; line-height: 8mm; }
+</style>
+<script>
+(function () {
+    'use strict';
+    var CFG = @Html.Raw(json);
+    var ROWS = CFG.rows || [];
+    var PALETTE = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#0ea5e9',
+                   '#ec4899', '#14b8a6', '#84cc16', '#f97316', '#6366f1', '#94a3b8'];
+
+    // shared reportReady() (in _SheetReport): fills "Page x of N", tells the parent, releases the PDF render
+    function done() { if (window.reportReady) window.reportReady(); }
+    setTimeout(done, CFG.timeoutMs || 20000);
+
+    if (typeof Chart === 'undefined') {
+        var err = document.getElementById('chartError');
+        if (err) err.style.display = 'block';
+        done(); return;
+    }
+    if (!ROWS.length || !CFG.charts || !CFG.charts.length) { done(); return; }
+
+    Chart.defaults.animation = false;              // required for PDF capture
+    Chart.defaults.responsive = true;
+    Chart.defaults.maintainAspectRatio = false;
+    Chart.defaults.font.family = 'Arial, sans-serif';
+    Chart.defaults.font.size = 10;
+
+    // ── helpers ─────────────────────────────────────────────
+    var compact = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 });
+    var full = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
+    var FORMAT = {
+        compact: function (v) { return compact.format(v); },
+        full:    function (v) { return full.format(v); },
+        percent: function (v) { return full.format(v) + '%'; },
+        int:     function (v) { return String(Math.round(v)); }
+    };
+    var TICK = {
+        percent: function (v) { return v + '%'; }
+    };
+    function fmt(name)  { return FORMAT[name] || FORMAT.compact; }
+    function tick(name) { return TICK[name] || FORMAT.compact; }
+
+    function labels() { return ROWS.map(function (r) { return r[CFG.labelKey]; }); }
+    function col(key) { return ROWS.map(function (r) { return r[key]; }); }
+    function sum(arr) { return arr.reduce(function (x, y) { return x + y; }, 0) || 1; }
+
+    // value labels drawn on the bars (allDatasets=false: only the first dataset)
+    function valueLabels(format, allDatasets) {
+        return {
+            id: 'valueLabels',
+            afterDatasetsDraw: function (chart) {
+                var ctx = chart.ctx, horizontal = chart.options.indexAxis === 'y';
+                ctx.save(); ctx.font = 'bold 9px Arial'; ctx.fillStyle = '#333'; ctx.textBaseline = 'middle';
+                chart.data.datasets.forEach(function (ds, di) {
+                    if (!allDatasets && di > 0) return;
+                    chart.getDatasetMeta(di).data.forEach(function (el, i) {
+                        var v = ds.data[i]; if (!v) return;
+                        if (horizontal) { ctx.textAlign = 'left'; ctx.fillText(format(v), el.x + 4, el.y); }
+                        else { ctx.textAlign = 'center'; ctx.fillText(format(v), el.x, el.y - 8); }
+                    });
+                });
+                ctx.restore();
+            }
+        };
+    }
+
+    // axis options shared by bar / grouped / barline
+    function axes(c, showGrid) {
+        var h = !!c.horizontal, t = tick(c.format);
+        return {
+            x: { beginAtZero: true, grid: { display: h && showGrid }, ticks: h ? { callback: t } : {} },
+            y: { beginAtZero: true, grid: { display: !h && showGrid }, ticks: h ? {} : { callback: t } }
+        };
+    }
+    function padding(c) { return c.horizontal ? { right: 50 } : { top: 18 }; }
+
+    // ── chart builders: one per "type" ──────────────────────
+    var BUILD = {
+        donut: function (c, el) {
+            var data = col(c.key), t = sum(data);
+            new Chart(el, {
+                type: 'doughnut',
+                data: {
+                    labels: ROWS.map(function (r, i) {
+                        return r[CFG.labelKey] + ' - ' + (c.money ? compact.format(data[i]) : data[i]) +
+                               ' (' + (data[i] * 100 / t).toFixed(1) + '%)';
+                    }),
+                    datasets: [{ data: data, backgroundColor: PALETTE, borderColor: '#fff', borderWidth: 2 }]
+                },
+                options: { cutout: '58%', plugins: { legend: { position: 'bottom', labels: { boxWidth: 10, font: { size: 8 } } } } }
+            });
+        },
+
+        bar: function (c, el) {
+            var ax = axes(c, true);
+            if (c.horizontal) ax.y.grid = { display: false };
+            new Chart(el, {
+                type: 'bar',
+                data: { labels: labels(), datasets: [{ data: col(c.key), backgroundColor: c.color || PALETTE[0], borderRadius: 3, maxBarThickness: c.thickness || 36 }] },
+                options: { indexAxis: c.horizontal ? 'y' : 'x', layout: { padding: padding(c) }, plugins: { legend: { display: false } }, scales: ax },
+                plugins: [valueLabels(fmt(c.format), false)]
+            });
+        },
+
+        grouped: function (c, el) {
+            new Chart(el, {
+                type: 'bar',
+                data: {
+                    labels: labels(),
+                    datasets: c.series.map(function (s) {
+                        return { label: s.label, data: col(s.key), backgroundColor: s.color, borderRadius: 3, maxBarThickness: c.thickness || 30 };
+                    })
+                },
+                options: {
+                    indexAxis: c.horizontal ? 'y' : 'x', layout: { padding: padding(c) },
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 10 } } },
+                    scales: axes(c, true)
+                },
+                plugins: [valueLabels(fmt(c.format), true)]
+            });
+        },
+
+        barline: function (c, el) {
+            new Chart(el, {
+                type: 'bar',
+                data: {
+                    labels: labels(),
+                    datasets: [
+                        { type: 'bar', label: c.label || 'Value', data: col(c.key), backgroundColor: c.color || PALETTE[2], borderRadius: 3, maxBarThickness: c.thickness || 36, order: 2 },
+                        { type: 'line', label: 'Trend', data: col(c.key), borderColor: c.lineColor || PALETTE[4], borderWidth: 2, pointRadius: 3, pointBackgroundColor: c.lineColor || PALETTE[4], fill: false, tension: .25, order: 1 }
+                    ]
+                },
+                options: {
+                    layout: { padding: { top: 18 } },
+                    plugins: { legend: { position: 'bottom', labels: { boxWidth: 10 } } },
+                    scales: { y: { beginAtZero: true, ticks: { callback: tick(c.format) } } }
+                },
+                plugins: [valueLabels(fmt(c.format), false)]
+            });
+        }
+    };
+
+    // ── draw everything; one bad chart never blocks the PDF ─
+    CFG.charts.forEach(function (c) {
+        try {
+            var el = document.getElementById(c.id);
+            var build = BUILD[c.type];
+            if (el && build) build(c, el);
+        } catch (e) {
+            if (window.console) console.error('chart ' + c.id + ' failed', e);
+        }
+    });
+
+    done();
+}());
+</script>
