@@ -1,0 +1,197 @@
+﻿@using System.Globalization
+@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService
+@using NexgenCosysReport.Dtos.ReportDtos
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    // ── 1. DATA (same keys as the table version of the report) ──
+    var particularsRows = (Model["Particulars"]  as List<LoanPortfolioParticularsDto>)  ?? new List<LoanPortfolioParticularsDto>();
+    var outstandingRows = (Model["Outstanding"]  as List<LoanPortfolioOutstandingDto>)  ?? new List<LoanPortfolioOutstandingDto>();
+    var loanTypeRows    = (Model["LoanTypeWise"] as List<LoanPortfolioLoanTypeWiseDto>) ?? new List<LoanPortfolioLoanTypeWiseDto>();
+    var branchName      = Model["BranchName"]?.ToString() ?? "All";
+    var generatedOn     = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // ── 2. NUMBERS FOR THE KPI CARDS ──
+    var totalLoanCount       = loanTypeRows.Sum(loanType => loanType.NoofLoan ?? 0);
+    var totalLoanAmount      = loanTypeRows.Sum(loanType => loanType.LoanIssueAmount ?? 0);
+    var averageLoanAmount    = totalLoanCount == 0 ? 0 : totalLoanAmount / totalLoanCount;
+    var largestLoanType      = loanTypeRows.OrderByDescending(loanType => loanType.LoanIssueAmount ?? 0).FirstOrDefault();
+    var largestLoanTypeName  = largestLoanType?.LoanTypeName ?? "-";
+    var largestLoanTypeShare = (largestLoanType == null || totalLoanAmount == 0)
+        ? 0
+        : Math.Round((largestLoanType.LoanIssueAmount ?? 0) / totalLoanAmount * 100, 1);
+
+    // width of a CSS bar relative to the biggest value in its list (invariant culture so the style never gets a comma)
+    string BarWidth(int? value, int maximum) =>
+        (maximum == 0 ? 0 : (value ?? 0) * 100.0 / maximum).ToString("0.##", CultureInfo.InvariantCulture);
+
+    var outstandingMaximum = outstandingRows.Any() ? outstandingRows.Max(row => row.NoofLoan ?? 0) : 0;
+    var hasAnyData         = particularsRows.Any() || outstandingRows.Any() || loanTypeRows.Any();
+
+    // ═══ CHARTS: only data + a list of chart specs. The drawing code lives in _VisualCharts.cshtml ═══
+    var chartSet = new VisualChartSet
+    {
+        Rows = loanTypeRows.Select(loanType => new
+        {
+            name   = loanType.LoanTypeName ?? "",
+            loans  = loanType.NoofLoan ?? 0,
+            amount = loanType.LoanIssueAmount ?? 0,
+            avg    = (loanType.NoofLoan ?? 0) > 0 ? (loanType.LoanIssueAmount ?? 0) / (loanType.NoofLoan ?? 0) : 0m
+        }).ToList(),
+        Charts =
+        [
+            VisualChart.Donut("cLoanCount",   "loans"),
+            VisualChart.Donut("cAmountShare", "amount", money: true),
+            VisualChart.Bar("cAmountByType",  "amount", "#2563eb", horizontal: true),
+            VisualChart.Bar("cAverageLoan",   "avg",    "#10b981", horizontal: true, thickness: 26)
+        ]
+    };
+
+    // templates cannot await: render the partials once here, reuse them inside the body
+    var headerHtml = await Html.PartialAsync("_CommonHeader", Model);
+    var chartsHtml = await Html.PartialAsync("_VisualCharts", chartSet);
+
+    // ── extra <head>: only this report's own CSS (shared chart/card/KPI CSS comes from _VisualCharts) ──
+    Func<object?, IHtmlContent> head = @<text>
+        <style>
+            /* KPI cards in one flex row, spread evenly across the page width */
+            .kpi-row {
+                display: flex !important;
+                flex-wrap: wrap;
+                justify-content: space-around;
+                align-items: stretch;
+                gap: 8px;
+            }
+            .kpi-row .kpi {
+                flex: 0 1 auto;
+                min-width: 150px;
+                text-align: center;
+            }
+
+            /* Particulars and gender cards: side by side, each card only as tall as its content */
+            .info-row {
+                display: flex;
+                align-items: flex-start;
+                gap: 10px;
+                margin-bottom: 10px;
+            }
+            .info-row > .card {
+                flex: 1 1 0;
+                min-width: 0;
+                height: auto;
+            }
+
+            .mini-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
+            .mini-table td { padding: 4px 6px; border-bottom: 1px solid #eee; }
+            .mini-table td.number { text-align: right; font-weight: bold; color: #1a3d7c; }
+
+            .bar-line { display: flex; align-items: center; gap: 8px; margin: 7px 0; font-size: 9pt; }
+            .bar-line .bar-label { flex: 0 0 38%; }
+            .bar-line .bar-track { flex: 1; background: #eef1f6; border-radius: 3px; height: 14px; }
+            .bar-line .bar-fill  { background: #2563eb; height: 14px; border-radius: 3px; }
+            .bar-line .bar-value { flex: 0 0 16%; text-align: right; font-weight: bold; color: #1a3d7c; }
+        </style>
+    </text>;
+
+    // ── pages: 1 = header, KPIs, info cards, donuts   |   2 = bar charts ──
+    Func<object?, IHtmlContent> body = @<text>
+        <div class="report-page" data-page="1">
+            <div class="sheet-body">
+                <div class="common-header-wrap">@headerHtml</div>
+                <div class="rpt-title">Loan Portfolio Report — Visual Summary</div>
+                <div class="rpt-meta">
+                    <div><div><strong>Branch Name :</strong> @branchName</div></div>
+                    <div class="text-right"><div><strong>Report Generated On :</strong> @generatedOn</div></div>
+                </div>
+                <div id="chartError">Chart library could not be loaded. Check network access to the Chart.js file.</div>
+
+                @if (!hasAnyData)
+                {
+                    <div class="empty">No data found for the selected criteria</div>
+                }
+                else
+                {
+                    <div class="kpi-row">
+                        <div class="kpi"><div class="l">Loan Types</div><div class="v">@loanTypeRows.Count.ToString("N0")</div><div class="s">active loan types</div></div>
+                        <div class="kpi"><div class="l">Total Loans</div><div class="v">@totalLoanCount.ToString("N0")</div><div class="s">across all loan types</div></div>
+                        <div class="kpi"><div class="l">Remaining Principal</div><div class="v">@totalLoanAmount.ToString("N2")</div><div class="s">avg @averageLoanAmount.ToString("N2") / loan</div></div>
+                        <div class="kpi"><div class="l">Largest Loan Type</div><div class="v" style="font-size:12pt">@largestLoanTypeName</div><div class="s">@largestLoanTypeShare.ToString("0.0")% of total amount</div></div>
+                    </div>
+
+                    @if (particularsRows.Any() || outstandingRows.Any())
+                    {
+                        <div class="info-row">
+                            @if (particularsRows.Any())
+                            {
+                                <div class="card">
+                                    <h3>Particulars</h3>
+                                    <table class="mini-table">
+                                        @foreach (var particular in particularsRows)
+                                        {
+                                            <tr><td>@(particular.Particulars ?? "")</td><td class="number">@(particular.NoofLoan?.ToString("N0") ?? "")</td></tr>
+                                        }
+                                    </table>
+                                </div>
+                            }
+                            @if (outstandingRows.Any())
+                            {
+                                <div class="card">
+                                    <h3>Loan Outstanding (Gender Wise)</h3>
+                                    @foreach (var outstandingRow in outstandingRows)
+                                    {
+                                        <div class="bar-line">
+                                            <div class="bar-label">@(outstandingRow.Particulars ?? "")</div>
+                                            <div class="bar-track"><div class="bar-fill" style="width:@BarWidth(outstandingRow.NoofLoan, outstandingMaximum)%"></div></div>
+                                            <div class="bar-value">@((outstandingRow.NoofLoan ?? 0).ToString("N0"))</div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @if (loanTypeRows.Any())
+                    {
+                        <div class="grid g2 fill">
+                            <div class="card"><h3>No. of Loans by Loan Type</h3><div class="chart-box"><canvas id="cLoanCount"></canvas></div></div>
+                            <div class="card"><h3>Remaining Principal Share</h3><div class="chart-box"><canvas id="cAmountShare"></canvas></div></div>
+                        </div>
+                    }
+                }
+            </div>
+            <div class="page-footer"></div>
+        </div>
+
+        @if (loanTypeRows.Any())
+        {
+            <div class="report-page" data-page="2">
+                <div class="sheet-body">
+                    <div class="grid g2 fill">
+                        <div class="card"><h3>Remaining Principal by Loan Type</h3><div class="chart-box"><canvas id="cAmountByType"></canvas></div></div>
+                        <div class="card"><h3>Average Loan Size by Loan Type</h3><div class="chart-box"><canvas id="cAverageLoan"></canvas></div></div>
+                    </div>
+                </div>
+                <div class="page-footer"></div>
+            </div>
+        }
+
+        @* Chart.js + the generic chart engine (draws every chart from chartSet, then calls reportReady) *@
+        @chartsHtml
+    </text>;
+
+    var sheet = new SheetReport
+    {
+        Data = Model,
+        Title = "Loan Portfolio Visual Report",
+        SheetName = "LoanPortfolio",
+        Head = head,
+        Body = body,
+        DeferReady = true,        // the shared chart script calls window.reportReady() when the charts are drawn
+        RowMm = 6,                // keeps SheetLayout.RowMm / DetailRowsPerPage in sync with the CSS
+        HeaderMm = 6
+    };
+}
+@await Html.PartialAsync("_SheetReport", sheet)
