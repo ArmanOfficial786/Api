@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+﻿@* @using Microsoft.AspNetCore.Html
 @using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.SavingAcWiseReport
 @using NexgenCosysReport.Services.ReportService
 @model Dictionary<string, object>
@@ -155,4 +155,135 @@
         EmptyText = "No data found"
     };
 }
-@await Html.PartialAsync("_SheetReport", sheet)
+@await Html.PartialAsync("_SheetReport", sheet) *@
+
+
+
+
+
+@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.SavingAcWiseReport
+@using NexgenCosysReport.Services.ReportService.Table
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    // ── 1. DATA (set by the controller) ──
+    var accountRows           = (Model["Rows"] as List<SavingTypeWiseIndividualBalanceRowDto>) ?? new();
+    var totalDeposit          = Model["TotalDeposit"] as decimal? ?? 0;
+    var totalWithdraw         = Model["TotalWithdraw"] as decimal? ?? 0;
+    var totalBalance          = Model["TotalBalance"] as decimal? ?? 0;
+    var totalOpening          = Model["TotalOpening"] as decimal? ?? 0;
+    var fromDate              = Model["FromDate"]?.ToString() ?? "";
+    var toDate                = Model["ToDate"]?.ToString() ?? "";
+    var branchName            = Model["BranchName"]?.ToString() ?? "";
+    var showOpeningBalance    = Model["OpeningBalance"] as bool? ?? false;
+    var showPercentage        = Model["PercentageBalance"] as bool? ?? false;
+    var groupByBranch         = Model["GroupByBranch"] as bool? ?? false;
+    var groupByCollectionCenter = Model["GroupByCollectionCenter"] as bool? ?? false;
+    var groupByMemberGroup    = Model["GroupByMemberGroup"] as bool? ?? false;
+    var generatedOn           = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // negative amounts are shown in brackets: (1,234.50)
+    string FormatAmount(decimal amount) => amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
+    string DashIfEmpty(string? text) => string.IsNullOrWhiteSpace(text) ? "-" : text;
+
+    // ── group by saving type: group line with totals, accounts underneath ──
+    var savingTypeGroups = accountRows
+        .GroupBy(accountRow => string.IsNullOrWhiteSpace(accountRow.SavingType) ? "-" : accountRow.SavingType!)
+        .OrderBy(rowsOfSavingType => rowsOfSavingType.Key, StringComparer.OrdinalIgnoreCase)
+        .Select(rowsOfSavingType => new
+        {
+            SavingType       = rowsOfSavingType.Key,
+            AccountCount     = rowsOfSavingType.Select(accountRow => accountRow.AccountNo)
+                                               .Where(accountNo => !string.IsNullOrWhiteSpace(accountNo))
+                                               .Distinct().Count(),
+            Opening          = rowsOfSavingType.Sum(accountRow => accountRow.Opening),
+            Deposit          = rowsOfSavingType.Sum(accountRow => accountRow.Deposit),
+            Withdraw         = rowsOfSavingType.Sum(accountRow => accountRow.Withdraw),
+            Balance          = rowsOfSavingType.Sum(accountRow => accountRow.Balance),
+            BranchName       = rowsOfSavingType.Select(accountRow => accountRow.BranchName).FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)),
+            CollectionCenter = rowsOfSavingType.Select(accountRow => accountRow.CollectionCenterName).FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)),
+            MemberGroup      = rowsOfSavingType.Select(accountRow => accountRow.MemberGroupName).FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)),
+            Accounts         = rowsOfSavingType.ToList()
+        }).ToList();
+
+    var sumOfGroupBalances    = savingTypeGroups.Sum(savingTypeGroup => savingTypeGroup.Balance);
+    var totalAccountCount     = savingTypeGroups.Sum(savingTypeGroup => savingTypeGroup.AccountCount);
+    var leadingColumnCount    = (groupByBranch ? 1 : 0) + (groupByCollectionCenter ? 1 : 0) + (groupByMemberGroup ? 1 : 0);   // optional columns before S.N.
+
+    // ── 2. COLUMNS (optional ones depend on the filters) ──
+    var table = new ReportTable(Model,
+            title: "Savings Type Wise Individual Balance Report",
+            sheetName: "SavingTypeWiseIndividualBalance");
+
+    if (groupByBranch)           table.Column("Branch", 12);
+    if (groupByCollectionCenter) table.Column("Collection Center", 12);
+    if (groupByMemberGroup)      table.Column("Member Group", 12);
+    table.Column("S.N.",      5, Align.Center)
+         .Column("MemberId", 12)
+         .Column("AccountNo", 15)
+         .Column("Count",     7, Align.Right);
+    if (showOpeningBalance)      table.Column("Opening", 12, Align.Right);
+    table.Column("Deposit",     12, Align.Right)
+         .Column("Withdrawl",   12, Align.Right)
+         .Column("Net Balance", 12, Align.Right);
+    if (showPercentage)          table.Column("%", 7, Align.Right);
+
+    table.Sizing(rowMm: 7, headerMm: 8, firstPageExtraMm: 70);
+
+    // ── 3. TITLE BLOCK ──
+    table.MetaPair("Branch Name :", branchName, "From Date :", fromDate)
+         .MetaPair("Report Generated On :", generatedOn, "To Date :", toDate);
+
+    // ── 4. ROWS ──
+    var serialNumber = 0;
+    foreach (var savingTypeGroup in savingTypeGroups)
+    {
+        // group line: optional cells, saving type spanning S.N./MemberId/AccountNo, then the totals
+        var groupCells = new List<ReportCell>();
+        if (groupByBranch)           groupCells.Add(ReportCell.Left(DashIfEmpty(savingTypeGroup.BranchName)));
+        if (groupByCollectionCenter) groupCells.Add(ReportCell.Left(DashIfEmpty(savingTypeGroup.CollectionCenter)));
+        if (groupByMemberGroup)      groupCells.Add(ReportCell.Left(DashIfEmpty(savingTypeGroup.MemberGroup)));
+        groupCells.Add(ReportCell.Left(savingTypeGroup.SavingType, 3));
+        groupCells.Add(ReportCell.Right(savingTypeGroup.AccountCount.ToString()));
+        if (showOpeningBalance)      groupCells.Add(ReportCell.Right(FormatAmount(savingTypeGroup.Opening)));
+        groupCells.Add(ReportCell.Right(FormatAmount(savingTypeGroup.Deposit)));
+        groupCells.Add(ReportCell.Right(FormatAmount(savingTypeGroup.Withdraw)));
+        groupCells.Add(ReportCell.Right(FormatAmount(savingTypeGroup.Balance)));
+        if (showPercentage)
+            groupCells.Add(ReportCell.Right(sumOfGroupBalances == 0
+                ? "0.00%"
+                : (savingTypeGroup.Balance / sumOfGroupBalances * 100).ToString("F2") + "%"));
+        table.GroupBy(groupCells.ToArray());
+
+        // one row per account
+        foreach (var account in savingTypeGroup.Accounts)
+        {
+            var accountValues = new List<string>();
+            for (var columnIndex = 0; columnIndex < leadingColumnCount; columnIndex++) accountValues.Add("");
+            accountValues.Add((++serialNumber).ToString());
+            accountValues.Add(DashIfEmpty(account.MemberId));
+            accountValues.Add(DashIfEmpty(account.AccountNo));
+            accountValues.Add("");                                   // Count is only shown on the group line
+            if (showOpeningBalance) accountValues.Add(FormatAmount(account.Opening));
+            accountValues.Add(FormatAmount(account.Deposit));
+            accountValues.Add(FormatAmount(account.Withdraw));
+            accountValues.Add(FormatAmount(account.Balance));
+            if (showPercentage) accountValues.Add("");
+            table.Data(accountValues.ToArray());
+        }
+    }
+
+    if (savingTypeGroups.Count > 0)
+    {
+        var totalValues = new List<string> { totalAccountCount.ToString() };
+        if (showOpeningBalance) totalValues.Add(FormatAmount(totalOpening));
+        totalValues.Add(FormatAmount(totalDeposit));
+        totalValues.Add(FormatAmount(totalWithdraw));
+        totalValues.Add(FormatAmount(totalBalance));
+        if (showPercentage) totalValues.Add("100.00%");
+        table.Total("Grand Total", leadingColumnCount + 3, totalValues.ToArray());   // label spans the leading columns + S.N./MemberId/AccountNo
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

@@ -122,7 +122,8 @@
     var branchName = Model["BranchName"]?.ToString() ?? "All";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // ── 2. COLUMNS, STYLE, SIZES ──
+    // ── 2. COLUMNS, STYLE, SIZES in table ──
+    //.Column(data,width,alignitems)
     var table = new ReportTable(Model, title: "Loan Portfolio Report", sheetName: "LoanPortfolio")
         .Column("Particulars", 45)
         .Column("Total No", 15, Align.Center)
@@ -140,6 +141,7 @@
     // ── 3. TITLE BLOCK ──
     table.Meta("Branch Name:", branchName)
          .Meta("Report Generated On:", generatedOn);
+         
 
     // ── 4. ROWS ──
     if (particulars.Any())

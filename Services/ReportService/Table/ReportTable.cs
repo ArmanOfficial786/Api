@@ -108,8 +108,13 @@ namespace NexgenCosysReport.Services.ReportService.Table
         public ReportTable Section(string title)
             => Add(RowKind.Section, new ReportCell(title, Align.Left, ColumnCount()));
 
-        public ReportTable Group(string title)
+        /// <summary>Full-width bold line that starts a group (title only, no values).</summary>
+        public ReportTable GroupTitle(string title)
             => Add(RowKind.Group, new ReportCell(title, Align.Left, ColumnCount()));
+
+        /// <summary>Group line with its own cells (title plus group totals). Cells must cover all columns.</summary>
+        public ReportTable GroupBy(params ReportCell[] cells)
+            => Add(RowKind.Group, cells);
 
         public ReportTable Note(string text)
             => Add(RowKind.Note, new ReportCell(text, Align.Left, ColumnCount()));
