@@ -545,10 +545,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                 return await ReportExportHelper.ExportFromCacheAsync(
                     reportKey, upperFormat, reportName, _jsReportService, _logger, page, ct);
             }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, StatusCode = 400, message = ex.Message });
-            }
+
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generating LoanProvision report");

@@ -2,17 +2,27 @@
 @using NexgenCosysReport.Dtos.ReportDtos
 @model SheetReport
 @{
-    var l = Model.Layout;
+    var l = Model.Layout;                       // PageSizeSetting (from Data["PageSetting"])
     var n = Model.ColCount;
     var tableMode = Model.Body == null;
     string Mm(double v) => PageSizeSetting.Mm(v);
+
+    // footer band = the bottom margin area (never smaller than FooterMm); text is centred inside it
+    var bandMm = Math.Max(l.MarginBottomMm, SheetReport.FooterMm);
 
     void ColGroup()
     {
         <colgroup>
             @foreach (var w in Model.Cols)
             {
-                if (w > 0) { <col style="width:@Mm(w);" /> } else { <col /> }
+                if (w > 0)
+                {
+                    <col style="width:@Mm(w);" />
+                }
+                else
+                {
+                    <col />
+                }
             }
         </colgroup>
     }
@@ -22,232 +32,617 @@
 <head>
     <meta charset="utf-8" />
     <title>@Model.Title</title>
-    @if (Model.Head != null) { @Model.Head(null) }
+    @if (Model.Head != null)
+    {
+        @Model.Head(null)
+    }
     <script>
-    window.JSREPORT_READY_TO_START = false;
+            window.JSREPORT_READY_TO_START = false;
 
-    // Table mode: make every page group exactly one sheet tall. Measured in the real renderer,
-    // so html and pdf end up identical (no server-side estimate).
-    window.fitFooters = function () {
-        var px = 96 / 25.4,
-            page = @PageSizeSetting.Num(l.SheetHeightMm) * px,
-            min = (@PageSizeSetting.Num(SheetReport.FooterMm) + @PageSizeSetting.Num(l.MarginBottomMm)) * px;
-        document.querySelectorAll('tbody.pg').forEach(function (b) {
-            var pf = b.querySelector('tr.pf'); if (!pf) return;
-            var used = 0;
-            b.querySelectorAll(':scope > tr').forEach(function (r) {
-                if (r === pf || r.classList.contains('gap')) return;
-                used += r.getBoundingClientRect().height;
-            });
-            var h = Math.max(min, page - used) + 'px';
-            pf.style.height = h;
-            pf.firstElementChild.style.height = h;
-            var w = pf.querySelector('.pf-wrap'); if (w) w.style.height = h;
-        });
-    };
+            var PX = 96 / 25.4,
+                PAGE_PX   = @PageSizeSetting.Num(l.SheetHeightMm) * PX,
+                FOOTER_PX = @PageSizeSetting.Num(bandMm) * PX,      // footer band (bottom margin area)
+                SAFETY_PX = 2 * PX;
 
-    window.reportReady = function () {
-        if (window.__chartsReady) return;
-        try {
-            window.fitFooters();
-            var ps = document.querySelectorAll('.report-page, tbody.pg'), n = ps.length;
-            ps.forEach(function (p, i) {
-                var f = p.querySelector('.page-footer, .pf-text');
-                if (f) f.textContent = 'Page ' + (i + 1) + ' of ' + n;
-            });
-            if (window.parent && window.parent !== window)
-                window.parent.postMessage({ type: 'REPORT_PAGES_READY', totalPages: n }, '*');
-        } catch (e) { }
-        finally {
-            window.__chartsReady = true;
-            window.JSREPORT_READY_TO_START = true;   // always reached
-        }
-    };
+            // rows that must stay with the row after them (section / group bars)
+            function isKeep(r) {
+                var c = r.classList;
+                return c.contains('kwn') || c.contains('group-header') || c.contains('section-header') || c.contains('type-header');
+            }
 
-    window.scrollToPage = function (n) {
-        var t = document.querySelector('[data-page="' + n + '"]'), b = document.getElementById('viewOuter');
-        if (!t) return;
-        if (b && b.classList.contains('view-outer'))
-            b.scrollTo({ top: t.offsetTop, behavior: 'smooth' });
-        else
-            window.scrollTo({ top: window.pageYOffset + t.getBoundingClientRect().top, behavior: 'smooth' });
-    };
+            // ═══ PAGINATION (table mode) ═══
+            // Measures the REAL height of every row in the renderer (browser or Chrome) and packs rows into
+            // pages of the actual sheet height: top margin + rows + footer band. Server Plan() is only the first estimate.
+            window.reflow = function () {
+                var table = document.querySelector('table.sheet-table');
+                if (!table) return;
+                var bodies = table.querySelectorAll('tbody.pg');
+                if (!bodies.length) return;
+
+                var first = bodies[0],
+                    mtT = first.querySelector('tr.mt'),
+                    pfT = first.querySelector('tr.pf');
+                if (!mtT || !pfT) return;
+
+                var span = mtT.firstElementChild.getAttribute('colspan') || '1';
+                var gapT = document.createElement('tr');
+                gapT.className = 'no-xl gap';
+                gapT.innerHTML = '<td colspan="' + span + '"></td>';
+
+                var flow = [], hs = [];
+                bodies.forEach(function (b) {
+                    Array.prototype.forEach.call(b.children, function (r) {
+                        var c = r.classList;
+                        if (c.contains('mt') || c.contains('pf') || c.contains('gap')) return;
+                        flow.push(r);
+                        hs.push(r.getBoundingClientRect().height);
+                    });
+                });
+                var mtH = mtT.getBoundingClientRect().height,
+                    cap = PAGE_PX - FOOTER_PX - SAFETY_PX;
+
+                var pages = [[]], used = mtH, i = 0;
+                while (i < flow.length) {
+                    var j = i, block = hs[i];
+                    while (isKeep(flow[j]) && j + 1 < flow.length) { j++; block += hs[j]; }
+                    var cur = pages[pages.length - 1];
+                    if (cur.length && used + block > cap) { cur = []; pages.push(cur); used = mtH; }
+                    for (var k = i; k <= j; k++) cur.push(flow[k]);
+                    used += block;
+                    i = j + 1;
+                }
+
+                var mtC = mtT.cloneNode(true), pfC = pfT.cloneNode(true);
+                pfC.removeAttribute('style');
+                Array.prototype.forEach.call(pfC.querySelectorAll('*'), function (e) { if (!e.classList.contains('pf-box')) e.style.height = ''; });
+                bodies.forEach(function (b) { table.removeChild(b); });
+                pages.forEach(function (rows, p) {
+                    var tb = document.createElement('tbody');
+                    tb.className = 'pg';
+                    tb.setAttribute('data-page', p + 1);
+                    tb.appendChild(mtC.cloneNode(true));
+                    rows.forEach(function (r) { tb.appendChild(r); });
+                    tb.appendChild(pfC.cloneNode(true));
+                    if (p < pages.length - 1) tb.appendChild(gapT.cloneNode(true));
+                    table.appendChild(tb);
+                });
+            };
+
+            // every page exactly one sheet tall: the footer row takes the remainder, the band sits at its bottom
+            window.fitFooters = function () {
+                document.querySelectorAll('tbody.pg').forEach(function (b) {
+                    var pf = b.querySelector('tr.pf'); if (!pf) return;
+                    var used = 0;
+                    b.querySelectorAll(':scope > tr').forEach(function (r) {
+                        if (r === pf || r.classList.contains('gap')) return;
+                        used += r.getBoundingClientRect().height;
+                    });
+                    var h = Math.max(FOOTER_PX, PAGE_PX - used) + 'px';
+                    pf.style.height = h;
+                    pf.firstElementChild.style.height = h;
+                    var w = pf.querySelector('.pf-wrap'); if (w) w.style.height = h;
+                });
+            };
+
+            window.reportReady = function () {
+                if (window.__chartsReady) return;
+                try {
+                    window.reflow();
+                    window.fitFooters();
+                    var ps = document.querySelectorAll('.report-page, tbody.pg'), n = ps.length;
+                    ps.forEach(function (p, i) {
+                        var f = p.querySelector('.page-footer, .pf-text');
+                        if (f) f.textContent = 'Page ' + (i + 1) + ' of ' + n;
+                    });
+                    if (window.parent && window.parent !== window)
+                        window.parent.postMessage({ type: 'REPORT_PAGES_READY', totalPages: n }, '*');
+                } catch (e) { }
+                finally {
+                    window.__chartsReady = true;
+                    window.JSREPORT_READY_TO_START = true;   // always reached
+                }
+            };
+
+            window.scrollToPage = function (n) {
+                var t = document.querySelector('[data-page="' + n + '"]'), b = document.getElementById('viewOuter');
+                if (!t) return;
+                if (b && b.classList.contains('view-outer'))
+                    b.scrollTo({ top: t.offsetTop, behavior: 'smooth' });
+                else
+                    window.scrollTo({ top: window.pageYOffset + t.getBoundingClientRect().top, behavior: 'smooth' });
+            };
     </script>
     <style>
-        :root { --sheet-w: @Mm(l.WidthMm); --sheet-h: @Mm(l.SheetHeightMm); --row: @Mm(Model.RowMm); --head: @Mm(Model.HeaderMm);
-                --lines: @Model.CellLines; --footer: @Mm(SheetReport.FooterMm); --mb: @Mm(l.MarginBottomMm); }
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; font-size: 8.5pt; color: #000; background: #e1e1e5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        .text-right { text-align: right !important; } .text-center { text-align: center !important; } .text-left { text-align: left !important; }
+            :root {
+                --sheet-w: @Mm(l.WidthMm);
+                --sheet-h: @Mm(l.SheetHeightMm);
+                --mt: @Mm(l.MarginTopMm);
+                --mr: @Mm(l.MarginRightMm);
+                --mb: @Mm(l.MarginBottomMm);
+                --ml: @Mm(l.MarginLeftMm);
+                --band: @Mm(bandMm);
+                --row: @Mm(Model.RowMm);
+                --head: @Mm(Model.HeaderMm);
+                --lines: @Model.CellLines;
+            }
 
-        .meta-title td { text-align: center; font-family: "Times New Roman", Times, serif; font-size: 14pt; font-weight: bold; text-decoration: underline; padding: 6px; }
-        .meta-row td { padding: 2px 6px; font-size: 9pt; }
-        .meta-spacer td { height: 6px; }
-        .detail-row td { border-bottom: 1px solid #eee; }
-        .alt td { background: #fafafa; border-bottom: 1px solid #eee; }
-        .group-header td { font-weight: bold; border-top: 1px solid #999; border-bottom: 1px solid #999; }
-        .grand-total td { font-weight: bold; border-top: 2px solid #000; border-bottom: 2px solid #000; background: #f9f9f9; }
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
 
-        .c { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--lines); line-clamp: var(--lines);
-             overflow: hidden; line-height: 3.5mm; max-height: calc(var(--lines) * 3.5mm); word-break: break-word; }
+            body {
+                font-family: Arial, sans-serif;
+                font-size: 8.5pt;
+                color: #000;
+                background: #e1e1e5;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
+            }
 
-        /* ═══ TABLE MODE: one table for html / pdf / excel ══ */
-        .sheet { width: var(--sheet-w); margin: 12px auto; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.18);
-                 padding: 0 @Mm(l.MarginRightMm) 0 @Mm(l.MarginLeftMm); }
-        table.sheet-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: #fff; }
-        table.sheet-table td, table.sheet-table th { padding: 0 5px; vertical-align: middle; overflow: hidden; }
-        table.sheet-table th { height: var(--head); text-align: left; font-weight: bold; white-space: nowrap; text-overflow: ellipsis;
-                               border-top: 2px solid #000; border-bottom: 1px solid #000; }
-        table.sheet-table tbody tr { height: var(--row); }
-        table.sheet-table tr.meta-title, table.sheet-table tr.meta-row, table.sheet-table tr.meta-spacer { height: auto; }
-        table.sheet-table td.hdr-cell { padding: 0; border: 0; }
+            .text-right {
+                text-align: right !important;
+            }
 
-        /* top margin row */
-        table.sheet-table tbody tr.mt td { padding: 0; border: 0; line-height: 0; font-size: 0; }
+            .text-center {
+                text-align: center !important;
+            }
 
-        /* footer row: height set by fitFooters(); box pinned to the bottom above the bottom margin,
-           "Page X of Y" centred on both axes inside the box */
-        table.sheet-table tbody tr.pf td,
-        table.sheet-table.bordered tbody tr.pf td { padding: 0; border: 0; vertical-align: bottom; overflow: hidden; line-height: 0; font-size: 0; }
-      .pf-wrap { display: flex; flex-direction: column; justify-content: flex-end; }
-      .pf-box { height: calc(var(--footer) + var(--mb)); width: 100%;
-          display: flex; align-items: center; justify-content: center;
-          font-size: 8pt; font-weight: bold; line-height: 1; text-align: center;
-          box-shadow: inset 0 1px 0 #ccc; }
-      .pf-text { display: block; line-height: 1; text-align: center; }
+            .text-left {
+                text-align: left !important;
+            }
 
-        table.sheet-table tr { break-inside: avoid; page-break-inside: avoid; }
-        table.sheet-table tbody.pg { break-after: page; page-break-after: always; }
-        table.sheet-table tbody.pg:last-of-type { break-after: auto; page-break-after: auto; }
-        table.sheet-table tbody.pg + tbody.pg { break-before: page; page-break-before: always; }
-        table.sheet-table tbody.pg + tbody.pg > tr:first-child { break-before: page; page-break-before: always; }
+            .meta-title td {
+                text-align: center;
+                font-family: "Times New Roman", Times, serif;
+                font-size: 14pt;
+                font-weight: bold;
+                text-decoration: underline;
+                padding: 6px;
+            }
 
-        table.sheet-table tr.gap { height: 24px; }
-        table.sheet-table tr.gap td { padding: 0; border: 0; background: #e1e1e5; height: 24px;
-                                      box-shadow: 0 0 0 100vmax #e1e1e5; clip-path: inset(0 -100vmax); }
-        table.sheet-table.bordered th, table.sheet-table.bordered td { border: 1px solid #999; }
-        table.sheet-table.bordered th { background: #f2f2f2; text-align: center; }
-        table.sheet-table.bordered td.hdr-cell, table.sheet-table.bordered tr.mt td, table.sheet-table.bordered tr.pf td { border: 0; }
+            .meta-row td {
+                padding: 2px 6px;
+                font-size: 9pt;
+            }
 
-        /* ═══ CUSTOM MODE (visual reports): fixed sheets ═══ */
-        .view-outer { padding: 12px 16px 20px; height: 100vh; height: 100dvh; overflow: auto; }
-        .report-page { width: var(--sheet-w); height: var(--sheet-h);
-            padding: @Mm(l.MarginTopMm) @Mm(l.MarginRightMm) @Mm(l.MarginBottomMm) @Mm(l.MarginLeftMm);
-            margin: 0 auto 24px; background: #fff; overflow: hidden; display: flex; flex-direction: column;
-            box-shadow: 0 2px 8px rgba(0,0,0,.18); page-break-after: always; break-after: page; }
-        .report-page:last-child { page-break-after: auto; break-after: auto; }
-        .sheet-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
-        .common-header-wrap { flex: none; width: 100%; overflow: hidden; }
-      .report-page { padding-bottom: 0; }   /* the footer band below carries the bottom margin */
-      .page-footer {
-        flex: none;
-        height: calc(var(--footer) + var(--mb));
-        margin: 0;
-        padding: 0;
-        box-shadow: inset 0 1px 0 #ccc;
-        display: flex;
-        align-items: center;          /* vertical centre of the whole bottom band */
-        justify-content: center;      /* horizontal centre */
-        font-size: 8pt;
-        font-weight: bold;
-        line-height: 1;
-     }
-        table.report-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: #fff; }
-        table.report-table th, table.report-table td { padding: 0 5px; vertical-align: middle; overflow: hidden; }
-        table.report-table thead th { height: var(--head); text-align: left; font-weight: bold; white-space: nowrap; text-overflow: ellipsis;
-                                      border-top: 2px solid #000; border-bottom: 1px solid #000; }
-        table.report-table tbody tr { height: var(--row); }
+            .meta-spacer td {
+                height: 6px;
+            }
 
-        .data-table { width: 100%; border-collapse: collapse; font-size: 9pt; }
-        .data-table td, .data-table th { padding: 3px 5px; vertical-align: middle; }
-        .data-table th { border-top: 1.5px solid #000; border-bottom: 1px solid #000; background: #f2f2f2; font-weight: bold; text-align: left; white-space: nowrap; }
-        .data-table .c { display: block; max-height: none; overflow: visible; }
+            .detail-row td {
+                border-bottom: 1px solid #eee;
+            }
 
-        @@page { size: @Mm(l.WidthMm) @Mm(l.HeightMm); margin: 0; }
-        @@media print {
-            html, body { background: #fff; margin: 0; padding: 0; }
-            .sheet { margin: 0; box-shadow: none; }          /* width stays = paper width, same as screen */
-            .view-outer { padding: 0; height: auto !important; overflow: visible !important; }
-            .report-page { box-shadow: none; margin: 0; }
-            tr.gap { display: none !important; }
-        }
+            .alt td {
+                background: #fafafa;
+                border-bottom: 1px solid #eee;
+            }
+
+            .group-header td {
+                font-weight: bold;
+                border-top: 1px solid #999;
+                border-bottom: 1px solid #999;
+            }
+
+            .grand-total td {
+                font-weight: bold;
+                border-top: 2px solid #000;
+                border-bottom: 2px solid #000;
+                background: #f9f9f9;
+            }
+
+            .c {
+                display: -webkit-box;
+                -webkit-box-orient: vertical;
+                -webkit-line-clamp: var(--lines);
+                line-clamp: var(--lines);
+                overflow: hidden;
+                line-height: 3.5mm;
+                max-height: calc(var(--lines) * 3.5mm);
+                word-break: break-word;
+            }
+
+            /* ═══ TABLE MODE: one table for html / pdf / excel ═══
+                       Left/right margins = padding of the sheet; top margin = blank row; bottom margin = footer band row.
+                       Chrome's own margins are 0, so html and pdf draw the identical page box. */
+            .sheet {
+                width: var(--sheet-w);
+                margin: 12px auto;
+                background: #fff;
+                box-shadow: 0 2px 8px rgba(0,0,0,.18);
+                padding: 0 var(--mr) 0 var(--ml);
+            }
+
+            table.sheet-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                background: #fff;
+            }
+
+                table.sheet-table td, table.sheet-table th {
+                    padding: 0 5px;
+                    vertical-align: middle;
+                    overflow: hidden;
+                }
+
+                    table.sheet-table td:first-child, table.sheet-table th:first-child {
+                        padding-left: 0;
+                    }
+
+                    table.sheet-table td:last-child, table.sheet-table th:last-child {
+                        padding-right: 0;
+                    }
+
+                table.sheet-table th {
+                    height: var(--head);
+                    text-align: left;
+                    font-weight: bold;
+                    white-space: nowrap;
+                    text-overflow: ellipsis;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                }
+
+                table.sheet-table tbody tr {
+                    height: var(--row);
+                }
+
+                table.sheet-table tr.meta-title, table.sheet-table tr.meta-row, table.sheet-table tr.meta-spacer {
+                    height: auto;
+                }
+
+                table.sheet-table td.hdr-cell {
+                    padding: 0;
+                    border: 0;
+                }
+
+                /* top margin: blank row, repeated on every page */
+                table.sheet-table tbody tr.mt {
+                    height: var(--mt);
+                }
+
+                    table.sheet-table tbody tr.mt td {
+                        padding: 0;
+                        border: 0;
+                        line-height: 0;
+                        font-size: 0;
+                        height: var(--mt);
+                    }
+
+                /* footer: the row stretches to the page bottom; the band (= bottom margin area) is pinned to its bottom edge
+                       and "Page X of Y" is centred on BOTH axes inside the band */
+                table.sheet-table tbody tr.pf td,
+                table.sheet-table.bordered tbody tr.pf td {
+                    padding: 0;
+                    border: 0;
+                    vertical-align: bottom;
+                    overflow: hidden;
+                    line-height: 0;
+                    font-size: 0;
+                }
+
+            .pf-wrap {
+                display: flex;
+                flex-direction: column;
+                justify-content: flex-end;
+            }
+
+            .pf-box {
+                flex: none;
+                width: 100%;
+                height: var(--band);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 8pt;
+                font-weight: bold;
+                line-height: 1;
+                text-align: center;
+                box-shadow: inset 0 1px 0 #ccc;
+            }
+
+            .pf-text {
+                display: block;
+                line-height: 1;
+                text-align: center;
+            }
+
+            table.sheet-table tr {
+                break-inside: avoid;
+                page-break-inside: avoid;
+            }
+
+            table.sheet-table tbody.pg {
+                break-after: page;
+                page-break-after: always;
+            }
+
+                table.sheet-table tbody.pg:last-of-type {
+                    break-after: auto;
+                    page-break-after: auto;
+                }
+
+                table.sheet-table tbody.pg + tbody.pg {
+                    break-before: page;
+                    page-break-before: always;
+                }
+
+                    table.sheet-table tbody.pg + tbody.pg > tr:first-child {
+                        break-before: page;
+                        page-break-before: always;
+                    }
+
+            table.sheet-table tr.gap {
+                height: 24px;
+            }
+
+                table.sheet-table tr.gap td {
+                    padding: 0;
+                    border: 0;
+                    background: #e1e1e5;
+                    height: 24px;
+                    box-shadow: 0 0 0 100vmax #e1e1e5;
+                    clip-path: inset(0 -100vmax);
+                }
+
+            table.sheet-table.bordered th, table.sheet-table.bordered td {
+                border: 1px solid #999;
+            }
+
+            table.sheet-table.bordered th {
+                background: #f2f2f2;
+                text-align: center;
+            }
+
+            table.sheet-table.bordered td.hdr-cell, table.sheet-table.bordered tr.mt td, table.sheet-table.bordered tr.pf td {
+                border: 0;
+            }
+
+            /* ═══ CUSTOM MODE (visual reports): fixed sheets; bottom margin = footer band ═══ */
+            .view-outer {
+                padding: 12px 16px 20px;
+                height: 100vh;
+                height: 100dvh;
+                overflow: auto;
+            }
+
+            .report-page {
+                width: var(--sheet-w);
+                height: var(--sheet-h);
+                padding: var(--mt) var(--mr) 0 var(--ml);
+                margin: 0 auto 24px;
+                background: #fff;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                box-shadow: 0 2px 8px rgba(0,0,0,.18);
+                page-break-after: always;
+                break-after: page;
+            }
+
+                .report-page:last-child {
+                    page-break-after: auto;
+                    break-after: auto;
+                }
+
+            .sheet-body {
+                flex: 1;
+                min-height: 0;
+                display: flex;
+                flex-direction: column;
+                overflow: hidden;
+            }
+
+            .common-header-wrap {
+                flex: none;
+                width: 100%;
+                overflow: hidden;
+            }
+
+            .page-footer {
+                flex: none;
+                height: var(--band);
+                margin: 0;
+                padding: 0;
+                box-shadow: inset 0 1px 0 #ccc;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
+                font-size: 8pt;
+                font-weight: bold;
+                line-height: 1;
+            }
+
+            table.report-table {
+                width: 100%;
+                border-collapse: collapse;
+                table-layout: fixed;
+                background: #fff;
+            }
+
+                table.report-table th, table.report-table td {
+                    padding: 0 5px;
+                    vertical-align: middle;
+                    overflow: hidden;
+                }
+
+                table.report-table thead th {
+                    height: var(--head);
+                    text-align: left;
+                    font-weight: bold;
+                    white-space: nowrap;
+                    text-overflow: ellipsis;
+                    border-top: 2px solid #000;
+                    border-bottom: 1px solid #000;
+                }
+
+                table.report-table tbody tr {
+                    height: var(--row);
+                }
+
+            .data-table {
+                width: 100%;
+                border-collapse: collapse;
+                font-size: 9pt;
+            }
+
+                .data-table td, .data-table th {
+                    padding: 3px 5px;
+                    vertical-align: middle;
+                }
+
+                .data-table th {
+                    border-top: 1.5px solid #000;
+                    border-bottom: 1px solid #000;
+                    background: #f2f2f2;
+                    font-weight: bold;
+                    text-align: left;
+                    white-space: nowrap;
+                }
+
+                .data-table .c {
+                    display: block;
+                    max-height: none;
+                    overflow: visible;
+                }
+
+            @@page {
+                size: @Mm(l.WidthMm) @Mm(l.HeightMm);
+                margin: 0;
+            }
+
+            @@media print {
+                html, body {
+                    background: #fff;
+                    margin: 0;
+                    padding: 0;
+                }
+
+                .sheet {
+                    margin: 0;
+                    box-shadow: none;
+                }
+
+                .view-outer {
+                    padding: 0;
+                    height: auto !important;
+                    overflow: visible !important;
+                }
+
+                .report-page {
+                    box-shadow: none;
+                    margin: 0;
+                }
+
+                tr.gap {
+                    display: none !important;
+                }
+            }
     </style>
-    @if (!string.IsNullOrWhiteSpace(Model.ExtraCss)) { <style>@Html.Raw(Model.ExtraCss)</style> }
+    @if (!string.IsNullOrWhiteSpace(Model.ExtraCss))
+    {
+        <style>@Html.Raw(Model.ExtraCss)</style>
+    }
 </head>
 <body>
-@if (tableMode)
-{
-    var pages = Model.Pages;
-    <div class="sheet" id="viewOuter" data-fixed-sheets
-         data-sheet-w="@PageSizeSetting.Num(l.WidthMm)" data-sheet-h="@PageSizeSetting.Num(l.HeightMm)">
-        <table class="sheet-table @(Model.Bordered ? "bordered" : "")" data-sheet-name="@Model.SheetName">
-            @{ ColGroup(); }
-            @for (var p = 0; p < pages.Count; p++)
-            {
-                var pg = pages[p];
-                <tbody class="pg" data-page="@(p + 1)">
-                    <tr class="no-xl mt" style="height:@Mm(l.MarginTopMm)"><td colspan="@n" style="height:@Mm(l.MarginTopMm)"></td></tr>
-                    @if (p == 0)
-                    {
-                        <tr class="no-xl"><td colspan="@n" class="hdr-cell">@await Html.PartialAsync("_CommonHeader", Model.Data)</td></tr>
-                        if (Model.Subheader != null) { @Model.Subheader(n) }
-                        if (Model.ColHeader != null) { @Model.ColHeader(n) }
-                        if (Model.RowCount == 0) { <tr><td colspan="@n" class="text-center">@Model.EmptyText</td></tr> }
-                    }
-                    @for (var i = pg.Start; i < pg.Start + pg.Count; i++) { @Model.Row!(i) }
-
-                    @* initial height only; fitFooters() sets the exact value in the real renderer *@
-                    @{ var pfH = Mm(SheetReport.FooterMm + l.MarginBottomMm); }
-                    <tr class="no-xl pf" style="height:@pfH">
-                        <td colspan="@n" style="height:@pfH">
-                            <div class="pf-wrap" style="height:@pfH">
-                                <div class="pf-box"><span class="pf-text">Page @(p + 1) of @pages.Count</span></div>
-                            </div>
-                        </td>
-                    </tr>
-                    @if (p < pages.Count - 1)
-                    {
-                        <tr class="no-xl gap"><td colspan="@n"></td></tr>
-                    }
-                </tbody>
-            }
-        </table>
-    </div>
-}
-else
-{
-    <div class="view-outer" id="viewOuter" data-fixed-sheets
-         data-sheet-w="@PageSizeSetting.Num(l.WidthMm)" data-sheet-h="@PageSizeSetting.Num(l.HeightMm)">
-        @Model.Body!(null)
-    </div>
-    @if (Model.ExcelBody != null)
+    @if (tableMode)
     {
-        <div id="excelSource" style="display:none" data-sheet-name="@Model.SheetName">@Model.ExcelBody(null)</div>
-    }
-}
+        var pages = Model.Pages;
+        <div class="sheet" id="viewOuter" data-fixed-sheets
+             data-sheet-w="@PageSizeSetting.Num(l.WidthMm)" data-sheet-h="@PageSizeSetting.Num(l.HeightMm)">
+            <table class="sheet-table @(Model.Bordered ? "bordered" : "")" data-sheet-name="@Model.SheetName">
+                @{
+                    ColGroup();
+                }
+                @for (var p = 0; p < pages.Count; p++)
+                {
+                    var pg = pages[p];
+                    <tbody class="pg" data-page="@(p + 1)">
+                        <tr class="no-xl mt"><td colspan="@n"></td></tr>
+                        @if (p == 0)
+                        {
+                            <tr class="no-xl"><td colspan="@n" class="hdr-cell">@await Html.PartialAsync("_CommonHeader", Model.Data)</td></tr>
+                            if (Model.Subheader != null)
+                            {
 
-<script>
-(function () {
-    'use strict';
-    @if (!Model.DeferReady) { <text>
-    // wait for logo + fonts: they change the header height that the footer fit depends on
-    var go = function () { (document.fonts ? document.fonts.ready : Promise.resolve()).then(window.reportReady); };
-    if (document.readyState === 'complete') go(); else window.addEventListener('load', go);
-    </text> }
-    if (!(window.parent && window.parent !== window)) return;
-    var box = document.getElementById('viewOuter');
-    var scrolled = box && box.classList.contains('view-outer');
-    var target = scrolled ? box : window, last = 1;
-    target.addEventListener('scroll', function () {
-        var top0 = scrolled ? box.getBoundingClientRect().top : 0;
-        var h = scrolled ? box.clientHeight : window.innerHeight;
-        var cur = 1;
-        document.querySelectorAll('[data-page]').forEach(function (p, i) {
-            if (p.getBoundingClientRect().top - top0 <= h / 3) cur = i + 1;
-        });
-        if (cur !== last) { last = cur; window.parent.postMessage({ type: 'REPORT_PAGE_CHANGED', page: cur }, '*'); }
-    }, { passive: true });
-}());
-</script>
+                                @Model.Subheader(n)
+                            }
+                            if (Model.ColHeader != null)
+                            {
+
+                                @Model.ColHeader(n)
+                            }
+                            if (Model.RowCount == 0)
+                            {
+                                <tr><td colspan="@n" class="text-center">@Model.EmptyText</td></tr>
+                            }
+                        }
+                        @for (var i = pg.Start; i < pg.Start + pg.Count; i++)
+                        {
+                            @Model.Row!(i)
+                        }
+
+                        @* initial height only; fitFooters() sets the exact value in the real renderer *@
+                        @{
+                            var pfH = Mm(bandMm);
+                        }
+                        <tr class="no-xl pf" style="height:@pfH">
+                            <td colspan="@n" style="height:@pfH">
+                                <div class="pf-wrap" style="height:@pfH">
+                                    <div class="pf-box"><span class="pf-text">Page @(p + 1) of @pages.Count</span></div>
+                                </div>
+                            </td>
+                        </tr>
+                        @if (p < pages.Count - 1)
+                        {
+                            <tr class="no-xl gap"><td colspan="@n"></td></tr>
+                        }
+                    </tbody>
+                }
+            </table>
+        </div>
+    }
+    else
+    {
+        <div class="view-outer" id="viewOuter" data-fixed-sheets
+             data-sheet-w="@PageSizeSetting.Num(l.WidthMm)" data-sheet-h="@PageSizeSetting.Num(l.HeightMm)">
+            @Model.Body!(null)
+        </div>
+        @if (Model.ExcelBody != null)
+        {
+            <div id="excelSource" style="display:none" data-sheet-name="@Model.SheetName">@Model.ExcelBody(null)</div>
+        }
+    }
+
+    <script>
+            (function () {
+                'use strict';
+                @if (!Model.DeferReady)
+                {
+                    <text>
+                        // wait for logo + fonts: they change row heights that pagination depends on
+                        var go = function () { (document.fonts ? document.fonts.ready : Promise.resolve()).then(window.reportReady); };
+                        if (document.readyState === 'complete') go(); else window.addEventListener('load', go);
+                    </text>
+                }
+                if (!(window.parent && window.parent !== window)) return;
+                var box = document.getElementById('viewOuter');
+                var scrolled = box && box.classList.contains('view-outer');
+                var target = scrolled ? box : window, last = 1;
+                target.addEventListener('scroll', function () {
+                    var top0 = scrolled ? box.getBoundingClientRect().top : 0;
+                    var h = scrolled ? box.clientHeight : window.innerHeight;
+                    var cur = 1;
+                    document.querySelectorAll('[data-page]').forEach(function (p, i) {
+                        if (p.getBoundingClientRect().top - top0 <= h / 3) cur = i + 1;
+                    });
+                    if (cur !== last) { last = cur; window.parent.postMessage({ type: 'REPORT_PAGE_CHANGED', page: cur }, '*'); }
+                }, { passive: true });
+            }());
+    </script>
 </body>
 </html>

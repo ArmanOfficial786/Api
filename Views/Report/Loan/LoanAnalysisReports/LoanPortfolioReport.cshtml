@@ -1,4 +1,8 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+﻿@* 
+@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService
 @model Dictionary<string, object>
 @{
     Layout = null;
@@ -7,228 +11,163 @@
     var outstanding = (Model["Outstanding"] as List<LoanPortfolioOutstandingDto>) ?? new List<LoanPortfolioOutstandingDto>();
     var loanTypeWise = (Model["LoanTypeWise"] as List<LoanPortfolioLoanTypeWiseDto>) ?? new List<LoanPortfolioLoanTypeWiseDto>();
     var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan Portfolio Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: "Times New Roman", Times, serif;
-                font-size: 11pt;
-                background: white;
-                color: #000;
-            }
+    var lay = (Model.TryGetValue("PageSetting", out var ps) ? ps as PageSizeSetting : null)
+              ?? throw new InvalidOperationException("PageSetting missing in the report data.");
+    var cw = lay.ContentWidthMm - 1;
+    var cols = new[] { 45.0, 15, 40 }.Select(p => Math.Round(cw * p / 100, 2)).ToArray();
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
+    // Flatten every section into one row list: (kind, col1, col2, col3)
+    //   sec = gray section bar | kv = label + number | th = loan-type header | tr = loan-type row
+    var items = new List<(string K, string A, string B, string C)>();
+    if (particulars.Any())
+    {
+        items.Add(("sec", "Particulars", "", ""));
+        items.AddRange(particulars.Select(r => ("kv", r.Particulars ?? "", r.NoofLoan?.ToString() ?? "", "")));
+    }
+    if (outstanding.Any())
+    {
+        items.Add(("sec", "Loan Outstanding Details (Gender Wise)", "", ""));
+        items.AddRange(outstanding.Select(r => ("kv", r.Particulars ?? "", r.NoofLoan?.ToString() ?? "", "")));
+    }
+    if (loanTypeWise.Any())
+    {
+        items.Add(("sec", "Loan Details (Loan Type Wise)", "", ""));
+        items.Add(("th", "Lone Type", "Total No", "Remaining Principal"));
+        items.AddRange(loanTypeWise.Select(r => ("tr", r.LoanTypeName ?? "",
+            r.NoofLoan?.ToString() ?? "",
+            r.LoanIssueAmount.HasValue ? r.LoanIssueAmount.Value.ToString("N2") : "")));
+    }
 
-            thead {
-                display: table-row-group;
-            }
+    Func<int, IHtmlContent> subheader = @<text>
+        <tr class="meta-title"><td colspan="3">Loan Portfolio Report</td></tr>
+        <tr class="meta-row"><td class="meta-label"><strong>Branch Name:</strong></td><td colspan="2">@branchName</td></tr>
+        <tr class="meta-row"><td class="meta-label"><strong>Report Generated On:</strong></td><td colspan="2">@generatedOn</td></tr>
+        <tr class="meta-spacer"><td colspan="3"></td></tr>
+    </text>;
 
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 11pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 3px 6px;
-                    vertical-align: middle;
-                }
-
-            /* ── Title band: double rule above + below, centered, underlined ── */
-            .title-row td {
-                text-align: center;
-                font-size: 15pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 6px 6px 8px;
-                border-top: 3px double #000;
-                border-bottom: 3px double #000;
-            }
-
-            /* ── Branch / Generated-On meta rows ── */
-            .meta-row td {
-                padding: 6px 6px 2px;
-                font-size: 11pt;
-                vertical-align: top;
-            }
-
-            .meta-label {
-                font-weight: bold;
-                white-space: nowrap;
-                width: 1%;
-            }
-
-            .meta-spacer td {
-                height: 8px;
-            }
-
-            /* ── Gray section bars: Particulars / Outstanding / Loan Type Wise ── */
-            .section-header td {
-                background: #808080;
-                color: #000;
-                font-weight: bold;
-                font-size: 11pt;
-                padding: 3px 6px;
-                border-top: 1px solid #000;
-                border-bottom: 1px solid #000;
-            }
-
-            /* ── Particulars / Outstanding rows: label + single number ── */
-            .kv-row td {
-                padding: 2px 6px;
-                color: #1a3d7c;
-            }
-
-            .kv-value {
-                text-align: left;
-            }
-
-            /* ── Loan Type Wise header row ── */
-            .type-header th {
-                text-align: left;
-                font-weight: bold;
-                border-bottom: 1px solid #000;
-                padding: 4px 6px;
-                background: transparent;
-            }
-
-            /* ── Loan Type Wise detail rows ── */
-            .type-row td {
-                padding: 2px 6px;
-                color: #1a3d7c;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
-        {
-            @await Html.PartialAsync("_CommonHeader", Model)
+    Func<int, IHtmlContent> row = @<text>
+        @{
+            var it = items[item];
         }
+        @if (it.K == "sec")
+        {
+            <tr class="section-header"><td colspan="3"><div class="c">@it.A</div></td></tr>
+        }
+        else if (it.K == "th")
+        {
+            <tr class="type-header">
+                <th>@it.A</th>
+                <th class="text-center">@it.B</th>
+                <th class="text-right">@it.C</th>
+            </tr>
+        }
+        else if (it.K == "kv")
+        {
+            <tr class="kv-row">
+                <td><div class="c">@it.A</div></td>
+                <td class="text-left">@it.B</td>
+                <td></td>
+            </tr>
+        }
+        else
+        {
+            <tr class="type-row">
+                <td><div class="c">@it.A</div></td>
+                <td class="text-center">@it.B</td>
+                <td class="text-right">@it.C</td>
+            </tr>
+        }
+    </text>;
 
-        <table class="data-table" data-sheet-name="LoanPortfolio">
-            <colgroup>
-                <col style="width:45%;" />
-                <col style="width:15%;" />
-                <col style="width:40%;" />
-            </colgroup>
-            <tbody>
-                <!-- Title -->
-                <tr class="title-row">
-                    <td colspan="3">Loan Portfolio Report</td>
-                </tr>
+    var css = @"
+        .meta-label { white-space: nowrap; }
+        .section-header td { background: #808080; color: #000; font-weight: bold; border-top: 1px solid #000; border-bottom: 1px solid #000; }
+        .kv-row td, .type-row td { color: #1a3d7c; }
+        .type-header th { text-align: left; font-weight: bold; border-bottom: 1px solid #000; background: transparent; }
+    ";
 
-                <!-- Branch / Generated On -->
-                <tr class="meta-row">
-                    <td class="meta-label" colspan="1">Branch Name:</td>
-                    <td colspan="2">@branchName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td class="meta-label" colspan="1">Report Generated On:</td>
-                    <td colspan="2">@generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="3"></td></tr>
+    var sheet = new SheetReport
+    {
+        Data = Model,
+        Title = "Loan Portfolio Report",
+        SheetName = "LoanPortfolio",
+        Cols = cols,
+        RowCount = items.Count,
+        Subheader = subheader,
+        Row = row,
+        KeepWithNext = i => items[i].K == "sec" || items[i].K == "th",
+        RowMm = 5.5,                  // row height; the renderer measures the real rows, this is only the server estimate
+        HeaderMm = 0,                 // no repeating column header; "th" is an inline row
+        FirstPageExtraMm = 70,        // common header + title + meta rows (server estimate only)
+        ExtraCss = css
+    };
+}
+@await Html.PartialAsync("_SheetReport", sheet)
+ *@
 
-                <!-- Particulars -->
-                @if (particulars.Any())
-                {
-                    <tr class="section-header">
-                        <td colspan="3">Particulars</td>
-                    </tr>
-                    foreach (var row in particulars)
-                    {
-                        <tr class="kv-row">
-                            <td>@(row.Particulars ?? "")</td>
-                            <td class="kv-value">@(row.NoofLoan?.ToString() ?? "")</td>
-                            <td></td>
-                        </tr>
-                    }
-                }
 
-                <!-- Loan Outstanding Details (Gender Wise) -->
-                @if (outstanding.Any())
-                {
-                    <tr class="section-header">
-                        <td colspan="3">Loan Outstanding Details (Gender Wise)</td>
-                    </tr>
-                    foreach (var row in outstanding)
-                    {
-                        <tr class="kv-row">
-                            <td>@(row.Particulars ?? "")</td>
-                            <td class="kv-value">@(row.NoofLoan?.ToString() ?? "")</td>
-                            <td></td>
-                        </tr>
-                    }
-                }
 
-                <!-- Loan Details (Loan Type Wise) -->
-                @if (loanTypeWise.Any())
-                {
-                    <tr class="section-header">
-                        <td colspan="3">Loan Details (Loan Type Wise)</td>
-                    </tr>
-                    <tr class="type-header">
-                        <th>Lone Type</th>
-                        <th class="text-center">Total No</th>
-                        <th class="text-right">Remaining Principal</th>
-                    </tr>
-                    foreach (var row in loanTypeWise)
-                    {
-                        <tr class="type-row">
-                            <td>@(row.LoanTypeName ?? "")</td>
-                            <td class="text-center">@(row.NoofLoan?.ToString() ?? "")</td>
-                            <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
-                        </tr>
-                    }
-                }
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@model Dictionary<string, object>
+@{
+    Layout = null;
 
-                @if (!particulars.Any() && !outstanding.Any() && !loanTypeWise.Any())
-                {
-                    <tr>
-                        <td colspan="3" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    // ── 1. DATA ──
+    var particulars = (Model["Particulars"] as List<LoanPortfolioParticularsDto>) ?? new();
+    var outstanding = (Model["Outstanding"] as List<LoanPortfolioOutstandingDto>) ?? new();
+    var loanTypeWise = (Model["LoanTypeWise"] as List<LoanPortfolioLoanTypeWiseDto>) ?? new();
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // ── 2. COLUMNS, STYLE, SIZES ──
+    var table = new ReportTable(Model, title: "Loan Portfolio Report", sheetName: "LoanPortfolio")
+        .Column("Particulars", 45)
+        .Column("Total No", 15, Align.Center)
+        .Column("Remaining Principal", 40, Align.Right)
+        .NoColumnHeader()
+        .Style(new ReportStyle
+        {
+            SectionBackground = "#808080",
+            DataText = "#1a3d7c",
+            HeaderBackground = "transparent",
+            ZebraStripes = false
+        })
+        .Sizing(rowMm: 5.5, firstPageExtraMm: 70);
+
+    // ── 3. TITLE BLOCK ──
+    table.Meta("Branch Name:", branchName)
+         .Meta("Report Generated On:", generatedOn);
+
+    // ── 4. ROWS ──
+    if (particulars.Any())
+    {
+        table.Section("Particulars");
+        foreach (var p in particulars)
+            table.Pair(p.Particulars ?? "", Fmt.Int(p.NoofLoan));
+    }
+
+    if (outstanding.Any())
+    {
+        table.Section("Loan Outstanding Details (Gender Wise)");
+        foreach (var o in outstanding)
+            table.Pair(o.Particulars ?? "", Fmt.Int(o.NoofLoan));
+    }
+
+    if (loanTypeWise.Any())
+    {
+        table.Section("Loan Details (Loan Type Wise)");
+        table.Header("Loan Type", "Total No", "Remaining Principal");
+        foreach (var t in loanTypeWise)
+            table.Data(t.LoanTypeName ?? "", Fmt.Int(t.NoofLoan), Fmt.Amount(t.LoanIssueAmount));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())
+
+
+
+
+
+
