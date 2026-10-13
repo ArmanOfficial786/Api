@@ -1,4 +1,4 @@
-﻿@using System.Globalization
+﻿@* @using System.Globalization
 @using Microsoft.AspNetCore.Html
 @using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
 @using NexgenCosysReport.Services.ReportService
@@ -57,7 +57,7 @@
     // ── extra <head>: only this report's own CSS (shared chart/card/KPI CSS comes from _VisualCharts) ──
     Func<object?, IHtmlContent> head = @<text>
         <style>
-            /* KPI cards in one flex row, spread evenly across the page width */
+           
             .kpi-row {
                 display: flex !important;
                 flex-wrap: wrap;
@@ -71,7 +71,7 @@
                 text-align: center;
             }
 
-            /* Particulars and gender cards: side by side, each card only as tall as its content */
+           
             .info-row {
                 display: flex;
                 align-items: flex-start;
@@ -178,7 +178,7 @@
             </div>
         }
 
-        @* Chart.js + the generic chart engine (draws every chart from chartSet, then calls reportReady) *@
+       
         @chartsHtml
     </text>;
 
@@ -189,9 +189,70 @@
         SheetName = "LoanPortfolio",
         Head = head,
         Body = body,
-        DeferReady = true,        // the shared chart script calls window.reportReady() when the charts are drawn
-        RowMm = 6,                // keeps SheetLayout.RowMm / DetailRowsPerPage in sync with the CSS
+        DeferReady = true,        
+        RowMm = 6,                
         HeaderMm = 6
     };
 }
-@await Html.PartialAsync("_SheetReport", sheet)
+@await Html.PartialAsync("_SheetReport", sheet) *@
+
+
+
+
+
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Visual
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    // ── 1. DATA ──
+    var particularsRows = (Model["Particulars"]  as List<LoanPortfolioParticularsDto>)  ?? new();
+    var outstandingRows = (Model["Outstanding"]  as List<LoanPortfolioOutstandingDto>)  ?? new();
+    var loanTypeRows    = (Model["LoanTypeWise"] as List<LoanPortfolioLoanTypeWiseDto>) ?? new();
+    var branchName      = Model["BranchName"]?.ToString() ?? "All";
+    var generatedOn     = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // ── 2. NUMBERS FOR THE KPI CARDS ──
+    var totalLoanCount       = loanTypeRows.Sum(loanType => loanType.NoofLoan ?? 0);
+    var totalLoanAmount      = loanTypeRows.Sum(loanType => loanType.LoanIssueAmount ?? 0);
+    var averageLoanAmount    = totalLoanCount == 0 ? 0 : totalLoanAmount / totalLoanCount;
+    var largestLoanType      = loanTypeRows.OrderByDescending(loanType => loanType.LoanIssueAmount ?? 0).FirstOrDefault();
+    var largestLoanTypeShare = (largestLoanType == null || totalLoanAmount == 0)
+                               ? 0 : Math.Round((largestLoanType.LoanIssueAmount ?? 0) / totalLoanAmount * 100, 1);
+
+    // ── 3. REPORT ──
+    var report = new VisualReport(Model, title: "Loan Portfolio Visual Report", sheetName: "LoanPortfolio")
+        .PrintedTitle("Loan Portfolio Report — Visual Summary")
+        .NoDataWhen(!particularsRows.Any() && !outstandingRows.Any() && !loanTypeRows.Any())
+        .ChartRows(loanTypeRows.Select(loanType => new
+        {
+            name   = loanType.LoanTypeName ?? "",
+            loans  = loanType.NoofLoan ?? 0,
+            amount = loanType.LoanIssueAmount ?? 0,
+            avg    = (loanType.NoofLoan ?? 0) > 0 ? (loanType.LoanIssueAmount ?? 0) / (loanType.NoofLoan ?? 0) : 0m
+        }));
+
+    // ── 4. TITLE BLOCK ──
+    report.MetaLeft("Branch Name :", branchName)
+          .MetaRight("Report Generated On :", generatedOn);
+
+    // ── 5. BLOCKS ──
+    report.Kpis(kpis => kpis
+            .Add("Loan Types",          loanTypeRows.Count.ToString("N0"),    "active loan types")
+            .Add("Total Loans",         totalLoanCount.ToString("N0"),        "across all loan types")
+            .Add("Remaining Principal", totalLoanAmount.ToString("N2"),       $"avg {averageLoanAmount:N2} / loan")
+            .Add("Largest Loan Type",   largestLoanType?.LoanTypeName ?? "-", $"{largestLoanTypeShare:0.0}% of total amount", smallValue: true))
+          .InfoRow(row => row
+            .Table("Particulars",
+                   particularsRows.Select(item => (item.Particulars ?? "", item.NoofLoan?.ToString("N0") ?? "")))
+            .BarList("Loan Outstanding (Gender Wise)",
+                     outstandingRows.Select(item => (item.Particulars ?? "", (decimal)(item.NoofLoan ?? 0)))))
+          .ChartGrid(2, grid => grid
+            .Donut("No. of Loans by Loan Type",  "loans")
+            .Donut("Remaining Principal Share", "amount", money: true))
+          .ChartGrid(2, grid => grid
+            .Bar("Remaining Principal by Loan Type", "amount", "#2563eb")
+            .Bar("Average Loan Size by Loan Type",   "avg",    "#10b981", thickness: 26));
+}
+@await Html.PartialAsync("_SheetReport", await report.BuildAsync(Html))
