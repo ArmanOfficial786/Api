@@ -171,7 +171,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 
                 if (upperFormat == "VIEW")
                 {
-                    timer.Restart();
+
                     var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
                       htmlContent, reportKey, page, ct);
                     Lap("Export to raw HTML");

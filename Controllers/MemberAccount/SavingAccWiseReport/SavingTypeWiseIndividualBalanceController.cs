@@ -61,27 +61,38 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
 
                 var reportKey = ReportUtils.GenerateReportKey(request, reportName, request.VisualReport ? "VISUAL" : "");
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+                var cached = await ReportExportHelper.TryServeAsync(
+                reportKey, upperFormat, reportName, pdfView: false,
+                _jsReportService, _reportFileResponse, _logger, PageSetting, ct);
+                if (cached != null) return cached;
 
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, reportName,
-                        _jsReportService, _logger);
-                }
 
-                // Fetch data
-                var dataTask = _savingTypeService.GetSavingTypeWiseIndividualBalance(request);
+
+                //if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
+                //{
+                //    return await ReportExportHelper.ExportFromCacheAsync(
+                //        reportKey, upperFormat, reportName,
+                //        _jsReportService, _logger);
+                //}
+
+                var timer = System.Diagnostics.Stopwatch.StartNew();
+                void Lap(string step) { _logger.LogInformation("{Step}: {Ms} ms", step, timer.ElapsedMilliseconds); timer.Restart(); }
+
                 string? branchIdForHeader = null;
                 if (!request.SameCompanyName && !string.IsNullOrEmpty(request.BranchId) &&
                     request.BranchId != "-1" && !request.BranchId.Contains(','))
                 {
                     branchIdForHeader = request.BranchId;
                 }
+
+                // Fetch data
+                var dataTask = _savingTypeService.GetSavingTypeWiseIndividualBalance(request);
+                Lap("Repository");
                 var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+                Lap("header");
 
                 await Task.WhenAll(dataTask, headerTask);
+                Lap("Repository + header");
 
                 var data = await dataTask;
                 var headerData = await headerTask;
@@ -126,32 +137,19 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
                             ? "Views/VisualReport/VSavingTypeWiseIndividualBalanceReport.cshtml"
                             : "Views/Report/MemberAC/SavingAcWiseReport/SavingTypeWiseIndividualBalance.cshtml",
                         data: reportData));
+                Lap("Razor render");
 
                 if (upperFormat == "VIEW")
                 {
-                    //var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    //var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    //var pagination = new Pagination
-                    //{
-                    //    currentPage = 1,
-                    //    totalPages = totalPages,
-                    //    pageSize = 1,
-                    //    hasNextPage = totalPages > 1,
-                    //    hasPreviousPage = false,
-                    //    totalRecord = data.Rows.Count
-                    //};
 
-                    //_headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    //Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    //Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
-
-                    //return new FileContentResult(pdfBytes, "application/pdf");
 
                     var viewHtmlNormal = await _jsReportService.ExportReportToRawHtmlAsync(
                       htmlContent, reportKey, PageSetting, ct);
+                    Lap("Export to raw HTML");
                     var Pagination = SheetHtml.CountSheets(viewHtmlNormal);
                     _reportFileResponse.AppendPaginationHeaders(Pagination, data.Rows.Count);
                     return Content(viewHtmlNormal, "text/html");
+                    Lap("Return");
 
 
                 }

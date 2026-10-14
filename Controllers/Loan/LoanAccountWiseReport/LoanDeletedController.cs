@@ -52,7 +52,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAccountWiseReport
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] LoanDeletedRequestDto request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW", CancellationToken ct = default)
         {
             try
             {
@@ -84,6 +84,10 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAccountWiseReport
                         reportName,
                         _jsReportService, _logger);
                 }
+
+
+
+
 
                 string? branchIdForHeader = null;
                 if (!string.IsNullOrEmpty(request.BranchIds) &&
