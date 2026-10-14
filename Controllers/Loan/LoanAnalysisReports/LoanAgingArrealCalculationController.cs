@@ -6,6 +6,7 @@ using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Loan.LoanAnalysisReport;
+using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
@@ -27,8 +28,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
         private readonly ILogger<LoanAgingArrealCalculationController> _logger;
 
 
-        private static readonly PageSizeSetting PageSetting =
-       PageSizeSetting.Custom(594, 420, PageUnit.mm, landscape: true);
+
 
         public LoanAgingArrealCalculationController(
             ILoanAgingArrealCalculationRepository repository,
@@ -49,6 +49,11 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
             _logger = logger;
             _reportFileResponse = reportFileResponse;
         }
+
+        private static readonly PageSizeSetting NPageSetting =
+            PageSizeSetting.Custom(500, 420, PageUnit.mm, landscape: true);
+        private static readonly PageSizeSetting VPageSetting =
+            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
@@ -71,8 +76,12 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 
                 var reportName = "LoanAgingArrealCalculation";
                 var upperFormat = format.ToUpper();
+                var isVisual = request.VisualReport;
+                var page = isVisual ? VPageSetting : NPageSetting;
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                //var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                var reportKey = ReportUtils.GenerateReportKey(
+                request, reportName, $"{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}");
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -82,7 +91,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     return await ReportExportHelper.ExportFromCacheAsync(
                         reportKey, upperFormat,
                         reportName,
-                        _jsReportService, _logger);
+                        _jsReportService, _logger, page, ct);
                 }
 
                 string? branchIdForHeader = null;
@@ -91,13 +100,19 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                 {
                     branchIdForHeader = request.BranchIds;
                 }
+                var timer = System.Diagnostics.Stopwatch.StartNew();
+                void Lap(string step) { _logger.LogInformation("{Step}: {Ms} ms", step, timer.ElapsedMilliseconds); timer.Restart(); }
 
                 var dataTask = _repository.GetReportDataAsync(request);
+                Lap("Repository");
+
                 var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+                Lap("header");
 
                 await Task.WhenAll(dataTask, headerTask);
-
+                Lap("Repository + header");
                 var data = await dataTask;
+                _logger.LogInformation("Razor render: {Ms} ms", timer.ElapsedMilliseconds);
                 var headerData = await headerTask;
 
                 if (!data.Rows.Any())
@@ -109,6 +124,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 
                 await ReportUtils.ConvertUniqueImagesToBase64Async(
                     headerData, nameof(CommonHeader.CompanyLogo), webRoot);
+                Lap("Logo to base64");
 
                 var reportData = new Dictionary<string, object>
                 {
@@ -137,39 +153,39 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     { "Enable1To30Days", data.Enable1To30Days },
                     { "EnableCollectionCenter", request.EnableCollectionCenter },
                     { "OrderBy", data.OrderBy ?? "-1" },
-                    { "Format", upperFormat }
+                    { "Format", upperFormat },
+                    { "PageSetting", page }
                 };
 
-                string viewPath = request.VisualReport
+                string viewPath = isVisual
                     ? "Views/VisualReport/Loan/VLoanAgingArrealCalculationReport.cshtml"
                     : "Views/Report/Loan/LoanAnalysisReports/LoanAgingArrealCalculationReport.cshtml";
+
 
                 var htmlContent = await Task.Run(() =>
                     _jsReportService.RenderRazorToHtmlAndCacheAsync(
                         reportKey: reportKey,
                         reportPath: viewPath,
                         data: reportData));
+                Lap("Razor render");
 
                 if (upperFormat == "VIEW")
                 {
+                    timer.Restart();
                     var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
-                     htmlContent, reportKey, PageSetting, ct);
-
-                    _logger.LogInformation("?? VIEW — jsreport Html recipe, {Bytes:N0} chars", viewHtml.Length);
+                      htmlContent, reportKey, page, ct);
+                    Lap("Export to raw HTML");
+                    _reportFileResponse.AppendPaginationHeaders(
+                        SheetHtml.CountSheets(viewHtml), data.TotalRecords);
                     return Content(viewHtml, "text/html");
 
                 }
 
-                if (upperFormat == "PDF")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
-                        htmlContent, "PDF", reportKey, PageSetting, ct);
-                    return _reportFileResponse.BuildPdfResponse(pdfBytes);
-                }
+
 
                 return await ReportExportHelper.ExportFromCacheAsync(
                     reportKey, upperFormat, "MemberDetailReport",
-                    _jsReportService, _logger, PageSetting, ct);
+                    _jsReportService, _logger, page, ct);
             }
 
             catch (Exception ex)

@@ -138,19 +138,52 @@
                         window.parent.postMessage({ type: 'REPORT_PAGES_READY', totalPages: n }, '*');
                 } catch (e) { }
                 finally {
+                    try { window.applyPageHash(false); } catch (e) { }   // NEW: open the page given in #page=N (after reflow rebuilt the pages)
                     window.__chartsReady = true;
                     window.JSREPORT_READY_TO_START = true;   // always reached
                 }
             };
 
-            window.scrollToPage = function (n) {
-                var t = document.querySelector('[data-page="' + n + '"]'), b = document.getElementById('viewOuter');
-                if (!t) return;
-                if (b && b.classList.contains('view-outer'))
-                    b.scrollTo({ top: t.offsetTop, behavior: 'smooth' });
-                else
-                    window.scrollTo({ top: window.pageYOffset + t.getBoundingClientRect().top, behavior: 'smooth' });
+            // ═══ PAGE NAVIGATION (NEW) ═══
+            // Visual reports scroll inside #viewOuter.view-outer; table reports scroll the window.
+            window.scrollToPage = function (n, smooth) {
+                var sheet = document.querySelector('[data-page="' + n + '"]');
+                if (!sheet) return false;
+
+                var box = document.getElementById('viewOuter'),
+                    inBox = box && box.classList.contains('view-outer'),
+                    behavior = smooth === false ? 'auto' : 'smooth',
+                    GAP = 12;                                   // same gap as the sheet margin
+
+                // while we scroll by code, the scroll listener must not report intermediate pages
+                window.__navigating = true;
+                clearTimeout(window.__navTimer);
+                window.__navTimer = setTimeout(function () { window.__navigating = false; }, 300);
+
+                if (inBox) {
+                    var top = sheet.getBoundingClientRect().top - box.getBoundingClientRect().top + box.scrollTop - GAP;
+                    box.scrollTo({ top: Math.max(0, top), behavior: behavior });
+                } else {
+                    var topWindow = sheet.getBoundingClientRect().top + window.pageYOffset - GAP;
+                    window.scrollTo({ top: Math.max(0, topWindow), behavior: behavior });
+                }
+                return true;
             };
+
+            // keeps "navigating" on until 150 ms after the last scroll event of a code-driven scroll
+            window.__holdNav = function () {
+                clearTimeout(window.__navTimer);
+                window.__navTimer = setTimeout(function () { window.__navigating = false; }, 150);
+            };
+
+            // "#page=3&toolbar=0&zoom=100"  ->  scroll to sheet 3 (the same fragment the PDF viewer reads)
+            window.applyPageHash = function (smooth) {
+                var match = /(?:^|[#&])page=(\d+)/.exec(location.hash);
+                return match ? window.scrollToPage(parseInt(match[1], 10), smooth) : false;
+            };
+
+            // first / previous / next / last: only the fragment changes, so the iframe does not reload
+            window.addEventListener('hashchange', function () { window.applyPageHash(true); });
     </script>
     <style>
             :root {
@@ -634,6 +667,7 @@
                 var scrolled = box && box.classList.contains('view-outer');
                 var target = scrolled ? box : window, last = 1;
                 target.addEventListener('scroll', function () {
+                    if (window.__navigating) { window.__holdNav(); return; }     // NEW: ignore the scroll events of a code-driven page jump
                     var top0 = scrolled ? box.getBoundingClientRect().top : 0;
                     var h = scrolled ? box.clientHeight : window.innerHeight;
                     var cur = 1;
