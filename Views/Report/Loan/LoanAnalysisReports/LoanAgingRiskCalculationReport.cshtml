@@ -1,280 +1,98 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<LoanAgingRiskCalculationRowDto>) ?? new List<LoanAgingRiskCalculationRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    // ── 1. DATA (set by the controller) ──
+    var agingRows = (Model["Rows"] as List<LoanAgingRiskCalculationRowDto>) ?? new();
     var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
     var totalBalanceAmount = Model["TotalBalanceAmount"] as decimal? ?? 0;
     var totalOverDue = Model["TotalOverDue"] as decimal? ?? 0;
     var totalGoodLoan = Model["TotalGoodLoan"] as decimal? ?? 0;
     var totalArrear = Model["TotalArrear"] as decimal? ?? 0;
-    var totalFrm1to365 = Model["TotalFrm1to365"] as decimal? ?? 0;
-    var totalGrtthan365 = Model["TotalGrtthan365"] as decimal? ?? 0;
+    var totalFrom1To365 = Model["TotalFrm1to365"] as decimal? ?? 0;
+    var totalGreaterThan365 = Model["TotalGrtthan365"] as decimal? ?? 0;
     var tillDate = Model["TillDate"]?.ToString() ?? "";
     var branchName = Model["BranchName"]?.ToString() ?? "All";
     var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "All";
     var penaltyType = Model["PenaltyType"]?.ToString() ?? "S";
     var penaltyTypeName = Model["PenaltyTypeName"]?.ToString() ?? "Schedule Wise";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var memberGroupFiltered = !string.IsNullOrEmpty(memberGroupName) && memberGroupName != "All";
 
-    var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName) && memberGroupName != "All";
+    var badgeClass = penaltyType == "S" ? "badge-schedule" : penaltyType == "R" ? "badge-remaining" : "badge-maturity";
+
+    // ── 2. COLUMNS, STYLE, SIZES ──
+    var table = new ReportTable(Model, title: "Loan Ageing Risk Calculation Report", sheetName: "LoanAgingRiskCalculation")
+        .Column("Member Id", 9)
+        .Column("Full Name", 14)
+        .Column("Loan A/c No", 10)
+        .Column("Loan Amount", 9, Align.Right)
+        .Column("Paid", 9, Align.Right)
+        .Column("Balance", 9, Align.Right)
+        .Column("Good Loan", 9, Align.Center)
+        .Column("Arrear", 7, Align.Right)
+        .Column("Overdue", 7, Align.Right)
+        .Column("1-365", 7, Align.Right)
+        .Column(">365", 7, Align.Right)
+        .Column("Days", 7, Align.Center)
+        .Column("Last Payment", 9)
+        //.Style(new ReportStyle { ZebraBackground = "#f9f9f9" })
+        //.Sizing(rowMm: 7, headerMm: 8, firstPageExtraMm: 75)
+        .Css(@"
+            table.sheet-table tr.r-data td.negative { color: #CC0000; }
+            .penalty-badge { display: inline-block; padding: 2px 10px; border-radius: 3px; font-size: 8pt; font-weight: bold; }
+            .badge-schedule  { background: #d1ecf1; color: #0c5460; }
+            .badge-remaining { background: #fff3cd; color: #856404; }
+            .badge-maturity  { background: #f8d7da; color: #721c24; }");
+
+    // ── 3. TITLE BLOCK ──
+    table.MetaRow(
+             Fmt.Join(Fmt.Labeled("Branch :", branchName), Fmt.Labeled("Till Date :", tillDate)),
+             Fmt.Labeled("Penalty Type :", Fmt.Badge(penaltyTypeName, $"penalty-badge {badgeClass}")),
+             leftSpan: 5)
+         .MetaRow(
+             memberGroupFiltered ? Fmt.Labeled("Member Group :", memberGroupName) : new HtmlString(""),
+             Fmt.Labeled("Report Generated On :", generatedOn),
+             leftSpan: 5);
+
+    // ── 4. ROWS ──
+    foreach (var agingRow in agingRows)
+    {
+        var overdueIsPositive = agingRow.OverDue.HasValue && agingRow.OverDue.Value > 0;
+
+        table.Data(
+            ReportCell.Left(agingRow.MemberId ?? ""),
+            ReportCell.Left(agingRow.FullName ?? ""),
+            ReportCell.Left(agingRow.LoanAccountNo ?? ""),
+            ReportCell.Right(Fmt.Amount(agingRow.LoanIssueAmount)),
+            ReportCell.Right(Fmt.Amount(agingRow.PaidAmount)),
+            ReportCell.Right(Fmt.Amount(agingRow.BalanceAmount)),
+            ReportCell.Right(Fmt.Amount(agingRow.Goodloan)),
+            ReportCell.Right(Fmt.Amount(agingRow.Arrear)),
+            new ReportCell(Fmt.Amount(agingRow.OverDue), Align.Right, 1, overdueIsPositive ? "negative" : null),
+            ReportCell.Right(Fmt.Amount(agingRow.Frm1to365)),
+            ReportCell.Right(Fmt.Amount(agingRow.Grtrhan365)),
+            ReportCell.Center(Fmt.Int(agingRow.Noofdays ?? 0)),
+            ReportCell.Left(agingRow.LastPaymentDate ?? ""));
+    }
+
+    if (agingRows.Any())
+    {
+        // label spans Member Id, Full Name and Loan A/c No; the 10 values fill the rest (Paid, Days and Last Payment stay empty)
+        table.Total("Grand Total", 3,
+            Fmt.Amount(totalLoanIssueAmount),
+            "",
+            Fmt.Amount(totalBalanceAmount),
+            Fmt.Amount(totalGoodLoan),
+            Fmt.Amount(totalArrear),
+            Fmt.Amount(totalOverDue),
+            Fmt.Amount(totalFrom1To365),
+            Fmt.Amount(totalGreaterThan365),
+            "",
+            "");
+    }
 }
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan Ageing Risk Calculation Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 8pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 8pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 3px 4px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .detail-row-alt td {
-                background: #f9f9f9;
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .positive {
-                color: #006600;
-            }
-
-            .negative {
-                color: #CC0000;
-            }
-
-            .penalty-badge {
-                display: inline-block;
-                padding: 2px 10px;
-                border-radius: 3px;
-                font-size: 8pt;
-                font-weight: bold;
-            }
-
-            .badge-schedule {
-                background: #d1ecf1;
-                color: #0c5460;
-            }
-
-            .badge-remaining {
-                background: #fff3cd;
-                color: #856404;
-            }
-
-            .badge-maturity {
-                background: #f8d7da;
-                color: #721c24;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
-        {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
-
-        <table class="data-table" data-sheet-name="LoanAgingRiskCalculation">
-            <colgroup>
-                <col style="width:9%;" />
-                <col style="width:14%;" />
-                <col style="width:10%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
-                <col style="width:8%;" />
-                <col style="width:7%;" />
-                <col style="width:7%;" />
-                <col style="width:7%;" />
-                <col style="width:7%;" />
-                <col style="width:7%;" />
-                <col style="width:7%;" />
-                <col style="width:9%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="13">Loan Ageing Risk Calculation Report</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="5">
-                        <strong>Branch :</strong> @branchName
-                        &nbsp;&nbsp;
-                        <strong>Till Date :</strong> @tillDate
-                    </td>
-                    <td colspan="8" class="text-right">
-                        <strong>Penalty Type :</strong>
-                        <span class="penalty-badge @(penaltyType == "S" ? "badge-schedule" : penaltyType == "R" ? "badge-remaining" : "badge-maturity")">
-                            @penaltyTypeName
-                        </span>
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="5">
-                        @if (isMemberGroupFiltered)
-                        {
-                            <strong>Member Group :</strong>
-                            @memberGroupName
-                        }
-                    </td>
-                    <td colspan="8" class="text-right">
-                        <strong>Report Generated On :</strong> @generatedOn
-                    </td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="13"></td></tr>
-
-                <tr>
-                    <th>Member Id</th>
-                    <th>Full Name</th>
-                    <th>Loan A/c No</th>
-                    <th class="text-right">Loan Amount</th>
-                    <th class="text-right">Paid</th>
-                    <th class="text-right">Balance</th>
-                    <th class="text-right">Good Loan</th>
-                    <th class="text-right">Arrear</th>
-                    <th class="text-right">Overdue</th>
-                    <th class="text-right">1-365</th>
-                    <th class="text-right">>365</th>
-                    <th class="text-center">Days</th>
-                    <th>Last Payment</th>
-                </tr>
-
-                @if (rows.Any())
-                {
-                    var sn = 0;
-                    foreach (var row in rows)
-                    {
-                        sn++;
-                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.FullName ?? "")</td>
-                            <td>@(row.LoanAccountNo ?? "")</td>
-                            <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.PaidAmount.HasValue ? row.PaidAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.BalanceAmount.HasValue ? row.BalanceAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.Goodloan.HasValue ? row.Goodloan.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.Arrear.HasValue ? row.Arrear.Value.ToString("N2") : "")</td>
-                            <td class="text-right @(row.OverDue.HasValue && row.OverDue.Value > 0 ? "negative" : "")">@(row.OverDue.HasValue ? row.OverDue.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.Frm1to365.HasValue ? row.Frm1to365.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.Grtrhan365.HasValue ? row.Grtrhan365.Value.ToString("N2") : "")</td>
-                            <td class="text-center">@(row.Noofdays ?? 0)</td>
-                            <td>@(row.LastPaymentDate ?? "")</td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="3" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
-                        <td></td>
-                        <td class="text-right"><strong>@totalBalanceAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalGoodLoan.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalArrear.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalOverDue.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalFrm1to365.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalGrtthan365.ToString("N2")</strong></td>
-                        <td colspan="2"></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="13" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+@await Html.PartialAsync("_SheetReport", table.Build())

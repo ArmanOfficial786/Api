@@ -1,0 +1,114 @@
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@using NexgenCosysReport.Services.ReportService.Visual
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    // ── 1. DATA (same keys as the table version of the report) ──
+    var agingRows = (Model["Rows"] as List<LoanAgingRiskCalculationRowDto>) ?? new();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
+    var totalBalanceAmount = Model["TotalBalanceAmount"] as decimal? ?? 0;
+    var totalOverDue = Model["TotalOverDue"] as decimal? ?? 0;
+    var totalGoodLoan = Model["TotalGoodLoan"] as decimal? ?? 0;
+    var totalArrear = Model["TotalArrear"] as decimal? ?? 0;
+    var totalFrom1To365 = Model["TotalFrm1to365"] as decimal? ?? 0;
+    var totalGreaterThan365 = Model["TotalGrtthan365"] as decimal? ?? 0;
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "All";
+    var penaltyType = Model["PenaltyType"]?.ToString() ?? "S";
+    var penaltyTypeName = Model["PenaltyTypeName"]?.ToString() ?? "Schedule Wise";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var memberGroupFiltered = !string.IsNullOrEmpty(memberGroupName) && memberGroupName != "All";
+
+    // totals fall back to the sum of the rows when the controller did not send them
+    if (totalRecords == 0) totalRecords = agingRows.Count;
+    if (totalBalanceAmount == 0) totalBalanceAmount = agingRows.Sum(row => row.BalanceAmount ?? 0);
+    if (totalGoodLoan == 0) totalGoodLoan = agingRows.Sum(row => row.Goodloan ?? 0);
+    if (totalArrear == 0) totalArrear = agingRows.Sum(row => row.Arrear ?? 0);
+    if (totalOverDue == 0) totalOverDue = agingRows.Sum(row => row.OverDue ?? 0);
+    if (totalFrom1To365 == 0) totalFrom1To365 = agingRows.Sum(row => row.Frm1to365 ?? 0);
+    if (totalGreaterThan365 == 0) totalGreaterThan365 = agingRows.Sum(row => row.Grtrhan365 ?? 0);
+
+    // ── 2. NUMBERS FOR THE KPI CARDS AND THE INFO CARDS ──
+    var overdueRatioPercent = totalBalanceAmount == 0 ? 0 : Math.Round(totalOverDue / totalBalanceAmount * 100, 2);
+    var overdueLoanCount = agingRows.Count(row => (row.OverDue ?? 0) > 0);
+
+    var highestOverdueRow = agingRows.OrderByDescending(row => row.OverDue ?? 0).FirstOrDefault();
+    var highestOverdueName = (highestOverdueRow == null || (highestOverdueRow.OverDue ?? 0) <= 0)
+                               ? "-" : (highestOverdueRow.FullName ?? highestOverdueRow.MemberId ?? "-");
+    var highestOverdueAmount = highestOverdueRow?.OverDue ?? 0;
+
+    // ten loans with the largest overdue amount (label = member name, value = overdue amount)
+    var topOverdueLoans = agingRows
+        .Where(row => (row.OverDue ?? 0) > 0)
+        .OrderByDescending(row => row.OverDue ?? 0)
+        .Take(10)
+        .Select(row => (Label: row.FullName ?? row.MemberId ?? "", Value: row.OverDue ?? 0))
+        .ToList();
+
+    var badgeClass = penaltyType == "S" ? "badge-schedule" : penaltyType == "R" ? "badge-remaining" : "badge-maturity";
+
+    // one chart row per risk category: amount, and how many loans have an amount in it
+    var categoryRows = new[]
+    {
+        new { name = "Good Loan",  amount = totalGoodLoan,       loans = agingRows.Count(row => (row.Goodloan ?? 0) > 0) },
+        new { name = "Arrear",     amount = totalArrear,         loans = agingRows.Count(row => (row.Arrear ?? 0) > 0) },
+        new { name = "Overdue",    amount = totalOverDue,        loans = overdueLoanCount },
+        new { name = "1-365 Days", amount = totalFrom1To365,     loans = agingRows.Count(row => (row.Frm1to365 ?? 0) > 0) },
+        new { name = ">365 Days",  amount = totalGreaterThan365, loans = agingRows.Count(row => (row.Grtrhan365 ?? 0) > 0) }
+    };
+
+    // ── 3. REPORT: data, title, sizes, special CSS ──
+    var report = new VisualReport(Model, title: "Loan Ageing Risk Calculation Visual Report", sheetName: "LoanAgingRiskCalculation")
+        .PrintedTitle("Loan Ageing Risk Calculation Report — Visual Summary")
+        .NoDataWhen(!agingRows.Any())
+        .ChartRows(categoryRows)                              // every chart below draws from the five risk categories
+        .Sizing(chartRowMm: 55, maxChartRowMm: 110)           // smaller minimum so the donuts fit page 1 and fill the rest
+        .Css(@"
+            .penalty-badge { display: inline-block; padding: 2px 10px; border-radius: 3px; font-size: 8pt; font-weight: bold; }
+            .badge-schedule  { background: #d1ecf1; color: #0c5460; }
+            .badge-remaining { background: #fff3cd; color: #856404; }
+            .badge-maturity  { background: #f8d7da; color: #721c24; }");
+
+    // ── 4. TITLE BLOCK (a line is drawn under it automatically) ──
+    var generatedLine = Fmt.Labeled("Report Generated On :", generatedOn);
+    report.MetaLeft("Branch :", branchName)
+          .MetaLeft(Fmt.Labeled("Penalty Type :", Fmt.Badge(penaltyTypeName, $"penalty-badge {badgeClass}")))
+          .MetaRight("Till Date :", tillDate)
+          .MetaRight(memberGroupFiltered
+              ? Fmt.Join(Fmt.Labeled("Member Group :", memberGroupName), generatedLine)
+              : generatedLine);
+
+    // ── 5. BLOCKS (the builder decides which page each one lands on) ──
+    report.Kpis(kpis => kpis
+            .Add("Total Loans", totalRecords.ToString("N0"), $"{overdueLoanCount:N0} loans overdue")
+            .Add("Loan Balance", totalBalanceAmount.ToString("N2"), $"issued {totalLoanIssueAmount:N2}")
+            .Add("Good Loan", totalGoodLoan.ToString("N2"), "performing amount")
+            .Add("Total Overdue", totalOverDue.ToString("N2"), $"arrear {totalArrear:N2}")
+            .Add("Overdue Ratio", $"{overdueRatioPercent:0.00}%", "overdue / balance")
+            .Add("Highest Overdue", highestOverdueName, $"{highestOverdueAmount:N2}", smallValue: true),
+            style: "margin-top:12px")                                  // space between the title block and the KPI cards
+          .InfoRow(row => row
+            .Table("Risk Summary", new[]
+            {
+                ("Good Loan",    totalGoodLoan.ToString("N2")),
+                ("Arrear",       totalArrear.ToString("N2")),
+                ("Overdue",      totalOverDue.ToString("N2")),
+                ("1-365 Days",   totalFrom1To365.ToString("N2")),
+                (">365 Days",    totalGreaterThan365.ToString("N2")),
+                ("Loan Balance", totalBalanceAmount.ToString("N2"))
+            })
+            .BarList("Top 10 Overdue Loans", topOverdueLoans, valueFormat: "N2"),
+            style: "margin-top:12px",                                  // space between the KPI cards and the info cards
+            heightMm: 62)                                              // real height of the row, so pagination does not over-reserve
+          .ChartGrid(2, grid => grid
+            .Donut("Amount by Risk Category", "amount", money: true)
+            .Donut("No. of Loans by Risk Category", "loans"))
+          .ChartGrid(2, grid => grid
+            .Bar("Amount by Risk Category", "amount", "#ef4444")
+            .Bar("No. of Loans by Risk Category", "loans", "#2563eb", thickness: 26));
+}
+@await Html.PartialAsync("_SheetReport", await report.BuildAsync(Html))

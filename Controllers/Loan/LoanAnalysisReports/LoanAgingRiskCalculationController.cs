@@ -2,15 +2,14 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Loan.LoanAnalysisReport;
 using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 {
@@ -26,6 +25,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
         private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
         private readonly ILogger<LoanAgingRiskCalculationController> _logger;
+        private readonly IReportFileResponse _reportFileResponse;
 
         public LoanAgingRiskCalculationController(
             ILoanAgingRiskCalculationRepository repository,
@@ -34,7 +34,8 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<LoanAgingRiskCalculationController> logger)
+            ILogger<LoanAgingRiskCalculationController> logger,
+            IReportFileResponse reportFileResponse)
         {
             _repository = repository;
             _commonHeaderRepository = commonHeaderRepository;
@@ -43,12 +44,18 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
             _headerResponse = headerResponse;
             _reportSettings = reportSettings;
             _logger = logger;
+            _reportFileResponse = reportFileResponse;
         }
+
+        private static readonly PageSizeSetting NPageSetting =
+          PageSizeSetting.Custom(260, 297, PageUnit.mm, landscape: true);
+        private static readonly PageSizeSetting VPageSetting =
+          PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] LoanAgingRiskCalculationRequestDto request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW", CancellationToken ct = default)
         {
             try
             {
@@ -62,13 +69,13 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                 {
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
                 }
-
-
-
                 var reportName = "LoanAgingRiskCalculation";
                 var upperFormat = format.ToUpper();
+                var isVisual = request.VisualReport;
+                var page = isVisual ? VPageSetting : NPageSetting;
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                var reportKey = ReportUtils.GenerateReportKey(
+               request, reportName, $"{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}");
 
                 ReportExportHelper.LogCacheState(upperFormat, reportKey,
                     _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
@@ -78,7 +85,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     return await ReportExportHelper.ExportFromCacheAsync(
                         reportKey, upperFormat,
                         reportName,
-                        _jsReportService, _logger);
+                        _jsReportService, _logger, page, ct);
                 }
 
                 string? branchIdForHeader = null;
@@ -124,11 +131,12 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     { "PenaltyType", data.PenaltyType ?? "S" },
                     { "PenaltyTypeName", data.PenaltyTypeName ?? "Schedule Wise" },
                     { "OrderBy", data.OrderBy ?? "-1" },
-                    { "Format", upperFormat }
+                    { "Format", upperFormat },
+                    { "PageSetting", page }
                 };
 
-                string viewPath = request.VisualReport
-                    ? "Views/VisualReport/Loan/VLoanAgingRiskCalculationReport.cshtml"
+                string viewPath = isVisual
+                    ? "Views/VisualReport/Loan/LoanAnalysisReports/vLoanAgingRiskCalculation.cshtml"
                     : "Views/Report/Loan/LoanAnalysisReports/LoanAgingRiskCalculationReport.cshtml";
 
                 var htmlContent = await Task.Run(() =>
@@ -139,33 +147,18 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 
                 if (upperFormat == "VIEW")
                 {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.Rows.Count
-                    };
-
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
+                    var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
+                       htmlContent, reportKey, page, ct);
+                    _reportFileResponse.AppendPaginationHeaders(
+                        SheetHtml.CountSheets(viewHtml), data.TotalRecords);
+                    return Content(viewHtml, "text/html");
                 }
                 return await ReportExportHelper.ExportFromCacheAsync(
                  reportKey, upperFormat,
                  reportName,
-                 _jsReportService, _logger);
+                 _jsReportService, _logger, page, ct);
             }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, StatusCode = 400, message = ex.Message });
-            }
+
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generating LoanAgingRiskCalculation report");
