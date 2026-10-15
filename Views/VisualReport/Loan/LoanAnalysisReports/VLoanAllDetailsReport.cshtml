@@ -1,0 +1,147 @@
+﻿@using NexgenCosysReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@using NexgenCosysReport.Services.ReportService.Visual
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    // ── 1. DATA (set by the controller; read-only, the cached data is shared with the normal view) ──
+    var rows = (Model["Rows"] as IEnumerable<LoanAllDetailsRowDto>)?.ToList() ?? new List<LoanAllDetailsRowDto>();
+    var branchName = Model.TryGetValue("BranchName", out var b) ? b?.ToString() ?? "All" : "All";
+    var tillDate = Model.TryGetValue("TillDate", out var t) ? t?.ToString() ?? "" : "";
+    var statusName = Model.TryGetValue("StatusName", out var s) ? s?.ToString() ?? "All" : "All";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // controller total, or the sum of the rows when it is missing or zero
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var v) && v != null)
+        {
+            var d = Convert.ToDecimal(v);
+            if (d != 0) return d;
+        }
+        return fallback;
+    }
+
+    var totalLoans = Model.TryGetValue("TotalRecords", out var tr) && tr != null && Convert.ToInt32(tr) > 0
+        ? Convert.ToInt32(tr)
+        : rows.Count;
+    var totalIssued = TotalOr("TotalLoanIssueAmount", rows.Sum(r => r.LoanIssueAmount ?? 0));
+    var totalRemainingPrincipal = TotalOr("TotalRemainingPrinciple", rows.Sum(r => r.RemainingPrinciple ?? 0));
+    var totalDefaultPrincipal = TotalOr("TotalDefaultPrinciple", rows.Sum(r => r.DefaultPrinciple ?? 0));
+    var totalCurrInterest = TotalOr("TotalCurrInterest", rows.Sum(r => r.CurrInterest ?? 0));
+    var totalCurrPenalty = TotalOr("TotalCurrPenalty", rows.Sum(r => r.CurrPenalty ?? 0));
+    var totalDue = TotalOr("TotalDue", rows.Sum(r => r.TotalDue ?? 0));
+    var totalRemaining = TotalOr("TotalRemaining", rows.Sum(r => r.TotalRemaining ?? 0));
+    var totalProvision = TotalOr("TotalProvisionAmount", rows.Sum(r => r.ProvisionalAmount ?? 0));
+
+    // ── 2. NUMBERS FOR THE KPI CARDS ──
+    var averageLoan = totalLoans == 0 ? 0 : totalIssued / totalLoans;
+    var defaultPercent = totalRemainingPrincipal == 0 ? 0 : Math.Round(totalDefaultPrincipal / totalRemainingPrincipal * 100, 2);
+    var provisionPercent = totalRemainingPrincipal == 0 ? 0 : Math.Round(totalProvision / totalRemainingPrincipal * 100, 2);
+
+    // ── 3. CHART ROWS: one row per loan type (top 10 by remaining principal, the rest as "Others") ──
+    var typeGroups = rows
+        .GroupBy(r => string.IsNullOrWhiteSpace(r.LoanTypeName) ? "Unknown" : r.LoanTypeName!.Trim())
+        .Select(g =>
+        {
+            var loans = g.Count();
+            var issue = g.Sum(x => x.LoanIssueAmount ?? 0);
+            var remaining = g.Sum(x => x.RemainingPrinciple ?? 0);
+            var defaulted = g.Sum(x => x.DefaultPrinciple ?? 0);
+            return new
+            {
+                name = g.Key,
+                loans,
+                issue,
+                remaining,
+                defaultPrin = defaulted,
+                due = g.Sum(x => x.TotalDue ?? 0),
+                provision = g.Sum(x => x.ProvisionalAmount ?? 0),
+                defaultPct = remaining == 0 ? 0m : Math.Round(defaulted / remaining * 100, 2),
+                avg = loans == 0 ? 0m : issue / loans
+            };
+        })
+        .OrderByDescending(x => x.remaining)
+        .ToList();
+
+    var chartRows = typeGroups.Take(10).ToList();
+    var rest = typeGroups.Skip(10).ToList();
+    if (rest.Any())
+    {
+        var rLoans = rest.Sum(x => x.loans);
+        var rIssue = rest.Sum(x => x.issue);
+        var rRemaining = rest.Sum(x => x.remaining);
+        var rDefault = rest.Sum(x => x.defaultPrin);
+        chartRows.Add(new
+        {
+            name = "Others",
+            loans = rLoans,
+            issue = rIssue,
+            remaining = rRemaining,
+            defaultPrin = rDefault,
+            due = rest.Sum(x => x.due),
+            provision = rest.Sum(x => x.provision),
+            defaultPct = rRemaining == 0 ? 0m : Math.Round(rDefault / rRemaining * 100, 2),
+            avg = rLoans == 0 ? 0m : rIssue / rLoans
+        });
+    }
+
+    // ── 4. INFO CARDS: loans by status / by category ──
+    var byStatus = rows
+        .GroupBy(r => string.IsNullOrWhiteSpace(r.LoanStatus) ? "Unknown" : r.LoanStatus!.Trim())
+        .Select(g => (Label: g.Key, Value: (decimal)g.Count()))
+        .OrderByDescending(x => x.Value).Take(5).ToList();
+
+    var byCategory = rows
+        .GroupBy(r => string.IsNullOrWhiteSpace(r.LoanCategory) ? "Unknown" : r.LoanCategory!.Trim())
+        .Select(g => (Label: g.Key, Value: (decimal)g.Count()))
+        .OrderByDescending(x => x.Value).Take(5).ToList();
+
+    // ── 5. REPORT: data, title, sizes ──
+    var report = new VisualReport(Model, title: "Loan Detail Report", sheetName: "LoanAllDetails")
+        .PrintedTitle("Loan Detail Report — Visual Summary")
+        .NoDataWhen(!rows.Any())
+        .ChartRows(chartRows)
+        .Sizing(chartRowMm: 75);
+
+    // ── 6. TITLE BLOCK ──
+    report.MetaLeft("Branch :", branchName)
+          .MetaLeft("Status :", statusName)
+          .MetaRight("Till Date :", tillDate)
+          .MetaRight("Report Generated On :", generatedOn);
+
+    // ── 7. BLOCKS (the builder decides which page each one lands on) ──
+    report.Kpis(kpis => kpis
+            .Add("Total Loans", totalLoans.ToString("N0"), $"avg issue {averageLoan:N2} / loan")
+            .Add("Loan Issued", totalIssued.ToString("N2"), "total issue amount")
+            .Add("Remaining Principal", totalRemainingPrincipal.ToString("N2"), "outstanding principal")
+            .Add("Default Principal", totalDefaultPrincipal.ToString("N2"), $"{defaultPercent:0.00}% of remaining")
+            .Add("Total Due", totalDue.ToString("N2"), "principal + interest + penalty")
+            .Add("Total Provision", totalProvision.ToString("N2"), $"{provisionPercent:0.00}% of remaining"))
+          .InfoRow(row => row
+            .BarList("Loans by Status", byStatus)
+            .BarList("Loans by Category", byCategory)
+            .Table("Key Figures", new (string Label, string Value)[]
+            {
+                ("Current Interest", totalCurrInterest.ToString("N2")),
+                ("Current Penalty", totalCurrPenalty.ToString("N2")),
+                ("Total Remaining", totalRemaining.ToString("N2")),
+                ("Default Rate", $"{defaultPercent:0.00}%")
+            }))
+          .ChartGrid(3, grid => grid
+            .Donut("No. of Loans by Loan Type", "loans")
+            .Donut("Remaining Principal Share", "remaining", money: true)
+            .Donut("Provision Amount Share", "provision", money: true))
+          .ChartGrid(2, grid => grid
+            .Grouped("Issue Amount vs Remaining Principal",
+                     new VisualSeries("Issue Amount", "issue", "#2563eb"),
+                     new VisualSeries("Remaining Principal", "remaining", "#10b981"))
+            .Grouped("Default Principal vs Total Due",
+                     new VisualSeries("Default Principal", "defaultPrin", "#ef4444"),
+                     new VisualSeries("Total Due", "due", "#f59e0b"))
+            .BarLine("Default Rate (%) by Loan Type", "defaultPct", "#f59e0b", "#8b5cf6", format: "percent")
+            .Bar("Average Loan Size by Loan Type", "avg", "#10b981", thickness: 26));
+}
+@await Html.PartialAsync("_SheetReport", await report.BuildAsync(Html))

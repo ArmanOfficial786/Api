@@ -197,6 +197,7 @@ Console.WriteLine($"[Startup] WebRootPath = '{settingsCheck?.WebRootPath}'");
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<IReportDataCache, ReportDataCache>();
+builder.Services.AddScoped<IReportHeaderProvider, ReportHeaderProvider>();
 builder.Services.AddScoped<CustomHeaderResponse>();
 builder.Services.AddHostedService<ProgressiveTempCleanupService>();
 

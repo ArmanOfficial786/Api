@@ -255,7 +255,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     request.BranchIds != "-1" && !request.BranchIds.Contains(','))
                     branchIdForHeader = request.BranchIds;
 
-                var sw = Stopwatch.StartNew();
+
 
                 var headerTask = _dataCache.GetOrLoadAsync($"Header_{branchIdForHeader ?? "ALL"}", async () =>
                 {
@@ -274,7 +274,6 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                 }, ct);
 
                 await Task.WhenAll(headerTask, dataTask);
-                var msDb = sw.ElapsedMilliseconds;
 
                 var headerRows = await headerTask;
                 var data = await dataTask;
@@ -304,10 +303,10 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     ? "Views/VisualReport/Loan/LoanAnalysisReports/VLoanProvisionReport.cshtml"
                     : "Views/Report/Loan/LoanAnalysisReports/LoanProvisionReport.cshtml";
 
-                sw.Restart();
+
                 var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
                     reportKey: reportKey, reportPath: viewPath, data: reportData, ct: ct);
-                var msRender = sw.ElapsedMilliseconds;
+
 
                 // VIEW (raw HTML + pagination headers) or export (PDF/Excel/...) from the cached HTML
                 var result = await ReportExportHelper.CompleteAsync(
@@ -315,16 +314,12 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     totalRecords: data.Rows.Count,
                     _jsReportService, _reportFileResponse, _logger, page, ct);
 
-                _logger.LogInformation(
-                    "TIMING {Report} {Format} {View} | db+header {Db} ms | razor {Razor} ms | html {Kb} KB | total {Total} ms",
-                    ReportName, upperFormat, isVisual ? "visual" : "normal",
-                    msDb, msRender, html.Length / 1024, total.ElapsedMilliseconds);
+
 
                 return result;
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating {Report} report after {Ms} ms", ReportName, total.ElapsedMilliseconds);
                 return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }

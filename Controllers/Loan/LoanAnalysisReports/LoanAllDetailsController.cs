@@ -339,7 +339,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 
                 var viewPath = isVisual
                     ? "Views/VisualReport/Loan/LoanAnalysisReports/VLoanAllDetailsReport.cshtml"
-                    : "Views/Report/Loan/LoanAnalysisReports/LoanAllDetialsReport.cshtml";   // match the real file name
+                    : "Views/Report/Loan/LoanAnalysisReports/LoanAllDetialsReport.cshtml";
 
                 var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
                     reportKey: reportKey, reportPath: viewPath, data: reportData, ct: ct);
