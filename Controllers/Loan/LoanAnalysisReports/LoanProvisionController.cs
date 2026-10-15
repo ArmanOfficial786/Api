@@ -1,200 +1,7 @@
-﻿
-//using Microsoft.AspNetCore.Authorization;
+﻿//using Microsoft.AspNetCore.Authorization;
 //using Microsoft.AspNetCore.Mvc;
 //using Microsoft.Extensions.Options;
 //using NexgenCosysReport.Dtos.ReportDtos;
-//using NexgenCosysReport.Dtos.RequestDtos.Common;
-//using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
-//using NexgenCosysReport.Inteface.ReportInterface;
-//using NexgenCosysReport.Inteface.ServiceInterface.Common;
-//using NexgenCosysReport.Inteface.ServiceInterface.Loan.LoanAnalysisReport;
-//using NexgenCosysReport.Services.ReportService;
-//using NexgenCosysReport.Utils.Report;
-//using System.Security.Claims;
-//using System.Text.Json;
-
-//namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
-//{
-//    [ApiController]
-//    [Route("api/[controller]")]
-//    [Authorize]
-//    public class LoanProvisionController : ControllerBase
-//    {
-//        private readonly ILoanProvisionRepository _repository;
-//        private readonly ICommonHeaderRepository _commonHeaderRepository;
-//        private readonly IJsReportService _jsReportService;
-//        private readonly IWebHostEnvironment _webHostEnvironment;
-//        private readonly CustomHeaderResponse _headerResponse;
-//        private readonly IOptions<ReportSettings> _reportSettings;
-//        private readonly ILogger<LoanProvisionController> _logger;
-//        private readonly IDateConverterService _dateConverter;
-
-//        public LoanProvisionController(
-//            ILoanProvisionRepository repository,
-//            ICommonHeaderRepository commonHeaderRepository,
-//            IJsReportService jsReportService,
-//            IWebHostEnvironment webHostEnvironment,
-//            CustomHeaderResponse headerResponse,
-//            IOptions<ReportSettings> reportSettings,
-//            ILogger<LoanProvisionController> logger,
-//            IDateConverterService dateConverter)
-//        {
-//            _repository = repository;
-//            _commonHeaderRepository = commonHeaderRepository;
-//            _jsReportService = jsReportService;
-//            _webHostEnvironment = webHostEnvironment;
-//            _headerResponse = headerResponse;
-//            _reportSettings = reportSettings;
-//            _logger = logger;
-//            _dateConverter = dateConverter;
-//        }
-
-//        [HttpPost()]
-//        public async Task<IActionResult> GenerateReport(
-//            [FromBody] LoanProvisionRequestDto request,
-//            [FromQuery] string format = "VIEW")
-//        {
-//            try
-//            {
-//                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-//                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-//                {
-//                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-//                }
-
-//                if (request == null || !ModelState.IsValid)
-//                {
-//                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
-//                }
-
-
-//                var reportName = "LoanProvision";
-//                var upperFormat = format.ToUpper();
-//                bool isVisual = request.VisualReport;
-
-//                var reportKey = isVisual
-//                    ? ReportUtils.GenerateReportKey(request, reportName, "VISUAL")
-//                    : ReportUtils.GenerateReportKey(request, reportName);
-
-
-//                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-//                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
-
-//                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-//                {
-//                    return await ReportExportHelper.ExportFromCacheAsync(
-//                        reportKey, upperFormat,
-//                        reportName,
-//                        _jsReportService, _logger);
-//                }
-
-//                string? branchIdForHeader = null;
-//                if (!string.IsNullOrEmpty(request.BranchIds) &&
-//                    request.BranchIds != "-1" && !request.BranchIds.Contains(','))
-//                {
-//                    branchIdForHeader = request.BranchIds;
-//                }
-
-//                var dataTask = _repository.GetReportDataAsync(request);
-//                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
-
-//                await Task.WhenAll(dataTask, headerTask);
-
-//                var data = await dataTask;
-//                var headerData = await headerTask;
-
-//                if (!data.Rows.Any())
-//                {
-//                    return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
-//                }
-
-//                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-
-//                await ReportUtils.ConvertUniqueImagesToBase64Async(
-//                    headerData, nameof(CommonHeader.CompanyLogo), webRoot);
-
-//                var reportData = new Dictionary<string, object>
-//                {
-//                    { "Rows", data.Rows },
-//                    { "TotalRecords", data.TotalRecords },
-//                    { "TotalAmount", data.TotalAmount },
-//                    { "TotalProvisionAmount", data.TotalProvisionAmount },
-//                    { "TotalLoans", data.TotalLoans },
-//                    { "HeaderDataSet", headerData },
-//                    { "TillDate", data.TillDateBs ?? "" },
-//                    { "BranchName", data.BranchName ?? "All" },
-//                    { "MemberGroupName", data.MemberGroupName ?? "All" },
-//                    { "PenaltyType", data.PenaltyType ?? "S" },
-//                    { "PenaltyTypeName", data.PenaltyTypeName ?? "Schedule Wise" },
-//                    { "Format", upperFormat }
-//                };
-
-//                string viewPath = request.VisualReport
-//                    ? "Views/VisualReport/Loan/LoanAnalysisReports/VLoanProvisionReport.cshtml"
-//                    : "Views/Report/Loan/LoanAnalysisReports/LoanProvisionReport.cshtml";
-
-//                var htmlContent = await Task.Run(() =>
-//                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
-//                        reportKey: reportKey,
-//                        reportPath: viewPath,
-//                        data: reportData));
-
-//                if (upperFormat == "VIEW")
-//                {
-//                    if (isVisual)
-//                    {
-//                        var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(htmlContent, reportKey);
-//                        return Content(viewHtml, "text/html");
-//                    }
-
-//                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-//                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-//                    var pagination = new Pagination
-//                    {
-//                        currentPage = 1,
-//                        totalPages = totalPages,
-//                        pageSize = 1,
-//                        hasNextPage = totalPages > 1,
-//                        hasPreviousPage = false,
-//                        totalRecord = data.Rows.Count
-//                    };
-
-//                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-//                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-//                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
-
-//                    return new FileContentResult(pdfBytes, "application/pdf");
-//                }
-//                return await ReportExportHelper.ExportFromCacheAsync(
-//                 reportKey, upperFormat,
-//                 reportName,
-//                 _jsReportService, _logger);
-//            }
-//            catch (ArgumentException ex)
-//            {
-//                return BadRequest(new { success = false, StatusCode = 400, message = ex.Message });
-//            }
-//            catch (Exception ex)
-//            {
-//                _logger.LogError(ex, "Error generating LoanProvision report");
-//                return StatusCode(500, new
-//                {
-//                    message = ex.Message,
-//                    inner = ex.InnerException?.Message,
-//                    stack = ex.StackTrace
-//                });
-//            }
-//        }
-//    }
-//}
-
-//new approach
-
-//using Microsoft.AspNetCore.Authorization;
-//using Microsoft.AspNetCore.Mvc;
-//using Microsoft.Extensions.Options;
-//using NexgenCosysReport.Dtos.ReportDtos;
-//using NexgenCosysReport.Dtos.RequestDtos.Common;
 //using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
 //using NexgenCosysReport.Inteface.ReportInterface;
 //using NexgenCosysReport.Inteface.ServiceInterface.Common;
@@ -203,7 +10,6 @@
 //using NexgenCosysReport.Utils.Enum;          // PageUnit
 //using NexgenCosysReport.Utils.Report;
 //using System.Security.Claims;
-//using System.Text.Json;
 
 //namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 //{
@@ -216,50 +22,42 @@
 //        private readonly ICommonHeaderRepository _commonHeaderRepository;
 //        private readonly IJsReportService _jsReportService;
 //        private readonly IWebHostEnvironment _webHostEnvironment;
-//        private readonly CustomHeaderResponse _headerResponse;
 //        private readonly IOptions<ReportSettings> _reportSettings;
 //        private readonly ILogger<LoanProvisionController> _logger;
-//        private readonly IDateConverterService _dateConverter;
 //        private readonly IReportFileResponse _reportFileResponse;
 
-//        // Visual report page only. Change it here: HTML view and PDF both follow it.
-//        private static readonly PageSizeSetting PageSetting =
+//        private static readonly PageSizeSetting NPageSetting = PageSizeSetting.A4Portrait;
+//        private static readonly PageSizeSetting VPageSetting =
 //            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
-
-//        // Derived once from PageSetting (sheet size, margins, rows per page)
-//        private static readonly SheetLayout Layout = SheetLayout.From(PageSetting);
 
 //        public LoanProvisionController(
 //            ILoanProvisionRepository repository,
 //            ICommonHeaderRepository commonHeaderRepository,
 //            IJsReportService jsReportService,
 //            IWebHostEnvironment webHostEnvironment,
-//            CustomHeaderResponse headerResponse,
 //            IOptions<ReportSettings> reportSettings,
 //            ILogger<LoanProvisionController> logger,
-//            IDateConverterService dateConverter,
 //            IReportFileResponse reportFileResponse)
 //        {
 //            _repository = repository;
 //            _commonHeaderRepository = commonHeaderRepository;
 //            _jsReportService = jsReportService;
 //            _webHostEnvironment = webHostEnvironment;
-//            _headerResponse = headerResponse;
 //            _reportSettings = reportSettings;
 //            _logger = logger;
-//            _dateConverter = dateConverter;
 //            _reportFileResponse = reportFileResponse;
 //        }
 
 //        [HttpPost()]
 //        public async Task<IActionResult> GenerateReport(
 //            [FromBody] LoanProvisionRequestDto request,
-//            [FromQuery] string format = "VIEW")
+//            [FromQuery] string format = "VIEW",
+//            CancellationToken ct = default)
 //        {
 //            try
 //            {
 //                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-//                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+//                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out _))
 //                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
 
 //                if (request == null || !ModelState.IsValid)
@@ -267,24 +65,22 @@
 
 //                var reportName = "LoanProvision";
 //                var upperFormat = format.ToUpper();
-//                bool isVisual = request.VisualReport;
+//                var isVisual = request.VisualReport;
 
-//                // Page size is part of the visual key, so changing PageSetting invalidates old cached HTML/PDF.
-//                var reportKey = isVisual
-//                    ? ReportUtils.GenerateReportKey(request, reportName, $"VISUAL_{Layout.CacheTag}")
-//                    : ReportUtils.GenerateReportKey(request, reportName);
+//                var page = isVisual ? VPageSetting : NPageSetting;
 
-//                // Only visual reports use PageSetting; normal reports keep their current defaults.
-//                PageSizeSetting? exportPage = isVisual ? PageSetting : null;
+//                //var reportKey = ReportUtils.GenerateReportKey(
+//                //    request, reportName, $"{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}");
+//                // key = whole request (every filter) + view type + page size + user
+//                var reportKey = ReportUtils.GenerateReportKey(
+//                    request, reportName,
+//                    $"{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}_U{userIdClaim}");
 
-//                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-//                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
 
-//                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-//                {
-//                    return await ReportExportHelper.ExportFromCacheAsync(
-//                        reportKey, upperFormat, reportName, _jsReportService, _logger, exportPage);
-//                }
+//                var cached = await ReportExportHelper.TryServeAsync(
+//                 reportKey, upperFormat, reportName, pdfView: false,
+//                 _jsReportService, _reportFileResponse, _logger, page, ct);
+//                if (cached != null) return cached;
 
 //                string? branchIdForHeader = null;
 //                if (!string.IsNullOrEmpty(request.BranchIds) &&
@@ -321,7 +117,7 @@
 //                    { "PenaltyType", data.PenaltyType ?? "S" },
 //                    { "PenaltyTypeName", data.PenaltyTypeName ?? "Schedule Wise" },
 //                    { "Format", upperFormat },
-//                    { "SheetLayout", Layout }              // read by the visual view only
+//                    { "PageSetting", page }
 //                };
 
 //                string viewPath = isVisual
@@ -329,64 +125,21 @@
 //                    : "Views/Report/Loan/LoanAnalysisReports/LoanProvisionReport.cshtml";
 
 //                var htmlContent = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
-//                    reportKey: reportKey, reportPath: viewPath, data: reportData);
+//                    reportKey: reportKey, reportPath: viewPath, data: reportData, ct: ct);
 
 //                if (upperFormat == "VIEW")
 //                {
-//                    // ═════════ VISUAL: raw HTML, pages = fixed sheets ═════════
-//                    if (isVisual)
-//                    {
-//                        var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
-//                            htmlContent, reportKey, PageSetting);
-
-//                        var sheets = SheetLayout.CountSheets(viewHtml);   // same count the PDF will have
-//                        var vPagination = new Pagination
-//                        {
-//                            currentPage = 1,
-//                            totalPages = sheets,
-//                            pageSize = 1,
-//                            hasNextPage = sheets > 1,
-//                            hasPreviousPage = false,
-//                            totalRecord = data.Rows.Count
-//                        };
-//                        _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-//                        Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(vPagination));
-//                        return Content(viewHtml, "text/html");
-//                    }
-
-//                    // ═════════ NORMAL: PDF + iText page count (unchanged) ═════════
-//                    //var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-//                    //var totalPages = JsReportService.CountPdfPages(pdfBytes);
-//                    //var pagination = new Pagination
-//                    //{
-//                    //    currentPage = 1,
-//                    //    totalPages = totalPages,
-//                    //    pageSize = 1,
-//                    //    hasNextPage = totalPages > 1,
-//                    //    hasPreviousPage = false,
-//                    //    totalRecord = data.Rows.Count
-//                    //};
-
-//                    //_headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-//                    //Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-//                    //Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
-//                    //return new FileContentResult(pdfBytes, "application/pdf");
-
-//                    var viewHtmlNormal = await _jsReportService.ExportReportToRawHtmlAsync(
-//                   htmlContent, reportKey, PageSetting);
-//                    var Pagination = SheetLayout.CountSheets(viewHtmlNormal);
-//                    _reportFileResponse.AppendPaginationHeaders(Pagination, data.Rows.Count);
-//                    return Content(viewHtmlNormal, "text/html");
-
+//                    var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
+//                        htmlContent, reportKey, page, ct);
+//                    _reportFileResponse.AppendPaginationHeaders(
+//                        SheetHtml.CountSheets(viewHtml), data.Rows.Count);
+//                    return Content(viewHtml, "text/html");
 //                }
 
 //                return await ReportExportHelper.ExportFromCacheAsync(
-//                    reportKey, upperFormat, reportName, _jsReportService, _logger, exportPage);
+//                    reportKey, upperFormat, reportName, _jsReportService, _logger, page, ct);
 //            }
-//            catch (ArgumentException ex)
-//            {
-//                return BadRequest(new { success = false, StatusCode = 400, message = ex.Message });
-//            }
+
 //            catch (Exception ex)
 //            {
 //                _logger.LogError(ex, "Error generating LoanProvision report");
@@ -403,8 +156,7 @@
 
 
 
-//latest new appraoch
-
+// Controllers/Loan/LoanAnalysisReport/LoanProvisionController.cs
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -413,9 +165,10 @@ using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Loan.LoanAnalysisReport;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
 using NexgenCosysReport.Utils.Enum;          // PageUnit
 using NexgenCosysReport.Utils.Report;
+using System.Diagnostics;
 using System.Security.Claims;
 
 namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
@@ -425,9 +178,12 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
     [Authorize]
     public class LoanProvisionController : ControllerBase
     {
+        private const string ReportName = "LoanProvision";
+
         private readonly ILoanProvisionRepository _repository;
         private readonly ICommonHeaderRepository _commonHeaderRepository;
         private readonly IJsReportService _jsReportService;
+        private readonly IReportDataCache _dataCache;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly IOptions<ReportSettings> _reportSettings;
         private readonly ILogger<LoanProvisionController> _logger;
@@ -441,6 +197,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
             ILoanProvisionRepository repository,
             ICommonHeaderRepository commonHeaderRepository,
             IJsReportService jsReportService,
+            IReportDataCache dataCache,
             IWebHostEnvironment webHostEnvironment,
             IOptions<ReportSettings> reportSettings,
             ILogger<LoanProvisionController> logger,
@@ -449,6 +206,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
             _repository = repository;
             _commonHeaderRepository = commonHeaderRepository;
             _jsReportService = jsReportService;
+            _dataCache = dataCache;
             _webHostEnvironment = webHostEnvironment;
             _reportSettings = reportSettings;
             _logger = logger;
@@ -461,6 +219,8 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
             [FromQuery] string format = "VIEW",
             CancellationToken ct = default)
         {
+            var total = Stopwatch.StartNew();
+
             try
             {
                 var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
@@ -470,45 +230,59 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                 if (request == null || !ModelState.IsValid)
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
 
-                var reportName = "LoanProvision";
-                var upperFormat = format.ToUpper();
+                var upperFormat = format.ToUpperInvariant();
                 var isVisual = request.VisualReport;
-
                 var page = isVisual ? VPageSetting : NPageSetting;
 
-                var reportKey = ReportUtils.GenerateReportKey(
-                    request, reportName, $"{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}");
+                // ── KEYS ──
+                // data key: every filter in the request (TillDateBs, BranchIds, MemberGroupId, PenaltyType) + user.
+                //           VisualReport is excluded, so normal and visual share one cached result.
+                // html key: data key + view type + page size.
+                var dataKey = ReportCacheKey.ForData(
+                    request, ReportName, userIdClaim, nameof(request.VisualReport));
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+                var reportKey = $"{dataKey}_{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}";
 
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, reportName, _jsReportService, _logger, page, ct);
-                }
+                // HTML hit: serve VIEW or export, no DB and no Razor
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: false,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
 
+                // ── HEADER: cached per branch (query + logo conversion run once, not on every data miss) ──
                 string? branchIdForHeader = null;
                 if (!string.IsNullOrEmpty(request.BranchIds) &&
                     request.BranchIds != "-1" && !request.BranchIds.Contains(','))
-                {
                     branchIdForHeader = request.BranchIds;
-                }
 
-                var dataTask = _repository.GetReportDataAsync(request);
-                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
-                await Task.WhenAll(dataTask, headerTask);
+                var sw = Stopwatch.StartNew();
 
+                var headerTask = _dataCache.GetOrLoadAsync($"Header_{branchIdForHeader ?? "ALL"}", async () =>
+                {
+                    var headerData = await _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+                    var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
+                    await ReportUtils.ConvertUniqueImagesToBase64Async(
+                        headerData, nameof(CommonHeader.CompanyLogo), webRoot);
+                    return headerData;
+                }, ct);
+
+                // ── DATA: loaded once, then reused by normal and visual until it expires ──
+                var dataTask = _dataCache.GetOrLoadAsync(dataKey, async () =>
+                {
+                    var loaded = await _repository.GetReportDataAsync(request);
+                    return loaded.Rows.Any() ? loaded : null;               // empty results are never cached
+                }, ct);
+
+                await Task.WhenAll(headerTask, dataTask);
+                var msDb = sw.ElapsedMilliseconds;
+
+                var headerRows = await headerTask;
                 var data = await dataTask;
-                var headerData = await headerTask;
 
-                if (!data.Rows.Any())
+                if (data == null)
                     return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
 
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-                await ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData, nameof(CommonHeader.CompanyLogo), webRoot);
-
+                // ── RENDER from the (possibly cached) data ──
                 var reportData = new Dictionary<string, object>
                 {
                     { "Rows", data.Rows },
@@ -516,7 +290,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     { "TotalAmount", data.TotalAmount },
                     { "TotalProvisionAmount", data.TotalProvisionAmount },
                     { "TotalLoans", data.TotalLoans },
-                    { "HeaderDataSet", headerData },
+                    { "HeaderDataSet", headerRows! },
                     { "TillDate", data.TillDateBs ?? "" },
                     { "BranchName", data.BranchName ?? "All" },
                     { "MemberGroupName", data.MemberGroupName ?? "All" },
@@ -526,35 +300,32 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                     { "PageSetting", page }
                 };
 
-                string viewPath = isVisual
+                var viewPath = isVisual
                     ? "Views/VisualReport/Loan/LoanAnalysisReports/VLoanProvisionReport.cshtml"
                     : "Views/Report/Loan/LoanAnalysisReports/LoanProvisionReport.cshtml";
 
-                var htmlContent = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                sw.Restart();
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
                     reportKey: reportKey, reportPath: viewPath, data: reportData, ct: ct);
+                var msRender = sw.ElapsedMilliseconds;
 
-                if (upperFormat == "VIEW")
-                {
-                    var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
-                        htmlContent, reportKey, page, ct);
-                    _reportFileResponse.AppendPaginationHeaders(
-                        SheetHtml.CountSheets(viewHtml), data.Rows.Count);
-                    return Content(viewHtml, "text/html");
-                }
+                // VIEW (raw HTML + pagination headers) or export (PDF/Excel/...) from the cached HTML
+                var result = await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: false,
+                    totalRecords: data.Rows.Count,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
 
-                return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, reportName, _jsReportService, _logger, page, ct);
+                _logger.LogInformation(
+                    "TIMING {Report} {Format} {View} | db+header {Db} ms | razor {Razor} ms | html {Kb} KB | total {Total} ms",
+                    ReportName, upperFormat, isVisual ? "visual" : "normal",
+                    msDb, msRender, html.Length / 1024, total.ElapsedMilliseconds);
+
+                return result;
             }
-
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating LoanProvision report");
-                return StatusCode(500, new
-                {
-                    message = ex.Message,
-                    inner = ex.InnerException?.Message,
-                    stack = ex.StackTrace
-                });
+                _logger.LogError(ex, "Error generating {Report} report after {Ms} ms", ReportName, total.ElapsedMilliseconds);
+                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }
     }

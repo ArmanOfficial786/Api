@@ -80,16 +80,10 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
                 var reportKey = ReportUtils.GenerateReportKey(
                 request, reportName, $"{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}");
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
-
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat,
-                        reportName,
-                        _jsReportService, _logger, page, ct);
-                }
+                var cached = await ReportExportHelper.TryServeAsync(
+                 reportKey, upperFormat, reportName, pdfView: false,
+                 _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
 
                 string? branchIdForHeader = null;
                 if (!string.IsNullOrEmpty(request.BranchIds) &&

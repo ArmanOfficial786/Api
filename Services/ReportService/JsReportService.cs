@@ -5,6 +5,7 @@ using jsreport.Types;
 using Microsoft.Extensions.Caching.Memory;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Inteface.ReportInterface;
+using NexgenCosysReport.Utils.Caching;
 using NexgenCosysReport.Utils.Report;
 
 namespace NexgenCosysReport.Services.ReportService
@@ -16,8 +17,8 @@ namespace NexgenCosysReport.Services.ReportService
         private readonly IRazorRenderService _razorRenderer;
         private readonly IMemoryCache _cache;
 
-        private static readonly TimeSpan CacheSliding = TimeSpan.FromMinutes(30);
-        private static readonly TimeSpan CacheAbsolute = TimeSpan.FromMinutes(60);
+        private static readonly TimeSpan CacheSliding = ReportCachePolicy.HtmlSliding;
+        private static readonly TimeSpan CacheAbsolute = ReportCachePolicy.Freshness;
         private const int RenderTimeoutMs = 600_000;
 
         public JsReportService(
@@ -131,47 +132,12 @@ namespace NexgenCosysReport.Services.ReportService
             return finalBytes;
         }
 
-        //public async Task<string> ExportReportToRawHtmlAsync(
-        //string htmlContent,
-        //string? reportKey = null,
-        //CancellationToken ct = default)
-        //{
-        //    // Use a separate key so we don't collide with the Razor HTML cache
-        //    var viewCacheKey = reportKey != null ? $"{reportKey}_VIEW_RAW" : null;
 
-        //    if (viewCacheKey != null && TryGetCachedHtml(viewCacheKey, out var cachedHtml) && cachedHtml != null)
-        //    {
-        //        _logger.LogInformation("📦 HTML cache hit — {Key}", viewCacheKey);
-        //        return cachedHtml;
-        //    }
-
-        //    var request = new RenderRequest
-        //    {
-        //        Template = new Template
-        //        {
-        //            Content = htmlContent,
-        //            Engine = Engine.None,
-        //            Recipe = Recipe.Html,
-        //            Helpers = null
-        //        },
-        //        Options = new RenderOptions { Timeout = RenderTimeoutMs }
-        //    };
-
-        //    var result = await _jsReportClient.RenderAsync(request, ct);
-        //    using var ms = new MemoryStream();
-        //    await result.Content.CopyToAsync(ms, ct);
-        //    var finalHtml = Encoding.UTF8.GetString(ms.ToArray());
-
-        //    if (viewCacheKey != null)
-        //        CacheHtml(viewCacheKey, finalHtml);
-
-        //    return finalHtml;
-        //}
         public Task<string> ExportReportToRawHtmlAsync(
-    string htmlContent,
-    string? reportKey = null,
-    PageSizeSetting? pageSetting = null,
-    CancellationToken ct = default)
+         string htmlContent,
+         string? reportKey = null,
+         PageSizeSetting? pageSetting = null,
+         CancellationToken ct = default)
         {
             // No jsreport round trip: Engine.None + Recipe.Html returned this same HTML.
             // The HTML already contains fixed sheets (one .report-page = one page).
@@ -179,13 +145,7 @@ namespace NexgenCosysReport.Services.ReportService
             // Optional guard: warn if this HTML was built for a different page size (stale cache)
             if (pageSetting != null && SheetHtml.TryReadSize(htmlContent, out var w, out var h))
             {
-                //var expected = SheetHtml.From(pageSetting);
-                //if (Math.Abs(w - expected.WidthMm) > 0.01 || Math.Abs(h - expected.HeightMm) > 0.01)
-                //{
-                //    _logger.LogWarning(
-                //        "Visual HTML {Key} was built for {W}x{H}mm but the page setting is {EW}x{EH}mm",
-                //        reportKey, w, h, expected.WidthMm, expected.HeightMm);
-                //}
+
                 if (Math.Abs(w - pageSetting.WidthMm) > 0.01 || Math.Abs(h - pageSetting.HeightMm) > 0.01)
                 {
                     _logger.LogWarning(
@@ -238,52 +198,7 @@ namespace NexgenCosysReport.Services.ReportService
             }
             return doc.DocumentNode.OuterHtml;
         }
-        //private static string PrepareForExcel(string html)
-        //{
-        //    var doc = new HtmlDocument();
-        //    doc.LoadHtml(html);
 
-        //    // Server-paged visual report: keep ONLY the single Excel table
-        //    var table = doc.GetElementbyId("excelSource")?.SelectSingleNode(".//table");
-        //    if (table != null)
-        //    {
-        //        var body = doc.DocumentNode.SelectSingleNode("//body");
-        //        body.RemoveAllChildren();
-        //        body.AppendChild(table);
-        //        return doc.DocumentNode.OuterHtml;
-        //    }
-
-        //    // Normal reports (Member Registration etc.): unchanged behaviour
-        //    doc.DocumentNode.SelectNodes("//*[contains(@class,'common-header-table')]")
-        //        ?.ToList().ForEach(n => n.Remove());
-        //    return doc.DocumentNode.OuterHtml;
-        //}
-
-        //private static string PrepareForExcel(string html)
-        //{
-        //    var doc = new HtmlDocument();
-        //    doc.LoadHtml(html);
-
-        //    var src = doc.GetElementbyId("excelSource");
-        //    var table = src?.SelectSingleNode(".//table");
-        //    if (src != null && table != null)
-        //    {
-        //        var name = src.GetAttributeValue("data-sheet-name", "");
-        //        if (!string.IsNullOrEmpty(name) && !table.Attributes.Contains("data-sheet-name"))
-        //            table.SetAttributeValue("data-sheet-name", name);
-
-        //        var body = doc.DocumentNode.SelectSingleNode("//body");
-        //        table.Remove();
-        //        body.RemoveAllChildren();
-        //        body.AppendChild(table);          // body = ONLY this table -> one sheet
-        //        return doc.DocumentNode.OuterHtml;
-        //    }
-
-        //    // Reports still on the old pattern: unchanged behaviour
-        //    doc.DocumentNode.SelectNodes("//*[contains(@class,'common-header-table')]")
-        //        ?.ToList().ForEach(n => n.Remove());
-        //    return doc.DocumentNode.OuterHtml;
-        //}
 
         private static string PrepareForExcel(string html)
         {

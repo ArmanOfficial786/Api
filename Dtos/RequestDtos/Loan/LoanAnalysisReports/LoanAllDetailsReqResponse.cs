@@ -14,6 +14,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
         public string? MemberGroupId { get; set; } = "-1";
         public string OrderBy { get; set; } = "-1";
         public bool VisualReport { get; set; } = false;
+        public List<string>? SelectedColumns { get; set; }
     }
 
     public class LoanAllDetailsRowDto

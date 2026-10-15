@@ -124,6 +124,7 @@ using Microsoft.Extensions.Caching.Memory;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
 
 namespace NexgenCosysReport.Utils.Report
 {
@@ -133,12 +134,11 @@ namespace NexgenCosysReport.Utils.Report
         // pagination headers without touching the DB. Same lifetime as the HTML cache.
         private record ViewInfo(int Pages, int Records);
         private static readonly MemoryCache ViewInfoCache = new(new MemoryCacheOptions());
+        // Utils/Report/ReportExportHelper.cs  (replace ViewInfoOptions only; it must not expire before the HTML)
         private static readonly MemoryCacheEntryOptions ViewInfoOptions = new()
         {
-            SlidingExpiration = TimeSpan.FromMinutes(30),
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(60)
+            AbsoluteExpirationRelativeToNow = ReportCachePolicy.Freshness + TimeSpan.FromMinutes(1)
         };
-
         // ══════════════════════════════════════════════════════════════════
         // STEP 1 — call BEFORE the DB.
         //   Cache hit  -> logs "CACHE HIT", serves from cache, returns the result.
@@ -154,7 +154,7 @@ namespace NexgenCosysReport.Utils.Report
 
             if (!js.TryGetCachedHtml(reportKey, out var html) || string.IsNullOrEmpty(html))
             {
-                logger.LogInformation("🗄️ CACHE MISS | {Format} | {Key} — reading from DB", upper, reportKey);
+                logger.LogInformation("🗄️ HTML CACHE MISS | {Format} | {Key} — rendering (data cache is checked next)", upper, reportKey);
                 return null;
             }
 

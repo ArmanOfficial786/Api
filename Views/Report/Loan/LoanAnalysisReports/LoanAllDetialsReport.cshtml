@@ -1,4 +1,4 @@
-﻿@model Dictionary<string, object>
+﻿@* @model Dictionary<string, object>
 @using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
 @{
     Layout = null;
@@ -670,4 +670,123 @@
         </script>
     }
 </body>
-</html>
+</html> *@
+
+
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    // ── 1. DATA (set by the controller; the view only reads it, the cached data is shared) ──
+    var rows = (Model["Rows"] as IEnumerable<LoanAllDetailsRowDto>)?.ToList() ?? new List<LoanAllDetailsRowDto>();
+    var branchName = Model.TryGetValue("BranchName", out var b) ? b?.ToString() ?? "All" : "All";
+    var tillDate = Model.TryGetValue("TillDate", out var t) ? t?.ToString() ?? "" : "";
+    var statusName = Model.TryGetValue("StatusName", out var s) ? s?.ToString() ?? "All" : "All";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var totalRecords = Model.TryGetValue("TotalRecords", out var tr) && tr != null && Convert.ToInt32(tr) > 0
+        ? Convert.ToInt32(tr)
+        : rows.Count;
+
+    // controller sends a list: empty = default request (all columns), filled = specific request
+    var selectedColumns = (Model.TryGetValue("SelectedColumns", out var sc) ? sc as IEnumerable<string> : null)?
+        .Where(c => !string.IsNullOrWhiteSpace(c))
+        .Select(c => c.Trim())
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    var showAllColumns = selectedColumns == null || selectedColumns.Count == 0;
+
+    // ── 2. COLUMN CATALOG (display order; Width = share of printable width) ──
+    static string N2(decimal? v) => v.HasValue ? v.Value.ToString("N2") : "";
+
+    var allColumns = new List<(string Key, string Header, double Width, Align Align, Func<LoanAllDetailsRowDto, string> Render)>
+    {
+        ("memberId",           "Member Id",            2.6, Align.Left,  r => r.MemberId ?? ""),
+        ("memberName",         "Member Name",          3.4, Align.Left,  r => r.MemberName ?? ""),
+        ("temAddress",         "Tem Address",          3.6, Align.Left,  r => r.TemAddress ?? ""),
+        ("mobileNo",           "Mobile No",            2.4, Align.Left,  r => r.MobileNo ?? ""),
+        ("contactNo",          "Contact No",           2.4, Align.Left,  r => r.ContactNo ?? ""),
+        ("citizenshipNo",      "Citizenship No",       2.6, Align.Left,  r => r.CitizenshipNo ?? ""),
+        ("citizenShipIssFrom", "CitizenShip Iss From", 2.6, Align.Left,  r => r.CitizenshipIssuePlace ?? ""),
+        ("accountNo",          "Account No",           2.6, Align.Left,  r => r.LoanAccountNo ?? ""),
+        ("loanType",           "Loan Type",            2.6, Align.Left,  r => r.LoanTypeName ?? ""),
+        ("loanCategory",       "Loan Category",        2.4, Align.Left,  r => r.LoanCategory ?? ""),
+        ("type",               "Type",                 1.9, Align.Left,  r => r.LoanPaymentTypeCode ?? ""),
+        ("period",             "Period",               1.9, Align.Left,  r => r.IssuePeriod ?? ""),
+        ("instType",           "Inst Type",            1.9, Align.Left,  r => r.InstallmentType ?? ""),
+        ("normalOD",           "NormalOD",             1.9, Align.Left,  r => r.NormalOD ?? ""),
+        ("issueType",          "Issue Type",           1.9, Align.Left,  r => r.LoanIssueType ?? ""),
+        ("issueDate",          "Issue Date",           2.2, Align.Left,  r => r.IssueDate ?? ""),
+        ("matDate",            "Mat Date",             2.2, Align.Left,  r => r.MaturityDate ?? ""),
+        ("intRate",            "Int Rate",             1.9, Align.Right, r => r.InterestRate ?? ""),
+        ("issueAmt",           "Issue Amt",            2.3, Align.Right, r => N2(r.LoanIssueAmount)),
+        ("sanAmount",          "San Amount",           2.3, Align.Right, r => N2(r.SansationAmount)),
+        ("odSanAmt",           "OD San Amt",           2.3, Align.Right, r => N2(r.ODSansationAmount)),
+        ("revODBal",           "Rev OD Bal",           2.3, Align.Right, r => N2(r.RevolvingODBalance)),
+        ("status",             "Status",               1.9, Align.Left,  r => r.LoanStatus ?? ""),
+        ("analysisStatus",     "Analysis Status",      1.9, Align.Left,  r => r.LoanAnalysisStatus ?? ""),
+        ("prinPaid",           "Prin Paid",            2.3, Align.Right, r => N2(r.TotalPrincipalpaid)),
+        ("intPaid",            "Int Paid",             2.3, Align.Right, r => N2(r.TotalInterestPaid)),
+        ("penPaid",            "Pen paid",             2.3, Align.Right, r => N2(r.TotalPenaltyPaid)),
+        ("intPayDate",         "Int Pay Date",         2.2, Align.Left,  r => r.LastInterestPaymentDate ?? ""),
+        ("pntPayDate",         "Pnt Pay date",         2.2, Align.Left,  r => r.LastPenaltyPaymentDate ?? ""),
+        ("rePrincipal",        "Re Principal",         2.3, Align.Right, r => N2(r.RemainingPrinciple)),
+        ("defPrincipal",       "Def Principal",        2.3, Align.Right, r => N2(r.DefaultPrinciple)),
+        ("prevInterest",       "Prev Interest",        2.3, Align.Right, r => N2(r.PreviousInterest)),
+        ("prevPenalty",        "Prev Penalty",         2.3, Align.Right, r => N2(r.PreviousPenalty)),
+        ("currInterest",       "Curr Interest",        2.3, Align.Right, r => N2(r.CurrInterest)),
+        ("currPenalty",        "Curr Penalty",         2.3, Align.Right, r => N2(r.CurrPenalty)),
+        ("totalInterest",      "Total Interest",       2.3, Align.Right, r => N2(r.TotalInterest)),
+        ("totalPenalty",       "Total Penalty",        2.3, Align.Right, r => N2(r.TotalPenalty)),
+        ("totalDue",           "Total Due",            2.3, Align.Right, r => N2(r.TotalDue)),
+        ("totRemaining",       "Tot Remaining",        2.3, Align.Right, r => N2(r.TotalRemaining)),
+        ("provisionAmt",       "Provision Amt",        2.3, Align.Right, r => N2(r.ProvisionalAmount)),
+        ("instAmt",            "Inst Amt",             2.3, Align.Right, r => N2(r.InstallmentAmount)),
+        ("instCon",            "Inst Con",             1.9, Align.Right, r => r.InstallmentCount?.ToString() ?? ""),
+        ("priDefaulter",       "Pri Defaulter",        2.3, Align.Right, r => N2(r.PrincipleDefaulter)),
+        ("intDefaulter",       "Int Defaulter",        2.3, Align.Right, r => N2(r.InterestDefaulter)),
+        ("totDefaulter",       "Tot Defaulter",        2.3, Align.Right, r => N2(r.TotalDefaulter)),
+    };
+
+    // default request -> all columns, specific request -> only the selected ones (catalog order)
+    var columns = showAllColumns
+        ? allColumns
+        : allColumns.Where(c => selectedColumns!.Contains(c.Key)).ToList();
+    if (columns.Count == 0) columns = allColumns;   // nothing matched: show all
+
+    // ── 3. COLUMNS, STYLE, SIZES ──
+    var table = new ReportTable(Model, title: "Loan Detail Report", sheetName: "LoanAllDetails")
+        .Column("S.N.", 1.2, Align.Center);
+    foreach (var c in columns)
+        table.Column(c.Header, c.Width, c.Align);
+
+    table.Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 75);
+
+    // ── 4. TITLE BLOCK ──
+    table.MetaPair("Branch :", branchName, "Till Date :", tillDate)
+         .MetaPair("Report Generated On :", generatedOn, "Status :", statusName);
+
+    // ── 5. ROWS ──
+    var sn = 0;
+    foreach (var r in rows)
+    {
+        var values = new string[columns.Count + 1];
+        values[0] = (++sn).ToString();
+        for (var i = 0; i < columns.Count; i++)
+            values[i + 1] = columns[i].Render(r);
+        table.Data(values);
+    }
+
+    // ── 6. TOTAL ──
+    if (rows.Count > 0)
+    {
+        var totalCols = columns.Count + 1;
+        var labelSpan = Math.Min(2, totalCols - 1);
+        var totalValues = new string[totalCols - labelSpan];
+        Array.Fill(totalValues, "");
+        totalValues[0] = totalRecords.ToString();
+        table.Total("Total Records :", labelSpan, totalValues);
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())
