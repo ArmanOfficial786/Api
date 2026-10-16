@@ -1,0 +1,144 @@
+﻿@using NexgenCosysReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@using NexgenCosysReport.Services.ReportService.Visual
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+    int LoansOf(LoanAgeingTypeWiseRowDto row) =>
+        decimal.TryParse(row.LoanAccountNo?.ToString(), out var count) ? (int)Math.Round(count) : 0;
+
+    var rows = (Model["Rows"] as List<LoanAgeingTypeWiseRowDto>) ?? new List<LoanAgeingTypeWiseRowDto>();
+
+    var tillDate = Text("TillDate");
+    var branchName = Text("BranchName", "All");
+    var memberGroupName = Text("MemberGroupName");
+    var penaltyTypeName = Text("PenaltyTypeName", "Schedule Wise");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // ── totals (from the controller, or summed from the rows) ──
+    var totalLoans = (int)TotalOr("TotalLoans", rows.Sum(x => LoansOf(x)));
+    var totalDisbursed = TotalOr("TotalLoanIssueAmount", rows.Sum(x => x.LoanIssueAmount ?? 0));
+    var totalRepaid = TotalOr("TotalRepaid", rows.Sum(x => x.Repaid ?? 0));
+    var totalBalance = TotalOr("TotalBalance", rows.Sum(x => x.TotalPrincipalAmount ?? 0));
+    var totalOverdue = TotalOr("TotalOverdue", rows.Sum(x => x.Overdue ?? 0));
+    var totalGoodLoan = TotalOr("TotalGoodLoan", 0);
+    var totalMembers = (int)TotalOr("TotalMembers", 0);
+
+    // ── numbers for the KPI cards ──
+    var averageLoan = totalLoans == 0 ? 0 : totalDisbursed / totalLoans;
+    var recoveryPercent = totalDisbursed == 0 ? 0 : Math.Round(totalRepaid / totalDisbursed * 100, 2);
+    var overduePercent = totalBalance == 0 ? 0 : Math.Round(totalOverdue / totalBalance * 100, 2);
+
+    // ── one row per loan type, biggest balance first ──
+    const int MaxTypes = 8;   // more loan types than this are combined into "Others" so the charts stay readable
+
+    var typeRows = rows
+        .Select(row => new
+        {
+            Name = string.IsNullOrWhiteSpace(row.LoanTypeName) ? "Unknown" : row.LoanTypeName!.Trim(),
+            Loans = LoansOf(row),
+            Disbursed = row.LoanIssueAmount ?? 0,
+            Repaid = row.Repaid ?? 0,
+            Balance = row.TotalPrincipalAmount ?? 0,
+            Overdue = row.Overdue ?? 0
+        })
+        .OrderByDescending(x => x.Balance)
+        .ToList();
+
+    var shown = typeRows.Take(MaxTypes).ToList();
+    var others = typeRows.Skip(MaxTypes).ToList();
+    if (others.Count > 0)
+    {
+        shown.Add(new
+        {
+            Name = "Others",
+            Loans = others.Sum(x => x.Loans),
+            Disbursed = others.Sum(x => x.Disbursed),
+            Repaid = others.Sum(x => x.Repaid),
+            Balance = others.Sum(x => x.Balance),
+            Overdue = others.Sum(x => x.Overdue)
+        });
+    }
+
+    // rows every chart reads (lower-case names are the keys used in the charts below)
+    var chartRows = shown
+        .Select(x => new
+        {
+            name = x.Name,
+            loans = x.Loans,
+            disbursed = x.Disbursed,
+            repaid = x.Repaid,
+            balance = x.Balance,
+            overdue = x.Overdue,
+            overduePct = x.Balance == 0 ? 0m : Math.Round(x.Overdue / x.Balance * 100, 2),
+            recoveryPct = x.Disbursed == 0 ? 0m : Math.Round(x.Repaid / x.Disbursed * 100, 2),
+            avgBalance = x.Loans == 0 ? 0m : x.Balance / x.Loans
+        })
+        .ToList();
+
+    // ── side blocks next to the KPIs ──
+    var topOverdue = typeRows
+        .Where(x => x.Overdue > 0)
+        .OrderByDescending(x => x.Overdue)
+        .Take(5)
+        .Select(x => (Label: x.Name, Value: x.Overdue))
+        .ToList();
+
+    var keyFigures = new List<(string Label, string Value)>
+    {
+        ("Disbursed", totalDisbursed.ToString("N2")),
+        ("Repaid", totalRepaid.ToString("N2")),
+        ("Balance", totalBalance.ToString("N2")),
+        ("Overdue", totalOverdue.ToString("N2")),
+        ("Recovery Rate", $"{recoveryPercent:0.00}%")
+    };
+    if (totalMembers > 0) keyFigures.Add(("Total Members", totalMembers.ToString("N0")));
+
+    var report = new VisualReport(Model, title: "Loan Ageing Type Wise Report", sheetName: "LoanAgeingTypeWise")
+        .PrintedTitle("Loan Ageing Type Wise Report — Visual Summary")
+        .NoDataWhen(rows.Count == 0)
+        .ChartRows(chartRows)
+        .Sizing(chartRowMm: 75);
+
+    report.MetaLeft("Branch :", branchName)
+          .MetaLeft("Penalty Type :", penaltyTypeName)
+          .MetaRight("Till Date :", tillDate)
+          .MetaRight("Report Generated On :", generatedOn);
+    if (!string.IsNullOrEmpty(memberGroupName)) report.MetaLeft("Member Group :", memberGroupName);
+
+    report.Kpis(kpis => kpis
+            .Add("Total Loans", totalLoans.ToString("N0"), $"{rows.Count} loan types")
+            .Add("Disbursed Amount", totalDisbursed.ToString("N2"), $"avg {averageLoan:N2} / loan")
+            .Add("Repaid Amount", totalRepaid.ToString("N2"), $"{recoveryPercent:0.00}% of disbursed")
+            .Add("Balance Amount", totalBalance.ToString("N2"),
+                 totalGoodLoan > 0 ? $"good loan {totalGoodLoan:N2}" : "principal outstanding")
+            .Add("Overdue Amount", totalOverdue.ToString("N2"), $"{overduePercent:0.00}% of balance"))
+          .InfoRow(info => info
+            .BarList("Top Loan Types by Overdue", topOverdue, "N2")
+            .Table("Key Figures", keyFigures))
+          .ChartGrid(3, grid => grid
+            .Donut("No. of Loans by Loan Type", "loans")
+            .Donut("Disbursed Amount Share", "disbursed", money: true)
+            .Donut("Overdue Share", "overdue", money: true))
+          .ChartGrid(2, grid => grid
+            .Grouped("Disbursed, Repaid and Balance by Loan Type",
+                     new VisualSeries("Disbursed", "disbursed", "#2563eb"),
+                     new VisualSeries("Repaid", "repaid", "#10b981"),
+                     new VisualSeries("Balance", "balance", "#f59e0b"))
+            .BarLine("Overdue Rate (%) of Balance", "overduePct", "#ef4444", "#8b5cf6", format: "percent")
+            .BarLine("Recovery Rate (%) of Disbursed", "recoveryPct", "#10b981", "#2563eb", format: "percent")
+            .Bar("Average Balance per Loan", "avgBalance", "#2563eb", thickness: 26));
+}
+@await Html.PartialAsync("_SheetReport", await report.BuildAsync(Html))

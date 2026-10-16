@@ -1,0 +1,158 @@
+﻿@using NexgenCosysReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@using NexgenCosysReport.Services.ReportService.Visual
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    var rows = (Model["Rows"] as List<LoanRegisterRowDto>) ?? new List<LoanRegisterRowDto>();
+
+    var tillDate = !string.IsNullOrEmpty(Text("TillDateAd")) ? Text("TillDateAd") : Text("TillDate");
+    var branchName = Text("BranchName", "All");
+    var loanTypeFilterName = Text("LoanTypeName");
+    var collectorName = Text("CollectorName");
+    var collectionCenterName = Text("CollectionCenterName");
+    var selectLoanName = Text("SelectLoanName", "All");
+    var enableCollectionCenter = Model.TryGetValue("EnableCollectionCenter", out var ec) && ec is bool centerEnabled && centerEnabled;
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // ── totals (from the controller, or summed from the rows) ──
+    var totalIssue = TotalOr("TotalLoanIssueAmount", rows.Sum(r => r.LoanIssueAmount ?? 0));
+    var totalPrincipal = TotalOr("TotalPriBalance", rows.Sum(r => r.PriBalance ?? 0));
+    var totalInterest = TotalOr("TotalIntBalance", rows.Sum(r => r.IntBalance ?? 0));
+    var totalPenalty = TotalOr("TotalPenaltyBalance", rows.Sum(r => r.PenaltyBalance ?? 0));
+    var totalBalance = TotalOr("TotalBalance", rows.Sum(r => r.TotalBalance ?? 0));
+    var totalPrincipalPaid = TotalOr("TotalPriPaid", 0);
+    var totalDefaulterAmount = rows.Sum(r => r.defaulterAmount ?? 0);
+    var loansInDefault = rows.Count(r => (r.defaulterAmount ?? 0) > 0);
+
+    // ── numbers for the KPI cards ──
+    var averageIssue = rows.Count == 0 ? 0 : totalIssue / rows.Count;
+    var principalPercent = totalIssue == 0 ? 0 : Math.Round(totalPrincipal / totalIssue * 100, 2);
+    var defaulterPercent = totalBalance == 0 ? 0 : Math.Round(totalDefaulterAmount / totalBalance * 100, 2);
+
+    // ── one row per loan type, biggest balance first ──
+    const int MaxTypes = 8;   // more loan types than this are combined into "Others" so the charts stay readable
+
+    var typeRows = rows
+        .GroupBy(r => string.IsNullOrWhiteSpace(r.LoanTypeName) ? "Unknown" : r.LoanTypeName!.Trim())
+        .Select(g => new
+        {
+            Name = g.Key,
+            Loans = g.Count(),
+            Issued = g.Sum(r => r.LoanIssueAmount ?? 0),
+            Principal = g.Sum(r => r.PriBalance ?? 0),
+            Interest = g.Sum(r => r.IntBalance ?? 0),
+            Penalty = g.Sum(r => r.PenaltyBalance ?? 0),
+            Balance = g.Sum(r => r.TotalBalance ?? 0),
+            Defaulter = g.Sum(r => r.defaulterAmount ?? 0)
+        })
+        .OrderByDescending(x => x.Balance)
+        .ToList();
+
+    var shown = typeRows.Take(MaxTypes).ToList();
+    var others = typeRows.Skip(MaxTypes).ToList();
+    if (others.Count > 0)
+    {
+        shown.Add(new
+        {
+            Name = "Others",
+            Loans = others.Sum(x => x.Loans),
+            Issued = others.Sum(x => x.Issued),
+            Principal = others.Sum(x => x.Principal),
+            Interest = others.Sum(x => x.Interest),
+            Penalty = others.Sum(x => x.Penalty),
+            Balance = others.Sum(x => x.Balance),
+            Defaulter = others.Sum(x => x.Defaulter)
+        });
+    }
+
+    // rows every chart reads (lower-case names are the keys used in the charts below)
+    var chartRows = shown
+        .Select(x => new
+        {
+            name = x.Name,
+            loans = x.Loans,
+            issued = x.Issued,
+            principal = x.Principal,
+            interest = x.Interest,
+            penalty = x.Penalty,
+            balance = x.Balance,
+            defaulter = x.Defaulter,
+            defaulterPct = x.Balance == 0 ? 0m : Math.Round(x.Defaulter / x.Balance * 100, 2),
+            avgIssue = x.Loans == 0 ? 0m : x.Issued / x.Loans
+        })
+        .ToList();
+
+    // ── side blocks next to the KPIs ──
+    var topBalance = typeRows
+        .OrderByDescending(x => x.Balance)
+        .Take(5)
+        .Select(x => (Label: x.Name, Value: x.Balance))
+        .ToList();
+
+    var keyFigures = new List<(string Label, string Value)>
+    {
+        ("Issued Amount", totalIssue.ToString("N2")),
+        ("Principal Balance", totalPrincipal.ToString("N2")),
+        ("Interest Balance", totalInterest.ToString("N2")),
+        ("Penalty Balance", totalPenalty.ToString("N2")),
+        ("Total Balance", totalBalance.ToString("N2")),
+        ("Defaulter Amount", totalDefaulterAmount.ToString("N2"))
+    };
+    if (totalPrincipalPaid > 0) keyFigures.Insert(2, ("Principal Paid", totalPrincipalPaid.ToString("N2")));
+
+    var report = new VisualReport(Model, title: "Loan Register Report", sheetName: "LoanRegister")
+        .PrintedTitle("Loan Register Report — Visual Summary")
+        .NoDataWhen(rows.Count == 0)
+        .ChartRows(chartRows)
+        .Sizing(chartRowMm: 75);
+
+    report.MetaLeft("Branch :", branchName)
+          .MetaLeft("Loan :", selectLoanName)
+          .MetaRight("Till Date :", tillDate)
+          .MetaRight("Report Generated On :", generatedOn);
+    if (!string.IsNullOrEmpty(loanTypeFilterName)) report.MetaLeft("Type :", loanTypeFilterName);
+    if (!string.IsNullOrEmpty(collectorName)) report.MetaLeft("Collector :", collectorName);
+    if (enableCollectionCenter && !string.IsNullOrEmpty(collectionCenterName))
+        report.MetaLeft("Collection Center :", collectionCenterName);
+
+    report.Kpis(kpis => kpis
+            .Add("Total Loans", rows.Count.ToString("N0"), $"{typeRows.Count} loan types")
+            .Add("Issued Amount", totalIssue.ToString("N2"), $"avg {averageIssue:N2} / loan")
+            .Add("Principal Balance", totalPrincipal.ToString("N2"), $"{principalPercent:0.00}% of issued")
+            .Add("Total Balance", totalBalance.ToString("N2"),
+                 $"interest {totalInterest:N2} + penalty {totalPenalty:N2}")
+            .Add("Defaulter Amount", totalDefaulterAmount.ToString("N2"),
+                 $"{defaulterPercent:0.00}% of balance, {loansInDefault} loans"))
+          .InfoRow(info => info
+            .BarList("Top Loan Types by Balance", topBalance, "N2")
+            .Table("Key Figures", keyFigures))
+          .ChartGrid(3, grid => grid
+            .Donut("No. of Loans by Loan Type", "loans")
+            .Donut("Issued Amount Share", "issued", money: true)
+            .Donut("Total Balance Share", "balance", money: true))
+          .ChartGrid(2, grid => grid
+            .Grouped("Issued Amount vs Principal Balance",
+                     new VisualSeries("Issued", "issued", "#2563eb"),
+                     new VisualSeries("Principal Balance", "principal", "#10b981"))
+            .Grouped("Balance Breakdown by Loan Type",
+                     new VisualSeries("Principal", "principal", "#2563eb"),
+                     new VisualSeries("Interest", "interest", "#f59e0b"),
+                     new VisualSeries("Penalty", "penalty", "#ef4444"))
+            .BarLine("Defaulter Rate (%) of Balance", "defaulterPct", "#ef4444", "#8b5cf6", format: "percent")
+            .Bar("Average Issue Amount per Loan", "avgIssue", "#8b5cf6", thickness: 26));
+}
+@await Html.PartialAsync("_SheetReport", await report.BuildAsync(Html))

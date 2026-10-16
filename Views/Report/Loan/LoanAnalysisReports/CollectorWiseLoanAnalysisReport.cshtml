@@ -1,4 +1,4 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+﻿@* @using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
 @model Dictionary<string, object>
 @{
     Layout = null;
@@ -265,4 +265,123 @@
         </table>
     </div>
 </body>
-</html>
+</html> *@
+
+
+@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var fontSize = "7.5pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    var rows = (Model["Rows"] as List<CollectorWiseLoanAnalysisSummaryRowDto>) ?? new List<CollectorWiseLoanAnalysisSummaryRowDto>();
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // ── totals (from the controller, or summed from the rows) ──
+    var totalOpening = TotalOr("TotalOpeningBalance", rows.Sum(r => r.OpeningBalance));
+    var totalOpeningCount = (int)TotalOr("TotalOpeningActiveCount", rows.Sum(r => r.OpeningActiveCount));
+    var totalDisburse = TotalOr("TotalDisburseAmount", rows.Sum(r => r.DisburseAmount));
+    var totalPayment = TotalOr("TotalPaymentAmount", rows.Sum(r => r.PaymentAmount));
+    var totalBalance = TotalOr("TotalBalanceAmount", rows.Sum(r => r.BalanceAmount));
+    var totalBalanceCount = (int)TotalOr("TotalBalanceActiveCount", rows.Sum(r => r.BalanceActiveCount));
+    var totalClosing = TotalOr("TotalClosingBalance", rows.Sum(r => r.ClosingBalance));
+    var totalClosingCount = (int)TotalOr("TotalClosingActiveCount", rows.Sum(r => r.ClosingActiveCount));
+    var totalGood = TotalOr("TotalGoodAmt", rows.Sum(r => r.GoodAmt));
+    var totalDue = TotalOr("TotalDueAmt", rows.Sum(r => r.DueAmt));
+    var totalDue1To365 = TotalOr("TotalDue1To365", rows.Sum(r => r.Due1To365));
+    var totalDueGt365 = TotalOr("TotalDueGt365", rows.Sum(r => r.DueGt365));
+
+    // percent of that row's closing balance, e.g. 716,812.41 / 2,455,284.26 = 29.19
+    string Pct(decimal amount, decimal closing) => closing == 0 ? "0.00" : (amount / closing * 100m).ToString("N2");
+
+    var table = new ReportTable(Model, title: "Collector Wise Loan Analysis Report", sheetName: "CollectorWiseLoanAnalysisSummary")
+        .Column("Loan Type", 12)
+        .Column("Open Bal", 8, Align.Right)
+        .Column("Open Cnt", 5, Align.Center)
+        .Column("Disburse", 9, Align.Right)
+        .Column("Payment", 9, Align.Right)
+        .Column("Bal Amt", 9, Align.Right)
+        .Column("Bal Cnt", 5, Align.Center)
+        .Column("Close Bal", 9, Align.Right)
+        .Column("Close Cnt", 5, Align.Center)
+        .Column("Good Amt", 6, Align.Right)
+        .Column("Good %", 4, Align.Right)
+        .Column("Due Amt", 6, Align.Right)
+        .Column("Due %", 4, Align.Right)
+        .Column("1-365 Amt", 6, Align.Right)
+        .Column("1-365 %", 4, Align.Right)
+        .Column(">365 Amt", 6, Align.Right)
+        .Column(">365 %", 4, Align.Right)
+        .Style(new ReportStyle
+        {
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 75)   // one text line per row
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 4px; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 1.5px solid #000; border-bottom: 1.5px solid #000; text-align: center; }\n" +
+            "table.sheet-table tr.r-data td { color: #1a3d7c; }");
+
+    // ── title block ──
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName), Fmt.Labeled("Report Generated On :", generatedOn));
+    table.MetaRow(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate));
+
+    // ── rows: one per loan type ──
+    foreach (var r in rows)
+    {
+        table.Data(
+            r.GroupName ?? "",
+            Fmt.Amount(r.OpeningBalance),
+            r.OpeningActiveCount.ToString(),
+            Fmt.Amount(r.DisburseAmount),
+            Fmt.Amount(r.PaymentAmount),
+            Fmt.Amount(r.BalanceAmount),
+            r.BalanceActiveCount.ToString(),
+            Fmt.Amount(r.ClosingBalance),
+            r.ClosingActiveCount.ToString(),
+            Fmt.Amount(r.GoodAmt),
+            Pct(r.GoodAmt, r.ClosingBalance),
+            Fmt.Amount(r.DueAmt),
+            Pct(r.DueAmt, r.ClosingBalance),
+            Fmt.Amount(r.Due1To365),
+            Pct(r.Due1To365, r.ClosingBalance),
+            Fmt.Amount(r.DueGt365),
+            Pct(r.DueGt365, r.ClosingBalance));
+    }
+
+    // label in the first column; the 16 values fill the rest
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total :", 1,
+            Fmt.Amount(totalOpening), totalOpeningCount.ToString(),
+            Fmt.Amount(totalDisburse), Fmt.Amount(totalPayment),
+            Fmt.Amount(totalBalance), totalBalanceCount.ToString(),
+            Fmt.Amount(totalClosing), totalClosingCount.ToString(),
+            Fmt.Amount(totalGood), Pct(totalGood, totalClosing),
+            Fmt.Amount(totalDue), Pct(totalDue, totalClosing),
+            Fmt.Amount(totalDue1To365), Pct(totalDue1To365, totalClosing),
+            Fmt.Amount(totalDueGt365), Pct(totalDueGt365, totalClosing));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

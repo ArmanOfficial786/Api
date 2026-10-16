@@ -1,4 +1,4 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+﻿@* @using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
 @model Dictionary<string, object>
 @{
     Layout = null;
@@ -252,4 +252,92 @@
         </table>
     </div>
 </body>
-</html>
+</html> *@
+
+
+
+
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var fontSize = "7.5pt";
+    var metaFontSize = "8pt";
+
+    var rows = (Model["Rows"] as IEnumerable<LoanInformationRowDto>)?.ToList() ?? new List<LoanInformationRowDto>();
+    var branchName = Model.TryGetValue("BranchName", out var b) ? b?.ToString() ?? "All" : "All";
+    var fromDate = Model.TryGetValue("FromDate", out var fd) ? fd?.ToString() ?? "" : "";
+    var toDate = Model.TryGetValue("ToDate", out var td) ? td?.ToString() ?? "" : "";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var v) && v != null)
+        {
+            var d = Convert.ToDecimal(v);
+            if (d != 0) return d;
+        }
+        return fallback;
+    }
+
+    var totalDisburse = TotalOr("TotalDisburseAmount", rows.Sum(x => x.DisburseAmount ?? 0));
+    var totalRepaidTill = TotalOr("TotalRepaidTill", rows.Sum(x => x.RepaidTill ?? 0));
+    var totalRepaid = TotalOr("TotalRepaid", rows.Sum(x => x.Repaid ?? 0));
+    var totalBalance = TotalOr("TotalBalanceAmount", rows.Sum(x => x.BalanceAmount ?? 0));
+
+    var table = new ReportTable(Model, title: "Loan Principal Information Report", sheetName: "LoanInformation")
+        .Column("Member ID", 9)
+        .Column("Member Name", 15)
+        .Column("Loan Type", 15)
+        .Column("Loan A/C No.", 12)
+        .Column("Disburse Amount", 13, Align.Right)
+        .Column("Previous Received", 12, Align.Right)
+        .Column("Received Between", 12, Align.Right)
+        .Column("Balance", 12, Align.Right)
+        .Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 75)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 3px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            @"
+            table.sheet-table tr.r-data td.loan-account { color: #1F5C99; }
+            table.sheet-table tr.r-data td.negative     { color: #CC0000; }
+            table.sheet-table tr.r-data td.positive     { color: #006600; }");
+
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName))
+         .MetaRow(Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)))
+         .MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    foreach (var grp in rows.GroupBy(x => new { x.MemberId, x.FullName }))
+    {
+        table.GroupBy(
+            ReportCell.Left(grp.Key.MemberId ?? ""),
+            ReportCell.Left(grp.Key.FullName ?? ""),
+            ReportCell.Left("", 6));
+
+        foreach (var row in grp)
+        {
+            table.Data(new[]
+            {
+                ReportCell.Left(""),
+                ReportCell.Left(""),
+                ReportCell.Left(row.LoanTypeName ?? ""),
+                new ReportCell(row.LoanAccountNo ?? "", Align.Left, 1, "loan-account"),
+                ReportCell.Right(Fmt.Amount(row.DisburseAmount)),
+                ReportCell.Right(Fmt.Amount(row.RepaidTill)),
+                ReportCell.Right(Fmt.Amount(row.Repaid)),
+                new ReportCell(Fmt.Amount(row.BalanceAmount), Align.Right, 1, row.BalanceAmount > 0 ? "negative" : "positive")
+            });
+        }
+    }
+
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", 4,
+            Fmt.Amount(totalDisburse), Fmt.Amount(totalRepaidTill), Fmt.Amount(totalRepaid), Fmt.Amount(totalBalance));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

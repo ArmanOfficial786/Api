@@ -1,0 +1,146 @@
+﻿@using NexgenCosysReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@using NexgenCosysReport.Services.ReportService.Visual
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    var rows = (Model["Rows"] as List<LoanCICRowDto>) ?? new List<LoanCICRowDto>();
+
+    var tillDate = !string.IsNullOrEmpty(Text("TillDateAd")) ? Text("TillDateAd") : Text("TillDate");
+    var branchName = Text("BranchName", "All");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // ── totals (from the controller, or summed from the rows) ──
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalIssue = TotalOr("TotalLoanIssueAmount", rows.Sum(r => r.LoanIssueAmount ?? 0));
+    var totalPrincipal = TotalOr("TotalPriBalance", rows.Sum(r => r.PriBalance ?? 0));
+    var totalInterest = TotalOr("TotalIntBalance", rows.Sum(r => r.IntBalance ?? 0));
+    var totalGood = TotalOr("TotalGoodLoan", rows.Sum(r => r.GoodLoan ?? 0));
+    var totalRisk1To365 = TotalOr("TotalLoanRisk1to365", rows.Sum(r => r.LoanRisk1to365 ?? 0));
+    var totalRiskGt365 = TotalOr("TotalLoanRiskGreaterThan365", rows.Sum(r => r.LoanRiskGreaterThan365 ?? 0));
+    var totalDelinquent = totalRisk1To365 + totalRiskGt365;
+
+    // ── numbers for the KPI cards ──
+    var averagePrincipal = totalRecords == 0 ? 0 : totalPrincipal / totalRecords;
+    var goodPercent = totalPrincipal == 0 ? 0 : Math.Round(totalGood / totalPrincipal * 100, 2);
+    var delinquentPercent = totalPrincipal == 0 ? 0 : Math.Round(totalDelinquent / totalPrincipal * 100, 2);
+    var loansInRisk = rows.Count(r => (r.LoanRisk1to365 ?? 0) + (r.LoanRiskGreaterThan365 ?? 0) > 0);
+
+    // ── one row per loan type, biggest remaining principal first ──
+    const int MaxTypes = 8;   // more loan types than this are combined into "Others" so the charts stay readable
+
+    var typeRows = rows
+        .GroupBy(r => string.IsNullOrWhiteSpace(r.LoanTypeName) ? "Unknown" : r.LoanTypeName!.Trim())
+        .Select(g => new
+        {
+            Name = g.Key,
+            Loans = g.Count(),
+            Issued = g.Sum(r => r.LoanIssueAmount ?? 0),
+            Principal = g.Sum(r => r.PriBalance ?? 0),
+            Interest = g.Sum(r => r.IntBalance ?? 0),
+            Good = g.Sum(r => r.GoodLoan ?? 0),
+            Risk1 = g.Sum(r => r.LoanRisk1to365 ?? 0),
+            Risk365 = g.Sum(r => r.LoanRiskGreaterThan365 ?? 0)
+        })
+        .OrderByDescending(x => x.Principal)
+        .ToList();
+
+    var shown = typeRows.Take(MaxTypes).ToList();
+    var others = typeRows.Skip(MaxTypes).ToList();
+    if (others.Count > 0)
+    {
+        shown.Add(new
+        {
+            Name = "Others",
+            Loans = others.Sum(x => x.Loans),
+            Issued = others.Sum(x => x.Issued),
+            Principal = others.Sum(x => x.Principal),
+            Interest = others.Sum(x => x.Interest),
+            Good = others.Sum(x => x.Good),
+            Risk1 = others.Sum(x => x.Risk1),
+            Risk365 = others.Sum(x => x.Risk365)
+        });
+    }
+
+    // rows every chart reads (lower-case names are the keys used in the charts below)
+    var chartRows = shown
+        .Select(x => new
+        {
+            name = x.Name,
+            loans = x.Loans,
+            issued = x.Issued,
+            principal = x.Principal,
+            interest = x.Interest,
+            good = x.Good,
+            risk1 = x.Risk1,
+            risk365 = x.Risk365,
+            riskPct = x.Principal == 0 ? 0m : Math.Round((x.Risk1 + x.Risk365) / x.Principal * 100, 2),
+            avgPrincipal = x.Loans == 0 ? 0m : x.Principal / x.Loans
+        })
+        .ToList();
+
+    // ── side blocks next to the KPIs ──
+    var topPrincipal = typeRows
+        .Take(5)
+        .Select(x => (Label: x.Name, Value: x.Principal))
+        .ToList();
+
+    var keyFigures = new List<(string Label, string Value)>
+    {
+        ("Issued Principle", totalIssue.ToString("N2")),
+        ("Remaining Principle", totalPrincipal.ToString("N2")),
+        ("Due Interest", totalInterest.ToString("N2")),
+        ("Good Loan", totalGood.ToString("N2")),
+        ("Delinquent 1-365 Days", totalRisk1To365.ToString("N2")),
+        ("Delinquent >365 Days", totalRiskGt365.ToString("N2"))
+    };
+
+    var report = new VisualReport(Model, title: "Loan CIC Report", sheetName: "LoanCIC")
+        .PrintedTitle("Loan CIC Report — Visual Summary")
+        .NoDataWhen(rows.Count == 0)
+        .ChartRows(chartRows)
+        .Sizing(chartRowMm: 75);
+
+    report.MetaLeft("Branch :", branchName)
+          .MetaRight("Till Date :", tillDate)
+          .MetaRight("Report Generated On :", generatedOn);
+
+    report.Kpis(kpis => kpis
+            .Add("Total Loans", totalRecords.ToString("N0"), $"{typeRows.Count} loan types")
+            .Add("Issued Principle", totalIssue.ToString("N2"), $"avg remaining {averagePrincipal:N2} / loan")
+            .Add("Remaining Principle", totalPrincipal.ToString("N2"), $"due interest {totalInterest:N2}")
+            .Add("Good Loan", totalGood.ToString("N2"), $"{goodPercent:0.00}% of remaining")
+            .Add("Delinquent", totalDelinquent.ToString("N2"),
+                 $"{delinquentPercent:0.00}% of remaining, {loansInRisk} loans"))
+          .InfoRow(info => info
+            .BarList("Top Loan Types by Remaining Principle", topPrincipal, "N2")
+            .Table("Key Figures", keyFigures))
+          .ChartGrid(3, grid => grid
+            .Donut("No. of Loans by Loan Type", "loans")
+            .Donut("Remaining Principle Share", "principal", money: true)
+            .Donut("Issued Principle Share", "issued", money: true))
+          .ChartGrid(2, grid => grid
+            .Grouped("Issued vs Remaining Principle",
+                     new VisualSeries("Issued", "issued", "#2563eb"),
+                     new VisualSeries("Remaining", "principal", "#10b981"))
+            .Grouped("Loan Quality by Loan Type",
+                     new VisualSeries("Good", "good", "#10b981"),
+                     new VisualSeries("1-365 Days", "risk1", "#f59e0b"),
+                     new VisualSeries(">365 Days", "risk365", "#ef4444"))
+            .BarLine("Delinquency Rate (%) of Remaining Principle", "riskPct", "#ef4444", "#8b5cf6", format: "percent")
+            .Bar("Average Remaining Principle per Loan", "avgPrincipal", "#8b5cf6", thickness: 26));
+}
+@await Html.PartialAsync("_SheetReport", await report.BuildAsync(Html))

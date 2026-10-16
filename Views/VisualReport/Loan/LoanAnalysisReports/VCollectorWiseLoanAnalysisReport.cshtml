@@ -1,0 +1,155 @@
+﻿@using NexgenCosysReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@using NexgenCosysReport.Services.ReportService.Visual
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    var rows = (Model["Rows"] as List<CollectorWiseLoanAnalysisSummaryRowDto>) ?? new List<CollectorWiseLoanAnalysisSummaryRowDto>();
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // ── totals (from the controller, or summed from the rows) ──
+    var totalOpening = TotalOr("TotalOpeningBalance", rows.Sum(r => r.OpeningBalance));
+    var totalDisburse = TotalOr("TotalDisburseAmount", rows.Sum(r => r.DisburseAmount));
+    var totalPayment = TotalOr("TotalPaymentAmount", rows.Sum(r => r.PaymentAmount));
+    var totalClosing = TotalOr("TotalClosingBalance", rows.Sum(r => r.ClosingBalance));
+    var totalClosingCount = (int)TotalOr("TotalClosingActiveCount", rows.Sum(r => r.ClosingActiveCount));
+    var totalGood = TotalOr("TotalGoodAmt", rows.Sum(r => r.GoodAmt));
+    var totalDue = TotalOr("TotalDueAmt", rows.Sum(r => r.DueAmt));
+    var totalDue1To365 = TotalOr("TotalDue1To365", rows.Sum(r => r.Due1To365));
+    var totalDueGt365 = TotalOr("TotalDueGt365", rows.Sum(r => r.DueGt365));
+
+    // ── numbers for the KPI cards ──
+    var goodPercent = totalClosing == 0 ? 0 : Math.Round(totalGood / totalClosing * 100, 2);
+    var duePercent = totalClosing == 0 ? 0 : Math.Round(totalDue / totalClosing * 100, 2);
+    var dueGt365Percent = totalClosing == 0 ? 0 : Math.Round(totalDueGt365 / totalClosing * 100, 2);
+
+    // ── one row per loan type, biggest closing balance first ──
+    const int MaxGroups = 8;   // more loan types than this are combined into "Others" so the charts stay readable
+
+    var groupRows = rows
+        .Select(r => new
+        {
+            Name = string.IsNullOrWhiteSpace(r.GroupName) ? "Unknown" : r.GroupName!.Trim(),
+            Opening = r.OpeningBalance,
+            Disburse = r.DisburseAmount,
+            Payment = r.PaymentAmount,
+            Closing = r.ClosingBalance,
+            ClosingCount = r.ClosingActiveCount,
+            Good = r.GoodAmt,
+            Due = r.DueAmt,
+            Due1To365 = r.Due1To365,
+            DueGt365 = r.DueGt365
+        })
+        .OrderByDescending(x => x.Closing)
+        .ToList();
+
+    var shown = groupRows.Take(MaxGroups).ToList();
+    var others = groupRows.Skip(MaxGroups).ToList();
+    if (others.Count > 0)
+    {
+        shown.Add(new
+        {
+            Name = "Others",
+            Opening = others.Sum(x => x.Opening),
+            Disburse = others.Sum(x => x.Disburse),
+            Payment = others.Sum(x => x.Payment),
+            Closing = others.Sum(x => x.Closing),
+            ClosingCount = others.Sum(x => x.ClosingCount),
+            Good = others.Sum(x => x.Good),
+            Due = others.Sum(x => x.Due),
+            Due1To365 = others.Sum(x => x.Due1To365),
+            DueGt365 = others.Sum(x => x.DueGt365)
+        });
+    }
+
+    // rows every chart reads (lower-case names are the keys used in the charts below)
+    var chartRows = shown
+        .Select(x => new
+        {
+            name = x.Name,
+            opening = x.Opening,
+            disburse = x.Disburse,
+            payment = x.Payment,
+            closing = x.Closing,
+            closingCount = x.ClosingCount,
+            good = x.Good,
+            due = x.Due,
+            due1To365 = x.Due1To365,
+            dueGt365 = x.DueGt365,
+            duePct = x.Closing == 0 ? 0m : Math.Round(x.Due / x.Closing * 100, 2)
+        })
+        .ToList();
+
+    // ── side blocks next to the KPIs ──
+    var topClosing = groupRows
+        .Take(5)
+        .Select(x => (Label: x.Name, Value: x.Closing))
+        .ToList();
+
+    var keyFigures = new List<(string Label, string Value)>
+    {
+        ("Opening Balance", totalOpening.ToString("N2")),
+        ("Disburse Amount", totalDisburse.ToString("N2")),
+        ("Payment Amount", totalPayment.ToString("N2")),
+        ("Closing Balance", totalClosing.ToString("N2")),
+        ("Good Amount", totalGood.ToString("N2")),
+        ("Due (1-365)", totalDue1To365.ToString("N2")),
+        ("Due (>365)", totalDueGt365.ToString("N2"))
+    };
+
+    var report = new VisualReport(Model, title: "Collector Wise Loan Analysis Report", sheetName: "CollectorWiseLoanAnalysisSummary")
+        .PrintedTitle("Collector Wise Loan Analysis — Visual Summary")
+        .NoDataWhen(rows.Count == 0)
+        .ChartRows(chartRows)
+        .Sizing(chartRowMm: 75);
+
+    report.MetaLeft("Branch :", branchName)
+          .MetaLeft("From Date :", fromDate)
+          .MetaRight("To Date :", toDate)
+          .MetaRight("Report Generated On :", generatedOn);
+
+    report.Kpis(kpis => kpis
+            .Add("Loan Types", rows.Count.ToString("N0"), $"{totalClosingCount:N0} active loans")
+            .Add("Disbursed", totalDisburse.ToString("N2"), $"paid back {totalPayment:N2}")
+            .Add("Closing Balance", totalClosing.ToString("N2"), $"opening {totalOpening:N2}")
+            .Add("Good Amount", totalGood.ToString("N2"), $"{goodPercent:0.00}% of closing")
+            .Add("Due Amount", totalDue.ToString("N2"),
+                 $"{duePercent:0.00}% of closing, {dueGt365Percent:0.00}% over 365 days"))
+          .InfoRow(info => info
+            .BarList("Top Loan Types by Closing Balance", topClosing, "N2")
+            .Table("Key Figures", keyFigures))
+          .ChartGrid(3, grid => grid
+            .Donut("Active Loans by Loan Type", "closingCount")
+            .Donut("Closing Balance Share", "closing", money: true)
+            .Donut("Disburse Amount Share", "disburse", money: true))
+          .ChartGrid(2, grid => grid
+            .Grouped("Opening vs Closing Balance",
+                     new VisualSeries("Opening", "opening", "#2563eb"),
+                     new VisualSeries("Closing", "closing", "#10b981"))
+            .Grouped("Disbursement vs Payment",
+                     new VisualSeries("Disburse", "disburse", "#f59e0b"),
+                     new VisualSeries("Payment", "payment", "#8b5cf6"))
+            .Grouped("Loan Quality by Loan Type",
+                     new VisualSeries("Good", "good", "#10b981"),
+                     new VisualSeries("Due 1-365", "due1To365", "#f59e0b"),
+                     new VisualSeries("Due >365", "dueGt365", "#ef4444"))
+            .BarLine("Due Rate (%) of Closing Balance", "duePct", "#ef4444", "#8b5cf6", format: "percent"));
+}
+@await Html.PartialAsync("_SheetReport", await report.BuildAsync(Html))

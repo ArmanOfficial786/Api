@@ -1,4 +1,4 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+﻿@* @using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
 @model Dictionary<string, object>
 @{
     Layout = null;
@@ -215,4 +215,100 @@
         </table>
     </div>
 </body>
-</html>
+</html> *@
+
+
+
+@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var fontSize = "10pt";
+    var metaFontSize = "10pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+    // "No of Loan" is stored in LoanAccountNo; read it as a number whatever its type is
+    int LoansOf(LoanAgeingTypeWiseRowDto row) =>
+        decimal.TryParse(row.LoanAccountNo?.ToString(), out var count) ? (int)Math.Round(count) : 0;
+
+    var rows = (Model["Rows"] as List<LoanAgeingTypeWiseRowDto>) ?? new List<LoanAgeingTypeWiseRowDto>();
+
+    var tillDate = Text("TillDate");
+    var branchName = Text("BranchName", "All");
+    var memberGroupName = Text("MemberGroupName");
+    var penaltyTypeName = Text("PenaltyTypeName", "Schedule Wise");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var totalLoans = (int)TotalOr("TotalLoans", rows.Sum(x => LoansOf(x)));
+    var totalLoanIssue = TotalOr("TotalLoanIssueAmount", rows.Sum(x => x.LoanIssueAmount ?? 0));
+    var totalRepaid = TotalOr("TotalRepaid", rows.Sum(x => x.Repaid ?? 0));
+    var totalBalance = TotalOr("TotalBalance", rows.Sum(x => x.TotalPrincipalAmount ?? 0));
+    var totalOverdue = TotalOr("TotalOverdue", rows.Sum(x => x.Overdue ?? 0));
+
+    var table = new ReportTable(Model, title: "Loan Ageing Type Wise Report", sheetName: "LoanAgeingTypeWise")
+        .Column("S.No", 6, Align.Center)
+        .Column("Loan Type", 28)
+        .Column("No of Loan", 11, Align.Center)
+        .Column("Disburse Amt", 14, Align.Right)
+        .Column("Repaid Amt", 14, Align.Right)
+        .Column("Balance Amt", 13, Align.Right)
+        .Column("Overdue Amt(P)", 14, Align.Right)
+        .Style(new ReportStyle
+        {
+            DataText = "#1a3d7c",
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6.5, headerMm: 8, firstPageExtraMm: 75)
+        .Css(
+            "table.sheet-table { font-family: \"Times New Roman\", Times, serif; }\n" +
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 6px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            "table.sheet-table tr.r-header th { border-bottom: 2px solid #000; }");
+
+    var filterParts = new List<IHtmlContent> { Fmt.Labeled("Filter By:-", $"Tilldate: {tillDate}") };
+    if (!string.IsNullOrEmpty(memberGroupName)) filterParts.Add(Fmt.Labeled("Member Group :", memberGroupName));
+    filterParts.Add(Fmt.Labeled("Penalty Type :", penaltyTypeName));
+
+    table.MetaRow(Fmt.Labeled("Branch Name:", branchName))
+         .MetaRow(Fmt.Join(filterParts.ToArray()))
+         .MetaRow(Fmt.Labeled("Report Generated On:", generatedOn));
+
+    var sn = 0;
+    foreach (var row in rows)
+    {
+        table.Data(
+            (++sn).ToString(),
+            row.LoanTypeName ?? "",
+            row.LoanAccountNo?.ToString() ?? "0",
+            Fmt.Amount(row.LoanIssueAmount),
+            Fmt.Amount(row.Repaid),
+            Fmt.Amount(row.TotalPrincipalAmount),
+            Fmt.Amount(row.Overdue));
+    }
+
+    if (rows.Count > 0)
+    {
+        table.Total("Total:", 2,
+            totalLoans.ToString(),
+            Fmt.Amount(totalLoanIssue),
+            Fmt.Amount(totalRepaid),
+            Fmt.Amount(totalBalance),
+            Fmt.Amount(totalOverdue));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

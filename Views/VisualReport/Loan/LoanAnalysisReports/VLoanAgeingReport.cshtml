@@ -1,0 +1,111 @@
+﻿@using NexgenCosysReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@using NexgenCosysReport.Services.ReportService.Visual
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    var sections = (Model["Sections"] as IEnumerable<LoanAgeingSectionDto>)?.Where(s => s.Rows.Any()).ToList()
+        ?? new List<LoanAgeingSectionDto>();
+    var allRows = sections.SelectMany(s => s.Rows).ToList();
+
+    var tillDate = Text("TillDate");
+    var branchName = Text("BranchName", "All");
+    var penaltyTypeName = Text("PenaltyTypeName", "Schedule Wise");
+    var ageingOnName = Text("AgeingOnName", "Principle");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var totalLoans = Model.TryGetValue("TotalRecords", out var tr) && tr != null && Convert.ToInt32(tr) > 0
+        ? Convert.ToInt32(tr)
+        : allRows.Count;
+    var totalAmount = TotalOr("TotalLoanIssueAmount", allRows.Sum(x => x.LoanIssueAmount ?? 0));
+    var totalOverDue = TotalOr("TotalOverDue", allRows.Sum(x => x.OverDue ?? 0));
+    var totalPrincipal = TotalOr("TotalPrincipalAmount", 0);
+    var totalPaid = allRows.Sum(x => x.PrinciplePaidAmt ?? 0);
+
+    var averageLoan = totalLoans == 0 ? 0 : totalAmount / totalLoans;
+    var overduePercent = totalAmount == 0 ? 0 : Math.Round(totalOverDue / totalAmount * 100, 2);
+    var maxDueDays = allRows.Count == 0 ? 0 : allRows.Max(x => x.DueDays ?? 0);
+    var avgDueDays = allRows.Count == 0 ? 0 : allRows.Average(x => x.DueDays ?? 0);
+
+    var chartRows = sections
+        .Select(s =>
+        {
+            var loans = s.Rows.Count();
+            var amount = s.Rows.Sum(x => x.LoanIssueAmount ?? 0);
+            var overdue = s.Rows.Sum(x => x.OverDue ?? 0);
+            return new
+            {
+                name = s.SectionName ?? "",
+                loans,
+                amount,
+                overdue,
+                paid = s.Rows.Sum(x => x.PrinciplePaidAmt ?? 0),
+                overduePct = amount == 0 ? 0m : Math.Round(overdue / amount * 100, 2),
+                avgOverdue = loans == 0 ? 0m : overdue / loans
+            };
+        })
+        .ToList();
+
+    var byLoanType = allRows
+        .GroupBy(x => string.IsNullOrWhiteSpace(x.LoanTypeName) ? "Unknown" : x.LoanTypeName!.Trim())
+        .Select(g => (Label: g.Key, Value: g.Sum(x => x.OverDue ?? 0)))
+        .OrderByDescending(x => x.Value)
+        .Take(5)
+        .ToList();
+
+    var keyFigures = new List<(string Label, string Value)>
+    {
+        ("Loan Amount", totalAmount.ToString("N2")),
+        ("Principal Paid", totalPaid.ToString("N2")),
+        ("Overdue", totalOverDue.ToString("N2")),
+        ("Overdue Rate", $"{overduePercent:0.00}%")
+    };
+    if (totalPrincipal > 0) keyFigures.Add(("Total Principal", totalPrincipal.ToString("N2")));
+
+    var report = new VisualReport(Model, title: "Loan Ageing Report", sheetName: "LoanAgeing")
+        .PrintedTitle("Loan Ageing Report — Visual Summary")
+        .NoDataWhen(allRows.Count == 0)
+        .ChartRows(chartRows)
+        .Sizing(chartRowMm: 75);
+
+    report.MetaLeft("Branch :", branchName)
+          .MetaLeft("Penalty Type :", penaltyTypeName)
+          .MetaLeft("Ageing On :", ageingOnName)
+          .MetaRight("Till Date :", tillDate)
+          .MetaRight("Report Generated On :", generatedOn);
+
+    report.Kpis(kpis => kpis
+            .Add("Total Loans", totalLoans.ToString("N0"), $"{sections.Count} ageing sections")
+            .Add("Loan Amount", totalAmount.ToString("N2"), $"avg {averageLoan:N2} / loan")
+            .Add("Overdue", totalOverDue.ToString("N2"), $"{overduePercent:0.00}% of loan amount")
+            .Add("Principal Paid", totalPaid.ToString("N2"), "paid so far")
+            .Add("Longest Overdue", $"{maxDueDays:N0} days", $"avg {avgDueDays:0} days"))
+          .InfoRow(info => info
+            .BarList("Top Loan Types by Overdue", byLoanType, "N2")
+            .Table("Key Figures", keyFigures))
+          .ChartGrid(3, grid => grid
+            .Donut("No. of Loans by Section", "loans")
+            .Donut("Loan Amount Share", "amount", money: true)
+            .Donut("Overdue Share", "overdue", money: true))
+          .ChartGrid(2, grid => grid
+            .Grouped("Loan Amount vs Overdue",
+                     new VisualSeries("Loan Amount", "amount", "#2563eb"),
+                     new VisualSeries("Overdue", "overdue", "#ef4444"))
+            .BarLine("Overdue Rate (%) by Section", "overduePct", "#f59e0b", "#8b5cf6", format: "percent")
+            .Bar("Average Overdue per Loan", "avgOverdue", "#ef4444", thickness: 26)
+            .Bar("Principal Paid by Section", "paid", "#10b981"));
+}
+@await Html.PartialAsync("_SheetReport", await report.BuildAsync(Html))

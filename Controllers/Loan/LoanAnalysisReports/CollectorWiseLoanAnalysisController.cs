@@ -1,16 +1,13 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Loan.LoanAnalysisReport;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
+using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
 {
@@ -19,187 +16,123 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
     [Authorize]
     public class CollectorWiseLoanAnalysisController : ControllerBase
     {
+        private const string ReportName = "CollectorWiseLoanAnalysis";
+
         private readonly ICollectorWiseLoanAnalysisRepository _repository;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
+        private readonly IReportHeaderProvider _headers;
         private readonly IJsReportService _jsReportService;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly CustomHeaderResponse _headerResponse;
-        private readonly IOptions<ReportSettings> _reportSettings;
+        private readonly IReportDataCache _dataCache;
         private readonly ILogger<CollectorWiseLoanAnalysisController> _logger;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        // normal: A4 landscape (17 columns); visual: same page as the other visual reports
+        private static readonly PageSizeSetting NPageSetting =
+            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: false);
+        private static readonly PageSizeSetting VPageSetting =
+            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         public CollectorWiseLoanAnalysisController(
             ICollectorWiseLoanAnalysisRepository repository,
-            ICommonHeaderRepository commonHeaderRepository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
-            IWebHostEnvironment webHostEnvironment,
-            CustomHeaderResponse headerResponse,
-            IOptions<ReportSettings> reportSettings,
-            ILogger<CollectorWiseLoanAnalysisController> logger)
+            IReportDataCache dataCache,
+            ILogger<CollectorWiseLoanAnalysisController> logger,
+            IReportFileResponse reportFileResponse)
         {
             _repository = repository;
-            _commonHeaderRepository = commonHeaderRepository;
+            _headers = headers;
             _jsReportService = jsReportService;
-            _webHostEnvironment = webHostEnvironment;
-            _headerResponse = headerResponse;
-            _reportSettings = reportSettings;
+            _dataCache = dataCache;
             _logger = logger;
+            _reportFileResponse = reportFileResponse;
         }
 
         [HttpPost]
         public async Task<IActionResult> GenerateReport(
             [FromBody] CollectorWiseLoanAnalysisRequestDto request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
             try
             {
                 var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                {
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out _))
                     return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                }
 
                 if (request == null || !ModelState.IsValid)
-                {
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
-                }
 
-                if (string.IsNullOrWhiteSpace(request.FromDateBs) || request.FromDateBs == "-1")
+
+                var upperFormat = format.ToUpperInvariant();
+                var isVisual = request.VisualReport;
+                var page = isVisual ? VPageSetting : NPageSetting;
+                var viewType = isVisual ? "VISUAL" : "NORMAL";
+
+                // the DB data is cached once and shared by the normal and the visual view
+                var dataKey = ReportCacheKey.ForData(
+                    request, ReportName, userIdClaim, nameof(request.VisualReport));
+                var reportKey = $"{dataKey}_{viewType}_{page.CacheTag}";
+
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: false,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
+
+                var headerTask = _headers.GetAsync(request.BranchIds, ct);
+                var dataTask = _dataCache.GetOrLoadAsync(dataKey, async () =>
                 {
-                    return BadRequest(new { success = false, StatusCode = 400, message = "Please select From Date" });
-                }
-
-                if (string.IsNullOrWhiteSpace(request.ToDateBs) || request.ToDateBs == "-1")
-                {
-                    return BadRequest(new { success = false, StatusCode = 400, message = "Please select To Date" });
-                }
-
-                if (string.IsNullOrEmpty(request.BranchIds) || request.BranchIds == "-1")
-                {
-                    return BadRequest(new { success = false, StatusCode = 400, message = "Please select Branch Name" });
-                }
-
-                if (request.PenaltyType != "S" && request.PenaltyType != "R" && request.PenaltyType != "A")
-                {
-                    return BadRequest(new { success = false, StatusCode = 400, message = "Penalty Type must be 'S' (Schedule Wise), 'R' (Remaining Principle), or 'A' (After Maturity)" });
-                }
-
-                if (request.ReportMode != "1" && request.ReportMode != "0")
-                {
-                    return BadRequest(new { success = false, StatusCode = 400, message = "Report Mode must be '1' (Summary) or '0' (Detail)" });
-                }
-
-                var reportName = "CollectorWiseLoanAnalysis";
-                var upperFormat = format.ToUpper();
-
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
-
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
-
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat,
-                        reportName,
-                        _jsReportService, _logger);
-                }
-
-                string? branchIdForHeader = null;
-                if (!string.IsNullOrEmpty(request.BranchIds) &&
-                    request.BranchIds != "-1" && !request.BranchIds.Contains(','))
-                {
-                    branchIdForHeader = request.BranchIds;
-                }
-
-                //var dataTask = _repository.GetReportDataAsync(request);
-                var dataTask = _repository.GetSummaryReportDataAsync(request);
-
-                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
-
-                await Task.WhenAll(dataTask, headerTask);
+                    var loaded = await _repository.GetSummaryReportDataAsync(request);
+                    if (loaded == null || loaded.Rows == null || !loaded.Rows.Any())
+                        return null;
+                    return loaded;
+                }, ct);
+                await Task.WhenAll(headerTask, dataTask);
 
                 var data = await dataTask;
-                var headerData = await headerTask;
-
-                if (!data.Rows.Any())
-                {
+                if (data == null)
                     return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
-                }
-
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-
-                await ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData, nameof(CommonHeader.CompanyLogo), webRoot);
 
                 var reportData = new Dictionary<string, object>
-               {
-                   { "Rows", data.Rows },
-                   { "TotalOpeningBalance", data.TotalOpeningBalance },
-                   { "TotalOpeningActiveCount", data.TotalOpeningActiveCount },
-                   { "TotalDisburseAmount", data.TotalDisburseAmount },
-                   { "TotalPaymentAmount", data.TotalPaymentAmount },
-                   { "TotalBalanceAmount", data.TotalBalanceAmount },
-                   { "TotalBalanceActiveCount", data.TotalBalanceActiveCount },
-                   { "TotalClosingBalance", data.TotalClosingBalance },
-                   { "TotalClosingActiveCount", data.TotalClosingActiveCount },
-                   { "TotalGoodAmt", data.TotalGoodAmt },
-                   { "TotalDueAmt", data.TotalDueAmt },
-                   { "TotalDue1To365", data.TotalDue1To365 },
-                   { "TotalDueGt365", data.TotalDueGt365 },
-                   { "HeaderDataSet", headerData ?? new List<CommonHeader>() },
-                   { "FromDate", data.FromDateBs ?? "" },
-                   { "ToDate", data.ToDateBs ?? "" },
-                   { "FromDateAd", data.FromDateAd ?? "" },
-                   { "ToDateAd", data.ToDateAd ?? "" },
-                   { "BranchName", data.BranchName ?? "All" },
-                   { "Format", upperFormat },
-               };
-                string viewPath = request.VisualReport
-                    ? "Views/VisualReport/Loan/VCollectorWiseLoanAnalysisReport.cshtml"
+                {
+                    { "Rows", data.Rows },
+                    { "TotalOpeningBalance", data.TotalOpeningBalance },
+                    { "TotalOpeningActiveCount", data.TotalOpeningActiveCount },
+                    { "TotalDisburseAmount", data.TotalDisburseAmount },
+                    { "TotalPaymentAmount", data.TotalPaymentAmount },
+                    { "TotalBalanceAmount", data.TotalBalanceAmount },
+                    { "TotalBalanceActiveCount", data.TotalBalanceActiveCount },
+                    { "TotalClosingBalance", data.TotalClosingBalance },
+                    { "TotalClosingActiveCount", data.TotalClosingActiveCount },
+                    { "TotalGoodAmt", data.TotalGoodAmt },
+                    { "TotalDueAmt", data.TotalDueAmt },
+                    { "TotalDue1To365", data.TotalDue1To365 },
+                    { "TotalDueGt365", data.TotalDueGt365 },
+                    { "HeaderDataSet", await headerTask },
+                    { "FromDate", data.FromDateBs ?? "" },
+                    { "ToDate", data.ToDateBs ?? "" },
+                    { "FromDateAd", data.FromDateAd ?? "" },
+                    { "ToDateAd", data.ToDateAd ?? "" },
+                    { "BranchName", data.BranchName ?? "All" },
+                    { "Format", upperFormat },
+                    { "PageSetting", page }
+                };
+
+                var viewPath = isVisual
+                    ? "Views/VisualReport/Loan/LoanAnalysisReports/VCollectorWiseLoanAnalysisReport.cshtml"
                     : "Views/Report/Loan/LoanAnalysisReports/CollectorWiseLoanAnalysisReport.cshtml";
 
-                var htmlContent = await Task.Run(() =>
-                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
-                        reportKey: reportKey,
-                        reportPath: viewPath,
-                        data: reportData));
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                    reportKey: reportKey, reportPath: viewPath, data: reportData, ct: ct);
 
-                if (upperFormat == "VIEW")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.Rows.Count
-                    };
-
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
-                }
-
-                return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat,
-                    reportName,
-                    _jsReportService, _logger);
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: false,
+                    totalRecords: data.Rows.Count,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
-
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating CollectorWiseLoanAnalysis report");
-                return StatusCode(500, new
-                {
-                    message = ex.Message,
-                    inner = ex.InnerException?.Message,
-                    stack = ex.StackTrace
-                });
+                _logger.LogError(ex, "Error generating {Report} report", ReportName);
+                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }
     }

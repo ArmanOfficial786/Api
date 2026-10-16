@@ -1,0 +1,132 @@
+﻿@using NexgenCosysReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@using NexgenCosysReport.Services.ReportService.Visual
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var rows = (Model["Rows"] as IEnumerable<LoanInformationRowDto>)?.ToList() ?? new List<LoanInformationRowDto>();
+    var branchName = Model.TryGetValue("BranchName", out var b) ? b?.ToString() ?? "All" : "All";
+    var fromDate = Model.TryGetValue("FromDate", out var fd) ? fd?.ToString() ?? "" : "";
+    var toDate = Model.TryGetValue("ToDate", out var td) ? td?.ToString() ?? "" : "";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var v) && v != null)
+        {
+            var d = Convert.ToDecimal(v);
+            if (d != 0) return d;
+        }
+        return fallback;
+    }
+
+    var totalLoans = Model.TryGetValue("TotalRecords", out var tr) && tr != null && Convert.ToInt32(tr) > 0
+        ? Convert.ToInt32(tr)
+        : rows.Count;
+    var totalDisburse = TotalOr("TotalDisburseAmount", rows.Sum(x => x.DisburseAmount ?? 0));
+    var totalRepaidTill = TotalOr("TotalRepaidTill", rows.Sum(x => x.RepaidTill ?? 0));
+    var totalRepaid = TotalOr("TotalRepaid", rows.Sum(x => x.Repaid ?? 0));
+    var totalBalance = TotalOr("TotalBalanceAmount", rows.Sum(x => x.BalanceAmount ?? 0));
+
+    var totalMembers = rows.Select(x => x.MemberId).Distinct().Count();
+    var totalReceived = totalRepaidTill + totalRepaid;
+    var averageLoan = totalLoans == 0 ? 0 : totalDisburse / totalLoans;
+    var recoveryPercent = totalDisburse == 0 ? 0 : Math.Round(totalReceived / totalDisburse * 100, 2);
+
+    var typeGroups = rows
+        .GroupBy(x => string.IsNullOrWhiteSpace(x.LoanTypeName) ? "Unknown" : x.LoanTypeName!.Trim())
+        .Select(g =>
+        {
+            var loans = g.Count();
+            var disburse = g.Sum(x => x.DisburseAmount ?? 0);
+            var previous = g.Sum(x => x.RepaidTill ?? 0);
+            var received = g.Sum(x => x.Repaid ?? 0);
+            return new
+            {
+                name = g.Key,
+                loans,
+                disburse,
+                previous,
+                received,
+                balance = g.Sum(x => x.BalanceAmount ?? 0),
+                recoveryPct = disburse == 0 ? 0m : Math.Round((previous + received) / disburse * 100, 2),
+                avg = loans == 0 ? 0m : disburse / loans
+            };
+        })
+        .OrderByDescending(x => x.disburse)
+        .ToList();
+
+    var chartRows = typeGroups.Take(10).ToList();
+    var rest = typeGroups.Skip(10).ToList();
+    if (rest.Any())
+    {
+        var rLoans = rest.Sum(x => x.loans);
+        var rDisburse = rest.Sum(x => x.disburse);
+        var rPrevious = rest.Sum(x => x.previous);
+        var rReceived = rest.Sum(x => x.received);
+        chartRows.Add(new
+        {
+            name = "Others",
+            loans = rLoans,
+            disburse = rDisburse,
+            previous = rPrevious,
+            received = rReceived,
+            balance = rest.Sum(x => x.balance),
+            recoveryPct = rDisburse == 0 ? 0m : Math.Round((rPrevious + rReceived) / rDisburse * 100, 2),
+            avg = rLoans == 0 ? 0m : rDisburse / rLoans
+        });
+    }
+
+    var topMembers = rows
+        .GroupBy(x => new { x.MemberId, x.FullName })
+        .Select(g => (
+            Label: string.IsNullOrWhiteSpace(g.Key.FullName) ? (g.Key.MemberId ?? "Unknown") : g.Key.FullName!.Trim(),
+            Value: g.Sum(x => x.BalanceAmount ?? 0)))
+        .OrderByDescending(x => x.Value)
+        .Take(5)
+        .ToList();
+
+    var report = new VisualReport(Model, title: "Loan Principal Information Report", sheetName: "LoanInformation")
+        .PrintedTitle("Loan Principal Information Report — Visual Summary")
+        .NoDataWhen(!rows.Any())
+        .ChartRows(chartRows)
+        .Sizing(chartRowMm: 75);
+
+    report.MetaLeft("Branch :", branchName)
+          .MetaLeft("From Date :", fromDate)
+          .MetaRight("To Date :", toDate)
+          .MetaRight("Report Generated On :", generatedOn);
+
+    report.Kpis(kpis => kpis
+            .Add("Total Members", totalMembers.ToString("N0"), $"{totalLoans:N0} loans")
+            .Add("Disbursed", totalDisburse.ToString("N2"), $"avg {averageLoan:N2} / loan")
+            .Add("Previous Received", totalRepaidTill.ToString("N2"), "before the period")
+            .Add("Received Between", totalRepaid.ToString("N2"), "within the period")
+            .Add("Balance", totalBalance.ToString("N2"), "still to be repaid")
+            .Add("Recovery Rate", $"{recoveryPercent:0.00}%", "received / disbursed"))
+          .InfoRow(info => info
+            .BarList("Top Members by Balance", topMembers, "N2")
+            .Table("Key Figures", new (string Label, string Value)[]
+            {
+                ("Total Received", totalReceived.ToString("N2")),
+                ("Previous Received", totalRepaidTill.ToString("N2")),
+                ("Received Between", totalRepaid.ToString("N2")),
+                ("Balance", totalBalance.ToString("N2"))
+            }))
+          .ChartGrid(3, grid => grid
+            .Donut("No. of Loans by Loan Type", "loans")
+            .Donut("Disbursed Amount Share", "disburse", money: true)
+            .Donut("Balance Amount Share", "balance", money: true))
+          .ChartGrid(2, grid => grid
+            .Grouped("Disbursed vs Balance",
+                     new VisualSeries("Disbursed", "disburse", "#2563eb"),
+                     new VisualSeries("Balance", "balance", "#ef4444"))
+            .Grouped("Previous vs Received Between",
+                     new VisualSeries("Previous Received", "previous", "#10b981"),
+                     new VisualSeries("Received Between", "received", "#f59e0b"))
+            .BarLine("Recovery Rate (%) by Loan Type", "recoveryPct", "#10b981", "#8b5cf6", format: "percent")
+            .Bar("Average Disbursed per Loan", "avg", "#2563eb", thickness: 26));
+}
+@await Html.PartialAsync("_SheetReport", await report.BuildAsync(Html))
