@@ -1,283 +1,110 @@
-﻿@* Views/Report/Loan/OtherReports/LoanReScheduleReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+    const int ColumnCount = 12;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+    string Money(decimal? value) => value.HasValue ? value.Value.ToString("N2") : "";
+
     var rows = (Model["Rows"] as List<LoanReScheduleRowDto>) ?? new List<LoanReScheduleRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalMembers = Model.ContainsKey("TotalMembers") ? (Model["TotalMembers"] as int? ?? 0) : 0;
-    var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
-    var totalLoanRescheduleAmount = Model["TotalLoanRescheduleAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
+    var memberGroupName = Text("MemberGroupName");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName);
-
-    // Grouped by member: member header once (Id + Name), then a numbered
-    // list of that member's rescheduled loans underneath - matches the
-    // legacy report exactly.
     var memberGroups = rows
         .GroupBy(r => new { r.MemberId, r.FullName })
         .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan Re-Schedule Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalMembers = memberGroups.Count;
+    var totalLoanIssueAmount = TotalOr("TotalLoanIssueAmount", rows.Sum(r => r.LoanIssueAmount ?? 0));
+    var totalLoanRescheduleAmount = TotalOr("TotalLoanRescheduleAmount", rows.Sum(r => r.LoanRescheduleAmount ?? 0));
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-                text-align: left;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: normal;
-                line-height: 1.2;
-                vertical-align: bottom;
-            }
-
-            /* Member group header row (Member Id + Name only) */
-            .member-header-row td {
-                padding-top: 6px;
-                padding-bottom: 2px;
-                font-weight: bold;
-            }
-
-            /* Loan rows under a member, numbered, each with a bottom rule */
-            .detail-row td {
-                border-bottom: 1px solid #ccc;
-            }
-
-            .sn-col {
-                text-align: center;
-                color: #555;
-            }
-
-            .loan-account {
-                color: #1F5C99;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Loan Re-Schedule Report", sheetName: "LoanReSchedule")
+        .Column("Member Details", 8)
+        .Column("A/C No", 9)
+        .Column("Loan Type", 9)
+        .Column("Issue Date", 8)
+        .Column("Issue Amount", 9, Align.Right)
+        .Column("Reschedule Date", 8)
+        .Column("Reschedule Amount", 9, Align.Right)
+        .Column("Duration", 6)
+        .Column("Payment Type", 13)
+        .Column("Interest", 7, Align.Right)
+        .Column("Type", 5)
+        .Column("Maturity Date", 9)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9",
+            GroupBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 10, firstPageExtraMm: 75)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; padding-top: 6px; padding-bottom: 2px; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 1px solid #ccc; }\n" +
+            ".sn-col { color: #555; }\n" +
+            ".loan-account { color: #1F5C99; }");
+
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+    table.MetaRow(Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("Till Date :", toDate)));
+    if (!string.IsNullOrEmpty(memberGroupName)) table.MetaRow(Fmt.Labeled("Member Group :", memberGroupName));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    foreach (var grp in memberGroups)
+    {
+        table.GroupBy(
+            ReportCell.Left(grp.Key.MemberId ?? ""),
+            ReportCell.Left(grp.Key.FullName ?? "", ColumnCount - 1));
+
+        var sn = 0;
+        foreach (var row in grp)
+        {
+            table.Data(
+                new ReportCell((++sn).ToString(), Align.Center, 1, "sn-col"),
+                new ReportCell(row.LoanAccountNo ?? "", Align.Left, 1, "loan-account"),
+                ReportCell.Left(row.LoanTypeName ?? ""),
+                ReportCell.Left(row.LoanIssueDate ?? ""),
+                ReportCell.Right(Money(row.LoanIssueAmount)),
+                ReportCell.Left(row.LoanRescheduleDate ?? ""),
+                ReportCell.Right(Money(row.LoanRescheduleAmount)),
+                ReportCell.Left(row.Duration ?? ""),
+                ReportCell.Left(row.PaymentType ?? ""),
+                ReportCell.Right(row.InterestRate ?? ""),
+                ReportCell.Left(""),
+                ReportCell.Left(row.MaturityDate ?? ""));
         }
+    }
 
-        <table class="data-table" data-sheet-name="LoanReSchedule">
-            <colgroup>
-                <col style="width:8%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
-                <col style="width:8%;" />
-                <col style="width:9%;" />
-                <col style="width:8%;" />
-                <col style="width:9%;" />
-                <col style="width:6%;" />
-                <col style="width:13%;" />
-                <col style="width:7%;" />
-                <col style="width:5%;" />
-                <col style="width:9%;" />
-            </colgroup>
-            <tbody>
-                <!-- Report Title -->
-                <tr class="meta-title">
-                    <td colspan="12">Loan Re-Schedule Report</td>
-                </tr>
-
-                <!-- Metadata: stacked, left-aligned -->
-                <tr class="meta-row">
-                    <td colspan="12"><strong>Branch Name :</strong> @branchName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="12">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Till Date :</strong> @toDate
-                    </td>
-                </tr>
-                @if (isMemberGroupFiltered)
-                {
-                    <tr class="meta-row">
-                        <td colspan="12"><strong>Member Group :</strong> @memberGroupName</td>
-                    </tr>
-                }
-                <tr class="meta-row">
-                    <td colspan="12"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="12"></td></tr>
-
-                <!-- Table Header -->
-                <tr>
-                    <th>Member Details</th>
-                    <th>A/C No</th>
-                    <th>Loan Type</th>
-                    <th>Issue Date</th>
-                    <th class="text-right">Issue Amount</th>
-                    <th>Reschedule Date</th>
-                    <th class="text-right">Reschedule Amount</th>
-                    <th>Duration</th>
-                    <th>Payment Type</th>
-                    <th class="text-right">Interest</th>
-                    <th>Type</th>
-                    <th>Maturity Date</th>
-                </tr>
-
-                @if (memberGroups.Any())
-                {
-                    foreach (var grp in memberGroups)
-                    {
-                        <!-- Member header band -->
-                        <tr class="member-header-row">
-                            <td>@(grp.Key.MemberId ?? "")</td>
-                            <td>@(grp.Key.FullName ?? "")</td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                        </tr>
-
-                        <!-- That member's rescheduled loans, numbered -->
-                        var sn = 0;
-                        foreach (var row in grp)
-                        {
-                            sn++;
-                            <tr class="detail-row">
-                                <td class="sn-col">@sn</td>
-                                <td class="loan-account">@(row.LoanAccountNo ?? "")</td>
-                                <td>@(row.LoanTypeName ?? "")</td>
-                                <td>@(row.LoanIssueDate ?? "")</td>
-                                <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
-                                <td>@(row.LoanRescheduleDate ?? "")</td>
-                                <td class="text-right">@(row.LoanRescheduleAmount.HasValue ? row.LoanRescheduleAmount.Value.ToString("N2") : "")</td>
-                                <td>@(row.Duration ?? "")</td>
-                                <td>@(row.PaymentType ?? "")</td>
-                                <td class="text-right">@(row.InterestRate ?? "")</td>
-                                <td>@* TODO: no "Type" (EMI/Bullet) property exists on LoanReScheduleRowDto - paste the real DTO/SP and I'll wire the correct property name here *@</td>
-                                <td>@(row.MaturityDate ?? "")</td>
-                            </tr>
-                        }
-                    }
-
-                    <!-- Grand Total Row -->
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
-                        <td></td>
-                        <td class="text-right"><strong>@totalLoanRescheduleAmount.ToString("N2")</strong></td>
-                        <td colspan="5"></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="12" class="text-right">
-                            <strong>Total Members: @totalMembers &nbsp;&nbsp;&nbsp; Total Records: @totalRecords</strong>
-                        </td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="12" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total(
+            "Grand Total", 4,
+            totalLoanIssueAmount.ToString("N2"),
+            "",
+            totalLoanRescheduleAmount.ToString("N2"),
+            "", "", "", "", "");
+        table.Total($"Total Members: {totalMembers}  |  Total Records: {totalRecords}", ColumnCount);
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

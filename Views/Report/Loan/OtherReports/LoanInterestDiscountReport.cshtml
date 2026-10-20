@@ -1,229 +1,81 @@
-﻿@* Views/Report/Loan/OtherReports/LoanInterestDiscountReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
     var rows = (Model["Rows"] as List<LoanInterestDiscountRowDto>) ?? new List<LoanInterestDiscountRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var memberName = Model["MemberName"]?.ToString() ?? "";
-    var loanTypeName = Model["LoanTypeName"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
+    var memberName = Text("MemberName");
+    var loanTypeName = Text("LoanTypeName");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var isMemberSearch = !string.IsNullOrEmpty(memberName);
-    var isLoanTypeFiltered = !string.IsNullOrEmpty(loanTypeName);
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan Interest Discount Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalAmount = TotalOr("TotalAmount", rows.Sum(r => r.CashReceived ?? 0));
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .report-title {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 4px 6px 8px 6px;
-            }
-
-            /* Own auto-layout table for the subheader so labels never wrap
-                           or overlap — same fix applied throughout this thread. */
-            .meta-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 6px;
-            }
-
-                .meta-table td {
-                    padding: 3px 6px;
-                    font-size: 9pt;
-                    white-space: nowrap;
-                    vertical-align: top;
-                }
-
-            .meta-spacer td {
-                height: 10px;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-                .data-table th {
-                    border-top: none;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                    white-space: normal;
-                    font-weight: bold;
-                }
-
-            .detail-row td {
-                border-bottom: none;
-            }
-
-            .grand-total-row td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-                padding-top: 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Loan Interest Discount Report", sheetName: "LoanInterestDiscount")
+        .Column("S.No", 6)
+        .Column("Transaction Date", 13)
+        .Column("Member ID", 10)
+        .Column("Member Name", 19)
+        .Column("Loan A/C No.", 12)
+        .Column("Loan Type", 15)
+        .Column("Amount", 12, Align.Right)
+        .Column("Operator", 13)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 0; border-bottom: 1px solid #000; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-total td { border-top: 1px solid #000; border-bottom: 0; padding-top: 6px; }");
 
-        <table class="meta-table">
-            <tr>
-                <td><strong>Branch Name:</strong> @branchName</td>
-            </tr>
-        </table>
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+    if (!string.IsNullOrEmpty(memberName)) table.MetaRow(Fmt.Labeled("Member :", memberName));
+    table.MetaRow(Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
+    if (!string.IsNullOrEmpty(loanTypeName)) table.MetaRow(Fmt.Labeled("Loan Type :", loanTypeName));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
 
-        <div class="report-title">Loan Interest Discount Report</div>
+    var sn = 0;
+    foreach (var row in rows)
+    {
+        table.Data(
+            (++sn).ToString(),
+            row.TransactionOnBs ?? "",
+            row.MemberId ?? "",
+            row.FullName ?? "",
+            row.LoanAccountNo ?? "",
+            row.LoanTypeName ?? "",
+            (row.CashReceived ?? 0m).ToString("N2"),
+            row.Operator ?? "");
+    }
 
-        <table class="meta-table">
-            @if (isMemberSearch)
-            {
-                <tr>
-                    <td><strong>Member :</strong> @memberName</td>
-                </tr>
-            }
-            <tr>
-                <td><strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp; <strong>To Date :</strong> @toDate</td>
-            </tr>
-            @if (isLoanTypeFiltered)
-            {
-                <tr>
-                    <td><strong>Loan Type :</strong> @loanTypeName</td>
-                </tr>
-            }
-            <tr>
-                <td><strong>Report Generated On :</strong> @generatedOn</td>
-            </tr>
-            <tr class="meta-spacer"><td></td></tr>
-        </table>
-
-        <table class="data-table" data-sheet-name="LoanInterestDiscount">
-            <colgroup>
-                <col style="width:6%;" />
-                <col style="width:13%;" />
-                <col style="width:10%;" />
-                <col style="width:19%;" />
-                <col style="width:12%;" />
-                <col style="width:15%;" />
-                <col style="width:12%;" />
-                <col style="width:13%;" />
-            </colgroup>
-            <tbody>
-                <tr>
-                    <th>S.No</th>
-                    <th>Transaction Date</th>
-                    <th>Member ID</th>
-                    <th>Member Name</th>
-                    <th>Loan A/C No.</th>
-                    <th>Loan Type</th>
-                    <th class="text-right">Amount</th>
-                    <th>Operator</th>
-                </tr>
-
-                @if (rows.Any())
-                {
-                    var sn = 0;
-                    foreach (var row in rows)
-                    {
-                        sn++;
-                        <tr class="detail-row">
-                            <td>@sn</td>
-                            <td>@(row.TransactionOnBs ?? "")</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.FullName ?? "")</td>
-                            <td>@(row.LoanAccountNo ?? "")</td>
-                            <td>@(row.LoanTypeName ?? "")</td>
-                            <td class="text-right">@(row.CashReceived.HasValue ? row.CashReceived.Value.ToString("N2") : "0.00")</td>
-                            <td>@(row.Operator ?? "")</td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="5" class="text-right">Grand Total:</td>
-                        <td class="text-right">Rs @totalAmount.ToString("N2")</td>
-                        <td colspan="2"></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="7" class="text-right">Total Records</td>
-                        <td class="text-center">@totalRecords</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="8" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total:", 6, "Rs " + totalAmount.ToString("N2"), "");
+        table.Total("Total Records", 7, totalRecords.ToString());
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())
