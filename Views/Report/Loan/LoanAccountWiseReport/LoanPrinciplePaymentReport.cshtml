@@ -1,223 +1,95 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+    const int ColumnCount = 7;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+    string Money(decimal? value) => value.HasValue ? value.Value.ToString("N2") : "";
+
     var rows = (Model["Rows"] as List<LoanPrinciplePaymentRowDto>) ?? new List<LoanPrinciplePaymentRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalPaidAmount = Model["TotalPaidAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var paymentTypeName = Model["PaymentTypeName"]?.ToString() ?? "Principle Payment";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
+    var paymentTypeName = Text("PaymentTypeName");
+    if (string.IsNullOrEmpty(paymentTypeName)) paymentTypeName = "Principle Payment";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Grouped by Member Id + Name + Loan A/C No + Loan Type — matches the image:
-    // each member/account combo's identifying columns are shown once, with a
-    // numbered payment list (SN, Date, Paid Amount) nested underneath. Rows must
-    // arrive pre-sorted so a member's/account's rows are contiguous, since
-    // GroupBy preserves first-seen order rather than sorting.
     var accountGroups = rows
         .GroupBy(r => new { r.MemberId, r.FullName, r.LoanAccountNo, r.LoanTypeName })
         .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan @paymentTypeName Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalPaidAmount = TotalOr("TotalPaidAmount", rows.Sum(r => r.PaidAmount ?? 0));
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 3px 6px;
-                    vertical-align: top;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 2px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 10px;
-            }
-
-            .data-table th {
-                border-top: 1px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-                font-weight: bold;
-            }
-
-            .account-row td {
-                border-top: 1px solid #eee;
-                padding-top: 6px;
-                font-weight: bold;
-            }
-
-            .payment-row td {
-                padding: 1px 6px;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: $"Loan {paymentTypeName} Report", sheetName: "LoanPrinciplePayment")
+        .Column("Member Id", 10)
+        .Column("Name", 18)
+        .Column("Account No", 14)
+        .Column("Account Type", 16)
+        .Column("", 6)
+        .Column("Date", 14)
+        .Column("Paid Amount (p)", 22, Align.Right)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 65)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 1px solid #000; white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 1px solid #eee; border-bottom: 0; padding-top: 6px; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 0; }");
+
+    table.MetaRow(Fmt.Labeled("Branch Name:", branchName));
+    table.MetaRow(Fmt.Join(Fmt.Labeled("From Date:", fromDate), Fmt.Labeled("Till Date:", toDate)));
+    table.MetaRow(Fmt.Labeled("Report Generated On:", generatedOn));
+
+    foreach (var account in accountGroups)
+    {
+        table.GroupBy(
+            ReportCell.Left(account.Key.MemberId ?? ""),
+            ReportCell.Left(account.Key.FullName ?? ""),
+            ReportCell.Left(account.Key.LoanAccountNo ?? ""),
+            ReportCell.Left(account.Key.LoanTypeName ?? ""),
+            ReportCell.Left("", ColumnCount - 4));
+
+        var sn = 0;
+        foreach (var row in account)
+        {
+            table.Data(
+                "",
+                "",
+                "",
+                "",
+                (++sn).ToString(),
+                row.Date ?? "",
+                Money(row.PaidAmount));
         }
+    }
 
-        <table class="data-table" data-sheet-name="LoanPrinciplePayment">
-            <colgroup>
-                <col style="width:10%;" />
-                <col style="width:18%;" />
-                <col style="width:14%;" />
-                <col style="width:16%;" />
-                <col style="width:6%;" />
-                <col style="width:14%;" />
-                <col style="width:22%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="7">Loan @paymentTypeName Report</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="7"><strong>Branch Name:</strong> &nbsp;&nbsp;@branchName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="7"><strong>From Date:</strong> &nbsp;&nbsp;@fromDate &nbsp;&nbsp;&nbsp;&nbsp; <strong>Till Date:</strong> &nbsp;&nbsp;@toDate</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="7"><strong>Report Generated On:</strong> &nbsp;&nbsp;@generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="7"></td></tr>
-
-                <tr>
-                    <th>Member Id</th>
-                    <th>Name</th>
-                    <th>Account No</th>
-                    <th>Account Type</th>
-                    <th></th>
-                    <th>Date</th>
-                    <th class="text-right">Paid Amount (p)</th>
-                </tr>
-
-                @if (accountGroups.Any())
-                {
-                    foreach (var account in accountGroups)
-                    {
-                        <tr class="account-row">
-                            <td>@(account.Key.MemberId ?? "")</td>
-                            <td>@(account.Key.FullName ?? "")</td>
-                            <td>@(account.Key.LoanAccountNo ?? "")</td>
-                            <td>@(account.Key.LoanTypeName ?? "")</td>
-                            <td colspan="3"></td>
-                        </tr>
-
-                        var sn = 0;
-                        foreach (var row in account)
-                        {
-                            sn++;
-                            <tr class="payment-row">
-                                <td></td>
-                                <td></td>
-                                <td></td>
-                                <td></td>
-                                <td>@sn</td>
-                                <td>@(row.Date ?? "")</td>
-                                <td class="text-right">@(row.PaidAmount.HasValue ? row.PaidAmount.Value.ToString("N2") : "")</td>
-                            </tr>
-                        }
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="6" class="text-right">Grand Total</td>
-                        <td class="text-right">@totalPaidAmount.ToString("N2")</td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="6" class="text-right">Total Records</td>
-                        <td class="text-center">@totalRecords</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", ColumnCount - 1, totalPaidAmount.ToString("N2"));
+        table.Total("Total Records", ColumnCount - 1, totalRecords.ToString());
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

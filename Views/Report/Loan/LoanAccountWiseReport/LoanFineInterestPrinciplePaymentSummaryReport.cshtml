@@ -1,263 +1,107 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+    const int ColumnCount = 8;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+    string N(decimal? value) => (value ?? 0m).ToString("N2");
+
     var rows = (Model["Rows"] as List<LoanFineInterestPrinciplePaymentSummaryRowDto>) ?? new List<LoanFineInterestPrinciplePaymentSummaryRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalFine = Model["TotalFine"] as decimal? ?? 0;
-    var totalInterest = Model["TotalInterest"] as decimal? ?? 0;
-    var totalPrincipal = Model["TotalPrincipal"] as decimal? ?? 0;
-    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
     var hasDateRange = !string.IsNullOrEmpty(fromDate) && !string.IsNullOrEmpty(toDate);
 
-    // ── Group by Loan Type, sorted alphabetically (case-insensitive) to
-    // match the target image's section order — "Agricultural Loan",
-    // "Animal Husbandry Loan", "auto loan", "Bakhra Palan Loan". Rows keep
-    // their original relative order within each group (GroupBy is stable).
     var loanTypeGroups = rows
         .GroupBy(r => r.LoanTypeName ?? "")
         .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
         .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan Fine Interest Principle Payment Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalFine = TotalOr("TotalFine", rows.Sum(r => r.Fine ?? 0));
+    var totalInterest = TotalOr("TotalInterest", rows.Sum(r => r.Interest ?? 0));
+    var totalPrincipal = TotalOr("TotalPrincipal", rows.Sum(r => r.Principal ?? 0));
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-            }
-
-            .detail-row td {
-                border-bottom: none;
-            }
-
-            .loan-type-header td {
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 6px 6px 3px 6px;
-            }
-
-            .subtotal-row td {
-                border-top: 1px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                padding: 5px 6px;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Loan Fine Interest Principle Payment Report", sheetName: "LoanFineInterestPrinciplePaymentSummary")
+        .Column("S.No", 6)
+        .Column("Member Id", 14)
+        .Column("Name", 19)
+        .Column("Account No", 14)
+        .Column("Fine Amt", 11, Align.Right)
+        .Column("Interest Amt", 12, Align.Right)
+        .Column("Principal Amt", 12, Align.Right)
+        .Column("Date", 12)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9",
+            GroupBackground = "#fff",
+            SubTotalBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; padding-top: 6px; padding-bottom: 3px; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-subtotal td { border-top: 1px solid #000; border-bottom: 2px solid #000; padding-top: 5px; padding-bottom: 5px; }\n" +
+            ".loan-type-label { font-weight: bold; text-decoration: underline; }");
+
+    table.MetaRow(Fmt.Labeled("Branch Name:", branchName));
+    if (hasDateRange)
+        table.MetaRow(Fmt.Join(Fmt.Labeled("From Date:", fromDate), Fmt.Labeled("Till Date:", toDate)));
+    table.MetaRow(Fmt.Labeled("Report Generated On:", generatedOn));
+
+    foreach (var group in loanTypeGroups)
+    {
+        table.GroupBy(new ReportCell(group.Key, Align.Left, ColumnCount, "loan-type-label"));
+
+        var sn = 0;
+        decimal groupFine = 0, groupInterest = 0, groupPrincipal = 0;
+
+        foreach (var row in group)
+        {
+            groupFine += row.Fine ?? 0;
+            groupInterest += row.Interest ?? 0;
+            groupPrincipal += row.Principal ?? 0;
+
+            table.Data(
+                (++sn).ToString(),
+                row.MemberId ?? "",
+                row.FullName ?? "",
+                row.LoanAccountNo ?? "",
+                N(row.Fine),
+                N(row.Interest),
+                N(row.Principal),
+                row.DateOnBs ?? "");
         }
 
-        <table class="data-table" data-sheet-name="LoanFineInterestPrinciplePaymentSummary">
-            <colgroup>
-                <col style="width:6%;" />
-                <col style="width:14%;" />
-                <col style="width:19%;" />
-                <col style="width:14%;" />
-                <col style="width:11%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-            </colgroup>
-            <tbody>
-                <!-- Report Title -->
-                <tr class="meta-title">
-                    <td colspan="8">Loan Fine Interest Principle Payment Report</td>
-                </tr>
+        table.SubTotal("Total:", 4, N(groupFine), N(groupInterest), N(groupPrincipal), "");
+    }
 
-                <!-- Metadata -->
-                <tr class="meta-row">
-                    <td colspan="8"><strong>Branch Name:</strong>&nbsp;&nbsp;@branchName</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="8"></td></tr>
-                @if (hasDateRange)
-                {
-                    <tr class="meta-row">
-                        <td colspan="8">
-                            <strong>From Date:</strong>&nbsp;&nbsp;@fromDate
-                            <text>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</text>
-                            <strong>Till Date:</strong>&nbsp;&nbsp;@toDate
-                        </td>
-                    </tr>
-                }
-                <tr class="meta-row">
-                    <td colspan="8"><strong>Report Generated On:</strong>&nbsp;&nbsp;@generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="8"></td></tr>
-
-                <!-- Table Header -->
-                <tr>
-                    <th>S.No</th>
-                    <th>Member Id</th>
-                    <th>Name</th>
-                    <th>Account No</th>
-                    <th class="text-right">Fine Amt</th>
-                    <th class="text-right">Interest Amt</th>
-                    <th class="text-right">Principal Amt</th>
-                    <th>Date</th>
-                </tr>
-
-                @if (rows.Any())
-                {
-                    foreach (var group in loanTypeGroups)
-                    {
-                        <tr class="loan-type-header">
-                            <td colspan="8">@group.Key</td>
-                        </tr>
-
-                        var sn = 0;
-                        decimal groupFine = 0, groupInterest = 0, groupPrincipal = 0;
-
-                        foreach (var row in group)
-                        {
-                            sn++;
-                            groupFine += row.Fine ?? 0;
-                            groupInterest += row.Interest ?? 0;
-                            groupPrincipal += row.Principal ?? 0;
-
-                            <tr class="detail-row">
-                                <td>@sn</td>
-                                <td>@(row.MemberId ?? "")</td>
-                                <td>@(row.FullName ?? "")</td>
-                                <td>@(row.LoanAccountNo ?? "")</td>
-                                <td class="text-right">@((row.Fine ?? 0).ToString("N2"))</td>
-                                <td class="text-right">@((row.Interest ?? 0).ToString("N2"))</td>
-                                <td class="text-right">@((row.Principal ?? 0).ToString("N2"))</td>
-                                <td>@(row.DateOnBs ?? "")</td>
-                            </tr>
-                        }
-
-                        <!-- Per-Loan-Type Subtotal -->
-                        <tr class="subtotal-row">
-                            <td colspan="4" class="text-right">Total:</td>
-                            <td class="text-right">@groupFine.ToString("N2")</td>
-                            <td class="text-right">@groupInterest.ToString("N2")</td>
-                            <td class="text-right">@groupPrincipal.ToString("N2")</td>
-                            <td></td>
-                        </tr>
-                    }
-
-                    <!-- Grand Total Row -->
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalFine.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalInterest.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalPrincipal.ToString("N2")</strong></td>
-                        <td></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="7" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-center"><strong>@totalRecords</strong></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="8" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", 4, N(totalFine), N(totalInterest), N(totalPrincipal), "");
+        table.Total("Total Records", ColumnCount - 1, totalRecords.ToString());
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

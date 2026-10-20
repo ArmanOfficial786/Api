@@ -1,339 +1,142 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var memberInfo = Model["MemberInfo"] as LoanStatementMemberInfoDto;
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    string Money(decimal? value) => (value ?? 0m).ToString("N2");
+    string S(object? value) => $"{value}";
+
+    var memberInfo = (Model["MemberInfo"] as LoanStatementMemberInfoDto) ?? new LoanStatementMemberInfoDto();
     var transactions = (Model["Transactions"] as List<LoanStatementTransactionDto>) ?? new List<LoanStatementTransactionDto>();
     var guarantees = (Model["Guarantees"] as List<LoanStatementGuaranteeDto>) ?? new List<LoanStatementGuaranteeDto>();
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var reportType = Model["Language"]?.ToString() ?? "English";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-    var isNepali = reportType.Equals("Nepali", StringComparison.OrdinalIgnoreCase);
 
-    // Totals for the transaction table and the Transaction Summary box
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var reportType = Text("Language", "English");
+    var isNepali = reportType.Equals("Nepali", StringComparison.OrdinalIgnoreCase);
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    string L(string en, string np) => isNepali ? np : en;
+
     var totalPrincipal = transactions.Sum(t => t.Principal ?? 0);
     var totalInterest = transactions.Sum(t => t.Interest ?? 0);
     var totalPenalty = transactions.Sum(t => t.Penalty ?? 0);
-    var loanIssueAmount = memberInfo?.LoanIssueAmount ?? 0;
+    var loanIssueAmount = memberInfo.LoanIssueAmount ?? 0;
     var balancePrincipal = loanIssueAmount - totalPrincipal;
 
-    // Labels toggle between English and Nepali - same pattern as ShareDetailsReport.cshtml
-    string L(string en, string np) => isNepali ? np : en;
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan Statement Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .between-row td {
-                padding: 2px 6px;
-                font-size: 9pt;
-            }
-
-            .between-row .label {
-                font-weight: bold;
-                white-space: nowrap;
-            }
-
-            .meta-spacer td {
-                height: 10px;
-            }
-
-            /* ── Bordered info boxes: shared style for all three boxes ── */
-            .info-box td {
-                border: 1px solid #000;
-                padding: 4px 8px;
-            }
-
-            .info-label {
-                font-weight: bold;
-                width: 15%;
-                white-space: nowrap;
-            }
-
-            .info-value {
-                width: 35%;
-            }
-
-            .box-header td {
-                border: 1px solid #000;
-                background: #fff;
-                font-weight: bold;
-                text-align: center;
-                padding: 5px 6px;
-            }
-
-            /* ── Transaction table ── */
-            .txn-header th {
-                border: 1px solid #000;
-                border-top: 2px solid #000;
-                font-weight: bold;
-                text-align: center;
-                background: #fff;
-                padding: 4px 6px;
-            }
-
-            .detail-row td {
-                border: 1px solid #000;
-                padding: 4px 6px;
-                color: #1a3d7c;
-            }
-
-            .total-row td {
-                border: 1px solid #000;
-                font-weight: bold;
-                padding: 4px 6px;
-                color: #000;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: L("Loan Statement Report", "ऋण स्टेटमेन्ट प्रतिवेदन"), sheetName: "LoanStatement")
+        .Column("DateNep", 16)
+        .Column("Description", 20)
+        .Column("Principal", 16, Align.Right)
+        .Column("Interest", 16, Align.Right)
+        .Column("Penalty", 16, Align.Right)
+        .Column("Balance Amt", 16, Align.Right)
+        .NoColumnHeader()
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 65)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; border: 1px solid #000; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 2px solid #000; text-align: center; }\n" +
+            "table.sheet-table tr.r-data td { color: #1a3d7c; }\n" +
+            "table.sheet-table tr.r-data td.info-label, table.sheet-table tr.r-data td.info-value, " +
+            "table.sheet-table tr.r-data td.box-header " +
+            "{ color: #000; padding: 2px 8px; }\n" +
+            "table.sheet-table tr.r-data td.info-label, table.sheet-table tr.r-data td.box-header { font-weight: bold; }\n" +
+            "table.sheet-table tr.r-data td.info-label { white-space: nowrap; }");
+
+    table.MetaRow(Fmt.Labeled(L("Statement Between", "स्टेटमेन्ट अवधि") + " :", $"{fromDate}   -   {toDate}"));
+    table.MetaRow(Fmt.Labeled(L("Report Generated On", "प्रतिवेदन मिति") + " :", generatedOn));
+
+    ReportCell Label(string text, int span = 1, Align align = Align.Left) => new ReportCell(text, align, span, "info-label");
+    ReportCell Value(string text, int span = 1, Align align = Align.Left) => new ReportCell(text, align, span, "info-value");
+    ReportCell Box(string text) => new ReportCell(text, Align.Center, 6, "box-header");
+
+    table.Data(Label(L("MemberID", "सदस्य आईडी")), Value(S(memberInfo.MemberId)), Label(L("Member Name", "सदस्य नाम")), Value(S(memberInfo.MemberName), 3));
+    table.Data(Label(L("Address", "ठेगाना")), Value(S(memberInfo.ContactAddress)), Label(L("Contact No", "सम्पर्क नं")), Value(S(memberInfo.ContactNo), 3));
+    table.Data(Label(L("Account No", "खाता नं")), Value(S(memberInfo.LoanAccountNo)), Label(L("Remarks", "कैफियत")), Value(S(memberInfo.Remark), 3));
+    table.Data(Label(L("Loan Type", "ऋण प्रकार")), Value(S(memberInfo.LoanTypeName)), Label(L("Interest Rate", "ब्याज दर")), Value((memberInfo.InterestRate ?? "0.00") + " %", 3));
+    table.Data(Label(L("Loan Issue Amount", "ऋण जारी रकम")), Value(loanIssueAmount.ToString("N2")), Label(L("Loan Period", "ऋण अवधि")), Value(S(memberInfo.Period), 3));
+    table.Data(Label(L("Loan Issue Date", "ऋण जारी मिति")), Value(S(memberInfo.LoanIssueOnBs)), Label(L("Loan Maturity Date", "ऋण भाखा मिति")), Value(S(memberInfo.MaturityOnBs), 3));
+
+    table.Spacer();
+    table.Header(
+        L("DateNep", "मिति"),
+        L("Description", "विवरण"),
+        L("Principal", "साँवा"),
+        L("Interest", "ब्याज"),
+        L("Penalty", "जरिवाना"),
+        L("Balance Amt", "बाँकी रकम"));
+
+    if (transactions.Count > 0)
+    {
+        foreach (var txn in transactions)
+        {
+            table.Data(
+                txn.TransactionOnBs ?? "-",
+                txn.Narration ?? txn.Particulars ?? "-",
+                Money(txn.Principal),
+                Money(txn.Interest),
+                Money(txn.Penalty),
+                Money(txn.Balance));
         }
 
-        <table class="data-table" data-sheet-name="LoanStatement">
-            <colgroup>
-                <col style="width:16%;" />
-                <col style="width:20%;" />
-                <col style="width:16%;" />
-                <col style="width:16%;" />
-                <col style="width:16%;" />
-                <col style="width:16%;" />
-            </colgroup>
-            <tbody>
-                <!-- Title -->
-                <tr class="meta-title">
-                    <td colspan="6">@L("Loan Statement Report", "ऋण स्टेटमेन्ट प्रतिवेदन")</td>
-                </tr>
+        table.Total(L("Total:", "जम्मा:"), 2,
+            totalPrincipal.ToString("N2"),
+            totalInterest.ToString("N2"),
+            totalPenalty.ToString("N2"),
+            "");
+    }
+    else
+    {
+        table.Data(ReportCell.Center(L("No transactions found for the selected criteria", "छानिएको मापदण्ड अनुसार कुनै कारोबार फेला परेन"), 6));
+    }
 
-                <!-- Statement Between -->
-                <tr class="between-row">
-                    <td class="label" colspan="1">@L("Statement Between", "स्टेटमेन्ट अवधि") :</td>
-                    <td colspan="1">@fromDate &nbsp;&nbsp;-&nbsp;&nbsp; @toDate</td>
-                    <td colspan="4"></td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="6"></td></tr>
+    table.Spacer();
+    table.Data(Box(L("Transaction Summary", "कारोबार सारांश")));
+    table.Data(
+        Label(L("Loan Issue Amount", "ऋण जारी रकम"), 1, Align.Center),
+        Label(L("Principal Paid", "साँवा तिरेको"), 1, Align.Center),
+        Label(L("Interest Paid", "ब्याज तिरेको"), 1, Align.Center),
+        Label(L("Penalty Paid", "जरिवाना तिरेको"), 1, Align.Center),
+        Label(L("Balance Principle Amt", "बाँकी साँवा रकम"), 2, Align.Center));
+    table.Data(
+        Value(loanIssueAmount.ToString("N2"), 1, Align.Center),
+        Value(totalPrincipal.ToString("N2"), 1, Align.Center),
+        Value(totalInterest.ToString("N2"), 1, Align.Center),
+        Value(totalPenalty.ToString("N2"), 1, Align.Center),
+        Value(balancePrincipal.ToString("N2"), 2, Align.Center));
 
-                <tr class="between-row">
-                    <td class="label" colspan="1">@L("Report Generated On", "प्रतिवेदन मिति") :</td>
-                    <td colspan="5">@generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="6"></td></tr>
+    table.Spacer();
+    table.Data(Box(L("Guarantee Detail", "जमानी विवरण")));
+    table.Data(
+        Label(L("Member Id", "सदस्य आईडी"), 1, Align.Center),
+        Label(L("Member Name", "सदस्य नाम"), 1, Align.Center),
+        Label(L("Contact No.", "सम्पर्क नं."), 1, Align.Center),
+        Label(L("Saving A/C No.", "बचत खाता नं."), 1, Align.Center),
+        Label(L("Saving Amount", "बचत रकम"), 1, Align.Center),
+        Label(L("Share Amount", "सेयर रकम"), 1, Align.Center));
 
-                <!-- Member / Loan info box -->
-                <tr class="info-box">
-                    <td class="info-label">@L("MemberID", "सदस्य आईडी")</td>
-                    <td class="info-value">@memberInfo?.MemberId</td>
-                    <td class="info-label">@L("Member Name", "सदस्य नाम")</td>
-                    <td class="info-value" colspan="3">@memberInfo?.MemberName</td>
-                </tr>
-                <tr class="info-box">
-                    <td class="info-label">@L("Address", "ठेगाना")</td>
-                    <td class="info-value">@memberInfo?.ContactAddress</td>
-                    <td class="info-label">@L("Contact No", "सम्पर्क नं")</td>
-                    <td class="info-value" colspan="3">@memberInfo?.ContactNo</td>
-                </tr>
-                <tr class="info-box">
-                    <td class="info-label">@L("Account No", "खाता नं")</td>
-                    <td class="info-value">@memberInfo?.LoanAccountNo</td>
-                    <td class="info-label">@L("Remarks", "कैफियत")</td>
-                    <td class="info-value" colspan="3">@memberInfo?.Remark</td>
-                </tr>
-                <tr class="info-box">
-                    <td class="info-label">@L("Loan Type", "ऋण प्रकार")</td>
-                    <td class="info-value">@memberInfo?.LoanTypeName</td>
-                    <td class="info-label">@L("Interest Rate", "ब्याज दर")</td>
-                    <td class="info-value" colspan="3">@(memberInfo?.InterestRate ?? "0.00") %</td>
-                </tr>
-                <tr class="info-box">
-                    <td class="info-label">@L("Loan Issue Amount", "ऋण जारी रकम")</td>
-                    <td class="info-value">@loanIssueAmount.ToString("N2")</td>
-                    <td class="info-label">@L("Loan Period", "ऋण अवधि")</td>
-                    <td class="info-value" colspan="3">@memberInfo?.Period</td>
-                </tr>
-                <tr class="info-box">
-                    <td class="info-label">@L("Loan Issue Date", "ऋण जारी मिति")</td>
-                    <td class="info-value">@memberInfo?.LoanIssueOnBs</td>
-                    <td class="info-label">@L("Loan Maturity Date", "ऋण भाखा मिति")</td>
-                    <td class="info-value" colspan="3">@memberInfo?.MaturityOnBs</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="6"></td></tr>
-
-                <!-- Transaction table -->
-                <tr class="txn-header">
-                    <th>@L("DateNep", "मिति")</th>
-                    <th>@L("Description", "विवरण")</th>
-                    <th class="text-right">@L("Principal", "साँवा")</th>
-                    <th class="text-right">@L("Interest", "ब्याज")</th>
-                    <th class="text-right">@L("Penalty", "जरिवाना")</th>
-                    <th class="text-right">@L("Balance Amt", "बाँकी रकम")</th>
-                </tr>
-
-                @if (transactions.Any())
-                {
-                    foreach (var txn in transactions)
-                    {
-                        var description = txn.Narration ?? txn.Particulars;
-                        <tr class="detail-row">
-                            <td>@(txn.TransactionOnBs ?? "-")</td>
-                            <td>@(description ?? "-")</td>
-                            <td class="text-right">@(txn.Principal?.ToString("N2") ?? "0.00")</td>
-                            <td class="text-right">@(txn.Interest?.ToString("N2") ?? "0.00")</td>
-                            <td class="text-right">@(txn.Penalty?.ToString("N2") ?? "0.00")</td>
-                            <td class="text-right">@(txn.Balance?.ToString("N2") ?? "0.00")</td>
-                        </tr>
-                    }
-
-                    <tr class="total-row">
-                        <td></td>
-                        <td class="text-right">@L("Total:", "जम्मा:")</td>
-                        <td class="text-right">@totalPrincipal.ToString("N2")</td>
-                        <td class="text-right">@totalInterest.ToString("N2")</td>
-                        <td class="text-right">@totalPenalty.ToString("N2")</td>
-                        <td></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="6" class="text-center">@L("No transactions found for the selected criteria", "छानिएको मापदण्ड अनुसार कुनै कारोबार फेला परेन")</td>
-                    </tr>
-                }
-                <tr class="meta-spacer"><td colspan="6"></td></tr>
-
-                <!-- Transaction Summary box -->
-                <tr class="box-header">
-                    <td colspan="6">@L("Transaction Summary", "कारोबार सारांश")</td>
-                </tr>
-                <tr class="info-box">
-                    <td class="info-label text-center" style="width:auto;">@L("Loan Issue Amount", "ऋण जारी रकम")</td>
-                    <td class="info-label text-center" style="width:auto;">@L("Principal Paid", "साँवा तिरेको")</td>
-                    <td class="info-label text-center" style="width:auto;">@L("Interest Paid", "ब्याज तिरेको")</td>
-                    <td class="info-label text-center" style="width:auto;">@L("Penalty Paid", "जरिवाना तिरेको")</td>
-                    <td class="info-label text-center" colspan="2" style="width:auto;">@L("Balance Principle Amt", "बाँकी साँवा रकम")</td>
-                </tr>
-                <tr class="info-box">
-                    <td class="text-center">@loanIssueAmount.ToString("N2")</td>
-                    <td class="text-center">@totalPrincipal.ToString("N2")</td>
-                    <td class="text-center">@totalInterest.ToString("N2")</td>
-                    <td class="text-center">@totalPenalty.ToString("N2")</td>
-                    <td class="text-center" colspan="2">@balancePrincipal.ToString("N2")</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="6"></td></tr>
-
-                <!-- Guarantee Detail box -->
-                <tr class="box-header">
-                    <td colspan="6">@L("Guarantee Detail", "जमानी विवरण")</td>
-                </tr>
-                <tr class="info-box">
-                    <td class="info-label text-center" style="width:auto;">@L("Member Id", "सदस्य आईडी")</td>
-                    <td class="info-label text-center" style="width:auto;">@L("Member Name", "सदस्य नाम")</td>
-                    <td class="info-label text-center" style="width:auto;">@L("Contact No.", "सम्पर्क नं.")</td>
-                    <td class="info-label text-center" style="width:auto;">@L("Saving A/C No.", "बचत खाता नं.")</td>
-                    <td class="info-label text-center" style="width:auto;">@L("Saving Amount", "बचत रकम")</td>
-                    <td class="info-label text-center" style="width:auto;">@L("Share Amount", "सेयर रकम")</td>
-                </tr>
-                @if (guarantees.Any())
-                {
-                    foreach (var g in guarantees)
-                    {
-                        <tr class="info-box">
-                            <td class="text-center">@(g.GuarantorMemberId ?? "")</td>
-                            <td class="text-center">@(g.GuarantorName ?? "")</td>
-                            <td class="text-center">@(g.ContactNo ?? "")</td>
-                            <td class="text-center">@(g.AccountNo ?? "")</td>
-                            <td class="text-center">@(g.GuaranteeAmount ?? "")</td>
-                            <td class="text-center">@(g.GuaranteeShareAmount ?? "")</td>
-                        </tr>
-                    }
-                }
-                else
-                {
-                    <tr class="info-box">
-                        <td class="text-center">&nbsp;</td>
-                        <td class="text-center">&nbsp;</td>
-                        <td class="text-center">&nbsp;</td>
-                        <td class="text-center">&nbsp;</td>
-                        <td class="text-center">&nbsp;</td>
-                        <td class="text-center">&nbsp;</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (guarantees.Count > 0)
+    {
+        foreach (var g in guarantees)
+        {
+            table.Data(
+                Value(S(g.GuarantorMemberId), 1, Align.Center),
+                Value(S(g.GuarantorName), 1, Align.Center),
+                Value(S(g.ContactNo), 1, Align.Center),
+                Value(S(g.AccountNo), 1, Align.Center),
+                Value(S(g.GuaranteeAmount), 1, Align.Center),
+                Value(S(g.GuaranteeShareAmount), 1, Align.Center));
+        }
+    }
+    else
