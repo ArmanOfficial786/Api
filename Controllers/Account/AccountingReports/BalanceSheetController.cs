@@ -1,14 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Account.NexgenCosysReport.Dtos.RequestDtos.AccountOperation;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Account.AccountingReport;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
+using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
-using System.Text.Json;
+using System.Security.Claims;
 
 namespace NexgenCosysReport.Controllers.Account.AccountingReports
 {
@@ -16,82 +14,76 @@ namespace NexgenCosysReport.Controllers.Account.AccountingReports
     [Route("api/[controller]")]
     public class BalanceSheetController : ControllerBase
     {
+        private const string ReportName = "BalanceSheet";
+
         private readonly IBalanceSheet _balanceSheetService;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
+        private readonly IReportHeaderProvider _headers;
         private readonly IJsReportService _jsReportService;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly CustomHeaderResponse _headerResponse;
-        private readonly IOptions<ReportSettings> _reportSettings;
+        private readonly IReportDataCache _dataCache;
         private readonly ILogger<BalanceSheetController> _logger;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        private static readonly PageSizeSetting NPageSetting = PageSizeSetting.A4Portrait;
+        private static readonly PageSizeSetting VPageSetting =
+            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         public BalanceSheetController(
             IBalanceSheet balanceSheetService,
-            ICommonHeaderRepository commonHeaderRepository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
-            IWebHostEnvironment webHostEnvironment,
-            IOptions<ReportSettings> reportSettings,
+            IReportDataCache dataCache,
             ILogger<BalanceSheetController> logger,
-            CustomHeaderResponse headerResponse)
+            IReportFileResponse reportFileResponse)
         {
             _balanceSheetService = balanceSheetService;
-            _commonHeaderRepository = commonHeaderRepository;
+            _headers = headers;
             _jsReportService = jsReportService;
-            _webHostEnvironment = webHostEnvironment;
-            _reportSettings = reportSettings;
+            _dataCache = dataCache;
             _logger = logger;
-            _headerResponse = headerResponse;
+            _reportFileResponse = reportFileResponse;
         }
 
-        [HttpPost()]
-        public async Task<ActionResult> GenerateReport(
+        [HttpPost]
+        public async Task<IActionResult> GenerateReport(
             [FromBody] BalanceSheetRequest request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
             try
             {
-                var reportName = "BalanceSheet";
-                var upperFormat = format.ToUpper();
-
-
                 if (request == null || !ModelState.IsValid)
-                    return BadRequest(new { success = false, message = "Invalid request" });
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
 
+                var userScope = User.FindFirst("UserId")?.Value
+                    ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? "anonymous";
 
+                var upperFormat = format.ToUpperInvariant();
+                var isVisual = request.VisualReport;
+                var page = isVisual ? VPageSetting : NPageSetting;
 
-                //var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                var dataKey = ReportCacheKey.ForData(
+                    request, ReportName, userScope, nameof(request.VisualReport));
+                var reportKey = $"{dataKey}_{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}";
 
-                var reportKey = request.VisualReport
-                 ? ReportUtils.GenerateReportKey(request, reportName, "VISUAL")
-                 : ReportUtils.GenerateReportKey(request, reportName);
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: false,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+                var headerBranch = request.SameCompanyName ? null : request.BranchIds;
+                var headerTask = _headers.GetAsync(headerBranch, ct);
 
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, reportName,
-                        _jsReportService, _logger);
-                }
-
-                // Fetch balance sheet data and header in parallel
-                var dataTask = _balanceSheetService.GetBalanceSheetReport(request);
-                var headerTask = _commonHeaderRepository.GetCommonHeaders(request.SameCompanyName ? "" : request.BranchIds);
-
-                await Task.WhenAll(dataTask, headerTask);
+                // NOTE: replace BalanceSheetReportResponse with the actual return type of GetBalanceSheetReport
+                var dataTask = _dataCache.GetOrLoadAsync(
+                    dataKey,
+                    async () => await _balanceSheetService.GetBalanceSheetReport(request),
+                    ct);
+                await Task.WhenAll(headerTask, dataTask);
 
                 var data = await dataTask;
-                var headerData = await headerTask;
-
                 if (data == null)
-                    return NotFound(new { success = false, message = "No data found." });
-
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-
-                await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData,
-                    nameof(CommonHeader.CompanyLogo),
-                    webRoot));
+                    return NotFound(new { success = false, StatusCode = 404, message = "No data found." });
 
                 var reportData = new Dictionary<string, object>
                 {
@@ -99,63 +91,35 @@ namespace NexgenCosysReport.Controllers.Account.AccountingReports
                     { "TotalDebit", data.TotalDebit },
                     { "TotalCredit", data.TotalCredit },
                     { "FiscalYearLabel", data.FiscalYearLabel },
+                    { "TotalRecords", data.Rows.Count() },
                     { "TillDate", request.TillDate },
                     { "BranchName", request.BranchName },
                     { "ReportType", request.ReportType },
                     { "OrderBy", request.OrderBy },
                     { "IncludePreviousYearBalance", request.IncludePreviousYearBalance },
-                    { "HeaderDataSet", headerData },
-                    { "Format", upperFormat }
+                    { "HeaderDataSet", await headerTask },
+                    { "Format", upperFormat },
+                    { "SameCompanyName", request.SameCompanyName },
+                    { "VisualReport", request.VisualReport },
+                    { "PageSetting", page }
                 };
 
+                var viewPath = isVisual
+                    ? "Views/VisualReport/Account/VBalanceSheetReport.cshtml"
+                    : "Views/Report/Account/AccountingReport/BalanceSheetReport.cshtml";
 
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                    reportKey: reportKey, reportPath: viewPath, data: reportData, ct: ct);
 
-                var htmlContent = await Task.Run(() =>
-                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
-                        reportKey: reportKey,
-                        reportPath: request.VisualReport
-                            ? "Views/VisualReport/Account/VBalanceSheetReport.cshtml"
-                            : "Views/Report/Account/AccountingReport/BalanceSheetReport.cshtml",
-                        data: reportData));
-                if (upperFormat == "VIEW")
-                {
-                    if (request.VisualReport)
-                    {
-                        _headerResponse.SetResponseHeaders(true, 200, "Visual report generated successfully.");
-                        Response.Headers.Append("X-Report-Format", "HTML");
-                        Response.Headers.Append("X-Is-Visual-Report", "true");
-                        Response.Headers.Append("X-Report-Name", reportName);
-                        return Content(htmlContent, "text/html");
-                    }
-
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
-                                  htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false
-                    };
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-
-                    Response.Headers.Append(
-                        "Content-Disposition",
-                        "inline; filename=\"MemberIdCardReport.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
-                }
-                return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, reportName,
-                    _jsReportService, _logger);
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: false,
+                    totalRecords: data.Rows.Count(),
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "BalanceSheet report generation failed");
-                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message, stack = ex.StackTrace });
+                _logger.LogError(ex, "Error generating {Report} report", ReportName);
+                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }
     }

@@ -10,6 +10,8 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Account.OthersReport
         public string PaymentType { get; set; } = "Bank Payment";
         public string TransactionType { get; set; } = "all";
         public string OrderBy { get; set; } = "Transaction Date";
+
+        public bool VisualReport { get; set; } = false;
     }
 
     public class BankReceivedPaymentRowDto

@@ -1,20 +1,32 @@
-﻿@* File: Views/Report/Account/MonthlyReport.cshtml *@
-@using NexgenCosysReport.Dtos.ReportDtos
-@using NexgenCosysReport.Dtos.RequestDtos.Account;
+﻿@using NexgenCosysReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.RequestDtos.Account
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
-
 @{
     Layout = null;
-    var data = Model["MonthlyData"] as MonthlyReportData;
-    var tillDate = Model["TillDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "";
-    var reportType = Model["ReportType"] as int? ?? 1;
-    var isMonthWise = Model["IsMonthWise"] as bool? ?? false;
-    var isNepali = Model["IsNepali"] as bool? ?? false;
-    var showBudget = Model["ShowBudget"] as bool? ?? false;
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fontSize = "8pt";
+    var metaFontSize = "8.5pt";
+
+    string Text(string key, string fallback = "") =>
+        Model.TryGetValue(key, out var value) && value != null ? value.ToString() ?? fallback : fallback;
+
+    bool Flag(string key) =>
+        Model.TryGetValue(key, out var value) && value is bool flag && flag;
+
+    var data = (MonthlyReportData)Model["MonthlyData"];
+
+    var branchName = Text("BranchName", "All");
+    var tillDate = Text("TillDate");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var reportType = Model.TryGetValue("ReportType", out var reportTypeValue) && reportTypeValue is int reportTypeNumber
+        ? reportTypeNumber
+        : 1;
+    var reportTypeLabel = reportType == 1 ? "Summary" : reportType == 2 ? "SubLedger" : "Detail";
+
+    var isNepali = Flag("IsNepali");
+    var showBudget = Flag("ShowBudget");
 
     string FormatAmount(decimal amount) =>
         amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
@@ -28,224 +40,118 @@
         _ => title
     } : title;
 
-    int sn = 0;
-
-    // Local function (NOT a Func<> lambda) — this is the supported ASP.NET Core
-    // Razor pattern for mixing C# logic with raw <tr>/<td> markup, equivalent to
-    // the old MVC @helper syntax. It writes directly to the page output, so it's
-    // called as a plain statement (no return value, no "await").
-    void RenderSection(List<MonthlyReportRowDto> rows, string sectionName)
+    // Current | Previous | [Budget]
+    ReportCell[] AmountCells(decimal current, decimal previous, decimal budget, string css = null)
     {
-        <tr class="section-title"><td colspan="@(showBudget ? 6 : 5)">@SectionTitle(sectionName)</td></tr>
-        if (rows != null && rows.Any())
+        var cells = new List<ReportCell>
         {
-            sn = 0;
-            var groups = rows.GroupBy(r => r.MainLedger ?? "Other").OrderBy(g => g.Key);
-            foreach (var group in groups)
-            {
-                decimal groupCurrent = group.Sum(r => r.CurrentAmount);
-                decimal groupPrevious = group.Sum(r => r.PreviousAmount);
-                decimal groupBudget = group.Sum(r => r.BudgetAmount);
-                <tr>
-                    <td></td>
-                    <td><strong>@group.Key</strong></td>
-                    <td></td>
-                    <td class="text-right">@FormatAmount(groupCurrent)</td>
-                    <td class="text-right">@FormatAmount(groupPrevious)</td>
-                    @if (showBudget)
-                    {
-                        <td class="text-right">@FormatAmount(groupBudget)</td>
-                    }
-                </tr>
-                foreach (var row in group.OrderBy(r => r.SubLedger))
-                {
-                    sn++;
-                    <tr>
-                        <td class="text-center">@sn</td>
-                        <td class="sub-ledger">@row.SubLedger</td>
-                        <td class="detail">@row.SubLedger1</td>
-                        <td class="text-right">@FormatAmount(row.CurrentAmount)</td>
-                        <td class="text-right">@FormatAmount(row.PreviousAmount)</td>
-                        @if (showBudget)
-                        {
-                            <td class="text-right">@FormatAmount(row.BudgetAmount)</td>
-                        }
-                    </tr>
-                }
-            }
+            new ReportCell(FormatAmount(current), Align.Right, 1, css),
+            new ReportCell(FormatAmount(previous), Align.Right, 1, css)
+        };
+        if (showBudget)
+            cells.Add(new ReportCell(FormatAmount(budget), Align.Right, 1, css));
+        return cells.ToArray();
+    }
+
+    var table = new ReportTable(Model, title: "Monthly Report", sheetName: "MonthlyReport")
+        .Column("SN", 5, Align.Center)
+        .Column("Ledger", 25)
+        .Column("Sub Ledger", 20)
+        .Column("Current", 15, Align.Right)
+        .Column("Previous", 15, Align.Right);
+
+    if (showBudget)
+        table.Column("Budget", 15, Align.Right);
+
+    table
+        .Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 70)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-section td, " +
+            "table.sheet-table tr.r-total td, table.sheet-table tr.r-note td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 4px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            @"
+            table.sheet-table tr.r-section td.text-left { text-align: center !important; }
+            table.sheet-table tr.r-note td              { text-align: center; }
+            table.sheet-table tr.r-data td.bold         { font-weight: bold; }
+            table.sheet-table tr.r-data td.indent       { padding-left: 5mm; }
+            table.sheet-table tr.r-data td.detail       { padding-left: 10mm; }");
+
+    table.MetaPair("Branch Name :", branchName, "Till Date :", tillDate)
+         .MetaPair("Report Generated On :", generatedOn, "Report Type :", reportTypeLabel);
+
+    // one section: title bar, then each main ledger with its total and sub ledger rows
+    void RenderSection(IEnumerable<MonthlyReportRowDto> sectionRows, string sectionName)
+    {
+        table.Section(SectionTitle(sectionName));
+
+        var rows = sectionRows?.ToList() ?? new List<MonthlyReportRowDto>();
+        if (rows.Count == 0)
+        {
+            table.Note("No data");
+            return;
         }
-        else
+
+        var serialNumber = 0;
+        var mainLedgerGroups = rows
+            .GroupBy(row => row.MainLedger ?? "Other")
+            .OrderBy(mainGroup => mainGroup.Key);
+
+        foreach (var mainGroup in mainLedgerGroups)
         {
-            <tr><td colspan="@(showBudget ? 6 : 5)" class="text-center">No data</td></tr>
+            table.Data(new[]
+            {
+                ReportCell.Left(""),
+                new ReportCell(mainGroup.Key, Align.Left, 1, "bold"),
+                ReportCell.Left("")
+            }.Concat(AmountCells(
+                mainGroup.Sum(row => row.CurrentAmount),
+                mainGroup.Sum(row => row.PreviousAmount),
+                mainGroup.Sum(row => row.BudgetAmount))).ToArray());
+
+            foreach (var row in mainGroup.OrderBy(subRow => subRow.SubLedger))
+            {
+                serialNumber++;
+                table.Data(new[]
+                {
+                    ReportCell.Center(serialNumber.ToString()),
+                    new ReportCell($"{row.SubLedger}", Align.Left, 1, "indent"),
+                    new ReportCell($"{row.SubLedger1}", Align.Left, 1, "detail")
+                }.Concat(AmountCells(row.CurrentAmount, row.PreviousAmount, row.BudgetAmount)).ToArray());
+            }
         }
     }
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Monthly Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                margin: 0;
-                padding: 0;
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-            }
+    RenderSection(data.AssetsRows, "Assets");
+    RenderSection(data.LiabilitiesRows, "Liabilities");
+    RenderSection(data.IncomeRows, "Income");
+    RenderSection(data.ExpensesRows, "Expenses");
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
+    // ── Totals ──
+    table.Section("Totals");
 
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-            }
-
-                .data-table td, .data-table th {
-                    padding: 4px 6px;
-                    border: 1px solid #ddd;
-                }
-
-                .data-table th {
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    background: #f2f2f2;
-                }
-
-            .section-title {
-                background: #e6e6e6;
-                font-weight: bold;
-                text-align: center;
-            }
-
-            .grand-total {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .summary-label {
-                font-weight: bold;
-                background: #f0f0f0;
-            }
-
-            .sub-ledger {
-                padding-left: 20px;
-            }
-
-            .detail {
-                padding-left: 40px;
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+    void TotalLine(string label, decimal amount)
+    {
+        var cells = new List<ReportCell>
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            new ReportCell(label, Align.Left, 3, "bold"),
+            ReportCell.Right(FormatAmount(amount)),
+            ReportCell.Right("")
+        };
+        if (showBudget)
+            cells.Add(ReportCell.Right(""));
+        table.Data(cells.ToArray());
+    }
 
-        <table class="data-table">
-            <thead>
-                <tr><th colspan="@(showBudget ? 6 : 5)" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">Monthly Report</th></tr>
-                <tr><td colspan="@(showBudget ? 6 : 5)"><strong>Branch:</strong> @branchName &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Till Date:</strong> @tillDate &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Generated:</strong> @generatedOn &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Report Type:</strong> @(reportType == 1 ? "Summary" : reportType == 2 ? "SubLedger" : "Detail")</td></tr>
-                <tr>
-                    <th style="width:5%;">SN</th>
-                    <th style="width:25%;">Ledger</th>
-                    <th style="width:20%;">Sub Ledger</th>
-                    <th style="width:15%;" class="text-right">Current</th>
-                    <th style="width:15%;" class="text-right">Previous</th>
-                    @if (showBudget)
-                    {
-                        <th style="width:15%;" class="text-right">Budget</th>
-                    }
-                </tr>
-            </thead>
-            <tbody>
-                @{
-                    RenderSection(data.AssetsRows, "Assets");
-                    RenderSection(data.LiabilitiesRows, "Liabilities");
-                    RenderSection(data.IncomeRows, "Income");
-                    RenderSection(data.ExpensesRows, "Expenses");
-                }
+    TotalLine("Total Assets", data.TotalAssets);
+    TotalLine("Total Liabilities", data.TotalLiabilities);
+    TotalLine("Net Assets (Assets - Liabilities)", data.TotalAssets - data.TotalLiabilities);
+    TotalLine("Total Income", data.TotalIncome);
+    TotalLine("Total Expenses", data.TotalExpenses);
 
-                @* Totals *@
-                <tr class="section-title"><td colspan="@(showBudget ? 6 : 5)">Totals</td></tr>
-                <tr>
-                    <td colspan="3" class="summary-label">Total Assets</td>
-                    <td class="text-right">@FormatAmount(data.TotalAssets)</td>
-                    <td></td>
-                    @if (showBudget)
-                    {
-                        <td></td>
-                    }
-                </tr>
-                <tr>
-                    <td colspan="3" class="summary-label">Total Liabilities</td>
-                    <td class="text-right">@FormatAmount(data.TotalLiabilities)</td>
-                    <td></td>
-                    @if (showBudget)
-                    {
-                        <td></td>
-                    }
-                </tr>
-                <tr>
-                    <td colspan="3" class="summary-label">Net Assets (Assets - Liabilities)</td>
-                    <td class="text-right">@FormatAmount(data.TotalAssets - data.TotalLiabilities)</td>
-                    <td></td>
-                    @if (showBudget)
-                    {
-                        <td></td>
-                    }
-                </tr>
-                <tr>
-                    <td colspan="3" class="summary-label">Total Income</td>
-                    <td class="text-right">@FormatAmount(data.TotalIncome)</td>
-                    <td></td>
-                    @if (showBudget)
-                    {
-                        <td></td>
-                    }
-                </tr>
-                <tr>
-                    <td colspan="3" class="summary-label">Total Expenses</td>
-                    <td class="text-right">@FormatAmount(data.TotalExpenses)</td>
-                    <td></td>
-                    @if (showBudget)
-                    {
-                        <td></td>
-                    }
-                </tr>
-                <tr class="grand-total">
-                    <td colspan="3"><strong>Net Profit (Income - Expenses)</strong></td>
-                    <td class="text-right"><strong>@FormatAmount(data.TotalIncome - data.TotalExpenses)</strong></td>
-                    <td></td>
-                    @if (showBudget)
-                    {
-                        <td></td>
-                    }
-                </tr>
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    var netProfitValues = showBudget
+        ? new[] { FormatAmount(data.TotalIncome - data.TotalExpenses), "", "" }
+        : new[] { FormatAmount(data.TotalIncome - data.TotalExpenses), "" };
+    table.Total("Net Profit (Income - Expenses) :", 3, netProfitValues);
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

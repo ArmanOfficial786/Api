@@ -1,318 +1,116 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
-
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9.5pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+
+    // a missing amount prints blank (same as before)
+    string A(decimal? v) => v.HasValue ? v.Value.ToString("N2") : "";
+
     var rows = (Model["Rows"] as List<TellerToTellerCashTransferRowDto>) ?? new List<TellerToTellerCashTransferRowDto>();
-    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Grouped by Teller From — each transaction under the group shows
-    // Teller To / Branch / Date / Amount / Issued By plus a denomination
-    // breakdown table, then a subtotal row per Teller From group. Rows must
-    // arrive pre-sorted by TellerFrom (see repository's ORDER BY) since
-    // GroupBy preserves first-seen order, not sorted order.
+    // grouped by Teller From; rows must arrive pre-sorted by TellerFrom (the repository's ORDER BY),
+    // because GroupBy keeps first-seen order, not sorted order
     var tellerFromGroups = rows.GroupBy(r => r.TellerFrom ?? "").ToList();
+
+    // ── cell helpers (every row covers the 20 grid units) ──
+    ReportCell Hd(string t, int span, Align a = Align.Left) => new(t, a, span);    // column title
+    ReportCell Pad(int span) => new("", Align.Left, span, "pad");                  // indent in front of the denomination box
+    ReportCell Lb(string t, int span) => new(t, Align.Left, span, "bx b");         // "Rs 50"
+    ReportCell Xc(string t, int span) => new(t, Align.Left, span, "bx b");         // "X"
+    ReportCell Ct(string t, int span) => new(t, Align.Left, span, "bx");           // note count
+    ReportCell Am(string t, int span) => new(t, Align.Right, span, "bx");          // note count x face value
+    ReportCell St(string t, int span, Align a = Align.Left) => new(t, a, span, "st");   // group subtotal line
+
+    var table = new ReportTable(Model, title: "Teller To Teller Cash Transfer Report", sheetName: "TellerToTellerCashTransfer")
+        .NoColumnHeader()
+        .Style(new ReportStyle
+        {
+            ZebraStripes = false,
+            GroupBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 75)   // one text line per row
+        .Css(
+            "body { font-family: \"Times New Roman\", Times, serif; } " +
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }" +
+            // teller line and transaction line: no rules
+            "table.sheet-table tr.r-group td, table.sheet-table tr.r-data td { border: 0; }" +
+            "table.sheet-table td.ind { padding-left: 20px; }" +
+            // denomination box
+            "table.sheet-table td.bx { border: 1px solid #000 !important; padding: 1px 8px; }" +
+            "table.sheet-table td.pad { border: 0 !important; }" +
+            "table.sheet-table td.b { font-weight: bold; }" +
+            // group subtotal: bold with a heavy line above
+            "table.sheet-table td.st { font-weight: bold; border-top: 2px solid #000 !important; padding-top: 3px; padding-bottom: 3px; }");
+
+    for (var i = 0; i < 20; i++) table.Column("", 1);
+
+    // one line of the denomination box = two notes side by side: 2 + 1 + 2 + 4 units each, after a 2-unit indent
+    // (declared after 'table' so it can use it)
+    void DenomRow(string l1, decimal? c1, decimal f1, string l2, decimal? c2, decimal f2, bool secondIsPaisa = false)
+    {
+        var n1 = c1 ?? 0m;
+        var n2 = c2 ?? 0m;
+        // paisa has no "X" and its amount prints as 0.00 (same as before)
+        table.Data(
+            Pad(2),
+            Lb(l1, 2), Xc("X", 1), Ct(n1.ToString("0.##"), 2), Am((n1 * f1).ToString("N2"), 4),
+            Lb(l2, 2), Xc(secondIsPaisa ? "" : "X", 1), Ct(n2.ToString("0.##"), 2), Am(secondIsPaisa ? "0.00" : (n2 * f2).ToString("N2"), 4));
+    }
+
+    // ── title block ──
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
+
+    // column titles, printed once under the title block: 5 columns of 4 units each (20% each; the old widths were 22/22/22/17/17)
+    table.Header(Hd("Teller From", 4), Hd("Teller To", 4), Hd("Date", 4), Hd("Amount", 4, Align.Right), Hd("Issued By", 4));
+
+    // ── rows: one group per Teller From, one record (line + denomination box) per transfer, then a subtotal ──
+    foreach (var group in tellerFromGroups)
+    {
+        var groupRows = group.ToList();
+
+        table.GroupTitle(group.Key);
+
+        foreach (var row in groupRows)
+        {
+            table.Data(
+                new ReportCell(row.TellerTo ?? "", Align.Left, 4, "ind"),
+                new ReportCell(row.OfficeName ?? "", Align.Left, 4),
+                new ReportCell(row.Date ?? "", Align.Left, 4),
+                new ReportCell(A(row.Amount), Align.Right, 4),
+                new ReportCell(row.IssuedBy ?? "", Align.Left, 4));
+
+            DenomRow("Rs 1",  row.Rs1,  1m,  "Rs 50",   row.Rs50,   50m);
+            DenomRow("Rs 2",  row.Rs2,  2m,  "Rs 100",  row.Rs100,  100m);
+            DenomRow("Rs 5",  row.Rs5,  5m,  "Rs 250",  row.Rs250,  250m);
+            DenomRow("Rs 10", row.Rs10, 10m, "Rs 500",  row.Rs500,  500m);
+            DenomRow("Rs 20", row.Rs20, 20m, "Rs 1000", row.Rs1000, 1000m);
+            DenomRow("Rs 25", row.Rs25, 25m, "Paisa",   row.Paisa,  0m, secondIsPaisa: true);
+
+            table.Spacer();
+        }
+
+        // subtotal of the group: Teller From name centred under Date, the sum under Amount
+        table.Data(
+            St("", 4),
+            St("", 4),
+            St(group.Key, 4, Align.Center),
+            St(groupRows.Sum(r => r.Amount ?? 0m).ToString("N2"), 4, Align.Right),
+            St("", 4));
+
+        table.Spacer();
+    }
 }
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Teller To Teller Cash Transfer Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: "Times New Roman", Times, serif;
-                font-size: 9.5pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .meta-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 4px;
-            }
-
-                .meta-table td {
-                    padding: 3px 4px;
-                    font-size: 9.5pt;
-                    vertical-align: top;
-                }
-
-            .report-title {
-                text-align: center;
-                font-size: 15pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 6px 0 12px 0;
-            }
-
-            .meta-label {
-                font-weight: bold;
-            }
-
-            .col-header-table {
-                width: 100%;
-                border-collapse: collapse;
-                border-bottom: 1px solid #000;
-                margin-bottom: 4px;
-            }
-
-                .col-header-table th {
-                    text-align: left;
-                    font-weight: bold;
-                    padding: 3px 4px 6px 4px;
-                    font-size: 9.5pt;
-                }
-
-            .teller-from-row td {
-                font-weight: bold;
-                padding: 10px 4px 2px 4px;
-                font-size: 9.5pt;
-            }
-
-            .txn-row-table {
-                width: 100%;
-                border-collapse: collapse;
-            }
-
-                .txn-row-table td {
-                    padding: 2px 4px;
-                    font-size: 9.5pt;
-                }
-
-            .denom-table {
-                border-collapse: collapse;
-                border: 1px solid #000;
-                margin: 2px 0 10px 20px;
-                width: calc(100% - 20px);
-            }
-
-                .denom-table td {
-                    border: 1px solid #000;
-                    padding: 3px 8px;
-                    font-size: 9.5pt;
-                }
-
-            .denom-label {
-                font-weight: bold;
-                width: 12%;
-            }
-
-            .denom-x {
-                width: 3%;
-                font-weight: bold;
-            }
-
-            .denom-count {
-                width: 12%;
-            }
-
-            .denom-amount {
-                width: 23%;
-                text-align: right;
-            }
-
-            .subtotal-row-table {
-                width: 100%;
-                border-collapse: collapse;
-                border-top: 2px solid #000;
-                margin-top: 4px;
-            }
-
-                .subtotal-row-table td {
-                    padding: 6px 4px;
-                    font-weight: bold;
-                    font-size: 9.5pt;
-                }
-
-            .text-right {
-                text-align: right;
-            }
-
-            .text-center {
-                text-align: center;
-            }
-
-            @@media print {
-                .teller-from-row {
-                    page-break-after: avoid;
-                }
-
-                .denom-table {
-                    page-break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
-        {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
-
-        <div class="report-title">Teller To Teller Cash Transfer Report</div>
-
-        <table class="meta-table">
-            <tr>
-                <td width="30%"><span class="meta-label">Report Generated On :</span> @generatedOn</td>
-                <td width="35%"><span class="meta-label">From Date :</span> @fromDate</td>
-                <td width="35%"><span class="meta-label">To Date :</span> @toDate</td>
-            </tr>
-        </table>
-
-        <table class="col-header-table">
-            <colgroup>
-                <col style="width:22%;" />
-                <col style="width:22%;" />
-                <col style="width:22%;" />
-                <col style="width:17%;" />
-                <col style="width:17%;" />
-            </colgroup>
-            <tr>
-                <th>Teller From</th>
-                <th>Teller To</th>
-                <th>Date</th>
-                <th class="text-right">Amount</th>
-                <th>Issued By</th>
-            </tr>
-        </table>
-
-        @if (tellerFromGroups.Any())
-        {
-            foreach (var group in tellerFromGroups)
-            {
-                var groupRows = group.ToList();
-
-                <table style="width:100%; border-collapse: collapse;">
-                    <tr class="teller-from-row">
-                        <td colspan="5">@group.Key</td>
-                    </tr>
-                </table>
-
-                foreach (var row in groupRows)
-                {
-                    <table class="txn-row-table">
-                        <colgroup>
-                            <col style="width:22%;" />
-                            <col style="width:22%;" />
-                            <col style="width:22%;" />
-                            <col style="width:17%;" />
-                            <col style="width:17%;" />
-                        </colgroup>
-                        <tr>
-                            <td style="padding-left: 20px;">@(row.TellerTo ?? "")</td>
-                            <td>@(row.OfficeName ?? "")</td>
-                            <td>@(row.Date ?? "")</td>
-                            <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
-                            <td>@(row.IssuedBy ?? "")</td>
-                        </tr>
-                    </table>
-
-                    <table class="denom-table">
-                        <tr>
-                            <td class="denom-label">Rs 1</td>
-                            <td class="denom-x">X</td>
-                            <td class="denom-count">@(row.Rs1 ?? 0)</td>
-                            <td class="denom-amount">@(((row.Rs1 ?? 0) * 1m).ToString("N2"))</td>
-                            <td class="denom-label">Rs 50</td>
-                            <td class="denom-x">X</td>
-                            <td class="denom-count">@(row.Rs50 ?? 0)</td>
-                            <td class="denom-amount">@(((row.Rs50 ?? 0) * 50m).ToString("N2"))</td>
-                        </tr>
-                        <tr>
-                            <td class="denom-label">Rs 2</td>
-                            <td class="denom-x">X</td>
-                            <td class="denom-count">@(row.Rs2 ?? 0)</td>
-                            <td class="denom-amount">@(((row.Rs2 ?? 0) * 2m).ToString("N2"))</td>
-                            <td class="denom-label">Rs 100</td>
-                            <td class="denom-x">X</td>
-                            <td class="denom-count">@(row.Rs100 ?? 0)</td>
-                            <td class="denom-amount">@(((row.Rs100 ?? 0) * 100m).ToString("N2"))</td>
-                        </tr>
-                        <tr>
-                            <td class="denom-label">Rs 5</td>
-                            <td class="denom-x">X</td>
-                            <td class="denom-count">@(row.Rs5 ?? 0)</td>
-                            <td class="denom-amount">@(((row.Rs5 ?? 0) * 5m).ToString("N2"))</td>
-                            <td class="denom-label">Rs 250</td>
-                            <td class="denom-x">X</td>
-                            <td class="denom-count">@(row.Rs250 ?? 0)</td>
-                            <td class="denom-amount">@(((row.Rs250 ?? 0) * 250m).ToString("N2"))</td>
-                        </tr>
-                        <tr>
-                            <td class="denom-label">Rs 10</td>
-                            <td class="denom-x">X</td>
-                            <td class="denom-count">@(row.Rs10 ?? 0)</td>
-                            <td class="denom-amount">@(((row.Rs10 ?? 0) * 10m).ToString("N2"))</td>
-                            <td class="denom-label">Rs 500</td>
-                            <td class="denom-x">X</td>
-                            <td class="denom-count">@(row.Rs500 ?? 0)</td>
-                            <td class="denom-amount">@(((row.Rs500 ?? 0) * 500m).ToString("N2"))</td>
-                        </tr>
-                        <tr>
-                            <td class="denom-label">Rs 20</td>
-                            <td class="denom-x">X</td>
-                            <td class="denom-count">@(row.Rs20 ?? 0)</td>
-                            <td class="denom-amount">@(((row.Rs20 ?? 0) * 20m).ToString("N2"))</td>
-                            <td class="denom-label">Rs 1000</td>
-                            <td class="denom-x">X</td>
-                            <td class="denom-count">@(row.Rs1000 ?? 0)</td>
-                            <td class="denom-amount">@(((row.Rs1000 ?? 0) * 1000m).ToString("N2"))</td>
-                        </tr>
-                        <tr>
-                            <td class="denom-label">Rs 25</td>
-                            <td class="denom-x">X</td>
-                            <td class="denom-count">@(row.Rs25 ?? 0)</td>
-                            <td class="denom-amount">@(((row.Rs25 ?? 0) * 25m).ToString("N2"))</td>
-                            <td class="denom-label">Paisa</td>
-                            <td></td>
-                            <td class="denom-count">@(row.Paisa ?? 0)</td>
-                            <td class="denom-amount">0.00</td>
-                        </tr>
-                    </table>
-                }
-
-                <table class="subtotal-row-table">
-                    <colgroup>
-                        <col style="width:22%;" />
-                        <col style="width:22%;" />
-                        <col style="width:22%;" />
-                        <col style="width:17%;" />
-                        <col style="width:17%;" />
-                    </colgroup>
-                    <tr>
-                        <td></td>
-                        <td></td>
-                        <td class="text-center">@group.Key</td>
-                        <td class="text-right">@groupRows.Sum(r => r.Amount ?? 0m).ToString("N2")</td>
-                        <td></td>
-                    </tr>
-                </table>
-            }
-        }
-        else
-        {
-            <p class="text-center">No data found for the selected criteria</p>
-        }
-    </div>
-</body>
-</html>
+@await Html.PartialAsync("_SheetReport", table.Build())

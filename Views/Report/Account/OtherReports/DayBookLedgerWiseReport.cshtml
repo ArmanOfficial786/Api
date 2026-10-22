@@ -1,243 +1,106 @@
-﻿<!-- Views/Report/Account/OthersReport/DayBookLedgerWiseReport.cshtml -->
+﻿@using Microsoft.AspNetCore.Html
 @using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<DayBookLedgerWiseRowDto>) ?? new List<DayBookLedgerWiseRowDto>();
-    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var fontSize = "9pt";
+    const int ColumnCount = 4;   // number of .Column(...) lines below; the group lines span all of them
 
-    string Fmt(decimal? v)
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
     {
-        var val = v ?? 0m;
-        return val < 0 ? $"({Math.Abs(val).ToString("N2")})" : val.ToString("N2");
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
     }
 
-    // Two-level grouping: LedgerHead (e.g. ASSETS) -> MainLedger (e.g. CASH & BANK
-    // BALANCES). Detail rows are NOT aggregated here — each row is a distinct voucher
-    // transaction (Voucher No differs per row), so every row is shown individually,
-    // unlike DailyIncomeReport where duplicate SubLedger names get summed.
-    // Rows must arrive pre-sorted by LedgerHead, MainLedger (see repository's ORDER BY)
-    // since GroupBy preserves first-seen order, not sorted order.
+    // a negative amount prints in brackets, a missing amount prints 0.00 (same as before)
+    // (named Money, not Fmt, because Fmt is the helper class of the report table)
+    string Money(decimal? v)
+    {
+        var val = v ?? 0m;
+        return val < 0 ? $"({Math.Abs(val):N2})" : val.ToString("N2");
+    }
+
+    var rows = (Model["Rows"] as List<DayBookLedgerWiseRowDto>) ?? new List<DayBookLedgerWiseRowDto>();
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchNames = Text("BranchNames", "All");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var totalBalance = TotalOr("TotalBalance", rows.Sum(r => r.TodayBalance ?? 0));
+
+    // Two levels: ledger head (e.g. ASSETS) -> main ledger (e.g. CASH & BANK BALANCES).
+    // Every row is a different voucher, so rows are NOT added up: each one prints on its own line.
+    // The repository must return the rows already sorted by LedgerHead, MainLedger.
     var ledgerHeadGroups = rows.GroupBy(r => r.LedgerHead ?? "").ToList();
-}
 
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Day Book Ledger Wise Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    // the three sub ledgers share one cell, separated by non-breaking spaces; a missing one prints "-"
+    string Particulars(DayBookLedgerWiseRowDto r) =>
+        string.Join("\u00A0\u00A0\u00A0\u00A0",
+            new[] { r.SubLedger1, r.SubLedger2, r.SubLedger3 }
+                .Select(s => string.IsNullOrWhiteSpace(s) ? "-" : s));
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+    string Dash(string? v) => string.IsNullOrWhiteSpace(v) ? "-" : v;
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-                font-weight: bold;
-            }
-
-            .ledger-head-row td {
-                font-weight: bold;
-                padding-top: 8px;
-                padding-bottom: 2px;
-                border: none;
-            }
-
-            .ledger-head-row.first-group td {
-                padding-top: 2px;
-            }
-
-            .main-ledger-row td {
-                font-weight: bold;
-                padding-left: 20px;
-                padding-top: 4px;
-                padding-bottom: 2px;
-                border: none;
-            }
-
-            .detail-row td {
-                border: none;
-            }
-
-            .particulars-cell .dash {
-                display: inline-block;
-                min-width: 60px;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Day Book Ledger Wise Report", sheetName: "DayBookLedgerWise")
+        .Column("Particulars", 35)
+        .Column("Narration", 25)
+        .Column("Voucher No.", 20)
+        .Column("Balance", 20, Align.Right)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)   // one text line per row
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            // ledger head and main ledger lines: bold, no rules
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; padding-top: 6px; }\n" +
+            // the main ledger line is indented under its ledger head
+            "table.sheet-table tr.r-group td.main-ledger { padding-left: 20px; padding-top: 3px; }\n" +
+            // detail rows: no rules
+            "table.sheet-table tr.r-data td { border-bottom: 0; }");
+
+    // ── title block ──
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Labeled("Branch Name :", branchNames));
+    table.MetaRow(Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
+
+    // ── rows: ledger head line, then for each main ledger its line and its vouchers ──
+    foreach (var headGroup in ledgerHeadGroups)
+    {
+        table.GroupTitle(headGroup.Key);
+
+        foreach (var mainGroup in headGroup.GroupBy(r => r.MainLedger ?? ""))
+        {
+            // main ledger line: one indented cell spanning all columns
+            table.GroupBy(new ReportCell(mainGroup.Key, Align.Left, ColumnCount, "main-ledger"));
+
+            foreach (var row in mainGroup)
+            {
+                table.Data(
+                    Particulars(row),
+                    Dash(row.Narration),
+                    Dash(row.VoucherNo),
+                    Money(row.TodayBalance));
+            }
         }
+    }
 
-        <table class="data-table" data-sheet-name="DayBookLedgerWise">
-            <colgroup>
-                <col style="width:35%;" />
-                <col style="width:25%;" />
-                <col style="width:20%;" />
-                <col style="width:20%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="4">Day Book Ledger Wise Report</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="2"></td>
-                    <td><strong>From Date :</strong> @fromDate</td>
-                    <td class="text-right"><strong>To Date :</strong> @toDate</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="2"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="2" class="text-right"><strong>Branch Name :</strong> @branchNames</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="4"></td></tr>
-
-                <tr>
-                    <th>Particulars</th>
-                    <th>Narration</th>
-                    <th>Vouncher No.</th>
-                    <th class="text-right">Balance</th>
-                </tr>
-
-                @if (ledgerHeadGroups.Any())
-                {
-                    bool isFirstLedgerHead = true;
-                    foreach (var lhGroup in ledgerHeadGroups)
-                    {
-                        <tr class="ledger-head-row @(isFirstLedgerHead ? "first-group" : "")">
-                            <td colspan="4">@lhGroup.Key</td>
-                        </tr>
-                        isFirstLedgerHead = false;
-
-                        var mainLedgerGroups = lhGroup.GroupBy(r => r.MainLedger ?? "").ToList();
-
-                        foreach (var mlGroup in mainLedgerGroups)
-                        {
-                            <tr class="main-ledger-row">
-                                <td colspan="4">@mlGroup.Key</td>
-                            </tr>
-
-                            foreach (var row in mlGroup)
-                            {
-                                <tr class="detail-row">
-                                    <td class="particulars-cell">
-                                        <span class="dash">@(row.SubLedger1 ?? "-")</span>
-                                        <span class="dash">@(row.SubLedger2 ?? "-")</span>
-                                        <span class="dash">@(row.SubLedger3 ?? "-")</span>
-                                    </td>
-                                    <td>@(row.Narration ?? "-")</td>
-                                    <td>@(row.VoucherNo ?? "-")</td>
-                                    <td class="text-right">@Fmt(row.TodayBalance)</td>
-                                </tr>
-                            }
-                        }
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="3" class="text-right">Grand Total</td>
-                        <td class="text-right">@Fmt(totalBalance)</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="4" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    // label spans the first 3 columns; the value fills Balance
+    if (rows.Count > 0)
+        table.Total("Grand Total", 3, Money(totalBalance));
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

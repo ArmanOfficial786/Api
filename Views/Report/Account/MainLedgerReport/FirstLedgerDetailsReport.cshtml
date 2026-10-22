@@ -1,28 +1,21 @@
-﻿<!-- Views/Report/Account/FirstLedgerDetailsReport/FirstLedgerDetailsReport.cshtml -->
-@using NexgenCosysReport.Dtos.RequestDtos.Account.FirstLedgerDetailsReport
-
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.FirstLedgerDetailsReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<FirstLedgerDetailsRowDto>) ?? new List<FirstLedgerDetailsRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalDebitAmount = Model["TotalDebitAmount"] as decimal? ?? 0;
-    var totalCreditAmount = Model["TotalCreditAmount"] as decimal? ?? 0;
-    var openingBalance = Model["OpeningBalance"] as decimal? ?? 0;
-    var closingBalance = Model["ClosingBalance"] as decimal? ?? 0;
-    var accountType = Model["AccountType"]?.ToString() ?? "";
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All";
-    var ledgerName = Model["LedgerName"]?.ToString() ?? "";
-    var subLedgerName = Model["SubLedgerName"]?.ToString() ?? "";
-    var showOpeningBalance = Model["ShowOpeningBalance"] as bool? ?? false;
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var fontSize = "9.5pt";
+    const int ColumnCount = 6;
 
-    Func<decimal?, string> N = v => (v ?? 0m).ToString("N2");
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    bool Flag(string key) => Model.TryGetValue(key, out var fv) && fv is bool b && b;
+    decimal Dec(string key) => Model.TryGetValue(key, out var dv) && dv != null ? Convert.ToDecimal(dv) : 0m;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        var dv = Dec(key);
+        return dv != 0 ? dv : fallback;
+    }
+    string N(decimal? v) => (v ?? 0m).ToString("N2");
 
     string SummaryBalanceWithDirection(decimal balance, string? acctType)
     {
@@ -33,260 +26,98 @@
             : (balance >= 0 ? "CR" : "DR");
         return $"{Math.Abs(balance):N2} {direction}";
     }
-}
 
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>First Sub Ledger Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var rows = (Model["Rows"] as List<FirstLedgerDetailsRowDto>) ?? new List<FirstLedgerDetailsRowDto>();
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9.5pt;
-                background: white;
-                color: #000;
-            }
+    var openingBalance = Dec("OpeningBalance");
+    var closingBalance = Dec("ClosingBalance");
+    var accountType = Text("AccountType");
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchNames = Text("BranchNames", "All");
+    var ledgerName = Text("LedgerName");
+    var subLedgerName = Text("SubLedgerName");
+    var showOpeningBalance = Flag("ShowOpeningBalance");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalDebitAmount = TotalOr("TotalDebitAmount", rows.Sum(r => r.DebitAmount ?? 0m));
+    var totalCreditAmount = TotalOr("TotalCreditAmount", rows.Sum(r => r.CreditAmount ?? 0m));
 
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9.5pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: top;
-                }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .report-title {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 15pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 6px 6px 10px 6px;
-            }
-
-            /* FIX: subheader now uses its own auto-layout table (no table-layout:
-                           fixed, no word-wrap: break-word) so each "Label : Value" pair stays
-                           on a single line instead of wrapping once it exceeds a fixed
-                           6-column width inherited from the data table below. */
-            .meta-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 6px;
-            }
-
-                .meta-table td {
-                    padding: 2px 6px;
-                    font-size: 9.5pt;
-                    white-space: nowrap;
-                    vertical-align: top;
-                }
-
-            .meta-left {
-                text-align: left;
-                width: 50%;
-            }
-
-            .meta-right {
-                text-align: right;
-                width: 50%;
-            }
-
-            .meta-spacer td {
-                height: 14px;
-            }
-
-            .column-header-row th {
-                text-align: left;
-                font-weight: bold;
-                border-top: none;
-                border-bottom: 1.5px solid #000;
-                padding: 6px 6px 8px 6px;
-            }
-
-            .entry-line-1 td {
-                padding: 6px 6px 0 6px;
-                border-top: 1px solid #000;
-            }
-
-            .entry-line-2 td {
-                padding: 0 6px;
-            }
-
-            .entry-line-3 td {
-                padding: 0 6px 6px 6px;
-            }
-
-            .sub-ledger-code {
-                display: inline-block;
-                min-width: 90px;
-            }
-
-            .opening-balance-row td {
-                background: #f2f2f2;
-                font-weight: bold;
-                padding: 5px 6px;
-                border-top: 1px solid #000;
-                border-bottom: 1px solid #000;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            @@media print {
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "First Sub Ledger Report", sheetName: "FirstLedgerDetails")
+        .Column("Date", 10)
+        .Column("Voucher No", 14)
+        .Column("Particulars", 38)
+        .Column("DR", 12, Align.Right)
+        .Column("CR", 12, Align.Right)
+        .Column("Balance", 14, Align.Right)
+        .NoColumnHeader()
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            SubTotalBackground = "#f2f2f2",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 5, headerMm: 8, firstPageExtraMm: 65)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 0; border-bottom: 1.5px solid #000; padding: 6px 6px 8px 6px; }\n" +
+            "table.sheet-table tr.r-group td { font-weight: normal; border-top: 0; border-bottom: 0; padding: 0 6px; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 0; padding: 0 6px 6px 6px; }\n" +
+            "table.sheet-table tr.r-group td.e1 { border-top: 1px solid #000; padding-top: 6px; padding-bottom: 0; }\n" +
+            "table.sheet-table tr.r-subtotal td { border-top: 1px solid #000; border-bottom: 1px solid #000; padding: 5px 6px; }");
 
-        <div class="report-title">First Sub Ledger Report</div>
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchNames), Fmt.Labeled("From Date :", fromDate), 3);
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn), Fmt.Labeled("To Date :", toDate), 3);
+    table.MetaRow(Fmt.Labeled("Ledger Name :", ledgerName), Fmt.Labeled("Sub Ledger Name :", subLedgerName), 3);
 
-        <table class="meta-table">
-            <tr>
-                <td class="meta-left"><strong>Branch Name :</strong> @branchNames</td>
-                <td class="meta-right"><strong>From Date :</strong> @fromDate</td>
-            </tr>
-            <tr>
-                <td class="meta-left"><strong>Report Generated On :</strong> @generatedOn</td>
-                <td class="meta-right"><strong>To Date :</strong> @toDate</td>
-            </tr>
-            <tr>
-                <td class="meta-left"><strong>Ledger Name :</strong> @ledgerName</td>
-                <td class="meta-right"><strong>Sub Ledger Name :</strong> @subLedgerName</td>
-            </tr>
-            <tr class="meta-spacer"><td colspan="2"></td></tr>
-        </table>
+    if (showOpeningBalance)
+        table.SubTotal("Opening Balance", ColumnCount - 1, SummaryBalanceWithDirection(openingBalance, accountType));
 
-        <table class="data-table" data-sheet-name="FirstLedgerDetails">
-            <colgroup>
-                <col style="width:10%;" />
-                <col style="width:14%;" />
-                <col style="width:38%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:14%;" />
-            </colgroup>
-            <tbody>
-                @if (showOpeningBalance)
-                {
-                    <tr class="opening-balance-row">
-                        <td colspan="5" class="text-right">Opening Balance</td>
-                        <td class="text-right">@SummaryBalanceWithDirection(openingBalance, accountType)</td>
-                    </tr>
-                }
+    table.Header();
 
-                <tr class="column-header-row">
-                    <th>Date</th>
-                    <th>Voucher No</th>
-                    <th class="text-center">Particulars</th>
-                    <th class="text-right">DR</th>
-                    <th class="text-right">CR</th>
-                    <th class="text-right">Balance</th>
-                </tr>
+    foreach (var row in rows)
+    {
+        var adDate = row.VoucherDateOn.HasValue ? row.VoucherDateOn.Value.ToString("MM/dd/yyyy") : "";
+        var rowBalance = row.BalanceAmount ?? 0m;
+        var rowType = row.Type ?? "";
 
-                @if (rows.Any())
-                {
-                    foreach (var row in rows)
-                    {
-                        var adDate = row.VoucherDateOn.HasValue ? row.VoucherDateOn.Value.ToString("MM/dd/yyyy") : "";
-                        var rowBalance = row.BalanceAmount ?? 0m;
-                        var rowType = row.Type ?? "";
+        table.GroupBy(
+            new ReportCell(row.VoucherDate ?? "", Align.Left, 1, "e1"),
+            new ReportCell(row.VoucherNo ?? "", Align.Left, 1, "e1"),
+            new ReportCell(row.MainLedger ?? "", Align.Left, 1, "e1"),
+            new ReportCell(N(row.DebitAmount), Align.Right, 1, "e1"),
+            new ReportCell(N(row.CreditAmount), Align.Right, 1, "e1"),
+            new ReportCell($"{Math.Abs(rowBalance):N2} {rowType}", Align.Right, 1, "e1"));
 
-                        <tr class="entry-line-1">
-                            <td>@(row.VoucherDate ?? "")</td>
-                            <td>@(row.VoucherNo ?? "")</td>
-                            <td>@(row.MainLedger ?? "")</td>
-                            <td class="text-right">@N(row.DebitAmount)</td>
-                            <td class="text-right">@N(row.CreditAmount)</td>
-                            <td class="text-right">@Math.Abs(rowBalance).ToString("N2") @rowType</td>
-                        </tr>
-                        <tr class="entry-line-2">
-                            <td>@adDate</td>
-                            <td></td>
-                            <td>
-                                <span class="sub-ledger-code">@(row.SubLedger1 ?? "")</span>@(row.SubLedger2 ?? "")
-                            </td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                        </tr>
-                        <tr class="entry-line-3">
-                            <td></td>
-                            <td></td>
-                            <td>@(row.NarrationLedger ?? "")</td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                        </tr>
-                    }
+        table.GroupBy(
+            ReportCell.Left(adDate),
+            ReportCell.Left(""),
+            ReportCell.Left($"{row.SubLedger1 ?? ""}\u00A0\u00A0\u00A0\u00A0\u00A0\u00A0{row.SubLedger2 ?? ""}"),
+            ReportCell.Left(""),
+            ReportCell.Left(""),
+            ReportCell.Left(""));
 
-                    <tr class="grand-total-row">
-                        <td colspan="3" class="text-right">Grand Total</td>
-                        <td class="text-right">@N(totalDebitAmount)</td>
-                        <td class="text-right">@N(totalCreditAmount)</td>
-                        <td class="text-right">@SummaryBalanceWithDirection(closingBalance, accountType)</td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="5" class="text-right">Total Records</td>
-                        <td class="text-center">@totalRecords</td>
-                    </tr>
+        table.Data(
+            ReportCell.Left(""),
+            ReportCell.Left(""),
+            ReportCell.Left(row.NarrationLedger ?? ""),
+            ReportCell.Left(""),
+            ReportCell.Left(""),
+            ReportCell.Left(""));
+    }
 
-                    @if (closingBalance != 0)
-                    {
-                        <tr class="opening-balance-row">
-                            <td colspan="5" class="text-right">Closing Balance</td>
-                            <td class="text-right">@SummaryBalanceWithDirection(closingBalance, accountType)</td>
-                        </tr>
-                    }
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="6" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", 3, N(totalDebitAmount), N(totalCreditAmount), SummaryBalanceWithDirection(closingBalance, accountType));
+        table.Total("Total Records", ColumnCount - 1, totalRecords.ToString());
+
+        if (closingBalance != 0)
+            table.SubTotal("Closing Balance", ColumnCount - 1, SummaryBalanceWithDirection(closingBalance, accountType));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

@@ -1,14 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Account.AccountingReport;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Account.AccountingReport;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
+using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
-using System.Text.Json;
+using System.Security.Claims;
 
 namespace NexgenCosysReport.Controllers.Account.AccountingReports
 {
@@ -16,124 +14,119 @@ namespace NexgenCosysReport.Controllers.Account.AccountingReports
     [Route("api/[controller]")]
     public class CashFlowDetailsController : ControllerBase
     {
+        private const string ReportName = "CashFlowDetails";
+
         private readonly ICashFlowDetail _cashFlowService;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
+        private readonly IReportHeaderProvider _headers;
         private readonly IJsReportService _jsReportService;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly CustomHeaderResponse _headerResponse;
-        private readonly IOptions<ReportSettings> _reportSettings;
+        private readonly IReportDataCache _dataCache;
         private readonly ILogger<CashFlowDetailsController> _logger;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        private static readonly PageSizeSetting NPageSetting = PageSizeSetting.A4Portrait;
+        private static readonly PageSizeSetting VPageSetting =
+            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         public CashFlowDetailsController(
             ICashFlowDetail cashFlowService,
-            ICommonHeaderRepository commonHeaderRepository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
-            IWebHostEnvironment webHostEnvironment,
-            CustomHeaderResponse headerResponse,
-            IOptions<ReportSettings> reportSettings,
-            ILogger<CashFlowDetailsController> logger)
+            IReportDataCache dataCache,
+            ILogger<CashFlowDetailsController> logger,
+            IReportFileResponse reportFileResponse)
         {
             _cashFlowService = cashFlowService;
-            _commonHeaderRepository = commonHeaderRepository;
+            _headers = headers;
             _jsReportService = jsReportService;
-            _webHostEnvironment = webHostEnvironment;
-            _headerResponse = headerResponse;
-            _reportSettings = reportSettings;
+            _dataCache = dataCache;
             _logger = logger;
+            _reportFileResponse = reportFileResponse;
         }
-        //need imporve the reposiotry
-        [HttpPost()]
-        public async Task<ActionResult> GenerateReport(
+
+        [HttpPost]
+        public async Task<IActionResult> GenerateReport(
             [FromBody] CashFlowDetailsRequest request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
             try
             {
-                var reportName = "CashFlowDetails";
-                var upperFormat = format.ToUpper();
                 if (request == null || !ModelState.IsValid)
-                    return BadRequest(new { success = false, status = 400, message = "Invalid request" });
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+                var userScope = User.FindFirst("UserId")?.Value
+                    ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? "anonymous";
 
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, reportName,
-                        _jsReportService, _logger);
-                }
+                var upperFormat = format.ToUpperInvariant();
+                var isVisual = request.VisualReport;
+                var page = isVisual ? VPageSetting : NPageSetting;
 
-                // Fetch data
-                var dataTask = _cashFlowService.GetCashFlowDetails(request);
-                string? branchIdForHeader = null;
+                var dataKey = ReportCacheKey.ForData(
+                    request, ReportName, userScope, nameof(request.VisualReport));
+                var reportKey = $"{dataKey}_{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}";
+
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: false,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
+
+                // header is branch specific only when exactly one branch is selected
+                string? headerBranch = null;
                 if (!request.SameCompanyName && !string.IsNullOrEmpty(request.BranchIds) &&
                     request.BranchIds != "-1" && !request.BranchIds.Contains(','))
                 {
-                    branchIdForHeader = request.BranchIds;
+                    headerBranch = request.BranchIds;
                 }
-                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+                var headerTask = _headers.GetAsync(headerBranch, ct);
 
-                await Task.WhenAll(dataTask, headerTask);
+                var dataTask = _dataCache.GetOrLoadAsync(
+                    dataKey,
+                    async () =>
+                    {
+                        var cashFlow = await _cashFlowService.GetCashFlowDetails(request);
+                        var hasRows = cashFlow.OperatingRows.Any()
+                            || cashFlow.InvestingRows.Any()
+                            || cashFlow.FinancingRows.Any();
+                        return hasRows ? cashFlow : null;
+                    },
+                    ct);
+                await Task.WhenAll(headerTask, dataTask);
 
                 var data = await dataTask;
-                var headerData = await headerTask;
+                if (data == null)
+                    return NotFound(new { success = false, StatusCode = 404, message = "No data found" });
 
-                if (!data.OperatingRows.Any() && !data.InvestingRows.Any() && !data.FinancingRows.Any())
-                {
-                    return NotFound(new { success = false, status = 400, message = "No data found" });
-                }
-
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-                await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData, nameof(CommonHeader.CompanyLogo), webRoot));
+                var totalRecords = data.OperatingRows.Count + data.InvestingRows.Count + data.FinancingRows.Count;
 
                 var reportData = new Dictionary<string, object>
                 {
                     { "CashFlowData", data },
-                    { "HeaderDataSet", headerData },
+                    { "HeaderDataSet", await headerTask },
+                    { "TotalRecords", totalRecords },
                     { "TillDate", request.TillDate },
                     { "BranchName", request.BranchName },
-                    { "Format", upperFormat }
+                    { "Format", upperFormat },
+                    { "SameCompanyName", request.SameCompanyName },
+                    { "VisualReport", request.VisualReport },
+                    { "PageSetting", page }
                 };
 
-                var htmlContent = await Task.Run(() =>
-                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
-                        reportKey: reportKey,
-                        reportPath: request.VisualReport
-                            ? "Views/VisualReport/VCashFlowDetailsReport.cshtml"
-                            : "Views/Report/Account/AccountingReport/CashFlowDetailReport.cshtml",
-                        data: reportData));
+                var viewPath = isVisual
+                    ? "Views/VisualReport/VCashFlowDetailsReport.cshtml"
+                    : "Views/Report/Account/AccountingReport/CashFlowDetailReport.cshtml";
 
-                if (upperFormat == "VIEW")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.OperatingRows.Count + data.InvestingRows.Count + data.FinancingRows.Count
-                    };
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                    reportKey: reportKey, reportPath: viewPath, data: reportData, ct: ct);
 
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
-                }
-
-                return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, reportName,
-                    _jsReportService, _logger);
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: false,
+                    totalRecords: totalRecords,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "CashFlowDetails report failed");
+                _logger.LogError(ex, "Error generating {Report} report", ReportName);
                 return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }

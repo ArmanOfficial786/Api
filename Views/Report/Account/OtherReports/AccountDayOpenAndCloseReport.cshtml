@@ -1,212 +1,87 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
-
+﻿@using System.Globalization
+@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<AccountDayOpenAndCloseRowDto>) ?? new List<AccountDayOpenAndCloseRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var fontSize = "9pt";
 
-    // Grouped by branch (OfficeName) — rows must arrive pre-sorted by OfficeName
-    // (see repository's ORDER BY) since GroupBy preserves first-seen order, not sorted order.
-    var branchGroups = rows.GroupBy(r => r.OfficeName ?? "").ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Account Date Opened And Closed Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-                font-weight: bold;
-            }
-
-            .branch-row td {
-                font-weight: bold;
-                padding-top: 12px;
-                padding-bottom: 4px;
-                border: none;
-            }
-
-            .branch-row.first-group td {
-                padding-top: 6px;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
         }
+        return fallback;
+    }
 
-        <table class="data-table" data-sheet-name="AccountDayOpenAndClose">
-            <colgroup>
-                <col style="width:12%;" />
-                <col style="width:14%;" />
-                <col style="width:16%;" />
-                <col style="width:12%;" />
-                <col style="width:16%;" />
-                <col style="width:10%;" />
-                <col style="width:10%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="7">Account Date Opened And Closed Report</td>
-                </tr>
+    // date and time exactly as before, e.g. 3/14/2026 9:05:00 AM
+    string Dt(DateTime? v) => v.HasValue ? v.Value.ToString("M/d/yyyy h:mm:ss tt", CultureInfo.InvariantCulture) : "";
 
-                <tr class="meta-row">
-                    <td colspan="2"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="5" class="text-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="7"></td></tr>
+    var rows = (Model["Rows"] as List<AccountDayOpenAndCloseRowDto>) ?? new List<AccountDayOpenAndCloseRowDto>();
 
-                <tr>
-                    <th>Opened Date</th>
-                    <th>Opened By</th>
-                    <th>Opened On</th>
-                    <th>Closed By</th>
-                    <th>Closed On</th>
-                    <th>Status</th>
-                    <th>Type</th>
-                </tr>
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
 
-                @if (branchGroups.Any())
-                {
-                    bool isFirstGroup = true;
-                    foreach (var branchGroup in branchGroups)
-                    {
-                        <tr class="branch-row @(isFirstGroup ? "first-group" : "")">
-                            <td colspan="7">@branchGroup.Key</td>
-                        </tr>
-                        isFirstGroup = false;
+    // grouped by branch (OfficeName), in the order the branches first appear:
+    // the repository must return the rows already sorted by OfficeName
+    var branchGroups = rows.GroupBy(r => r.OfficeName ?? "").ToList();
 
-                        foreach (var row in branchGroup)
-                        {
-                            <tr class="detail-row">
-                                <td>@(row.OpenedDateOnBs ?? "")</td>
-                                <td>@(row.OpenedBy ?? "")</td>
-                                <td>@(row.OpenedOn.HasValue ? row.OpenedOn.Value.ToString("M/d/yyyy h:mm:ss tt") : "")</td>
-                                <td>@(row.ClosedBy ?? "")</td>
-                                <td>@(row.ClosedOn.HasValue ? row.ClosedOn.Value.ToString("M/d/yyyy h:mm:ss tt") : "")</td>
-                                <td>@(row.Status ?? "")</td>
-                                <td>@(row.EveningCounter ?? "")</td>
-                            </tr>
-                        }
-                    }
+    var table = new ReportTable(Model, title: "Account Date Opened And Closed Report", sheetName: "AccountDayOpenAndClose")
+        .Column("Opened Date", 12)
+        .Column("Opened By", 14)
+        .Column("Opened On", 16)
+        .Column("Closed By", 12)
+        .Column("Closed On", 16)
+        .Column("Status", 10)
+        .Column("Type", 10)
+        .Style(new ReportStyle
+        {
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)   // one text line per row
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            // branch line: bold, no rules
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; }");
 
-                    <tr class="grand-total-row">
-                        <td colspan="6" class="text-right">Total Records</td>
-                        <td class="text-right">@totalRecords</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    // ── title block ──
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
+
+    // ── rows: one block per branch ──
+    foreach (var branchGroup in branchGroups)
+    {
+        // branch line: one cell spanning all columns
+        table.GroupTitle(branchGroup.Key);
+
+        foreach (var row in branchGroup)
+        {
+            table.Data(
+                row.OpenedDateOnBs ?? "",
+                row.OpenedBy ?? "",
+                Dt(row.OpenedOn),
+                row.ClosedBy ?? "",
+                Dt(row.ClosedOn),
+                row.Status ?? "",
+                row.EveningCounter ?? "");
+        }
+    }
+
+    // footer: one right-aligned cell spanning all 7 columns
+    if (rows.Count > 0)
+        table.Total($"Total Records : {totalRecords}", 7);
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

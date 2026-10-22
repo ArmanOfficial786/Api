@@ -1,211 +1,92 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.AccountingReport;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.AccountingReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
-
 @{
     Layout = null;
 
-    var rows = (Model["TrialBalanceRows"] as List<SummaryTrialBalanceRowDto>) ?? new List<SummaryTrialBalanceRowDto>();
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "Ledger Name";
-    var withClosingBalance = Model.ContainsKey("WithClosingBalance") && Convert.ToBoolean(Model["WithClosingBalance"]);
-    var reportType = Model["ReportType"]?.ToString() ?? "Detail";
-    var isSubLedger = Model.ContainsKey("IsSubLedger") && Convert.ToBoolean(Model["IsSubLedger"]);
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var fontSize = "8pt";
+    var metaFontSize = "8.5pt";
+
+    string Text(string key, string fallback = "") =>
+        Model.TryGetValue(key, out var value) && value != null ? value.ToString() ?? fallback : fallback;
+
+    var rows = (Model["TrialBalanceRows"] as IEnumerable<SummaryTrialBalanceRowDto>)?.ToList()
+        ?? new List<SummaryTrialBalanceRowDto>();
+
+    var reportType = Text("ReportType", "Detail");
+    var branchName = Text("BranchName", "All");
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    string FormatAmount(decimal amount) => amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
+    string FormatAmount(decimal amount) =>
+        amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
 
-    // Group by LedgerHead and MainLedger for totals
-    var groups = rows
-        .GroupBy(r => new { r.LedgerHead, r.MainLedger })
-        .OrderBy(g => g.Key.LedgerHead)
-        .ThenBy(g => g.Key.MainLedger)
-        .ToList();
+    decimal grandDebit = rows.Sum(row => row.DebitAmount);
+    decimal grandCredit = rows.Sum(row => row.CreditAmount);
 
-    decimal grandDebit = rows.Sum(r => r.DebitAmount);
-    decimal grandCredit = rows.Sum(r => r.CreditAmount);
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Summary Trial Balance Report</title>
-    <style>
-            /* Same styles as previous reports */
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var table = new ReportTable(Model, title: "Summary Trial Balance Report", sheetName: "SummaryTrialBalance")
+        .Column("Ledger Head", 15)
+        .Column("Sub Ledger", 35)
+        .Column("Debit", 16, Align.Right)
+        .Column("Credit", 17, Align.Right)
+        .Column("Balance", 17, Align.Right)
+        .Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 70)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-section td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 4px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            @"
+            table.sheet-table tr.r-section td.text-left { text-align: center !important; }");
 
-            body {
-                margin: 0;
-                padding: 0;
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-            }
+    table.MetaPair("Branch Name :", branchName, "From Date :", fromDate)
+         .MetaPair("Report Generated On :", generatedOn, "To Date :", toDate);
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
+    if (reportType == "Detail")
+    {
+        // one section per ledger head / main ledger, with its own total
+        var mainLedgerGroups = rows
+            .GroupBy(row => new { row.LedgerHead, row.MainLedger })
+            .OrderBy(mainGroup => mainGroup.Key.LedgerHead)
+            .ThenBy(mainGroup => mainGroup.Key.MainLedger)
+            .ToList();
 
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-            }
-
-                .data-table th, .data-table td {
-                    padding: 4px 6px;
-                    border: 1px solid #ddd;
-                }
-
-                .data-table th {
-                    background: #f2f2f2;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 4px 6px;
-            }
-
-            .section-header td {
-                font-weight: bold;
-                background: #e6e6e6;
-                text-align: center;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-            }
-
-            .grand-total td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-left {
-                text-align: left !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .indent {
-                padding-left: 20px;
-            }
-
-            @@media print {
-                body {
-                    margin: 0;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+        foreach (var mainGroup in mainLedgerGroups)
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            table.Section($"{mainGroup.Key.LedgerHead} - {mainGroup.Key.MainLedger}");
+
+            foreach (var row in mainGroup)
+            {
+                table.Data(
+                    "",
+                    $"{row.SubLedger}",
+                    FormatAmount(row.DebitAmount),
+                    FormatAmount(row.CreditAmount),
+                    FormatAmount(row.Balance));
+            }
+
+            table.SubTotal($"Total {mainGroup.Key.MainLedger}", 2,
+                FormatAmount(mainGroup.Sum(row => row.DebitAmount)),
+                FormatAmount(mainGroup.Sum(row => row.CreditAmount)),
+                FormatAmount(mainGroup.Sum(row => row.Balance)));
         }
+    }
+    else
+    {
+        // Summary mode: flat list, no grouping
+        foreach (var row in rows)
+        {
+            table.Data(
+                $"{row.LedgerHead}",
+                $"{row.SubLedger}",
+                FormatAmount(row.DebitAmount),
+                FormatAmount(row.CreditAmount),
+                FormatAmount(row.Balance));
+        }
+    }
 
-        <table class="data-table" data-sheet-name="SummaryTrialBalance">
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="5">Summary Trial Balance Report</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="3"><strong>Branch Name :</strong> @branchName</td>
-                    <td colspan="2" class="text-right"><strong>From Date :</strong> @fromDate</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="2" class="text-right"><strong>To Date :</strong> @toDate</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="5"></td></tr>
-
-                <tr>
-                    <th style="width:15%;">Ledger Head</th>
-                    <th style="width:35%;">Sub Ledger</th>
-                    <th style="width:16%;" class="text-right">Debit</th>
-                    <th style="width:17%;" class="text-right">Credit</th>
-                    <th style="width:17%;" class="text-right">Balance</th>
-                </tr>
-
-                @if (reportType == "Detail")
-                {
-                    // Show each row with possible grouping
-                    foreach (var group in groups)
-                    {
-                        // Show group header (LedgerHead and MainLedger)
-                        <tr class="section-header">
-                            <td colspan="5">@group.Key.LedgerHead - @group.Key.MainLedger</td>
-                        </tr>
-                        // Show rows for this group
-                        foreach (var row in group)
-                        {
-                            <tr>
-                                <td></td>
-                                <td>@row.SubLedger</td>
-                                <td class="text-right">@FormatAmount(row.DebitAmount)</td>
-                                <td class="text-right">@FormatAmount(row.CreditAmount)</td>
-                                <td class="text-right">@FormatAmount(row.Balance)</td>
-                            </tr>
-                        }
-                        // Show subtotal for this group
-                        <tr class="grand-total">
-                            <td colspan="2" class="text-right">Total @group.Key.MainLedger</td>
-                            <td class="text-right">@FormatAmount(group.Sum(r => r.DebitAmount))</td>
-                            <td class="text-right">@FormatAmount(group.Sum(r => r.CreditAmount))</td>
-                            <td class="text-right">@FormatAmount(group.Sum(r => r.Balance))</td>
-                        </tr>
-                    }
-                }
-                else // Summary mode – no grouping, just flat list
-                {
-                    foreach (var row in rows)
-                    {
-                        <tr>
-                            <td>@row.LedgerHead</td>
-                            <td>@row.SubLedger</td>
-                            <td class="text-right">@FormatAmount(row.DebitAmount)</td>
-                            <td class="text-right">@FormatAmount(row.CreditAmount)</td>
-                            <td class="text-right">@FormatAmount(row.Balance)</td>
-                        </tr>
-                    }
-                }
-
-                <tr class="grand-total">
-                    <td colspan="2" class="text-right">Grand Total</td>
-                    <td class="text-right">@FormatAmount(grandDebit)</td>
-                    <td class="text-right">@FormatAmount(grandCredit)</td>
-                    <td></td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+        table.Total("Grand Total :", 2, FormatAmount(grandDebit), FormatAmount(grandCredit), "");
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

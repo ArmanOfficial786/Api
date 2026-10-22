@@ -9,6 +9,7 @@
         public string ReportType { get; set; } = "Detail";
         public decimal InterestRate { get; set; } = 0;
         public decimal MinimumClosingBalance { get; set; } = 0;
+        public bool VisualReport { get; set; } = false;
     }
     public class IBTStatementBranchwiseRowDto
     {

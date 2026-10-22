@@ -1,196 +1,77 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.AccountingReport;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.AccountingReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
-    var data = Model["CashFlowData"] as CashFlowDetailsData;
-    var tillDate = Model["TillDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fontSize = "8pt";
+    var metaFontSize = "8.5pt";
+
+    string Text(string key, string fallback = "") =>
+        Model.TryGetValue(key, out var value) && value != null ? value.ToString() ?? fallback : fallback;
+
+    var data = (CashFlowDetailsData)Model["CashFlowData"];
+
+    var branchName = Text("BranchName", "All");
+    var tillDate = Text("TillDate");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
     string FormatAmount(decimal amount) =>
         amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
 
-    int sectionNumber = 1;
+    var table = new ReportTable(Model, title: "Cash Flow Details Report", sheetName: "CashFlowDetailsReport")
+        .Column("S.N.", 10)
+        .Column("Details", 60)
+        .Column("Current Year (Rs)", 30, Align.Right)
+        .Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 75)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-section td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 4px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            @"
+            table.sheet-table tr.r-section td.text-left { text-align: center !important; }
+            table.sheet-table tr.r-data td.bold         { font-weight: bold; }");
+
+    table.MetaPair("Branch Name :", branchName, "Till Date :", tillDate)
+         .MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    // one activity block: numbered section bar, its rows, then the net total line
+    void Activity(
+        int sectionNumber,
+        string title,
+        IEnumerable<(string Label, decimal Amount)> activityRows,
+        string netLabel,
+        decimal netAmount)
+    {
+        table.Section($"{sectionNumber}. {title}");
+        foreach (var activityRow in activityRows)
+            table.Data("", activityRow.Label, FormatAmount(activityRow.Amount));
+        table.Total(netLabel, 2, FormatAmount(netAmount));
+    }
+
+    Activity(1, "Cash Flows From Operating Activities",
+        data.OperatingRows.Select(row => (Label: row.SubLedger ?? row.MainLedger, Amount: row.Amount)),
+        "Net Cash Provided by Operating Activities", data.NetOperating);
+
+    Activity(2, "Cash Flows From Investing Activities",
+        data.InvestingRows.Select(row => (Label: row.SubLedger ?? row.MainLedger, Amount: row.Amount)),
+        "Net Cash Used in Investing Activities", data.NetInvesting);
+
+    Activity(3, "Cash Flows From Financing Activities",
+        data.FinancingRows.Select(row => (Label: row.SubLedger ?? row.MainLedger, Amount: row.Amount)),
+        "Net Cash Used in Financing Activities", data.NetFinancing);
+
+    // ── Summary ──
+    table.Total("Net Increase/Decrease in Cash and Bank Equivalent Current Year (1 + 3 - 2)", 2,
+        FormatAmount(data.NetIncrease));
+
+    void SummaryLine(string label, decimal amount) =>
+        table.Data(
+            new ReportCell(label, Align.Right, 2, "bold"),
+            new ReportCell(FormatAmount(amount), Align.Right, 1, "bold"));
+
+    SummaryLine("Opening Cash and Bank Equivalent Current Year, Beginning", data.OpeningCashBalance);
+    SummaryLine("Net Cash and Bank Equivalent Current Year, Ending", data.ClosingCashBalance);
 }
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Cash Flow Details Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                margin: 0;
-                padding: 0;
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-            }
-
-                .data-table td, .data-table th {
-                    padding: 4px 6px;
-                    border: 1px solid #ddd;
-                }
-
-                .data-table th {
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    background: #f2f2f2;
-                }
-
-            .section-title {
-                background: #e6e6e6;
-                font-weight: bold;
-                text-align: center;
-            }
-
-            .grand-total {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .summary-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
-        {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
-
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th colspan="3" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">Cash Flow Details Report</th>
-                </tr>
-                <tr>
-                    <td colspan="3">
-                        <strong>Branch Name:</strong> @branchName &nbsp;&nbsp;|&nbsp;&nbsp;
-                        <strong>Till Date:</strong> @tillDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                        <strong>Report Generated On:</strong> @generatedOn
-                    </td>
-                </tr>
-                <tr>
-                    <th style="width:10%;">S.N.</th>
-                    <th style="width:60%;">Details</th>
-                    <th style="width:30%;" class="text-right">Current Year (Rs)</th>
-                </tr>
-            </thead>
-            <tbody>
-                @* ── Operating Activities ── *@
-                @{
-                    <tr class="section-title">
-                        <td colspan="3">@(sectionNumber++). Cash Flows From Operating Activities</td>
-                    </tr>
-                    foreach (var row in data.OperatingRows)
-                    {
-                        <tr>
-                            <td></td>
-                            <td>@(row.SubLedger ?? row.MainLedger)</td>
-                            <td class="text-right">@FormatAmount(row.Amount)</td>
-                        </tr>
-                    }
-                    <tr class="grand-total">
-                        <td></td>
-                        <td><strong>Net Cash Provided by Operating Activities</strong></td>
-                        <td class="text-right"><strong>@FormatAmount(data.NetOperating)</strong></td>
-                    </tr>
-                }
-
-                @* ── Investing Activities ── *@
-                @{
-                    <tr class="section-title">
-                        <td colspan="3">@(sectionNumber++). Cash Flows From Investing Activities</td>
-                    </tr>
-                    foreach (var row in data.InvestingRows)
-                    {
-                        <tr>
-                            <td></td>
-                            <td>@(row.SubLedger ?? row.MainLedger)</td>
-                            <td class="text-right">@FormatAmount(row.Amount)</td>
-                        </tr>
-                    }
-                    <tr class="grand-total">
-                        <td></td>
-                        <td><strong>Net Cash Used in Investing Activities</strong></td>
-                        <td class="text-right"><strong>@FormatAmount(data.NetInvesting)</strong></td>
-                    </tr>
-                }
-
-                @* ── Financing Activities ── *@
-                @{
-                    <tr class="section-title">
-                        <td colspan="3">@(sectionNumber++). Cash Flows From Financing Activities</td>
-                    </tr>
-                    foreach (var row in data.FinancingRows)
-                    {
-                        <tr>
-                            <td></td>
-                            <td>@(row.SubLedger ?? row.MainLedger)</td>
-                            <td class="text-right">@FormatAmount(row.Amount)</td>
-                        </tr>
-                    }
-                    <tr class="grand-total">
-                        <td></td>
-                        <td><strong>Net Cash Used in Financing Activities</strong></td>
-                        <td class="text-right"><strong>@FormatAmount(data.NetFinancing)</strong></td>
-                    </tr>
-                }
-
-                @* ── Summary ── *@
-                <tr class="summary-row">
-                    <td colspan="2" class="text-right">
-                        <strong>Net Increase/Decrease in Cash and Bank Equivalent Current Year (1 + 3 - 2)</strong>
-                    </td>
-                    <td class="text-right"><strong>@FormatAmount(data.NetIncrease)</strong></td>
-                </tr>
-                <tr>
-                    <td colspan="2" class="text-right">
-                        <strong>Opening Cash and Bank Equivalent Current Year, Beginning</strong>
-                    </td>
-                    <td class="text-right"><strong>@FormatAmount(data.OpeningCashBalance)</strong></td>
-                </tr>
-                <tr>
-                    <td colspan="2" class="text-right">
-                        <strong>Net Cash and Bank Equivalent Current Year, Ending</strong>
-                    </td>
-                    <td class="text-right"><strong>@FormatAmount(data.ClosingCashBalance)</strong></td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+@await Html.PartialAsync("_SheetReport", table.Build())

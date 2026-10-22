@@ -1,162 +1,88 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.AccountingReport;
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Account.AccountingReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
-
 @{
     Layout = null;
+
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    // empty values are shown as "-"
+    string Dash(object? value) => value == null || string.IsNullOrWhiteSpace(value.ToString()) ? "-" : value.ToString()!;
+    // negative amounts in brackets:  (1,250.00)
+    string Amount(decimal value) => value < 0 ? $"({Math.Abs(value):N2})" : value.ToString("N2");
+
     var rows = (Model["Rows"] as List<ThresholdTransactionRowDto>) ?? new List<ThresholdTransactionRowDto>();
-    var totalDeposit = Model["TotalDepositAmount"] as decimal? ?? 0;
-    var totalWithdraw = Model["TotalWithdrawAmount"] as decimal? ?? 0;
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "";
-    var transactionNumber = Model["TransactionNumber"]?.ToString() ?? "";
-    var memberName = Model["MemberName"]?.ToString() ?? "";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var totalDeposit = Model["TotalDepositAmount"] as decimal? ?? rows.Sum(r => r.AmountInvolvedInDeposit);
+    var totalWithdraw = Model["TotalWithdrawAmount"] as decimal? ?? rows.Sum(r => r.AmountInvolvedInWithdraw);
+    var totalRecords = Model["TotalRecords"] as int? ?? rows.Count;
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName");
+    var transactionNumber = Text("TransactionNumber");
+    var memberName = Text("MemberName");
+    var orderBy = Text("OrderBy");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    string FormatAmount(decimal amount) =>
-        amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
-
-    string NullDisplay(object value) =>
-        value == null || string.IsNullOrWhiteSpace(value.ToString()) ? "-" : value.ToString();
-
-    int sn = 0;
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Threshold Transaction Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                margin: 0;
-                padding: 0;
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-            }
-
-                .data-table td, .data-table th {
-                    padding: 4px 6px;
-                    border: 1px solid #ddd;
-                }
-
-                .data-table th {
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    background: #f2f2f2;
-                }
-
-            .grand-total {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Threshold Transaction Report", sheetName: "ThresholdTransaction")
+        .Column("SN", 5, Align.Center)
+        .Column("Member Id", 12)
+        .Column("Member Name", 16)
+        .Column("Account No", 10)
+        .Column("Bill No", 10)
+        .Column("Date", 12)
+        .Column("Deposit", 14, Align.Right)
+        .Column("Withdraw", 14, Align.Right)
+        .Column("Status", 7)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            HeaderBackground = "#f2f2f2",
+            TotalBackground = "#f9f9f9",
+            ZebraStripes = false
+        })
+        //.CellLines(2)                                           // a long name or account number may use two lines
+        .Sizing(rowMm: 8, headerMm: 8, firstPageExtraMm: 70)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; border-left: 1px solid #ddd; border-right: 1px solid #ddd; }\n" +
+            "table.sheet-table tr.r-data td { border: 1px solid #ddd; }");
 
-        <table class="data-table">
-            <thead>
-                <tr><th colspan="9" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">Threshold Transaction Report</th></tr>
-                <tr>
-                    <td colspan="9">
-                        <strong>Branch:</strong> @branchName &nbsp;&nbsp;|&nbsp;&nbsp;
-                        <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                        <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                        <strong>Generated:</strong> @generatedOn
-                        @if (!string.IsNullOrEmpty(transactionNumber))
-                        {
-                            <text>&nbsp;&nbsp;|&nbsp;&nbsp; <strong>Bill No:</strong> @transactionNumber</text>
-                        }
-                        @if (!string.IsNullOrEmpty(memberName))
-                        {
-                            <text>&nbsp;&nbsp;|&nbsp;&nbsp; <strong>Member:</strong> @memberName</text>
-                        }
-                        @if (!string.IsNullOrEmpty(orderBy) && orderBy != "-1")
-                        {
-                            <text>&nbsp;&nbsp;|&nbsp;&nbsp; <strong>Order By:</strong> @orderBy</text>
-                        }
-                    </td>
-                </tr>
-                <tr>
-                    <th style="width:5%;">SN</th>
-                    <th style="width:12%;">Member Id</th>
-                    <th style="width:16%;">Member Name</th>
-                    <th style="width:10%;">Account No</th>
-                    <th style="width:10%;">Bill No</th>
-                    <th style="width:12%;">Date</th>
-                    <th style="width:14%;" class="text-right">Deposit</th>
-                    <th style="width:14%;" class="text-right">Withdraw</th>
-                    <th style="width:7%;">Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (rows.Any())
-                {
-                    sn = 0;
-                    foreach (var row in rows)
-                    {
-                        sn++;
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@NullDisplay(row.MemberId)</td>
-                            <td>@NullDisplay(row.MemberName)</td>
-                            <td>@NullDisplay(row.AccountNo)</td>
-                            <td>@NullDisplay(row.TransactionNumber)</td>
-                            <td>@NullDisplay(row.DateOfTransactionOnBS)</td>
-                            <td class="text-right">@FormatAmount(row.AmountInvolvedInDeposit)</td>
-                            <td class="text-right">@FormatAmount(row.AmountInvolvedInWithdraw)</td>
-                            <td>@(row.IsActive ? "Active" : "Inactive")</td>
-                        </tr>
-                    }
-                    <tr class="grand-total">
-                        <td colspan="6" class="text-right"><strong>Total</strong></td>
-                        <td class="text-right"><strong>@FormatAmount(totalDeposit)</strong></td>
-                        <td class="text-right"><strong>@FormatAmount(totalWithdraw)</strong></td>
-                        <td><strong>Records: @totalRecords</strong></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="9" class="text-center">No data found</td></tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    // ── title block: one line; optional filters appear only when used ──
+    var infoParts = new List<IHtmlContent>
+    {
+        Fmt.Labeled("Branch:", branchName),
+        Fmt.Labeled("From:", fromDate),
+        Fmt.Labeled("To:", toDate),
+        Fmt.Labeled("Generated:", generatedOn)
+    };
+    if (!string.IsNullOrEmpty(transactionNumber)) infoParts.Add(Fmt.Labeled("Bill No:", transactionNumber));
+    if (!string.IsNullOrEmpty(memberName)) infoParts.Add(Fmt.Labeled("Member:", memberName));
+    if (!string.IsNullOrEmpty(orderBy) && orderBy != "-1") infoParts.Add(Fmt.Labeled("Order By:", orderBy));
+
+    table.MetaRow(Fmt.Join(infoParts.ToArray()));
+
+    // ── rows ──
+    var sn = 0;
+    foreach (var row in rows)
+    {
+        table.Data(
+            (++sn).ToString(),
+            Dash(row.MemberId),
+            Dash(row.MemberName),
+            Dash(row.AccountNo),
+            Dash(row.TransactionNumber),
+            Dash(row.DateOfTransactionOnBS),
+            Amount(row.AmountInvolvedInDeposit),
+            Amount(row.AmountInvolvedInWithdraw),
+            row.IsActive ? "Active" : "Inactive");
+    }
+
+    if (rows.Count > 0)
+    {
+        // label spans the first 6 columns; the record count moves into the label
+        table.Total($"Total ({totalRecords} records)", 6, Amount(totalDeposit), Amount(totalWithdraw), "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

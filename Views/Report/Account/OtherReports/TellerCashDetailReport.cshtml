@@ -1,310 +1,135 @@
-﻿@* Views/Report/AccountOperation/OthersReport/TellerCashDetailReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.AccountOperation.OthersReport;
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.AccountOperation.OthersReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal Dec(string key) => Model.TryGetValue(key, out var dv) && dv != null ? Convert.ToDecimal(dv) : 0m;
+
+    // summary amounts: negatives in brackets (same as before); detail amounts: blank when missing
+    string N(decimal v) => v < 0 ? $"({Math.Abs(v):N2})" : v.ToString("N2");
+    string A(decimal? v) => v.HasValue ? v.Value.ToString("N2") : "";
+
     var transactionRows = (Model["TransactionRows"] as List<TellerCashDetailTransactionRowDto>) ?? new List<TellerCashDetailTransactionRowDto>();
     var manualRows = (Model["ManualRows"] as List<TellerCashDetailManualRowDto>) ?? new List<TellerCashDetailManualRowDto>();
 
-    var transactionDR = Model["TransactionCashBalanceDR"] as decimal? ?? 0;
-    var transactionCR = Model["TransactionCashBalanceCR"] as decimal? ?? 0;
-    var voucherDR = Model["VoucherCashBalanceDR"] as decimal? ?? 0;
-    var voucherCR = Model["VoucherCashBalanceCR"] as decimal? ?? 0;
-    var tellerCashFromVault = Model["TellerCashFromVault"] as decimal? ?? 0;
-    var tellerCashFromTeller = Model["TellerCashFromTeller"] as decimal? ?? 0;
-    var tellerCashToTeller = Model["TellerCashToTeller"] as decimal? ?? 0;
-    var tellerCashToVault = Model["TellerCashToVault"] as decimal? ?? 0;
-    var totalDR = Model["TotalDR"] as decimal? ?? 0;
-    var totalCR = Model["TotalCR"] as decimal? ?? 0;
-    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
-    var grandTotal = Model["GrandTotal"] as decimal? ?? 0;
+    var transactionDR = Dec("TransactionCashBalanceDR");
+    var transactionCR = Dec("TransactionCashBalanceCR");
+    var voucherDR = Dec("VoucherCashBalanceDR");
+    var voucherCR = Dec("VoucherCashBalanceCR");
+    var tellerCashFromVault = Dec("TellerCashFromVault");
+    var tellerCashFromTeller = Dec("TellerCashFromTeller");
+    var tellerCashToTeller = Dec("TellerCashToTeller");
+    var tellerCashToVault = Dec("TellerCashToVault");
+    var totalDR = Dec("TotalDR");
+    var totalCR = Dec("TotalCR");
+    var totalBalance = Dec("TotalBalance");
+    var grandTotal = Dec("GrandTotal");
 
-    var transactionDate = Model["TransactionDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var tellerName = Model["TellerName"]?.ToString() ?? "All Teller";
-    var reportType = Model["ReportType"]?.ToString() ?? "D";
-    var isDetail = reportType == "D";
-
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var transactionDate = Text("TransactionDate");
+    var branchName = Text("BranchName", "All");
+    var tellerName = Text("TellerName", "All Teller");
+    var isDetail = Text("ReportType", "D") == "D";      // "S" = summary only: the two detail blocks are hidden
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    string Fmt(decimal v) => v < 0 ? $"({Math.Abs(v):N2})" : v.ToString("N2");
+    // ── cell helpers (every row below covers the 24 grid units) ──
+    ReportCell Hd(string t, int span, Align a = Align.Center) => new(t, a, span, "bx bg");          // boxed summary title
+    ReportCell Bx(string t, int span, Align a = Align.Right, bool bold = false) => new(t, a, span, bold ? "bx b" : "bx");   // boxed summary value
+    ReportCell Gh(string t, int span, Align a = Align.Right) => new(t, a, span);                    // detail column title
+    ReportCell Dc(string t, int span, Align a = Align.Right) => new(t, a, span);                    // detail value
+
+    // one 24-unit grid carries all four blocks, so each block just chooses its own spans
+    var table = new ReportTable(Model, title: "Teller Cash Detail Report", sheetName: "TellerCashDetail")
+        .NoColumnHeader()
+        .Style(new ReportStyle
+        {
+            ZebraStripes = false,
+            SectionBackground = "#e8e8e8",
+            HeaderBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 110)   // the page 1 title block and the two summary grids are tall
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }" +
+            "table.sheet-table tr.r-section td { font-size: 10pt; }" +
+            // boxed summary grids
+            "table.sheet-table td.bx, table.sheet-table th.bx { border: 1px solid #000 !important; }" +
+            "table.sheet-table th.bg { background: #f0f0f0 !important; }" +
+            "table.sheet-table td.b { font-weight: bold; }");
+
+    for (var i = 0; i < 24; i++) table.Column("", 1);
+
+    // ── title block ──
+    table.MetaRow(
+        Fmt.Join(Fmt.Labeled("Transaction Date :", transactionDate), Fmt.Labeled("Branch :", branchName)),
+        Fmt.Labeled("Teller :", tellerName));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    // ── Auto / Manual / Total summary grid (4 blocks of 6 units) ──
+    table.Header(Hd("", 6), Hd("DR", 6), Hd("CR", 6), Hd("Balance", 6));
+    table.Data(Bx("Auto (Transaction)", 6, Align.Left), Bx(N(transactionDR), 6), Bx(N(transactionCR), 6), Bx(N(transactionDR - transactionCR), 6));
+    table.Data(Bx("Manual (Voucher)", 6, Align.Left), Bx(N(voucherDR), 6), Bx(N(voucherCR), 6), Bx(N(voucherDR - voucherCR), 6));
+    table.Data(Bx("Total", 6, Align.Left, true), Bx(N(totalDR), 6, bold: true), Bx(N(totalCR), 6, bold: true), Bx(N(totalBalance), 6, bold: true));
+
+    table.Spacer();
+
+    // ── teller cash movement summary (6 blocks of 4 units) ──
+    table.Header(Hd("Cash From Vault", 4), Hd("Cash From Teller", 4), Hd("Cash To Teller", 4),
+                 Hd("Cash To Vault", 4), Hd("Balance", 4), Hd("Total", 4));
+    table.Data(Bx(N(tellerCashFromVault), 4), Bx(N(tellerCashFromTeller), 4), Bx(N(tellerCashToTeller), 4),
+               Bx(N(tellerCashToVault), 4), Bx(N(totalBalance), 4), Bx(N(grandTotal), 4, bold: true));
+
+    if (isDetail)
+    {
+        // ── Transaction Detail (Auto): 7 columns = 3 + 5 + 4 + 3 + 3 + 3 + 3 units ──
+        table.Spacer();
+        table.Section("Transaction Detail (Auto)");
+        table.Header(Gh("Member Id", 3, Align.Left), Gh("Member Name", 5, Align.Left), Gh("Account No", 4),
+                     Gh("Bill No", 3), Gh("Type", 3), Gh("DR", 3), Gh("CR", 3));
+
+        if (transactionRows.Any())
+        {
+            foreach (var row in transactionRows)
+            {
+                table.Data(
+                    Dc(row.MemberId ?? "", 3, Align.Left),
+                    Dc(row.MemberName ?? "", 5, Align.Left),
+                    Dc(row.AccountNo ?? "", 4),
+                    Dc(row.BillNo ?? "", 3),
+                    Dc(row.TransactionType ?? "", 3),
+                    Dc(A(row.DebitAmount), 3),
+                    Dc(A(row.CreditAmount), 3));
+            }
+        }
+        else
+        {
+            table.Data(Dc("No transaction data found", 24, Align.Center));
+        }
+
+        // ── Voucher Detail (Manual): 4 columns = 4 + 14 + 3 + 3 units ──
+        table.Spacer();
+        table.Section("Voucher Detail (Manual)");
+        table.Header(Gh("Voucher No", 4, Align.Left), Gh("Narration", 14, Align.Left), Gh("DR", 3), Gh("CR", 3));
+
+        if (manualRows.Any())
+        {
+            foreach (var row in manualRows)
+            {
+                table.Data(
+                    Dc(row.VoucherNo ?? "", 4, Align.Left),
+                    Dc(row.Narration ?? "", 14, Align.Left),
+                    Dc(A(row.DebitAmount), 3),
+                    Dc(A(row.CreditAmount), 3));
+            }
+        }
+        else
+        {
+            table.Data(Dc("No voucher data found", 24, Align.Center));
+        }
+    }
 }
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Teller Cash Detail Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 10px;
-            }
-
-            .summary-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 12px;
-            }
-
-                .summary-table th, .summary-table td {
-                    border: 1px solid #000;
-                    padding: 4px 8px;
-                    text-align: right;
-                }
-
-                .summary-table th {
-                    background: #f0f0f0;
-                    text-align: center;
-                    font-weight: bold;
-                }
-
-                    .summary-table td:first-child, .summary-table th:first-child {
-                        text-align: left;
-                    }
-
-            .section-header td {
-                background: #e8e8e8;
-                font-weight: bold;
-                font-size: 10pt;
-                padding: 5px 6px;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-            }
-
-            .data-table th.grid-header {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: right;
-                white-space: nowrap;
-            }
-
-                .data-table th.grid-header:nth-child(-n+2) {
-                    text-align: left;
-                }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-                text-align: right;
-            }
-
-                .detail-row td:nth-child(-n+2) {
-                    text-align: left;
-                }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-                text-align: right;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
-        {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
-
-        <table class="data-table">
-            <tr class="meta-title">
-                <td colspan="4">Teller Cash Detail Report</td>
-            </tr>
-            <tr class="meta-row">
-                <td><strong>Transaction Date :</strong> @transactionDate</td>
-                <td><strong>Branch :</strong> @branchName</td>
-                <td colspan="2" class="text-right"><strong>Teller :</strong> @tellerName</td>
-            </tr>
-            <tr class="meta-row">
-                <td colspan="4"><strong>Report Generated On :</strong> @generatedOn</td>
-            </tr>
-            <tr class="meta-spacer"><td colspan="4"></td></tr>
-        </table>
-
-        <!-- Auto / Manual / Total summary grid -->
-        <table class="summary-table">
-            <tr>
-                <th></th>
-                <th>DR</th>
-                <th>CR</th>
-                <th>Balance</th>
-            </tr>
-            <tr>
-                <td>Auto (Transaction)</td>
-                <td>@Fmt(transactionDR)</td>
-                <td>@Fmt(transactionCR)</td>
-                <td>@Fmt(transactionDR - transactionCR)</td>
-            </tr>
-            <tr>
-                <td>Manual (Voucher)</td>
-                <td>@Fmt(voucherDR)</td>
-                <td>@Fmt(voucherCR)</td>
-                <td>@Fmt(voucherDR - voucherCR)</td>
-            </tr>
-            <tr style="font-weight:bold;">
-                <td>Total</td>
-                <td>@Fmt(totalDR)</td>
-                <td>@Fmt(totalCR)</td>
-                <td>@Fmt(totalBalance)</td>
-            </tr>
-        </table>
-
-        <!-- Teller cash movement summary -->
-        <table class="summary-table">
-            <tr>
-                <th>Cash From Vault</th>
-                <th>Cash From Teller</th>
-                <th>Cash To Teller</th>
-                <th>Cash To Vault</th>
-                <th>Balance</th>
-                <th>Total</th>
-            </tr>
-            <tr>
-                <td>@Fmt(tellerCashFromVault)</td>
-                <td>@Fmt(tellerCashFromTeller)</td>
-                <td>@Fmt(tellerCashToTeller)</td>
-                <td>@Fmt(tellerCashToVault)</td>
-                <td>@Fmt(totalBalance)</td>
-                <td style="font-weight:bold;">@Fmt(grandTotal)</td>
-            </tr>
-        </table>
-
-        @if (isDetail)
-        {
-            <!-- Detail1 section — hidden entirely when ReportType == "S" (Summary), matching legacy Detail1.Visible = false -->
-            <table class="data-table" data-sheet-name="TellerCashDetail-Auto">
-                <tbody>
-                    <tr class="section-header">
-                        <td colspan="7">Transaction Detail (Auto)</td>
-                    </tr>
-                    <tr>
-                        <th class="grid-header">Member Id</th>
-                        <th class="grid-header">Member Name</th>
-                        <th class="grid-header">Account No</th>
-                        <th class="grid-header">Bill No</th>
-                        <th class="grid-header">Type</th>
-                        <th class="grid-header">DR</th>
-                        <th class="grid-header">CR</th>
-                    </tr>
-                    @if (transactionRows.Any())
-                    {
-                        foreach (var row in transactionRows)
-                        {
-                            <tr class="detail-row">
-                                <td>@(row.MemberId ?? "")</td>
-                                <td>@(row.MemberName ?? "")</td>
-                                <td>@(row.AccountNo ?? "")</td>
-                                <td>@(row.BillNo ?? "")</td>
-                                <td>@(row.TransactionType ?? "")</td>
-                                <td>@(row.DebitAmount.HasValue ? row.DebitAmount.Value.ToString("N2") : "")</td>
-                                <td>@(row.CreditAmount.HasValue ? row.CreditAmount.Value.ToString("N2") : "")</td>
-                            </tr>
-                        }
-                    }
-                    else
-                    {
-                        <tr><td colspan="7" class="text-center">No transaction data found</td></tr>
-                    }
-                </tbody>
-            </table>
-
-            <table class="data-table" data-sheet-name="TellerCashDetail-Manual">
-                <tbody>
-                    <tr class="section-header">
-                        <td colspan="4">Voucher Detail (Manual)</td>
-                    </tr>
-                    <tr>
-                        <th class="grid-header">Voucher No</th>
-                        <th class="grid-header">Narration</th>
-                        <th class="grid-header">DR</th>
-                        <th class="grid-header">CR</th>
-                    </tr>
-                    @if (manualRows.Any())
-                    {
-                        foreach (var row in manualRows)
-                        {
-                            <tr class="detail-row">
-                                <td>@(row.VoucherNo ?? "")</td>
-                                <td>@(row.Narration ?? "")</td>
-                                <td>@(row.DebitAmount.HasValue ? row.DebitAmount.Value.ToString("N2") : "")</td>
-                                <td>@(row.CreditAmount.HasValue ? row.CreditAmount.Value.ToString("N2") : "")</td>
-                            </tr>
-                        }
-                    }
-                    else
-                    {
-                        <tr><td colspan="4" class="text-center">No voucher data found</td></tr>
-                    }
-                </tbody>
-            </table>
-        }
-    </div>
-</body>
-</html>
+@await Html.PartialAsync("_SheetReport", table.Build())

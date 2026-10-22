@@ -1,17 +1,13 @@
-﻿// Controllers/AccountOperation/OthersReport/PEARLSAnalysisController.cs
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Account.OtherReports;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
+using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Account.OtherReports
 {
@@ -20,79 +16,68 @@ namespace NexgenCosysReport.Controllers.Account.OtherReports
     [Authorize]
     public class PEARLSAnalysisController : ControllerBase
     {
+        private const string ReportName = "PEARLSAnalysis";
+
         private readonly IPEARLSAnalysis _repository;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
+        private readonly IReportHeaderProvider _headers;
         private readonly IJsReportService _jsReportService;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly CustomHeaderResponse _headerResponse;
-        private readonly IOptions<ReportSettings> _reportSettings;
+        private readonly IReportDataCache _dataCache;
         private readonly ILogger<PEARLSAnalysisController> _logger;
-        private readonly IDateConverterService _dateConverter;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        // normal: A4 portrait (6 columns); visual: same page as every visual report
+        private static readonly PageSizeSetting NPageSetting = PageSizeSetting.A4Portrait;
+        private static readonly PageSizeSetting VPageSetting =
+            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         public PEARLSAnalysisController(
             IPEARLSAnalysis repository,
-            ICommonHeaderRepository commonHeaderRepository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
-            IWebHostEnvironment webHostEnvironment,
-            CustomHeaderResponse headerResponse,
-            IOptions<ReportSettings> reportSettings,
+            IReportDataCache dataCache,
             ILogger<PEARLSAnalysisController> logger,
-            IDateConverterService dateConverter)
+            IReportFileResponse reportFileResponse)
         {
             _repository = repository;
-            _commonHeaderRepository = commonHeaderRepository;
+            _headers = headers;
             _jsReportService = jsReportService;
-            _webHostEnvironment = webHostEnvironment;
-            _headerResponse = headerResponse;
-            _reportSettings = reportSettings;
+            _dataCache = dataCache;
             _logger = logger;
-            _dateConverter = dateConverter;
+            _reportFileResponse = reportFileResponse;
         }
 
+        // POST api/PEARLSAnalysis?format=VIEW
         [HttpPost]
         public async Task<IActionResult> GenerateReport(
             [FromBody] PEARLSAnalysisRequestDto request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
             try
             {
-                var reportName = "PEARLSAnalysis";
-                var upperFormat = format.ToUpper();
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out _))
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
 
                 if (request == null || !ModelState.IsValid)
-                {
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
-                }
-                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                {
-                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                }
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var upperFormat = format.ToUpperInvariant();
+                var isVisual = request.VisualReport;
+                var page = isVisual ? VPageSetting : NPageSetting;
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+                // the DB data is cached once and shared by the normal and the visual view
+                var dataKey = ReportCacheKey.ForData(
+                    request, ReportName, userIdClaim, nameof(request.VisualReport));
+                var reportKey = $"{dataKey}_{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}";
 
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat,
-                        reportName,
-                        _jsReportService, _logger);
-                }
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: false,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
 
-                // Get report data
-                var data = await _repository.GetPEARLSAnalysisDataAsync(request);
-
-                if (!data.PEARLSP.Any() && !data.PEARLSE.Any() && !data.PEARLSA.Any() &&
-                    !data.PEARLSR.Any() && !data.PEARLSL.Any() && !data.PEARLSS.Any())
-                {
-                    return NotFound(new { success = false, StatusCode = 404, message = "No data found" });
-                }
-
-                // Get header data
-                string? branchIdForHeader = null;
+                // the header shows one branch only when a single branch is selected
+                var branchIdForHeader = "";
                 if (!string.IsNullOrEmpty(request.BranchId) &&
                     request.BranchId != "-1" &&
                     !request.BranchId.Contains(',') &&
@@ -101,14 +86,22 @@ namespace NexgenCosysReport.Controllers.Account.OtherReports
                     branchIdForHeader = request.BranchId;
                 }
 
-                var headerData = await _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+                var headerTask = _headers.GetAsync(branchIdForHeader, ct);
+                var dataTask = _dataCache.GetOrLoadAsync(dataKey, async () =>
+                {
+                    var loaded = await _repository.GetPEARLSAnalysisDataAsync(request);
+                    if (loaded == null ||
+                        (!loaded.PEARLSP.Any() && !loaded.PEARLSE.Any() && !loaded.PEARLSA.Any() &&
+                         !loaded.PEARLSR.Any() && !loaded.PEARLSL.Any() && !loaded.PEARLSS.Any()))
+                        return null;
+                    return loaded;
+                }, ct);
+                await Task.WhenAll(headerTask, dataTask);
 
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
+                var data = await dataTask;
+                if (data == null)
+                    return NotFound(new { success = false, StatusCode = 404, message = "No data found" });
 
-                await ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData, nameof(CommonHeader.CompanyLogo), webRoot);
-
-                // Prepare report data
                 var reportData = new Dictionary<string, object>
                 {
                     { "PEARLSP", data.PEARLSP },
@@ -117,61 +110,35 @@ namespace NexgenCosysReport.Controllers.Account.OtherReports
                     { "PEARLSR", data.PEARLSR },
                     { "PEARLSL", data.PEARLSL },
                     { "PEARLSS", data.PEARLSS },
-                    { "TillDate", data.TillDate },
+                    { "TillDate", data.TillDate ?? "" },
                     { "BranchNames", data.BranchNames ?? "All Branches" },
-                    { "FiscalYear", data.FiscalYear },
+                    { "FiscalYear", data.FiscalYear ?? "" },
                     { "PreviousDate", data.PreviousDate },
-                    { "HeaderDataSet", headerData },
+                    { "HeaderDataSet", await headerTask },
                     { "Format", upperFormat },
-                    { "VisualReport", request.VisualReport }
+                    { "PageSetting", page }
                 };
 
-                string viewPath = request.VisualReport
+                // NOTE: the visual view below must exist before a request with VisualReport = true is made
+                var viewPath = isVisual
                     ? "Views/VisualReport/VPEARLSAnalysisReport.cshtml"
                     : "Views/Report/Account/OtherReports/PEARLSAnalysisReport.cshtml";
 
-                var htmlContent = await Task.Run(() =>
-                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
-                        reportKey: reportKey,
-                        reportPath: viewPath,
-                        data: reportData));
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                    reportKey: reportKey, reportPath: viewPath, data: reportData, ct: ct);
 
-                if (upperFormat == "VIEW")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.PEARLSP.Count + data.PEARLSE.Count + data.PEARLSA.Count +
-                                      data.PEARLSR.Count + data.PEARLSL.Count + data.PEARLSS.Count
-                    };
+                var totalRecords = data.PEARLSP.Count + data.PEARLSE.Count + data.PEARLSA.Count +
+                                   data.PEARLSR.Count + data.PEARLSL.Count + data.PEARLSS.Count;
 
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
-                }
-
-                return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat,
-                    reportName,
-                    _jsReportService, _logger);
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: false,
+                    totalRecords: totalRecords,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating PEARLS Analysis Report");
-                return StatusCode(500, new
-                {
-                    message = ex.Message,
-                    inner = ex.InnerException?.Message,
-                    stack = ex.StackTrace
-                });
+                _logger.LogError(ex, "Error generating {Report} report", ReportName);
+                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }
     }

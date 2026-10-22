@@ -48,6 +48,10 @@ namespace NexgenCosysReport.Services.ReportService.Table
             return this;
         }
 
+        /// <summary>Column titles in the middle of the table, with full control of every cell (alignment, span, css).</summary>
+        public ReportTable Header(params ReportCell[] cells)
+            => Add(RowKind.Header, cells);
+
         /// <summary>Hide the column titles printed under the title block (use Header() rows instead).</summary>
         public ReportTable NoColumnHeader() { _showColumnHeader = false; return this; }
 

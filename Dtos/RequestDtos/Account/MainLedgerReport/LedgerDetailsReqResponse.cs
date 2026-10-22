@@ -104,6 +104,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Account.SubLedgerDetailsReport
         public List<string> LedgerHead { get; set; } = new();
 
         public bool IsSummary { get; set; }
+        public bool VisualReport { get; set; } = false;
     }
 
     // Columns match sp_6_56_GetLedgerDetails' output SELECT list
