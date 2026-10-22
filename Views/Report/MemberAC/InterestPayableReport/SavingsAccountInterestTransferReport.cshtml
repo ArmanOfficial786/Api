@@ -1,224 +1,83 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
+
+    var fontSize = "9.5pt";
+    const int ColumnCount = 6;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
     var rows = (Model["Rows"] as List<SavingsAccountInterestTransferRowDto>) ?? new List<SavingsAccountInterestTransferRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchNames = Text("BranchNames", "All Branches");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Group by Saving Type — drives the bold group headers
-    // ("1 Year Normal Saving", "Abc Saving 2 Year", "Bal Bachat Deposit Type", ...)
     var depositTypeGroups = rows.GroupBy(r => r.DepositTypeName ?? "").ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Savings Account Next Interest Transfer Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                background: white;
-                color: #000;
-                padding: 20px;
-            }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
 
-            .report-container {
-                width: 100%;
-                max-width: 1200px;
-                margin: 0 auto;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9.5pt;
-            }
-
-                .data-table td, .data-table th {
-                    border: none;
-                    vertical-align: top;
-                }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            /* -------- Title row -------- */
-            .report-title td {
-                text-align: center;
-                font-family: 'Times New Roman', Times, serif;
-                font-size: 15pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 0 12px 0;
-            }
-
-            /* -------- Filter rows (Branch / Generated / From-To) -------- */
-            .filter-row td {
-                padding: 2px 6px;
-                font-size: 9.5pt;
-            }
-
-            .filter-row.filter-last td {
-                padding-bottom: 6px;
-                border-bottom: 1px solid #000;
-            }
-
-            .filter-row .label {
-                font-weight: bold;
-            }
-
-            /* -------- Column header row -------- */
-            .column-header-row th {
-                text-align: left;
-                font-weight: bold;
-                font-size: 9.5pt;
-                padding: 6px 6px 6px 6px;
-                border-bottom: 1.5px solid #000;
-                white-space: nowrap;
-            }
-
-            /* -------- Group header (saving type) -------- */
-            .group-header-row td {
-                font-weight: bold;
-                font-size: 10pt;
-                padding: 10px 6px 4px 6px;
-            }
-
-            .group-header-row.first-group td {
-                padding-top: 8px;
-            }
-
-            /* -------- Detail rows -------- */
-            .detail-row td {
-                padding: 3px 6px;
-            }
-
-            /* -------- Rule drawn under the last row of every group -------- */
-            .group-divider-row td {
-                padding: 0 6px;
-            }
-
-            .group-divider-row hr {
-                border: none;
-                border-top: 1px solid #000;
-                margin: 4px 0 0 0;
-            }
-
-            /* -------- Footer -------- */
-            .summary-row td {
-                padding: 6px 6px 3px 6px;
-                font-weight: bold;
-                border-top: 1.5px solid #000;
-            }
-
-            @@media print {
-                body {
-                    padding: 10px;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Savings Account Next Interest Transfer Report", sheetName: "SavingsAccountInterestTransfer")
+        .Column("Saving Type", 16)
+        .Column("Member Id", 12)
+        .Column("Member Name", 22)
+        .Column("Account No", 16)
+        .Column("A/C Opened Date", 17)
+        .Column("Interest Date", 17)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            SubTotalBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 65)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 0; border-bottom: 1.5px solid #000; white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-group td { font-size: 10pt; border-top: 0; border-bottom: 0; padding-top: 10px; padding-bottom: 4px; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-subtotal td { border-top: 1px solid #000; padding-top: 0; padding-bottom: 0; line-height: 0.4; }\n" +
+            "table.sheet-table tr.r-total td { border-top: 1.5px solid #000; border-bottom: 0; padding-top: 6px; }");
+
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchNames));
+    table.MetaRow(Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
+    table.MetaRow(Fmt.Labeled("Report Generated On:", generatedOn));
+
+    foreach (var group in depositTypeGroups)
+    {
+        table.GroupTitle(group.Key);
+
+        foreach (var row in group)
+        {
+            table.Data(
+                "",
+                row.MemberId ?? "",
+                row.MemberName ?? "",
+                row.AccountNo ?? "",
+                row.AccountOpenDate ?? "",
+                row.NextInterestDate ?? "");
         }
 
-        <table class="data-table">
-            <colgroup>
-                <col style="width:16%;">
-                <col style="width:12%;">
-                <col style="width:22%;">
-                <col style="width:16%;">
-                <col style="width:17%;">
-                <col style="width:17%;">
-            </colgroup>
-            <tbody>
-                <tr class="report-title">
-                    <td colspan="6">Savings Account Next Interest Transfer Report</td>
-                </tr>
+        table.SubTotal("", ColumnCount - 1, "");
+    }
 
-                <tr class="filter-row">
-                    <td colspan="6"><span class="label">Branch Name :</span> @branchNames</td>
-                </tr>
-                <tr class="filter-row filter-last">
-                    <td colspan="2"><span class="label">Report Generated On:</span> @generatedOn</td>
-                    <td colspan="2"><span class="label">From Date :</span> @fromDate</td>
-                    <td colspan="2"><span class="label">To Date :</span> @toDate</td>
-                </tr>
-
-                <tr class="column-header-row">
-                    <th>Saving Type</th>
-                    <th>Member Id</th>
-                    <th>Member Name</th>
-                    <th>Account No</th>
-                    <th>A/C Opened Date</th>
-                    <th>Interest Date</th>
-                </tr>
-
-                @if (depositTypeGroups.Any())
-                {
-                    bool isFirstGroup = true;
-                    foreach (var group in depositTypeGroups)
-                    {
-                        var groupRows = group.ToList();
-
-                        <tr class="group-header-row @(isFirstGroup ? "first-group" : "")">
-                            <td colspan="6">@group.Key</td>
-                        </tr>
-                        isFirstGroup = false;
-
-                        foreach (var row in groupRows)
-                        {
-                            <tr class="detail-row">
-                                <td></td>
-                                <td>@(row.MemberId ?? "")</td>
-                                <td>@(row.MemberName ?? "")</td>
-                                <td>@(row.AccountNo ?? "")</td>
-                                <td>@(row.AccountOpenDate ?? "")</td>
-                                <td>@(row.NextInterestDate ?? "")</td>
-                            </tr>
-                        }
-
-                        <tr class="group-divider-row">
-                            <td colspan="6"><hr /></td>
-                        </tr>
-                    }
-
-                    <tr class="summary-row">
-                        <td colspan="5" class="text-right">Total Records</td>
-                        <td class="text-right">@totalRecords</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="6" class="text-center" style="padding: 20px 0; font-size: 10pt; color: #666;">
-                            No savings account interest transfer records found for the selected criteria
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+        table.Total("Total Records", ColumnCount - 1, totalRecords.ToString());
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

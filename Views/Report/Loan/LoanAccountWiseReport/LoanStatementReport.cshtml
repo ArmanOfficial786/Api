@@ -140,3 +140,10 @@
         }
     }
     else
+    {
+        table.Data(
+            Value("", 1, Align.Center), Value("", 1, Align.Center), Value("", 1, Align.Center),
+            Value("", 1, Align.Center), Value("", 1, Align.Center), Value("", 1, Align.Center));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

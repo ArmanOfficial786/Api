@@ -1,17 +1,13 @@
-﻿// Controllers/MemberAccount/OthersReport/SavingAccountDeletedController.cs
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.OthersReport;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
+using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
 {
@@ -20,136 +16,107 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
     [Authorize]
     public class SavingAccountDeletedController : ControllerBase
     {
+        private const string ReportName = "SavingAccountDeleted";
+
         private readonly ISavingAccountDeletedRepository _repository;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
+        private readonly IReportHeaderProvider _headers;
         private readonly IJsReportService _jsReportService;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly CustomHeaderResponse _headerResponse;
-        private readonly IOptions<ReportSettings> _reportSettings;
+        private readonly IReportDataCache _dataCache;
         private readonly ILogger<SavingAccountDeletedController> _logger;
-        private readonly IDateConverterService _dateConverter;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        private static readonly PageSizeSetting NPageSetting = PageSizeSetting.A4Portrait;
+        private static readonly PageSizeSetting VPageSetting =
+            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         public SavingAccountDeletedController(
             ISavingAccountDeletedRepository repository,
-            ICommonHeaderRepository commonHeaderRepository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
-            IWebHostEnvironment webHostEnvironment,
-            CustomHeaderResponse headerResponse,
-            IOptions<ReportSettings> reportSettings,
+            IReportDataCache dataCache,
             ILogger<SavingAccountDeletedController> logger,
-            IDateConverterService dateConverter)
+            IReportFileResponse reportFileResponse)
         {
             _repository = repository;
-            _commonHeaderRepository = commonHeaderRepository;
+            _headers = headers;
             _jsReportService = jsReportService;
-            _webHostEnvironment = webHostEnvironment;
-            _headerResponse = headerResponse;
-            _reportSettings = reportSettings;
+            _dataCache = dataCache;
             _logger = logger;
-            _dateConverter = dateConverter;
+            _reportFileResponse = reportFileResponse;
         }
 
-        [HttpPost()]
+        [HttpPost]
         public async Task<IActionResult> GenerateReport(
             [FromBody] SavingAccountDeletedRequestDto request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
             try
             {
-                // Extract userId from JWT
                 var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                {
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out _))
                     return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                }
-                var reportName = "SavingAccountDeleted";
-                var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+                if (request == null || !ModelState.IsValid)
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
 
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
+                var upperFormat = format.ToUpperInvariant();
+                var isVisual = request.VisualReport;
+                var page = isVisual ? VPageSetting : NPageSetting;
+
+                var dataKey = ReportCacheKey.ForData(
+                    request, ReportName, userIdClaim, nameof(request.VisualReport));
+                var reportKey = $"{dataKey}_{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}";
+
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: request.VisualReport,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
+
+                var headerTask = _headers.GetAsync("", ct);
+                var dataTask = _dataCache.GetOrLoadAsync(dataKey, async () =>
                 {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat,
-                        reportName,
-                        _jsReportService, _logger);
-                }
+                    var loaded = await _repository.GetReportDataAsync(request);
+                    if (loaded == null || loaded.Rows == null || !loaded.Rows.Any())
+                        return null;
+                    return loaded;
+                }, ct);
+                await Task.WhenAll(headerTask, dataTask);
 
-                var data = await _repository.GetReportDataAsync(request);
-
-                if (!data.Rows.Any())
-                {
+                var data = await dataTask;
+                if (data == null)
                     return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
-                }
-
-
-                var headerData = await _commonHeaderRepository.GetCommonHeaders();
-
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-                await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData, nameof(CommonHeader.CompanyLogo), webRoot));
 
                 var reportData = new Dictionary<string, object>
                 {
                     { "Rows", data.Rows },
-                    { "TotalRecords", data.TotalRecords },
-                    { "TotalBalance", data.TotalBalance },
-                    { "HeaderDataSet", headerData },
-                    { "FromDate", request.FromDateBs },
-                    { "ToDate", request.ToDateBs },
-                    { "BranchNames", data.BranchNames ?? "All"},
-                    { "OrderBy", request.OrderBy },
+                    { "TotalDeletedAccounts", data.TotalDeletedAccounts },
+                    { "HeaderDataSet", await headerTask },
+                    { "FromDate", request.FromDateBs ?? "" },
+                    { "ToDate", request.ToDateBs ?? "" },
+                    { "BranchNames", data.BranchNames ?? "All" },
                     { "Format", upperFormat },
-                    { "VisualReport", request.VisualReport },
-                    { "TotalDeletedAccounts", data.TotalDeletedAccounts }
+                    { "PageSetting", page }
                 };
 
                 string viewPath = request.VisualReport
                     ? "Views/VisualReport/VSavingAccountDeletedReport.cshtml"
                     : "Views/Report/MemberAC/OthersReport/SavingAccountDeletedReport.cshtml";
 
-                var htmlContent = await Task.Run(() =>
-                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
-                        reportKey: reportKey,
-                        reportPath: viewPath,
-                        data: reportData));
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                    reportKey: reportKey,
+                    reportPath: viewPath,
+                    data: reportData, ct: ct);
 
-                if (upperFormat == "VIEW")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.Rows.Count
-                    };
-
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
-                }
-
-                return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat,
-                    reportName,
-                    _jsReportService, _logger);
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: request.VisualReport,
+                    totalRecords: data.Rows.Count,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new
-                {
-                    message = ex.Message,
-                    inner = ex.InnerException?.Message,
-                    stack = ex.StackTrace
-                });
+                _logger.LogError(ex, "Error generating {Report} report", ReportName);
+                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }
     }

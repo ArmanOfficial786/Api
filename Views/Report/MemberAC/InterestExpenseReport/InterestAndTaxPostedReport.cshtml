@@ -1,237 +1,96 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestExpenseReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
+
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal Dec(string key) => Model.TryGetValue(key, out var dv) && dv != null ? Convert.ToDecimal(dv) : 0m;
+
     var rows = (Model["Rows"] as List<InterestAndTaxPostedRowDto>) ?? new List<InterestAndTaxPostedRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalInterest = Model["TotalInterest"] as decimal? ?? 0;
-    var totalTax = Model["TotalTax"] as decimal? ?? 0;
-    var totalNetBalance = Model["TotalNetBalance"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchNames = Text("BranchNames", "All Branches");
+    var orderBy = Text("OrderBy");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm");
-    var totalDepositTypes = Model["TotalDepositTypes"] as int? ?? 0;
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Interest and Tax Posted Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-            }
+    var totalInterest = Dec("TotalInterest");
+    var totalTax = Dec("TotalTax");
+    var totalNetBalance = Dec("TotalNetBalance");
+    var totalDepositTypes = (int)Dec("TotalDepositTypes");
+    var totalRecords = (int)Dec("TotalRecords");
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-            }
-
-                .data-table td, .data-table th {
-                    padding: 4px 6px;
-                    border: 1px solid #ccc;
-                }
-
-                .data-table th {
-                    background: #f2f2f2;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                }
-
-                .data-table thead {
-                    display: table-row-group;
-                }
-
-            .grand-total {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .filter-info {
-                margin-bottom: 4px;
-            }
-
-            .report-title {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-            }
-
-            .highlight-interest {
-                color: #2e7d32;
-                font-weight: bold;
-            }
-
-            .highlight-tax {
-                color: #c62828;
-                font-weight: bold;
-            }
-
-            .highlight-net {
-                color: #1565c0;
-                font-weight: bold;
-            }
-
-            .highlight-rate {
-                color: #f57f17;
-                font-weight: bold;
-            }
-
-            .highlight-interest-date {
-                color: #6a1b9a;
-                font-weight: bold;
-            }
-
-            .highlight-member-name {
-                font-weight: bold;
-            }
-
-            .highlight-account-no {
-                color: #00695c;
-                font-weight: bold;
-            }
-
-            .highlight-net-interest {
-                color: #e65100;
-                font-weight: bold;
-            }
-
-            .saving-type-header {
-                background: #e8f5e9;
-            }
-
-            @@media print {
-                .data-table thead {
-                    display: table-row-group;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Saving Interest and Tax Posted Report", sheetName: "InterestAndTaxPosted")
+        .Column("Saving Type", 8)
+        .Column("Member ID", 10)
+        .Column("Member Name", 15)
+        .Column("Account No", 8)
+        .Column("Interest Date", 10)
+        .Column("Rate (%)", 6, Align.Right)
+        .Column("Interest", 10, Align.Right)
+        .Column("Tax", 8, Align.Right)
+        .Column("Net Interest", 10, Align.Right)
+        .Column("Net Balance", 10, Align.Right)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#f2f2f2",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 55)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; border-left: 1px solid #ccc; border-right: 1px solid #ccc; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 2px solid #000; border-bottom: 1px solid #000; white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-data td { border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; }\n" +
+            "table.sheet-table tr.r-data td.saving-type { background: #e8f5e9; }\n" +
+            "table.sheet-table tr.r-data td.hl-member { font-weight: bold; }\n" +
+            "table.sheet-table tr.r-data td.hl-account { color: #00695c; font-weight: bold; }\n" +
+            "table.sheet-table tr.r-data td.hl-date { color: #6a1b9a; font-weight: bold; }\n" +
+            "table.sheet-table tr.r-data td.hl-rate { color: #f57f17; font-weight: bold; }\n" +
+            "table.sheet-table tr.r-data td.hl-interest { color: #2e7d32; font-weight: bold; }\n" +
+            "table.sheet-table tr.r-data td.hl-tax { color: #c62828; font-weight: bold; }\n" +
+            "table.sheet-table tr.r-data td.hl-net-interest { color: #e65100; font-weight: bold; }\n" +
+            "table.sheet-table tr.r-data td.hl-net { color: #1565c0; font-weight: bold; }");
 
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th colspan="11" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">
-                        Saving Interest and Tax Posted Report
-                    </th>
-                </tr>
-                <tr>
-                    <td colspan="11">
-                        <div class="filter-info">
-                            <strong>Branches:</strong> @branchNames &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Order By:</strong> @orderBy &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Generated:</strong> @generatedOn
-                        </div>
-                    </td>
-                </tr>
-                <tr>
-                    <th style="width:8%;">Saving Type</th>
-                    <th style="width:10%;">Member ID</th>
-                    <th style="width:15%;">Member Name</th>
-                    <th style="width:8%;">Account No</th>
-                    <th style="width:10%;">Interest Date</th>
-                    <th style="width:6%;" class="text-right">Rate (%)</th>
-                    <th style="width:10%;" class="text-right">Interest</th>
-                    <th style="width:8%;" class="text-right">Tax</th>
-                    <th style="width:10%;" class="text-right">Net Interest</th>
-                    <th style="width:10%;" class="text-right">Net Balance</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (rows.Any())
-                {
-                    foreach (var row in rows)
-                    {
-                        // Parse the rate to a numeric value for display
-                        decimal? rateValue = null;
-                        if (!string.IsNullOrEmpty(row.InterestRate))
-                        {
-                            if (decimal.TryParse(row.InterestRate, out decimal parsedRate))
-                            {
-                                rateValue = parsedRate;
-                            }
-                        }
+    table.MetaRow(Fmt.Join(
+        Fmt.Labeled("Branches:", branchNames),
+        Fmt.Labeled("From:", fromDate),
+        Fmt.Labeled("To:", toDate),
+        Fmt.Labeled("Order By:", orderBy),
+        Fmt.Labeled("Generated:", generatedOn)));
 
-                        <tr>
-                            <td class="saving-type-header">@(row.DepositTypeName ?? "")</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td class="highlight-member-name">@(row.MemberName ?? "")</td>
-                            <td class="highlight-account-no">@(row.AccountNo ?? "")</td>
-                            <td class="highlight-interest-date">@(row.InterestDate ?? "")</td>
-                            <td class="text-right highlight-rate">@(rateValue.HasValue ? rateValue.Value.ToString("N2") + " %" : "")</td>
-                            <td class="text-right highlight-interest">@(row.Interest.HasValue ? row.Interest.Value.ToString("N2") : "")</td>
-                            <td class="text-right highlight-tax">@(row.Tax.HasValue ? row.Tax.Value.ToString("N2") : "")</td>
-                            <td class="text-right highlight-net-interest">@(row.NetInterest.HasValue ? row.NetInterest.Value.ToString("N2") : "")</td>
-                            <td class="text-right highlight-net">@(row.NetBalance.HasValue ? row.NetBalance.Value.ToString("N2") : "")</td>
-                        </tr>
-                    }
-                    <tr class="grand-total">
-                        <td colspan="6" class="text-right"><strong>Total</strong></td>
-                        <td class="text-right"><strong>@totalInterest.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalTax.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@((totalInterest - totalTax).ToString("N2"))</strong></td>
-                        <td class="text-right"><strong>@totalNetBalance.ToString("N2")</strong></td>
-                    </tr>
-                    <tr>
-                        <td colspan="6" class="text-right"><strong>Total Deposit Types</strong></td>
-                        <td class="text-right"><strong>@totalDepositTypes</strong></td>
-                        <td colspan="4"></td>
-                    </tr>
-                    <tr>
-                        <td colspan="6" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-right"><strong>@totalRecords</strong></td>
-                        <td colspan="4"></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="11" class="text-center">
-                            No interest and tax posted records found for the selected criteria
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    foreach (var row in rows)
+    {
+        var rate = !string.IsNullOrEmpty(row.InterestRate) && decimal.TryParse(row.InterestRate, out var parsedRate)
+            ? parsedRate.ToString("N2") + " %"
+            : "";
+
+        table.Data(
+            new ReportCell(row.DepositTypeName ?? "", Align.Left, 1, "saving-type"),
+            ReportCell.Left(row.MemberId ?? ""),
+            new ReportCell(row.MemberName ?? "", Align.Left, 1, "hl-member"),
+            new ReportCell(row.AccountNo ?? "", Align.Left, 1, "hl-account"),
+            new ReportCell(row.InterestDate ?? "", Align.Left, 1, "hl-date"),
+            new ReportCell(rate, Align.Right, 1, "hl-rate"),
+            new ReportCell(Fmt.Amount(row.Interest), Align.Right, 1, "hl-interest"),
+            new ReportCell(Fmt.Amount(row.Tax), Align.Right, 1, "hl-tax"),
+            new ReportCell(Fmt.Amount(row.NetInterest), Align.Right, 1, "hl-net-interest"),
+            new ReportCell(Fmt.Amount(row.NetBalance), Align.Right, 1, "hl-net"));
+    }
+
+    if (rows.Count > 0)
+    {
+        table.Total("Total", 6,
+            totalInterest.ToString("N2"),
+            totalTax.ToString("N2"),
+            (totalInterest - totalTax).ToString("N2"),
+            totalNetBalance.ToString("N2"));
+        table.Total("Total Deposit Types", 6, totalDepositTypes.ToString(), "", "", "");
+        table.Total("Total Records", 6, totalRecords.ToString(), "", "", "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

@@ -1,199 +1,66 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<SavingTransferRowDto>) ?? new List<SavingTransferRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var fontSize = "8pt";
+    var metaFontSize = "8.5pt";
+
+    string Text(string key) => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? "" : "";
+
+    var rows = (Model["Rows"] as IEnumerable<SavingTransferRowDto>)?.ToList() ?? new List<SavingTransferRowDto>();
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchNames = Text("BranchNames");
+    if (branchNames == "") branchNames = "All Branches";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Saving Transfer Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+    var totalRecords = Model.TryGetValue("TotalRecords", out var tr) && tr != null && Convert.ToInt32(tr) > 0
+        ? Convert.ToInt32(tr)
+        : rows.Count;
+    var totalAmount = Model.TryGetValue("TotalAmount", out var ta) && ta != null && Convert.ToDecimal(ta) != 0
+        ? Convert.ToDecimal(ta)
+        : rows.Sum(r => r.Amount ?? 0);
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
+    var table = new ReportTable(Model, title: "Saving Transfer Report", sheetName: "SavingTransfer")
+        .Column("Member Id", 10)
+        .Column("Member Name", 17)
+        .Column("Account No", 17)
+        .Column("Type", 12)
+        .Column("Amount", 14, Align.Right)
+        .Column("Date", 14)
+        .Column("Operator", 16)
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 4px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }");
 
-            thead {
-                display: table-row-group;
-            }
+    table.MetaRow(
+            Fmt.Labeled("Branch Name :", branchNames),
+            Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+            leftSpan: 3)
+         .MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
 
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    foreach (var row in rows)
+    {
+        table.Data(new[]
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ReportCell.Left(row.MemberId ?? ""),
+            ReportCell.Left(row.MemberName ?? ""),
+            ReportCell.Left(row.AccountNo ?? ""),
+            ReportCell.Left(row.Type ?? ""),
+            ReportCell.Right(Fmt.Amount(row.Amount)),
+            ReportCell.Left(row.Date ?? ""),
+            ReportCell.Left(row.Operator ?? "")
+        });
+    }
 
-        <table class="data-table" data-sheet-name="SavingTransfer">
-            <colgroup>
-                <col style="width:10%;" />
-                <col style="width:16%;" />
-                <col style="width:16%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:14%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="7">Saving Transfer Report</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="3"><strong>Branch Name :</strong> @branchNames</td>
-                    <td colspan="4" class="text-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="4"></td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="7"></td></tr>
-
-                <tr>
-                    <th>Member Id</th>
-                    <th>Member Name</th>
-                    <th>Account No</th>
-                    <th>Type</th>
-                    <th class="text-right">Amount</th>
-                    <th>Date</th>
-                    <th>Operator</th>
-                </tr>
-
-                @if (rows.Any())
-                {
-                    foreach (var row in rows)
-                    {
-                        <tr class="detail-row">
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td>@(row.Type ?? "")</td>
-                            <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
-                            <td>@(row.Date ?? "")</td>
-                            <td>@(row.Operator ?? "")</td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">Grand Total</td>
-                        <td class="text-right">@totalAmount.ToString("N2")</td>
-                        <td colspan="2"></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">Total Records</td>
-                        <td class="text-right">@totalRecords</td>
-                        <td colspan="2"></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", 4, Fmt.Amount(totalAmount), "", "");
+        table.Total("Total Records", 4, totalRecords.ToString(), "", "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

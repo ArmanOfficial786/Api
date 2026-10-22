@@ -1,200 +1,71 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
+
+    var fontSize = "8.5pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal Dec(string key) => Model.TryGetValue(key, out var dv) && dv != null ? Convert.ToDecimal(dv) : 0m;
+    string Dash(string? value) => string.IsNullOrEmpty(value) ? "-" : value;
+
     var rows = (Model["Rows"] as List<ChequeClearanceRowDto>) ?? new List<ChequeClearanceRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-    var hasRows = rows != null && rows.Count > 0;
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Cheque Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+    var totalAmount = Dec("TotalAmount");
+    var totalRecords = (int)Dec("TotalRecords");
+    if (totalRecords == 0) totalRecords = rows.Count;
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 8.5pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                border-top: 2px solid #000;
-                border-bottom: 1.5px solid #000;
-                text-align: left;
-                white-space: nowrap;
-                font-weight: bold;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Cheque Report", sheetName: "ChequeReport")
+        .Column("MemberId", 10)
+        .Column("Member Name", 14)
+        .Column("Cheque No", 10)
+        .Column("Amount", 11, Align.Right)
+        .Column("Receive Bs", 11)
+        .Column("Send Bs", 11)
+        .Column("Clearance Bs", 11)
+        .Column("Rejected Bs", 11)
+        .Column("Deleted Bs", 11)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 55)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 6px; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 2px solid #000; border-bottom: 1.5px solid #000; white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 1px solid #eee; }");
 
-        <table class="data-table" data-sheet-name="ChequeReport">
-            <colgroup>
-                <col style="width:10%;" />
-                <col style="width:14%;" />
-                <col style="width:10%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="9">Cheque Report</td>
-                </tr>
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+        3);
 
-                <tr class="meta-row">
-                    <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="6" class="text-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="9"></td></tr>
+    foreach (var row in rows)
+    {
+        table.Data(
+            row.MemberId ?? "",
+            row.MemberName ?? "",
+            Fmt.Int(row.ChequeNo),
+            Fmt.Amount(row.Amount),
+            Dash(row.ReceiveDateBs),
+            Dash(row.SendDateBs),
+            Dash(row.ClearanceDateBs),
+            Dash(row.RejectedDateBs),
+            Dash(row.DeletedDateBs));
+    }
 
-                <tr>
-                    <th>MemberId</th>
-                    <th>Member Name</th>
-                    <th>Cheque No</th>
-                    <th class="text-right">Amount</th>
-                    <th>Receive Bs</th>
-                    <th>Send Bs</th>
-                    <th>Clearance Bs</th>
-                    <th>Rejected Bs</th>
-                    <th>Deleted Bs</th>
-                </tr>
-
-                @if (hasRows)
-                {
-                    foreach (var row in rows)
-                    {
-                        <tr class="detail-row">
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.ChequeNo.HasValue ? row.ChequeNo.Value.ToString() : "")</td>
-                            <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
-                            <td>@(string.IsNullOrEmpty(row.ReceiveDateBs) ? "-" : row.ReceiveDateBs)</td>
-                            <td>@(string.IsNullOrEmpty(row.SendDateBs) ? "-" : row.SendDateBs)</td>
-                            <td>@(string.IsNullOrEmpty(row.ClearanceDateBs) ? "-" : row.ClearanceDateBs)</td>
-                            <td>@(string.IsNullOrEmpty(row.RejectedDateBs) ? "-" : row.RejectedDateBs)</td>
-                            <td>@(string.IsNullOrEmpty(row.DeletedDateBs) ? "-" : row.DeletedDateBs)</td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="3" class="text-right">Total Amount</td>
-                        <td class="text-right">@totalAmount.ToString("N2")</td>
-                        <td colspan="5"></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="3" class="text-right">Total Records</td>
-                        <td class="text-right">@totalRecords</td>
-                        <td colspan="5"></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="9" class="text-center">No cheque records found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Total Amount", 3, totalAmount.ToString("N2"), "", "", "", "", "");
+        table.Total("Total Records", 3, totalRecords.ToString(), "", "", "", "", "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

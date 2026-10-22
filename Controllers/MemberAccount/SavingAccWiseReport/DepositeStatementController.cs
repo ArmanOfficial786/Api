@@ -1,92 +1,94 @@
-﻿// Controllers/AccountOperation/DepositStatementController.cs
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.SavingAcWiseReport;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.SavingAcWiseReport;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
+using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
+using System.Security.Claims;
 using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class DepositStatementController : ControllerBase
     {
+        private const string ReportName = "DepositStatementReport";
+
         private readonly IDepositeStatement _repository;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
+        private readonly IReportHeaderProvider _headers;
         private readonly IJsReportService _jsReportService;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly CustomHeaderResponse _headerResponse;
-        private readonly IOptions<ReportSettings> _reportSettings;
+        private readonly IReportDataCache _dataCache;
         private readonly ILogger<DepositStatementController> _logger;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        private static readonly PageSizeSetting NPageSetting = PageSizeSetting.A4Portrait;
+        private static readonly PageSizeSetting VPageSetting =
+            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         public DepositStatementController(
             IDepositeStatement repository,
-            ICommonHeaderRepository commonHeaderRepository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
-            IWebHostEnvironment webHostEnvironment,
-            CustomHeaderResponse headerResponse,
-            IOptions<ReportSettings> reportSettings,
-            ILogger<DepositStatementController> logger)
+            IReportDataCache dataCache,
+            ILogger<DepositStatementController> logger,
+            IReportFileResponse reportFileResponse)
         {
             _repository = repository;
-            _commonHeaderRepository = commonHeaderRepository;
+            _headers = headers;
             _jsReportService = jsReportService;
-            _webHostEnvironment = webHostEnvironment;
-            _headerResponse = headerResponse;
-            _reportSettings = reportSettings;
+            _dataCache = dataCache;
             _logger = logger;
+            _reportFileResponse = reportFileResponse;
         }
 
-        [HttpPost()]
+        [HttpPost]
         public async Task<IActionResult> GenerateReport(
             [FromBody] DepositStatementRequestDto request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
             try
             {
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out _))
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+
                 if (request == null || !ModelState.IsValid)
-                    return BadRequest(new { success = false, message = "Invalid request" });
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
 
-                var reportName = "DepositStatementReport";
-                var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                var upperFormat = format.ToUpperInvariant();
+                var isVisual = request.VisualReport;
+                var page = isVisual ? VPageSetting : NPageSetting;
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+                var dataKey = ReportCacheKey.ForData(
+                    request, ReportName, userIdClaim, nameof(request.VisualReport));
+                var reportKey = $"{dataKey}_{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}";
 
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: request.VisualReport,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
+
+                var data = await _dataCache.GetOrLoadAsync(dataKey, async () =>
                 {
-                    _logger.LogInformation("? NO DB CALL — serving from cache");
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, reportName,
-                        _jsReportService, _logger);
-                }
+                    var loaded = await _repository.GetDepositStatement(request);
+                    if (loaded == null || loaded.Rows == null || !loaded.Rows.Any())
+                        return null;
+                    return loaded;
+                }, ct);
 
-                // Fetch data
-                var data = await _repository.GetDepositStatement(request);
+                if (data == null)
+                    return NotFound(new { success = false, StatusCode = 400, message = "No transactions found for the specified period" });
 
-                if (!data.Rows.Any())
-                {
-                    return NotFound(new { success = false, message = "No transactions found for the specified period" });
-                }
-
-                string? branchIdForHeader = null;
-                if (!request.SameCompanyName && data.OfficeId.HasValue)
-                {
-                    branchIdForHeader = data.OfficeId.Value.ToString();
-                }
-
-                var headerData = await _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
-
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-                await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData, nameof(CommonHeader.CompanyLogo), webRoot));
+                var branchIdForHeader = !request.SameCompanyName && data.OfficeId.HasValue
+                    ? data.OfficeId.Value.ToString()
+                    : "";
+                var headerData = await _headers.GetAsync(branchIdForHeader, ct);
 
                 var reportData = new Dictionary<string, object>
                 {
@@ -97,63 +99,47 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
                     { "InterestAmount", data.InterestAmount },
                     { "TaxAmount", data.TaxAmount },
                     { "HeaderDataSet", headerData },
-                    { "FromDate", request.FromDateBs },
-                    { "ToDate", request.ToDateBs },
-                    { "AccountNo", request.AccountNo },
+                    { "FromDate", request.FromDateBs ?? "" },
+                    { "ToDate", request.ToDateBs ?? "" },
+                    { "AccountNo", request.AccountNo ?? "" },
                     { "EnableInterest", request.EnableInterest },
                     { "EntryBy", request.EntryBy },
                     { "EnableBillNumber", request.EnableBillNumber },
                     { "ValueDate", request.ValueDate },
                     { "VerifiedTillBs", data.VerifiedTillBs ?? string.Empty },
+                    { "Language", request.Language },
+                    { "VisualReport", request.VisualReport },
                     { "Format", upperFormat },
-                    { "Language", request.Language }
+                    { "PageSetting", page }
                 };
-
-                var htmlContent = await Task.Run(() =>
-                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
-                        reportKey: reportKey,
-                        reportPath: request.VisualReport
-                            ? "Views/VisualReport/VDepositStatementReport.cshtml"
-                            : "Views/Report/MemberAC/SavingAcWiseReport/DepositeStatement.cshtml",
-                        data: reportData));
 
                 if (upperFormat == "VIEW")
                 {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.Rows.Count
-                    };
-
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
                     Response.Headers.Append("X-Verification-Status", JsonSerializer.Serialize(new
                     {
                         data.HasVerification,
                         data.VerifiedTillBs
                     }));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
                 }
 
-                return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, reportName,
-                    _jsReportService, _logger);
+                string viewPath = request.VisualReport
+                    ? "Views/VisualReport/VDepositStatementReport.cshtml"
+                    : "Views/Report/MemberAC/SavingAcWiseReport/DepositeStatement.cshtml";
+
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                    reportKey: reportKey,
+                    reportPath: viewPath,
+                    data: reportData, ct: ct);
+
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: request.VisualReport,
+                    totalRecords: data.Rows.Count,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { success = false, message = ex.Message });
-            }
+
             catch (Exception ex)
             {
-                _logger.LogError(ex, "DepositStatement report generation failed");
+                _logger.LogError(ex, "Error generating {Report} report", ReportName);
                 return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }

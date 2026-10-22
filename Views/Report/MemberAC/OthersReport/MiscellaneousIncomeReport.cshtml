@@ -1,251 +1,101 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<MiscellaneousIncomeRowDto>) ?? new List<MiscellaneousIncomeRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "";
-    var reportType = Model["ReportType"]?.ToString() ?? "Miscellaneous";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-    var selectedMemberId = Model.ContainsKey("SelectedMemberId") ? Model["SelectedMemberId"]?.ToString() : null;
-    var selectedMemberName = Model.ContainsKey("SelectedMemberName") ? Model["SelectedMemberName"]?.ToString() : null;
+    var fontSize = "9pt";
+    const int ColumnCount = 5;
 
-    // Group exactly like the original DevExpress report: Particulars (level 1) -> Member (level 2) -> transaction rows.
-    // No re-ordering here — groups/rows print in the order the repository already returned (driven by OrderBy).
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal Dec(string key) => Model.TryGetValue(key, out var dv) && dv != null ? Convert.ToDecimal(dv) : 0m;
+
+    var rows = (Model["Rows"] as List<MiscellaneousIncomeRowDto>) ?? new List<MiscellaneousIncomeRowDto>();
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchNames = Text("BranchNames", "All Branches");
+    var reportType = Text("ReportType");
+    if (string.IsNullOrEmpty(reportType)) reportType = "Miscellaneous";
+    var selectedMemberId = Text("SelectedMemberId");
+    var selectedMemberName = Text("SelectedMemberName");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var totalAmount = Dec("TotalAmount");
+    var totalRecords = (int)Dec("TotalRecords");
+    if (totalRecords == 0) totalRecords = rows.Count;
+
     var particularsGroups = rows
         .GroupBy(r => r.Particulars ?? "")
         .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>@reportType Income Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-            }
-
-            .particulars-row td {
-                font-weight: bold;
-                padding-top: 8px;
-            }
-
-            .member-row td {
-                font-weight: bold;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .subtotal-row td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-                padding-top: 5px;
-                padding-bottom: 5px;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: $"{reportType} Income Report", sheetName: "MiscellaneousIncome")
+        .Column("Particulars", 16)
+        .Column("Member Details", 20)
+        .Column("Details", 29)
+        .Column("Date", 15)
+        .Column("Amount", 20, Align.Right)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9",
+            GroupBackground = "#fff",
+            TotalBackground = "#f9f9f9",
+            SubTotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 60)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-group td.part-hdr { padding-top: 8px; }\n" +
+            "table.sheet-table tr.r-subtotal td { border-top: 1px solid #000; border-bottom: 0; padding-top: 5px; padding-bottom: 5px; }");
+
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchNames));
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+        2);
+
+    if (!string.IsNullOrEmpty(selectedMemberId))
+    {
+        table.MetaRow(Fmt.Join(
+            Fmt.Labeled("Member Id :", selectedMemberId),
+            Fmt.Labeled("Member Name :", selectedMemberName)));
+    }
+
+    foreach (var particularsGroup in particularsGroups)
+    {
+        table.GroupBy(
+            new ReportCell(particularsGroup.Key, Align.Left, 1, "part-hdr"),
+            new ReportCell("", Align.Left, ColumnCount - 1, "part-hdr"));
+
+        foreach (var memberGroup in particularsGroup.GroupBy(r => new { r.MemberId, r.MemberName }))
+        {
+            table.GroupBy(
+                ReportCell.Left(""),
+                ReportCell.Left($"{memberGroup.Key.MemberId}   {memberGroup.Key.MemberName}", ColumnCount - 1));
+
+            foreach (var row in memberGroup)
+            {
+                table.Data(
+                    ReportCell.Left(""),
+                    ReportCell.Left(""),
+                    ReportCell.Left(row.Details ?? ""),
+                    ReportCell.Left(row.Date ?? ""),
+                    ReportCell.Right(Fmt.Amount(row.Amount)));
+            }
         }
 
-        <table class="data-table" data-sheet-name="MiscellaneousIncome">
-            <colgroup>
-                <col style="width:16%;" />
-                <col style="width:20%;" />
-                <col style="width:29%;" />
-                <col style="width:15%;" />
-                <col style="width:20%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="5">@reportType Income Report</td>
-                </tr>
+        table.SubTotal(particularsGroup.Key, ColumnCount - 1, particularsGroup.Sum(r => r.Amount ?? 0).ToString("N2"));
+    }
 
-                <tr class="meta-row">
-                    <td colspan="5"><strong>Branch Name :</strong> @branchNames</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="5"></td></tr>
-
-                <tr class="meta-row">
-                    <td colspan="2"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="3" class="text-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                @if (!string.IsNullOrEmpty(selectedMemberId))
-                {
-                    <tr class="meta-row">
-                        <td colspan="5">
-                            <strong>Member Id :</strong> @selectedMemberId
-                            &nbsp;&nbsp;&nbsp;
-                            <strong>Member Name :</strong> @selectedMemberName
-                        </td>
-                    </tr>
-                }
-                <tr class="meta-spacer"><td colspan="5"></td></tr>
-
-                <tr>
-                    <th>Particulars</th>
-                    <th>Member Details</th>
-                    <th>Details</th>
-                    <th>Date</th>
-                    <th class="text-right">Amount</th>
-                </tr>
-
-                @if (particularsGroups.Any())
-                {
-                    foreach (var particularsGroup in particularsGroups)
-                    {
-                        <tr class="particulars-row">
-                            <td>@particularsGroup.Key</td>
-                            <td colspan="4"></td>
-                        </tr>
-
-                        var memberGroups = particularsGroup.GroupBy(r => new { r.MemberId, r.MemberName }).ToList();
-
-                        foreach (var memberGroup in memberGroups)
-                        {
-                            <tr class="member-row">
-                                <td></td>
-                                <td colspan="4">@(memberGroup.Key.MemberId ?? "") &nbsp;&nbsp; @(memberGroup.Key.MemberName ?? "")</td>
-                            </tr>
-
-                            foreach (var row in memberGroup)
-                            {
-                                <tr class="detail-row">
-                                    <td></td>
-                                    <td></td>
-                                    <td>@(row.Details ?? "")</td>
-                                    <td>@(row.Date ?? "")</td>
-                                    <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
-                                </tr>
-                            }
-                        }
-
-                        <tr class="subtotal-row">
-                            <td colspan="4" class="text-right">@particularsGroup.Key</td>
-                            <td class="text-right">@particularsGroup.Sum(r => r.Amount ?? 0).ToString("N2")</td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">Grand Total</td>
-                        <td class="text-right">@totalAmount.ToString("N2")</td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">Total Records</td>
-                        <td class="text-right">@totalRecords</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="5" class="text-center">No @reportType.ToLower() income found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", ColumnCount - 1, totalAmount.ToString("N2"));
+        table.Total("Total Records", ColumnCount - 1, totalRecords.ToString());
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

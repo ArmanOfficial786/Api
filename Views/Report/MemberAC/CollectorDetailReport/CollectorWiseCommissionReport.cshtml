@@ -1,178 +1,71 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.CollectorDetailReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
+
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal Dec(string key) => Model.TryGetValue(key, out var dv) && dv != null ? Convert.ToDecimal(dv) : 0m;
+
     var rows = (Model["Rows"] as List<CollectorWiseCommissionRowDto>) ?? new List<CollectorWiseCommissionRowDto>();
-    var totalCollectedAmount = Model["TotalCollectedAmount"] as decimal? ?? 0;
-    var totalCommissionAmount = Model["TotalCommissionAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var collectorName = Model["CollectorName"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var collectorName = Text("CollectorName");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Collector Wise Commission Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .report-title {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 10px 0;
-            }
-
-            .meta-row {
-                width: 100%;
-                padding: 2px 0;
-            }
-
-                .meta-row td {
-                    padding: 2px 0;
-                    border: none;
-                }
-
-            .meta-right {
-                text-align: right;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                margin-top: 6px;
-            }
-
-                .data-table td, .data-table th {
-                    padding: 4px 6px;
-                    border: 1px solid #ccc;
-                }
-
-                .data-table th {
-                    background: #f2f2f2;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                }
-
-                .data-table thead {
-                    display: table-row-group;
-                }
-
-            .grand-total {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .highlight-collected {
-                color: #2e7d32;
-                font-weight: bold;
-            }
-
-            .highlight-commission {
-                color: #1565c0;
-                font-weight: bold;
-            }
-
-            @@media print {
-                .data-table thead {
-                    display: table-row-group;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Collector Wise Commission Report", sheetName: "CollectorWiseCommission")
+        .Column("Member Id", 12)
+        .Column("Member Name", 22)
+        .Column("Type", 16)
+        .Column("Account No", 12)
+        .Column("Collected Amount", 13, Align.Right)
+        .Column("Commission Amount", 13, Align.Right)
+        .Column("Date", 12)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#f2f2f2",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 60)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; border-left: 1px solid #ccc; border-right: 1px solid #ccc; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 2px solid #000; border-bottom: 1px solid #000; white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-data td { border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; }\n" +
+            "table.sheet-table tr.r-data td.hl-collected { color: #2e7d32; font-weight: bold; }\n" +
+            "table.sheet-table tr.r-data td.hl-commission { color: #1565c0; font-weight: bold; }");
 
-        <div class="report-title">Collector Wise Commission Report</div>
+    table.MetaRow(
+        Fmt.Join(),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+        4);
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On:", generatedOn),
+        Fmt.Labeled("Collector Name :", collectorName),
+        4);
 
-        <table class="meta-row" style="width:100%;">
-            <tr>
-                <td></td>
-                <td class="meta-right">
-                    <strong>From Date :</strong>&nbsp;&nbsp;@fromDate&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                    <strong>To Date :</strong>&nbsp;&nbsp;@toDate
-                </td>
-            </tr>
-            <tr>
-                <td><strong>Report Generated On:</strong>&nbsp;&nbsp;@generatedOn</td>
-                <td class="meta-right"><strong>Collector Name :</strong>&nbsp;&nbsp;@collectorName</td>
-            </tr>
-        </table>
+    foreach (var row in rows)
+    {
+        table.Data(
+            ReportCell.Left(row.MemberId ?? ""),
+            ReportCell.Left(row.MemberName ?? ""),
+            ReportCell.Left(row.Type ?? ""),
+            ReportCell.Left(row.AccountNo ?? ""),
+            new ReportCell(Fmt.Amount(row.CollectedAmount), Align.Right, 1, "hl-collected"),
+            new ReportCell(Fmt.Amount(row.CommissionAmount), Align.Right, 1, "hl-commission"),
+            ReportCell.Left(row.Date ?? ""));
+    }
 
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th style="width:12%;">Member Id</th>
-                    <th style="width:22%;">Member Name</th>
-                    <th style="width:16%;">Type</th>
-                    <th style="width:12%;">Account No</th>
-                    <th style="width:13%;" class="text-right">Collected Amount</th>
-                    <th style="width:13%;" class="text-right">Commission Amount</th>
-                    <th style="width:12%;">Date</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (rows.Any())
-                {
-                    foreach (var row in rows)
-                    {
-                        <tr>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.Type ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td class="text-right highlight-collected">@(row.CollectedAmount.HasValue ? row.CollectedAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right highlight-commission">@(row.CommissionAmount.HasValue ? row.CommissionAmount.Value.ToString("N2") : "")</td>
-                            <td>@(row.Date ?? "")</td>
-                        </tr>
-                    }
-                    <tr class="grand-total">
-                        <td colspan="3"></td>
-                        <td class="text-right"><strong>Total Amount :</strong></td>
-                        <td class="text-right"><strong>@totalCollectedAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalCommissionAmount.ToString("N2")</strong></td>
-                        <td></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="7" style="text-align:center;">No commission transactions found for the selected criteria</td></tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Total Amount :", 4,
+            Dec("TotalCollectedAmount").ToString("N2"),
+            Dec("TotalCommissionAmount").ToString("N2"),
+            "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

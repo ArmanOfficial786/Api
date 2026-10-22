@@ -1,267 +1,108 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "8.5pt";
+    const int ColumnCount = 8;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal Dec(string key) => Model.TryGetValue(key, out var dv) && dv != null ? Convert.ToDecimal(dv) : 0m;
+
     var rows = (Model["Rows"] as List<BranchToBranchExpenseRowDto>) ?? new List<BranchToBranchExpenseRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchFromName = Model["BranchFromName"]?.ToString() ?? "All";
-    var branchToName = Model["BranchToName"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchFromName = Text("BranchFromName", "All");
+    var branchToName = Text("BranchToName", "All");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Grouped exactly like BranchToBranchCollection: Date -> Saving Type -> rows.
+    var totalAmount = Dec("TotalAmount");
+    var totalRecords = (int)Dec("TotalRecords");
+    if (totalRecords == 0) totalRecords = rows.Count;
+
     var dateGroups = rows
         .GroupBy(r => r.Date ?? "")
         .OrderBy(g => g.Key)
         .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Branch To Branch Expense Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 8.5pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 3px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .meta-rule td {
-                border-bottom: 1px solid #000;
-                padding-bottom: 6px;
-            }
-
-            .data-table th {
-                background: #f2f2f2;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-            }
-
-            .date-group-row td {
-                font-weight: bold;
-                padding-top: 8px;
-                border-bottom: 1px solid #000;
-            }
-
-            .type-group-row td {
-                font-weight: bold;
-                padding-left: 14px;
-            }
-
-            .detail-row td:first-child {
-                padding-left: 24px;
-            }
-
-            .type-subtotal-row td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-            }
-
-            .date-total-row td {
-                border-top: 1px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                padding-top: 4px;
-                padding-bottom: 6px;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Branch To Branch Expense Report", sheetName: "BranchToBranchExpense")
+        .Column("Date", 10)
+        .Column("Saving Type", 12)
+        .Column("Member Id", 10)
+        .Column("Name", 16)
+        .Column("Bill No.", 10)
+        .Column("Account No", 16)
+        .Column("Cheque No", 12)
+        .Column("Amount", 14, Align.Right)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#f2f2f2",
+            GroupBackground = "#fff",
+            SubTotalBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 55)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 6px; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 2px solid #000; border-bottom: 1px solid #000; white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-group td.date-hdr { padding-top: 8px; border-top: 0; border-bottom: 1px solid #000; }\n" +
+            "table.sheet-table tr.r-group td.type-hdr { padding-left: 14px; border-top: 0; border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-data td.idx-cell { padding-left: 24px; }\n" +
+            "table.sheet-table tr.r-data td.date-total { font-weight: bold; border-top: 1px solid #000; border-bottom: 2px solid #000; padding-top: 4px; padding-bottom: 6px; }\n" +
+            "table.sheet-table tr.r-subtotal td { border-top: 1px solid #000; border-bottom: 0; }");
+
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+        4);
+    table.MetaRow(
+        Fmt.Labeled("Collection Branch Name :", branchFromName),
+        Fmt.Labeled("Branch Name :", branchToName),
+        4);
+
+    foreach (var dateGroup in dateGroups)
+    {
+        table.GroupBy(new ReportCell(dateGroup.Key, Align.Left, ColumnCount, "date-hdr"));
+
+        foreach (var typeGroup in dateGroup.GroupBy(r => r.Type ?? "").OrderBy(g => g.Key))
+        {
+            table.GroupBy(
+                ReportCell.Left(""),
+                new ReportCell(typeGroup.Key, Align.Left, ColumnCount - 1, "type-hdr"));
+
+            var idx = 0;
+            foreach (var row in typeGroup)
+            {
+                table.Data(
+                    new ReportCell((++idx).ToString(), Align.Left, 1, "idx-cell"),
+                    ReportCell.Left(""),
+                    ReportCell.Left(row.MemberId ?? ""),
+                    ReportCell.Left(row.MemberName ?? ""),
+                    ReportCell.Left(row.BillNo ?? ""),
+                    ReportCell.Left(row.AccountNo ?? ""),
+                    ReportCell.Left(row.ChequeNo ?? ""),
+                    ReportCell.Right(Fmt.Amount(row.Amount)));
+            }
+
+            table.SubTotal(typeGroup.Key, ColumnCount - 1, typeGroup.Sum(r => r.Amount ?? 0).ToString("N2"));
         }
 
-        <table class="data-table" data-sheet-name="BranchToBranchExpense">
-            <colgroup>
-                <col style="width:10%;" />
-                <col style="width:12%;" />
-                <col style="width:10%;" />
-                <col style="width:16%;" />
-                <col style="width:10%;" />
-                <col style="width:16%;" />
-                <col style="width:12%;" />
-                <col style="width:14%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="8">Branch To Branch Expense Report</td>
-                </tr>
+        table.Data(
+            new ReportCell($"Total Records : {dateGroup.Count()}", Align.Left, 3, "date-total"),
+            new ReportCell(dateGroup.Key, Align.Center, 4, "date-total"),
+            new ReportCell(dateGroup.Sum(r => r.Amount ?? 0).ToString("N2"), Align.Right, 1, "date-total"));
+    }
 
-                <tr class="meta-row">
-                    <td colspan="4"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="4" class="text-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-row meta-rule">
-                    <td colspan="4"><strong>Collection Branch Name :</strong> @branchFromName</td>
-                    <td colspan="4" class="text-right"><strong>Branch Name :</strong> @branchToName</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="8"></td></tr>
-
-                <tr>
-                    <th>Date</th>
-                    <th>Saving Type</th>
-                    <th>Member Id</th>
-                    <th>Name</th>
-                    <th>Bill No.</th>
-                    <th>Account No</th>
-                    <th>Cheque No</th>
-                    <th class="text-right">Amount</th>
-                </tr>
-
-                @if (dateGroups.Any())
-                {
-                    foreach (var dateGroup in dateGroups)
-                    {
-                        <tr class="date-group-row">
-                            <td colspan="8">@dateGroup.Key</td>
-                        </tr>
-
-                        var typeGroups = dateGroup.GroupBy(r => r.Type ?? "").OrderBy(g => g.Key).ToList();
-
-                        foreach (var typeGroup in typeGroups)
-                        {
-                            <tr class="type-group-row">
-                                <td></td>
-                                <td colspan="7">@typeGroup.Key</td>
-                            </tr>
-
-                            int idx = 0;
-                            foreach (var row in typeGroup)
-                            {
-                                idx++;
-                                <tr class="detail-row">
-                                    <td>@idx</td>
-                                    <td></td>
-                                    <td>@(row.MemberId ?? "")</td>
-                                    <td>@(row.MemberName ?? "")</td>
-                                    <td>@(row.BillNo ?? "")</td>
-                                    <td>@(row.AccountNo ?? "")</td>
-                                    <td>@(row.ChequeNo ?? "")</td>
-                                    <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
-                                </tr>
-                            }
-
-                            <tr class="type-subtotal-row">
-                                <td colspan="7" class="text-right">@typeGroup.Key</td>
-                                <td class="text-right">@typeGroup.Sum(r => r.Amount ?? 0).ToString("N2")</td>
-                            </tr>
-                        }
-
-                        <tr class="date-total-row">
-                            <td colspan="3">Total Records : @dateGroup.Count()</td>
-                            <td colspan="4" class="text-center">@dateGroup.Key</td>
-                            <td class="text-right">@dateGroup.Sum(r => r.Amount ?? 0).ToString("N2")</td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="7" class="text-right">Grand Total</td>
-                        <td class="text-right">@totalAmount.ToString("N2")</td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="7" class="text-right">Total Records</td>
-                        <td class="text-right">@totalRecords</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="8" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", ColumnCount - 1, totalAmount.ToString("N2"));
+        table.Total("Total Records", ColumnCount - 1, totalRecords.ToString());
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

@@ -1,167 +1,79 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.SavingAcWiseReport;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.SavingAcWiseReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
-
 @{
     Layout = null;
+
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+    string NullDisplay(object? value) => value == null || string.IsNullOrWhiteSpace(value.ToString()) ? "" : value.ToString()!;
+    string FormatAmount(decimal amount) => amount == 0 ? "0" : amount.ToString("N0");
+
     var rows = (Model["Rows"] as List<MemberAccountDetailNoRowDto>) ?? new List<MemberAccountDetailNoRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalSaving = Model["TotalSaving"] as decimal? ?? 0m;
-    var totalShare = Model["TotalShare"] as decimal? ?? 0m;
-    var totalLoan = Model["TotalLoan"] as decimal? ?? 0m;
-    var tillDate = Model["TillDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "";
-    var memberType = Model["MemberType"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var tillDate = Text("TillDate");
+    var branchName = Text("BranchName");
+    var memberType = Text("MemberType", "All");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    string NullDisplay(object? value) =>
-        value == null || string.IsNullOrWhiteSpace(value.ToString()) ? "" : value.ToString()!;
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalSaving = TotalOr("TotalSaving", rows.Sum(r => r.Saving));
+    var totalShare = TotalOr("TotalShare", rows.Sum(r => r.Share));
+    var totalLoan = TotalOr("TotalLoan", rows.Sum(r => r.Loan));
 
-    string FormatAmount(decimal amount) =>
-        amount == 0 ? "0" : amount.ToString("N0");
-
-    int sn = 0;
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>@memberType Member List Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-            }
-
-            .report-container {
-                width: 100%;
-            }
-
-            .report-title {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                margin: 10px 0;
-            }
-
-            .report-meta {
-                margin-bottom: 10px;
-                font-size: 9pt;
-            }
-
-                .report-meta div {
-                    margin-bottom: 3px;
-                }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-            }
-
-                .data-table td, .data-table th {
-                    padding: 4px 6px;
-                    border: 1px solid #ddd;
-                }
-
-                /* IMPORTANT: forces thead to behave as a normal row group instead of
-                           a "table-header-group", which is what browsers/PDF engines repeat
-                           automatically on every page. This makes the column header print
-                           exactly once, like any other row. */
-                .data-table thead {
-                    display: table-row-group;
-                }
-
-                    .data-table thead th {
-                        border-top: 2px solid #000;
-                        border-bottom: 1px solid #000;
-                        background: #f2f2f2;
-                        text-align: left;
-                    }
-
-            .grand-total {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: $"{memberType} Member List Report", sheetName: "MemberAccountDetailNo")
+        .Column("SN", 5, Align.Center)
+        .Column("MemberId", 12)
+        .Column("Name", 20)
+        .Column("Address", 18)
+        .Column("Contact No", 18)
+        .Column("Saving", 9, Align.Right)
+        .Column("Share", 9, Align.Right)
+        .Column("Loan", 9, Align.Right)
+        .NoColumnHeader()
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#f2f2f2",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 55)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 6px; }\n" +
+            "table.sheet-table tr.r-header th { border: 1px solid #ddd; border-top: 2px solid #000; border-bottom: 1px solid #000; }\n" +
+            "table.sheet-table tr.r-data td { border: 1px solid #ddd; }");
 
-        <div class="report-title">@memberType Member List Report</div>
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+    table.MetaRow(Fmt.Join(Fmt.Labeled("Report Generated On :", generatedOn), Fmt.Labeled("Till Date :", tillDate)));
 
-        <div class="report-meta">
-            <div><strong>Branch Name :</strong> &nbsp; @branchName</div>
-            <div><strong>Report Generated On :</strong> &nbsp; @generatedOn &nbsp;&nbsp;&nbsp;&nbsp; <strong>Till Date :</strong> &nbsp; @tillDate</div>
-        </div>
+    table.Header();
 
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th style="width:5%;">SN</th>
-                    <th style="width:12%;">MemberId</th>
-                    <th style="width:20%;">Name</th>
-                    <th style="width:18%;">Address</th>
-                    <th style="width:18%;">Contact No</th>
-                    <th style="width:9%;" class="text-right">Saving</th>
-                    <th style="width:9%;" class="text-right">Share</th>
-                    <th style="width:9%;" class="text-right">Loan</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (rows.Any())
-                {
-                    sn = 0;
-                    foreach (var row in rows)
-                    {
-                        sn++;
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@NullDisplay(row.MemberId)</td>
-                            <td>@NullDisplay(row.Name)</td>
-                            <td>@NullDisplay(row.Address)</td>
-                            <td>@NullDisplay(row.ContactNo)</td>
-                            <td class="text-right">@FormatAmount(row.Saving)</td>
-                            <td class="text-right">@FormatAmount(row.Share)</td>
-                            <td class="text-right">@FormatAmount(row.Loan)</td>
-                        </tr>
-                    }
-                    <tr class="grand-total">
-                        <td colspan="5" class="text-right"><strong>Total (@totalRecords)</strong></td>
-                        <td class="text-right"><strong>@FormatAmount(totalSaving)</strong></td>
-                        <td class="text-right"><strong>@FormatAmount(totalShare)</strong></td>
-                        <td class="text-right"><strong>@FormatAmount(totalLoan)</strong></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="8" class="text-center">No data found</td></tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    var sn = 0;
+    foreach (var row in rows)
+    {
+        table.Data(
+            ReportCell.Center((++sn).ToString()),
+            ReportCell.Left(NullDisplay(row.MemberId)),
+            ReportCell.Left(NullDisplay(row.Name)),
+            ReportCell.Left(NullDisplay(row.Address)),
+            ReportCell.Left(NullDisplay(row.ContactNo)),
+            ReportCell.Right(FormatAmount(row.Saving)),
+            ReportCell.Right(FormatAmount(row.Share)),
+            ReportCell.Right(FormatAmount(row.Loan)));
+    }
+
+    if (rows.Count > 0)
+        table.Total($"Total ({totalRecords})", 5, FormatAmount(totalSaving), FormatAmount(totalShare), FormatAmount(totalLoan));
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

@@ -1,320 +1,94 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
-    var rows = (Model["Rows"] as List<SavingInterestChangeLogRowDto>) ?? new List<SavingInterestChangeLogRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var reportType = Model["ReportType"]?.ToString() ?? "1";
-    var reportTypeText = Model["ReportTypeText"]?.ToString() ?? (reportType == "1" ? "Account No" : "Deposit Type");
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = Model["GeneratedOn"]?.ToString() ?? DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
-    var accountNo = Model["AccountNo"]?.ToString();
-    var depositTypeName = Model["DepositTypeName"]?.ToString();
-    var officeName = Model["OfficeName"]?.ToString() ?? "All";
-    var totalChanges = Model["TotalChanges"] as int? ?? 0;
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Saving Interest Change Log Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+    var fontSize = "7.5pt";
+    var metaFontSize = "8pt";
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-                padding: 10px;
-            }
+    string Text(string key) => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? "" : "";
 
-            thead {
-                display: table-row-group;
-            }
+    var rows = (Model["Rows"] as IEnumerable<SavingInterestChangeLogRowDto>)?.ToList() ?? new List<SavingInterestChangeLogRowDto>();
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var reportType = Text("ReportType");
+    if (reportType == "") reportType = "1";
+    var accountNo = Text("AccountNo");
+    var depositTypeName = Text("DepositTypeName");
+    var officeName = Text("OfficeName");
+    if (officeName == "") officeName = "All";
+    var generatedOn = Text("GeneratedOn");
+    if (generatedOn == "") generatedOn = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
 
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 8.5pt;
-                table-layout: fixed;
-            }
+    var totalRecords = Model.TryGetValue("TotalRecords", out var tr) && tr != null && Convert.ToInt32(tr) > 0
+        ? Convert.ToInt32(tr)
+        : rows.Count;
+    var totalChanges = Model.TryGetValue("TotalChanges", out var tc) && tc != null && Convert.ToInt32(tc) > 0
+        ? Convert.ToInt32(tc)
+        : rows.Count;
 
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 5px;
-                    vertical-align: middle;
-                    border: 1px solid #ccc;
-                }
+    var remarks = "Saving A/C Interest changed different from Deposit Type.";
 
-                .data-table th {
-                    background: #f2f2f2;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                    font-weight: bold;
-                    white-space: normal !important; /* Allow wrapping */
-                    vertical-align: middle;
-                    line-height: 1.3;
-                }
+    var table = new ReportTable(Model,
+        title: "Saving Interest Log Report By " + (reportType == "1" ? "Account No" : "Deposit Type"),
+        sheetName: "SavingInterestChangeLog")
+        .Column("SN", 4, Align.Center)
+        .Column("Member Detail", 18)
+        .Column("Account No", 12)
+        .Column("Previous Rate", 8, Align.Center)
+        .Column("Current Rate", 8, Align.Center)
+        .Column("Activated Date", 10, Align.Center)
+        .Column("Remarks", 20)
+        .Column("Created Date", 10, Align.Center)
+        .Column("Created By", 10)
+        .Sizing(rowMm: 6, headerMm: 9, firstPageExtraMm: 70)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 3px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            @"
+            table.sheet-table tr.r-data td.rate-old  { color: #c62828; }
+            table.sheet-table tr.r-data td.rate-new  { color: #2e7d32; }
+            table.sheet-table tr.r-data td.highlight { color: #1565c0; font-weight: bold; }
+            table.sheet-table tr.r-data td.remarks   { color: #555; }");
 
-            /* Report Title */
-            .report-title {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+        leftSpan: 4);
 
-            /* Header meta rows */
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-                border: none;
-            }
+    if (reportType == "1" && !string.IsNullOrEmpty(accountNo))
+        table.MetaRow(Fmt.Labeled("Account No :", accountNo));
+    else if (reportType == "2" && !string.IsNullOrEmpty(depositTypeName))
+        table.MetaRow(Fmt.Labeled("Deposit Type :", depositTypeName));
 
-            .meta-spacer td {
-                height: 6px;
-                border: none;
-            }
+    var sn = 0;
+    foreach (var row in rows)
+    {
+        var oldRate = row.PreviousInterestRate.HasValue ? row.PreviousInterestRate.Value.ToString("N2") : "-";
+        var newRate = row.CurrentInterestRate.HasValue ? row.CurrentInterestRate.Value.ToString("N2") : "-";
+        var activated = row.InterestActivationOnbs ?? "";
 
-            /* Data rows */
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .text-left {
-                text-align: left !important;
-            }
-
-            /* Interest Rate change styling */
-            .rate-old {
-                color: #c62828;
-            }
-
-            .rate-new {
-                color: #2e7d32;
-            }
-
-            .highlight-change {
-                color: #1565c0;
-                font-weight: bold;
-            }
-
-            /* Grand total rows */
-            .grand-total td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            /* Member detail formatting */
-            .member-detail {
-                font-weight: normal;
-            }
-
-            .remarks-text {
-                color: #555;
-                font-size: 8pt;
-                word-wrap: break-word;
-            }
-
-            /* Office name at bottom */
-            .office-footer {
-                text-align: right;
-                font-weight: bold;
-                padding: 8px 6px;
-                border: none !important;
-            }
-
-            /* Header text with line breaks */
-            .header-line1 {
-                display: block;
-                font-size: 8pt;
-            }
-
-            .header-line2 {
-                display: block;
-                font-size: 8pt;
-                font-weight: bold;
-            }
-
-            /* Print styles */
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-
-                .no-print {
-                    display: none !important;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+        table.Data(new[]
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ReportCell.Center((++sn).ToString()),
+            ReportCell.Left($"{row.MemberId} ({row.MemberName})"),
+            ReportCell.Left(row.AccountNo ?? ""),
+            new ReportCell(oldRate, Align.Center, 1, "rate-old"),
+            new ReportCell(newRate, Align.Center, 1, "rate-new"),
+            new ReportCell(activated, Align.Center, 1, "highlight"),
+            new ReportCell(remarks, Align.Left, 1, "remarks"),
+            ReportCell.Center(activated),
+            ReportCell.Left(row.CreatedBy ?? "CoSys Software")
+        });
+    }
 
-        <table class="data-table">
-            <!-- Column width definitions -->
-            <colgroup>
-                <col style="width:4%;" />    <!-- SN -->
-                <col style="width:18%;" />   <!-- Member Detail -->
-                <col style="width:12%;" />   <!-- Account No -->
-                <col style="width:8%;" />    <!-- Previous Rate -->
-                <col style="width:8%;" />    <!-- Current Rate -->
-                <col style="width:10%;" />   <!-- Activated Date -->
-                <col style="width:20%;" />   <!-- Remarks -->
-                <col style="width:10%;" />   <!-- Created Date -->
-                <col style="width:10%;" />   <!-- Created By -->
-            </colgroup>
-            <tbody>
-                <!-- Report Title -->
-                <tr>
-                    <td colspan="9" class="report-title">
-                        Saving Interest Log Report By @(reportType == "1" ? "Account No" : "Deposit Type")
-                    </td>
-                </tr>
-
-                <!-- Meta Info -->
-                <tr class="meta-row">
-                    <td colspan="4">
-                        <strong>Report Generated On:</strong> @generatedOn
-                    </td>
-                    <td colspan="5" class="text-right">
-                        <strong>From Date:</strong> @fromDate &nbsp;|&nbsp; <strong>To Date:</strong> @toDate
-                    </td>
-                </tr>
-
-                <!-- Filter info -->
-                @if (reportType == "1" && !string.IsNullOrEmpty(accountNo))
-                {
-                    <tr class="meta-row">
-                        <td colspan="9">
-                            <strong>Account No:</strong> @accountNo
-                        </td>
-                    </tr>
-                }
-                else if (reportType == "2" && !string.IsNullOrEmpty(depositTypeName))
-                {
-                    <tr class="meta-row">
-                        <td colspan="9">
-                            <strong>Deposit Type:</strong> @depositTypeName
-                        </td>
-                    </tr>
-                }
-
-                <tr class="meta-spacer"><td colspan="9"></td></tr>
-
-                <!-- Column Headers - with two-line text -->
-                <tr>
-                    <th class="text-center">SN</th>
-                    <th>Member Detail</th>
-                    <th>Account No</th>
-                    <th class="text-center">
-                        <span class="header-line1">Previous</span>
-                        <span class="header-line2">Rate</span>
-                    </th>
-                    <th class="text-center">
-                        <span class="header-line1">Current</span>
-                        <span class="header-line2">Rate</span>
-                    </th>
-                    <th class="text-center">
-                        <span class="header-line1">Activated</span>
-                        <span class="header-line2">Date</span>
-                    </th>
-                    <th>Remarks</th>
-                    <th class="text-center">
-                        <span class="header-line1">Created</span>
-                        <span class="header-line2">Date</span>
-                    </th>
-                    <th>
-                        <span class="header-line1">Created</span>
-                        <span class="header-line2">By</span>
-                    </th>
-                </tr>
-
-                <!-- Data Rows -->
-                @if (rows.Any())
-                {
-                    int sn = 0;
-                    foreach (var row in rows)
-                    {
-                        sn++;
-                        var oldRate = row.PreviousInterestRate.HasValue ? row.PreviousInterestRate.Value.ToString("N2") : "-";
-                        var newRate = row.CurrentInterestRate.HasValue ? row.CurrentInterestRate.Value.ToString("N2") : "-";
-                        var memberDetail = $"{row.MemberId} ({row.MemberName})";
-                        var remarks = "Saving A/C Interest changed different from Deposit Type.";
-                        var createdDate = row.InterestActivationOnbs ?? "";
-
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            <td class="member-detail">@memberDetail</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td class="text-center rate-old">@oldRate</td>
-                            <td class="text-center rate-new">@newRate</td>
-                            <td class="text-center highlight-change">@(row.InterestActivationOnbs ?? "")</td>
-                            <td class="remarks-text">@remarks</td>
-                            <td class="text-center">@createdDate</td>
-                            <td>@(row.CreatedBy ?? "CoSys Software")</td>
-                        </tr>
-                    }
-
-                    <!-- Grand Total -->
-                    <tr class="grand-total">
-                        <td colspan="8" class="text-right"><strong>Total Changes</strong></td>
-                        <td class="text-right"><strong>@totalChanges</strong></td>
-                    </tr>
-                    <tr class="grand-total">
-                        <td colspan="8" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-right"><strong>@totalRecords</strong></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="9" class="text-center">No interest change log found for the selected criteria</td>
-                    </tr>
-                }
-
-                <!-- Office Name Footer -->
-                <tr>
-                    <td colspan="9" class="office-footer">
-                        <strong>Office Name:</strong> @officeName
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Total Changes", 8, totalChanges.ToString());
+        table.Total("Total Records", 8, totalRecords.ToString());
+        table.Data(ReportCell.Right("Office Name : " + officeName, 9));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

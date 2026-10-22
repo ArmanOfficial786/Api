@@ -1,253 +1,109 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
+
+    var fontSize = "8.5pt";
+    const int ColumnCount = 11;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+    string Money(decimal? value) => value.HasValue ? value.Value.ToString("N2") : "";
+
     var rows = (Model["Rows"] as List<InterestPayableRowDto>) ?? new List<InterestPayableRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalInterest = Model["TotalInterest"] as decimal? ?? 0;
-    var totalTax = Model["TotalTax"] as decimal? ?? 0;
-    var tillDate = Model["TillDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var tillDate = Text("TillDate");
+    var branchName = Text("BranchName", "All");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Grouped by Deposit Type — rows must arrive pre-sorted by DepositTypeName
-    // (see repository OrderBy) since GroupBy preserves first-seen order, not sorted order.
     var depositTypeGroups = rows.GroupBy(r => r.DepositTypeName ?? "").ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Interest Payable Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalInterest = TotalOr("TotalInterest", rows.Sum(r => r.InterestAmount ?? 0));
+    var totalTax = TotalOr("TotalTax", rows.Sum(r => r.TaxAmount ?? 0));
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 8.5pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 3px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                border-top: 2px solid #000;
-                border-bottom: 1.5px solid #000;
-                text-align: left;
-                white-space: nowrap;
-                font-weight: bold;
-            }
-
-            .group-header-row td {
-                font-weight: bold;
-                padding-top: 12px;
-                padding-bottom: 2px;
-            }
-
-            .group-header-row.first-group td {
-                padding-top: 6px;
-            }
-
-            .detail-row td:first-child {
-                padding-left: 10px;
-            }
-
-            .group-subtotal-row td {
-                border-top: 1px solid #000;
-                border-bottom: 1px solid #000;
-                font-weight: bold;
-                padding-top: 4px;
-                padding-bottom: 4px;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Interest Payable Report", sheetName: "InterestPayable")
+        .Column("MemberId", 9)
+        .Column("Member Name", 14)
+        .Column("Account No", 10)
+        .Column("Rate", 6, Align.Right)
+        .Column("Date From", 9)
+        .Column("Interest", 10, Align.Right)
+        .Column("Tax", 9, Align.Right)
+        .Column("Maturity", 9)
+        .Column("Type", 7)
+        .Column("Balance", 10, Align.Right)
+        .Column("IsActual/Provisional", 7)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            SubTotalBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 5.5, headerMm: 10, firstPageExtraMm: 65)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { border-bottom: 1.5px solid #000; white-space: normal; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; padding-top: 10px; padding-bottom: 2px; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-data td:first-child { padding-left: 10px; }\n" +
+            "table.sheet-table tr.r-subtotal td { border-top: 1px solid #000; border-bottom: 1px solid #000; padding-top: 4px; padding-bottom: 4px; }");
+
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName), Fmt.Labeled("Till Date :", tillDate), 6);
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    foreach (var group in depositTypeGroups)
+    {
+        var groupRows = group.ToList();
+        var firstRow = groupRows.First();
+
+        table.GroupBy(
+            ReportCell.Left(group.Key, 3),
+            ReportCell.Left(firstRow.InterestCalculationType ?? "", 2),
+            ReportCell.Left("", 3),
+            ReportCell.Left(firstRow.BalanceType ?? ""),
+            ReportCell.Left("", 2));
+
+        foreach (var row in groupRows)
+        {
+            table.Data(
+                row.MemberId ?? "",
+                row.MemberName ?? "",
+                row.AccountNo ?? "",
+                Money(row.InterestRate),
+                row.InterestFrom ?? "",
+                Money(row.InterestAmount),
+                Money(row.TaxAmount),
+                row.MaturityDate ?? "",
+                row.Type ?? "",
+                Money(row.Balance),
+                row.IsActualOrProvisional ?? "");
         }
 
-        <table class="data-table" data-sheet-name="InterestPayable">
-            <colgroup>
-                <col style="width:10%;" />
-                <col style="width:14%;" />
-                <col style="width:10%;" />
-                <col style="width:6%;" />
-                <col style="width:9%;" />
-                <col style="width:10%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
-                <col style="width:8%;" />
-                <col style="width:9%;" />
-                <col style="width:6%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="11">Interest Payable Report</td>
-                </tr>
+        table.SubTotal(
+            group.Key, 5,
+            groupRows.Sum(r => r.InterestAmount ?? 0).ToString("N2"),
+            groupRows.Sum(r => r.TaxAmount ?? 0).ToString("N2"),
+            "", "", "", "");
+    }
 
-                <tr class="meta-row">
-                    <td colspan="6"><strong>Branch Name :</strong> @branchName</td>
-                    <td colspan="5" class="text-right"><strong>Till Date :</strong> @tillDate</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="6"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="5"></td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="11"></td></tr>
-
-                <tr>
-                    <th>MemberId</th>
-                    <th>Member Name</th>
-                    <th>Account No</th>
-                    <th class="text-right">Rate</th>
-                    <th>Date From</th>
-                    <th class="text-right">Interest</th>
-                    <th class="text-right">Tax</th>
-                    <th>Maturity</th>
-                    <th>Type</th>
-                    <th class="text-right">Balance</th>
-                    <th>IsActual/Provisional</th>
-                </tr>
-
-                @if (depositTypeGroups.Any())
-                {
-                    bool isFirstGroup = true;
-                    foreach (var group in depositTypeGroups)
-                    {
-                        var groupRows = group.ToList();
-                        var firstRow = groupRows.First();
-
-                        <tr class="group-header-row @(isFirstGroup ? "first-group" : "")">
-                            <td colspan="3">@group.Key</td>
-                            <td colspan="2">@(firstRow.InterestCalculationType ?? "")</td>
-                            <td colspan="3"></td>
-                            <td>@(firstRow.BalanceType ?? "")</td>
-                            <td colspan="2"></td>
-                        </tr>
-                        isFirstGroup = false;
-
-                        foreach (var row in groupRows)
-                        {
-                            <tr class="detail-row">
-                                <td>@(row.MemberId ?? "")</td>
-                                <td>@(row.MemberName ?? "")</td>
-                                <td>@(row.AccountNo ?? "")</td>
-                                <td class="text-right">@(row.InterestRate.HasValue ? row.InterestRate.Value.ToString("N2") : "")</td>
-                                <td>@(row.InterestFrom ?? "")</td>
-                                <td class="text-right">@(row.InterestAmount.HasValue ? row.InterestAmount.Value.ToString("N2") : "")</td>
-                                <td class="text-right">@(row.TaxAmount.HasValue ? row.TaxAmount.Value.ToString("N2") : "")</td>
-                                <td>@(row.MaturityDate ?? "")</td>
-                                <td>@(row.Type ?? "")</td>
-                                <td class="text-right">@(row.Balance.HasValue ? row.Balance.Value.ToString("N2") : "")</td>
-                                <td>@(row.IsActualOrProvisional ?? "")</td>
-                            </tr>
-                        }
-
-                        <tr class="group-subtotal-row">
-                            <td colspan="5">@group.Key</td>
-                            <td class="text-right">@groupRows.Sum(r => r.InterestAmount ?? 0).ToString("N2")</td>
-                            <td class="text-right">@groupRows.Sum(r => r.TaxAmount ?? 0).ToString("N2")</td>
-                            <td colspan="3"></td>
-                            <td></td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="5" class="text-right">Grand Total</td>
-                        <td class="text-right">@totalInterest.ToString("N2")</td>
-                        <td class="text-right">@totalTax.ToString("N2")</td>
-                        <td colspan="3"></td>
-                        <td></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="5" class="text-right">Total Records</td>
-                        <td colspan="6">@totalRecords</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="11" class="text-center">No interest payable records found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", 5, totalInterest.ToString("N2"), totalTax.ToString("N2"), "", "", "", "");
+        table.Total($"Total Records: {totalRecords}", ColumnCount);
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

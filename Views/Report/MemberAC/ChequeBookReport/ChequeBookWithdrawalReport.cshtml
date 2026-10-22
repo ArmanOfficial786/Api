@@ -1,210 +1,72 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.ChequeBookReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
+
+    var fontSize = "9pt";
+    const int ColumnCount = 6;
+
     var rows = (Model["Rows"] as List<ChequeBookWithdrawalRowDto>) ?? new List<ChequeBookWithdrawalRowDto>();
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-    var hasRows = rows != null && rows.Count > 0;
 
-    // Two-level grouping matching the image: Member -> Account No -> cheque rows.
-    // Rows must arrive pre-sorted by MemberId, then AccountNo (see repository's default
-    // OrderBy) since GroupBy preserves first-seen order rather than sorting.
     var memberGroups = rows.GroupBy(r => new { r.MemberId, r.MemberName }).ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Cheque Withdrawal Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                border-top: 2px solid #000;
-                border-bottom: 1.5px solid #000;
-                text-align: left;
-                white-space: nowrap;
-                font-weight: bold;
-            }
-
-            .member-row td {
-                font-weight: bold;
-                padding-top: 12px;
-                padding-bottom: 2px;
-                border: none;
-            }
-
-            .member-row.first-group td {
-                padding-top: 6px;
-            }
-
-            .account-row td {
-                font-weight: bold;
-                padding-left: 20px;
-                padding-bottom: 2px;
-                border: none;
-            }
-
-            .cheque-row td {
-                border: none;
-                border-bottom: 1px solid #eee;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Cheque Withdrawal Report", sheetName: "ChequeWithdrawal")
+        .Column("Member ID", 14)
+        .Column("Member Name", 20)
+        .Column("A/C No.", 18)
+        .Column("Cheque No", 16)
+        .Column("Date", 16)
+        .Column("Status", 16)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff"
+        })
+        .Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 55)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { white-space: nowrap; border-bottom: 1.5px solid #000; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-group td.m-first { padding-top: 6px; }\n" +
+            "table.sheet-table tr.r-group td.m-next { padding-top: 12px; }\n" +
+            "table.sheet-table tr.r-group td.acct { padding-top: 1px; }");
+
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    var firstMember = true;
+    foreach (var memberGroup in memberGroups)
+    {
+        var memberCss = firstMember ? "m-first" : "m-next";
+        firstMember = false;
+
+        table.GroupBy(
+            new ReportCell(memberGroup.Key.MemberId ?? "", Align.Left, 1, memberCss),
+            new ReportCell(memberGroup.Key.MemberName ?? "", Align.Left, 1, memberCss),
+            new ReportCell("", Align.Left, ColumnCount - 2, memberCss));
+
+        foreach (var accountGroup in memberGroup.GroupBy(r => r.AccountNo ?? ""))
+        {
+            table.GroupBy(
+                new ReportCell("", Align.Left, 2, "acct"),
+                new ReportCell(accountGroup.Key, Align.Left, 1, "acct"),
+                new ReportCell("", Align.Left, ColumnCount - 3, "acct"));
+
+            foreach (var row in accountGroup)
+            {
+                table.Data(
+                    "",
+                    "",
+                    "",
+                    row.ChequeNo.HasValue ? row.ChequeNo.Value.ToString("D6") : "",
+                    row.WithdrawalDateBs ?? "",
+                    row.Status ?? "");
+            }
         }
-
-        <table class="data-table" data-sheet-name="ChequeWithdrawal">
-            <colgroup>
-                <col style="width:14%;" />
-                <col style="width:20%;" />
-                <col style="width:18%;" />
-                <col style="width:16%;" />
-                <col style="width:16%;" />
-                <col style="width:16%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="6">Cheque Withdrawal Report</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="6"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="6"></td></tr>
-
-                <tr>
-                    <th>Member ID</th>
-                    <th>Member Name</th>
-                    <th>A/C No.</th>
-                    <th>Cheque No</th>
-                    <th>Date</th>
-                    <th>Status</th>
-                </tr>
-
-                @if (hasRows)
-                {
-                    bool isFirstMemberGroup = true;
-                    foreach (var memberGroup in memberGroups)
-                    {
-                        <tr class="member-row @(isFirstMemberGroup ? "first-group" : "")">
-                            <td>@memberGroup.Key.MemberId</td>
-                            <td>@memberGroup.Key.MemberName</td>
-                            <td colspan="4"></td>
-                        </tr>
-                        isFirstMemberGroup = false;
-
-                        var accountGroups = memberGroup.GroupBy(r => r.AccountNo ?? "").ToList();
-
-                        foreach (var accountGroup in accountGroups)
-                        {
-                            <tr class="account-row">
-                                <td></td>
-                                <td></td>
-                                <td>@accountGroup.Key</td>
-                                <td colspan="3"></td>
-                            </tr>
-
-                            foreach (var row in accountGroup)
-                            {
-                                <tr class="cheque-row">
-                                    <td></td>
-                                    <td></td>
-                                    <td></td>
-                                    <td>@(row.ChequeNo.HasValue ? row.ChequeNo.Value.ToString("D6") : "")</td>
-                                    <td>@(row.WithdrawalDateBs ?? "")</td>
-                                    <td>@(row.Status ?? "")</td>
-                                </tr>
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="6" class="text-center">No cheque withdrawal records found for the selected account</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

@@ -1,220 +1,73 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
-    var rows = (Model["Rows"] as List<SavingAccountRenewedRowDto>) ?? new List<SavingAccountRenewedRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalRenewedAccounts = Model["TotalRenewedAccounts"] as int? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
 
-    var generatedOn = Model.ContainsKey("ReportGeneratedOnBs") && Model["ReportGeneratedOnBs"] != null
-        ? Model["ReportGeneratedOnBs"].ToString()
-        : DateTime.Now.ToString("yyyy/MM/dd");
+    var fontSize = "8pt";
+    var metaFontSize = "8.5pt";
 
-    // Rows must arrive pre-sorted by MemberId so GroupBy (which preserves first-seen
-    // order, not sorted order) produces contiguous per-member groups.
-    var memberGroups = rows
-        .GroupBy(r => new { r.MemberId, r.MemberName })
-        .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Savings Account Renewed Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    string Text(string key) => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? "" : "";
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9.5pt;
-                background: white;
-                color: #000;
-            }
+    var rows = (Model["Rows"] as IEnumerable<SavingAccountRenewedRowDto>)?.ToList() ?? new List<SavingAccountRenewedRowDto>();
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchNames = Text("BranchNames");
+    if (branchNames == "") branchNames = "All Branches";
+    var generatedOn = Text("ReportGeneratedOnBs");
+    if (generatedOn == "") generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
+    var totalRecords = Model.TryGetValue("TotalRecords", out var tr) && tr != null && Convert.ToInt32(tr) > 0
+        ? Convert.ToInt32(tr)
+        : rows.Count;
+    var totalRenewedAccounts = Model.TryGetValue("TotalRenewedAccounts", out var ta) && ta != null
+        ? Convert.ToInt32(ta)
+        : 0;
 
-            .report-title {
-                text-align: center;
-                font-size: 15pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 10px 0 12px 0;
-            }
+    var hasDates = !string.IsNullOrEmpty(fromDate) && fromDate != "-1"
+        && !string.IsNullOrEmpty(toDate) && toDate != "-1";
 
-            .meta-table {
-                width: 100%;
-                margin-bottom: 6px;
-                font-size: 9.5pt;
-            }
+    var table = new ReportTable(Model, title: "Savings Account Renewed Report", sheetName: "SavingAccountRenewed")
+        .Column("Member Id", 14)
+        .Column("Account No", 16)
+        .Column("Deposit Type Name", 24)
+        .Column("Interest Rate", 14, Align.Right)
+        .Column("Open Date", 16)
+        .Column("Renewed Date", 16)
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 4px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }");
 
-                .meta-table td {
-                    padding: 1px 4px;
-                }
+    table.MetaPair("Branch Name :", branchNames, "Report Generated On :", generatedOn);
+    if (hasDates) table.MetaPair("From Date :", fromDate, "To Date :", toDate);
 
-                .meta-table .label {
-                    font-weight: bold;
-                    white-space: nowrap;
-                }
+    foreach (var grp in rows.GroupBy(x => new { x.MemberId, x.MemberName }))
+    {
+        table.GroupBy(
+            ReportCell.Left(grp.Key.MemberId ?? ""),
+            ReportCell.Left(grp.Key.MemberName ?? "", 5));
 
-            /* No cell grid - only rule lines, matching the target design */
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9.5pt;
-            }
-
-                .data-table td, .data-table th {
-                    padding: 3px 6px;
-                    border: none;
-                }
-
-                .data-table thead th {
-                    text-align: left;
-                    font-weight: bold;
-                    border-top: 2px solid #000;
-                    border-bottom: 1.5px solid #000;
-                    padding: 5px 6px;
-                }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            /* Member header row: Member Id | Member Name */
-            .member-row td {
-                font-weight: bold;
-                padding-top: 10px;
-            }
-
-            /* Account rows under a member */
-            .account-row td {
-                padding-top: 2px;
-                padding-bottom: 2px;
-            }
-
-            /* Rule line under the last account row of a member group */
-            .account-row.last-in-group td {
-                border-bottom: 1px solid #000;
-                padding-bottom: 4px;
-            }
-
-            .grand-total td {
-                font-weight: bold;
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                padding-top: 6px;
-                padding-bottom: 6px;
-            }
-
-            @@media print {
-                .data-table thead {
-                    display: table-header-group;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+        foreach (var row in grp)
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
-
-        <div class="report-title">Savings Account Renewed Report</div>
-
-        <table class="meta-table">
-            <tr>
-                <td class="label" style="width:15%;">Branch Name :</td>
-                <td style="width:35%;">@branchNames</td>
-                <td class="label" style="width:15%;">Report Generated On:</td>
-                <td style="width:35%;">@generatedOn</td>
-            </tr>
-            @if (!string.IsNullOrEmpty(fromDate) && fromDate != "-1" && !string.IsNullOrEmpty(toDate) && toDate != "-1")
+            table.Data(new[]
             {
-                <tr>
-                    <td></td>
-                    <td></td>
-                    <td class="label">From Date :</td>
-                    <td>@fromDate</td>
-                </tr>
-                <tr>
-                    <td></td>
-                    <td></td>
-                    <td class="label">To Date :</td>
-                    <td>@toDate</td>
-                </tr>
-            }
-        </table>
+                ReportCell.Left(""),
+                ReportCell.Left(row.AccountNo ?? ""),
+                ReportCell.Left(row.DepositTypeName ?? ""),
+                ReportCell.Right(row.InterestRate.HasValue ? row.InterestRate.Value.ToString("N2") : ""),
+                ReportCell.Left(row.AccountOpenOnBs ?? ""),
+                ReportCell.Left(row.MaturityOnBs ?? "")
+            });
+        }
+    }
 
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th style="width:14%;">Member Id</th>
-                    <th style="width:16%;">Account No</th>
-                    <th style="width:24%;">Deposit Type Name</th>
-                    <th style="width:14%;" class="text-right">Interest Rate</th>
-                    <th style="width:16%;">Open Date</th>
-                    <th style="width:16%;">Renewed Date</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (memberGroups.Any())
-                {
-                    foreach (var memberGroup in memberGroups)
-                    {
-                        <tr class="member-row">
-                            <td>@memberGroup.Key.MemberId</td>
-                            <td colspan="5">@memberGroup.Key.MemberName</td>
-                        </tr>
-
-                        var accountsInGroup = memberGroup.ToList();
-                        for (int i = 0; i < accountsInGroup.Count; i++)
-                        {
-                            var row = accountsInGroup[i];
-                            var isLast = i == accountsInGroup.Count - 1;
-                            <tr class="account-row @(isLast ? "last-in-group" : "")">
-                                <td></td>
-                                <td>@row.AccountNo</td>
-                                <td>@row.DepositTypeName</td>
-                                <td class="text-right">@(row.InterestRate.HasValue ? row.InterestRate.Value.ToString("N2") : "")</td>
-                                <td>@row.AccountOpenOnBs</td>
-                                <td>@row.MaturityOnBs</td>
-                            </tr>
-                        }
-                    }
-
-                    <tr class="grand-total">
-                        <td colspan="5" class="text-right">Total Renewed Accounts</td>
-                        <td class="text-right">@totalRenewedAccounts</td>
-                    </tr>
-                    <tr class="grand-total">
-                        <td colspan="5" class="text-right">Total Records</td>
-                        <td class="text-right">@totalRecords</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="6" class="text-center">No renewed saving accounts found for the selected criteria</td></tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Total Renewed Accounts", 5, totalRenewedAccounts.ToString());
+        table.Total("Total Records", 5, totalRecords.ToString());
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

@@ -1,234 +1,96 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+    const int ColumnCount = 7;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+    string Money(decimal? value) => value.HasValue ? value.Value.ToString("N2") : "";
+
     var rows = (Model["Rows"] as List<PayableInterestTransferredRowDto>) ?? new List<PayableInterestTransferredRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalInterest = Model["TotalInterest"] as decimal? ?? 0;
-    var totalTax = Model["TotalTax"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchNames = Text("BranchNames", "All Branches");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Grouped by Deposit Type, matching the image: group label + subtotal row first,
-    // then that group's member rows. No re-ordering — groups/rows print in the order
-    // the repository already returned.
     var depositTypeGroups = rows
         .GroupBy(r => r.DepositTypeName ?? "")
         .ToList();
 
-    // Running S.N. counter across all groups (not reset per group)
-    var serialNo = 0;
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Payable Interest Transfer to Account</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalInterest = TotalOr("TotalInterest", rows.Sum(r => r.Interest ?? 0));
+    var totalTax = TotalOr("TotalTax", rows.Sum(r => r.Tax ?? 0));
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-            }
-
-            .type-row td {
-                font-weight: bold;
-                border-top: 1px solid #000;
-                border-bottom: 1px solid #000;
-                padding-top: 5px;
-                padding-bottom: 5px;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Payable Interest Transfer to Account", sheetName: "PayableInterestTransferred")
+        .Column("S.N.", 6)
+        .Column("Member Id", 13)
+        .Column("Name", 20)
+        .Column("Account No", 15)
+        .Column("Interest Amount", 15, Align.Right)
+        .Column("Tax Amount", 14, Align.Right)
+        .Column("Date", 17)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9",
+            GroupBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 1px solid #000; border-bottom: 1px solid #000; padding-top: 5px; padding-bottom: 5px; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 1px solid #eee; }");
+
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchNames));
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+        3);
+
+    var serialNo = 0;
+    foreach (var typeGroup in depositTypeGroups)
+    {
+        table.GroupBy(
+            ReportCell.Left(""),
+            ReportCell.Left(typeGroup.Key, 3),
+            ReportCell.Right(typeGroup.Sum(r => r.Interest ?? 0).ToString("N2")),
+            ReportCell.Right(typeGroup.Sum(r => r.Tax ?? 0).ToString("N2")),
+            ReportCell.Left(""));
+
+        foreach (var row in typeGroup)
+        {
+            table.Data(
+                (++serialNo).ToString(),
+                row.MemberId ?? "",
+                row.MemberName ?? "",
+                row.AccountNo ?? "",
+                Money(row.Interest),
+                Money(row.Tax),
+                row.InterestDate ?? "");
         }
+    }
 
-        <table class="data-table" data-sheet-name="PayableInterestTransferred">
-            <colgroup>
-                <col style="width:6%;" />
-                <col style="width:13%;" />
-                <col style="width:20%;" />
-                <col style="width:15%;" />
-                <col style="width:15%;" />
-                <col style="width:14%;" />
-                <col style="width:17%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="7">Payable Interest Transfer to Account</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="4"><strong>Branch Name :</strong> @branchNames</td>
-                    <td colspan="3"></td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="7"></td></tr>
-
-                <tr class="meta-row">
-                    <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="4" class="text-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="7"></td></tr>
-
-                <tr>
-                    <th>S.N.</th>
-                    <th>Member Id</th>
-                    <th>Name</th>
-                    <th>Account No</th>
-                    <th class="text-right">Interest Amount</th>
-                    <th class="text-right">Tax Amount</th>
-                    <th>Date</th>
-                </tr>
-
-                @if (depositTypeGroups.Any())
-                {
-                    foreach (var typeGroup in depositTypeGroups)
-                    {
-                        <tr class="type-row">
-                            <td></td>
-                            <td colspan="3">@typeGroup.Key</td>
-                            <td class="text-right">@typeGroup.Sum(r => r.Interest ?? 0).ToString("N2")</td>
-                            <td class="text-right">@typeGroup.Sum(r => r.Tax ?? 0).ToString("N2")</td>
-                            <td></td>
-                        </tr>
-
-                        foreach (var row in typeGroup)
-                        {
-                            serialNo++;
-                            <tr class="detail-row">
-                                <td>@serialNo</td>
-                                <td>@(row.MemberId ?? "")</td>
-                                <td>@(row.MemberName ?? "")</td>
-                                <td>@(row.AccountNo ?? "")</td>
-                                <td class="text-right">@(row.Interest.HasValue ? row.Interest.Value.ToString("N2") : "")</td>
-                                <td class="text-right">@(row.Tax.HasValue ? row.Tax.Value.ToString("N2") : "")</td>
-                                <td>@(row.InterestDate ?? "")</td>
-                            </tr>
-                        }
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">Grand Total</td>
-                        <td class="text-right">@totalInterest.ToString("N2")</td>
-                        <td class="text-right">@totalTax.ToString("N2")</td>
-                        <td></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">Total Records</td>
-                        <td class="text-right">@totalRecords</td>
-                        <td colspan="2"></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="7" class="text-center">No payable interest transferred records found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", 4, totalInterest.ToString("N2"), totalTax.ToString("N2"), "");
+        table.Total("Total Records", 4, totalRecords.ToString(), "", "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())
