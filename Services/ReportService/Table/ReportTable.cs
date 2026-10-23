@@ -265,22 +265,55 @@ namespace NexgenCosysReport.Services.ReportService.Table
             return html;
         }
 
+        //private static void AppendCell(HtmlContentBuilder html, RowKind kind, ReportCell cell)
+        //{
+        //    var tag = kind == RowKind.Header ? "th" : "td";
+        //    var css = AlignClass(cell.Alignment) + (cell.Css is null ? "" : " " + cell.Css);
+        //    var span = cell.Span > 1 ? $" colspan=\"{cell.Span}\"" : "";
+
+        //    // long left-aligned text is clamped to the configured number of lines (keeps rows one height)
+        //    var clamp = (kind is RowKind.Section or RowKind.Data or RowKind.Group or RowKind.SubTotal)
+        //                && cell.Alignment == Align.Left;
+
+        //    html.AppendHtml($"<{tag} class=\"{E(css)}\"{span}>");
+        //    if (clamp) html.AppendHtml("<div class=\"c\">");
+        //    html.Append(cell.Text);                       // Append() HTML-encodes the text
+        //    if (clamp) html.AppendHtml("</div>");
+        //    html.AppendHtml($"</{tag}>");
+        //}
         private static void AppendCell(HtmlContentBuilder html, RowKind kind, ReportCell cell)
         {
             var tag = kind == RowKind.Header ? "th" : "td";
             var css = AlignClass(cell.Alignment) + (cell.Css is null ? "" : " " + cell.Css);
             var span = cell.Span > 1 ? $" colspan=\"{cell.Span}\"" : "";
 
-            // long left-aligned text is clamped to the configured number of lines (keeps rows one height)
-            var clamp = (kind is RowKind.Section or RowKind.Data or RowKind.Group or RowKind.SubTotal)
-                        && cell.Alignment == Align.Left;
-
             html.AppendHtml($"<{tag} class=\"{E(css)}\"{span}>");
-            if (clamp) html.AppendHtml("<div class=\"c\">");
-            html.Append(cell.Text);                       // Append() HTML-encodes the text
-            if (clamp) html.AppendHtml("</div>");
+
+            if (cell.IsHtml)
+            {
+                html.AppendHtml(cell.Text);      // trusted markup (e.g. a picture): written as is, never clamped
+            }
+            else
+            {
+                // long left-aligned text is clamped to the configured number of lines (keeps rows one height)
+                var clamp = (kind is RowKind.Section or RowKind.Data or RowKind.Group or RowKind.SubTotal)
+                            && cell.Alignment == Align.Left;
+
+                if (clamp) html.AppendHtml("<div class=\"c\">");
+
+                var lines = (cell.Text ?? "").Split('\n');          // "\n" in the text = line break
+                for (var i = 0; i < lines.Length; i++)
+                {
+                    if (i > 0) html.AppendHtml("<br />");
+                    html.Append(lines[i]);                          // Append() HTML-encodes
+                }
+
+                if (clamp) html.AppendHtml("</div>");
+            }
+
             html.AppendHtml($"</{tag}>");
         }
+
 
         // No default case on purpose: adding a RowKind without a css class here gives a compiler warning.
         private static string ClassOf(RowKind kind) => kind switch

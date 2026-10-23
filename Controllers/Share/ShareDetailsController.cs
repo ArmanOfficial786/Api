@@ -1,12 +1,10 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Share;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Share;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
 using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
@@ -18,108 +16,91 @@ namespace NexgenCosysReport.Controllers.Share
     [Authorize]
     public class ShareDetailsController : ControllerBase
     {
+        private const string ReportName = "ShareDetails";
+
         private readonly IShareDetails _repository;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
+        private readonly IReportHeaderProvider _headers;
         private readonly IJsReportService _jsReportService;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly CustomHeaderResponse _headerResponse;
-        private readonly IOptions<ReportSettings> _reportSettings;
+        private readonly IReportDataCache _dataCache;
         private readonly ILogger<ShareDetailsController> _logger;
-        private readonly IDateConverterService _dateConverter;
         private readonly IReportFileResponse _reportFileResponse;
 
-        private static readonly PageSizeSetting PageSetting =
-          PageSizeSetting.Custom(500, 297, PageUnit.mm, landscape: true);
+        // normal report: 26 columns, so a wide landscape sheet
+        private static readonly PageSizeSetting NPageSetting =
+            PageSizeSetting.Custom(500, 297, PageUnit.mm, landscape: true);
 
+        // visual report
+        private static readonly PageSizeSetting VPageSetting =
+            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         public ShareDetailsController(
             IShareDetails repository,
-            ICommonHeaderRepository commonHeaderRepository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
-            IWebHostEnvironment webHostEnvironment,
-            CustomHeaderResponse headerResponse,
-            IOptions<ReportSettings> reportSettings,
+            IReportDataCache dataCache,
             ILogger<ShareDetailsController> logger,
-            IDateConverterService dateConverter,
             IReportFileResponse reportFileResponse)
         {
             _repository = repository;
-            _commonHeaderRepository = commonHeaderRepository;
+            _headers = headers;
             _jsReportService = jsReportService;
-            _webHostEnvironment = webHostEnvironment;
-            _headerResponse = headerResponse;
-            _reportSettings = reportSettings;
+            _dataCache = dataCache;
             _logger = logger;
-            _dateConverter = dateConverter;
             _reportFileResponse = reportFileResponse;
         }
 
-        [HttpPost()]
+        [HttpPost]
         public async Task<IActionResult> GenerateReport(
             [FromBody] ShareDetailsRequestDto request,
             [FromQuery] string format = "VIEW",
-             CancellationToken ct = default
-            )
+            CancellationToken ct = default)
         {
             try
             {
-                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                {
-                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                }
+                var userScope = User.FindFirst("UserId")?.Value
+                    ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userScope) || !long.TryParse(userScope, out _))
+                    return Unauthorized(new { success = false, StatusCode = 401, message = "Unauthorized" });
 
                 if (request == null || !ModelState.IsValid)
-                {
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
-                }
 
                 if (string.IsNullOrEmpty(request.OfficeIds))
-                {
                     return BadRequest(new { success = false, StatusCode = 400, message = "select Branch Office" });
-                }
 
-                var reportType = string.IsNullOrWhiteSpace(request.ReportType) ? "ENGLISH" : request.ReportType.ToUpper();
-                request.ReportType = reportType;
+                // normalise before the cache key is built, so "english" and "ENGLISH" share one entry
+                request.ReportType = string.IsNullOrWhiteSpace(request.ReportType)
+                    ? "ENGLISH"
+                    : request.ReportType.ToUpperInvariant();
 
-                var reportName = "ShareDetails";
-                var upperFormat = format.ToUpper();
+                var upperFormat = format.ToUpperInvariant();
+                var isVisual = request.VisualReport;
+                var page = isVisual ? VPageSetting : NPageSetting;
 
+                var dataKey = ReportCacheKey.ForData(
+                    request, ReportName, userScope, nameof(request.VisualReport));
+                var reportKey = $"{dataKey}_{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}";
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName, request.VisualReport ? "VISUAL" : "");
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: false,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
 
-                //var reportKey = isVisual
-                //     ? ReportUtils.GenerateReportKey(request, reportName, $"VISUAL_{Layout.CacheTag}")
-                //     : ReportUtils.GenerateReportKey(request, reportName, $"NORMAL_{Layout.CacheTag}");
+                var headerTask = _headers.GetAsync(null, ct);
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
-
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat,
-                        reportName,
-                        _jsReportService, _logger, PageSetting, ct);
-                }
-
-                var dataTask = _repository.GetReportDataAsync(request);
-                var headerTask = _commonHeaderRepository.GetCommonHeaders();
-
-                await Task.WhenAll(dataTask, headerTask);
+                var dataTask = _dataCache.GetOrLoadAsync(
+                    dataKey,
+                    async () =>
+                    {
+                        var shareDetails = await _repository.GetReportDataAsync(request);
+                        return shareDetails.Rows.Any() ? shareDetails : null;
+                    },
+                    ct);
+                await Task.WhenAll(headerTask, dataTask);
 
                 var data = await dataTask;
-                var headerData = await headerTask;
-
-                if (!data.Rows.Any())
-                {
-                    return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
-                }
-
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-
-                await ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData, nameof(CommonHeader.CompanyLogo), webRoot);
+                if (data == null)
+                    return NotFound(new { success = false, StatusCode = 404, message = "No data found" });
 
                 var reportData = new Dictionary<string, object>
                 {
@@ -128,7 +109,7 @@ namespace NexgenCosysReport.Controllers.Share
                     { "TotalMembers", data.TotalMembers },
                     { "TotalShare", data.TotalShare },
                     { "TotalShareAmount", data.TotalShareAmount },
-                    { "HeaderDataSet", headerData },
+                    { "HeaderDataSet", await headerTask },
                     { "TillDate", data.TillDateBs ?? "" },
                     { "BranchName", data.BranchName ?? "All" },
                     { "ShareTypeName", data.ShareTypeName ?? "All" },
@@ -140,50 +121,26 @@ namespace NexgenCosysReport.Controllers.Share
                     { "ReportType", data.ReportType ?? "ENGLISH" },
                     { "OrderBy", request.OrderBy },
                     { "Format", upperFormat },
-                    { "PageSetting", PageSetting }
+                    { "VisualReport", isVisual },
+                    { "PageSetting", page }
                 };
 
-                string viewPath = request.VisualReport
+                var viewPath = isVisual
                     ? "Views/VisualReport/VShareDetailsReport.cshtml"
                     : "Views/Report/Share/ShareDetailsReport.cshtml";
 
-                var htmlContent = await Task.Run(() =>
-                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
-                        reportKey: reportKey,
-                        reportPath: viewPath,
-                        data: reportData));
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                    reportKey: reportKey, reportPath: viewPath, data: reportData, ct: ct);
 
-
-                if (upperFormat == "VIEW")
-                {
-                    var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
-                     htmlContent, reportKey, PageSetting, ct);
-                    var vPagination = SheetHtml.CountSheets(viewHtml);
-                    _reportFileResponse.AppendPaginationHeaders(vPagination, data.Rows.Count);
-                    return Content(viewHtml, "text/html");
-
-                }
-
-                //if (upperFormat == "PDF")
-                //{
-                //    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
-                //        htmlContent, "PDF", reportKey, PageSetting, ct);
-                //    return _reportFileResponse.BuildPdfResponse(pdfBytes);
-                //}
-
-                return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, "MemberDetailReport",
-                    _jsReportService, _logger, PageSetting, ct);
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: false,
+                    totalRecords: data.Rows.Count,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating ShareDetails report");
-                return StatusCode(500, new
-                {
-                    message = ex.Message,
-                    inner = ex.InnerException?.Message,
-                    stack = ex.StackTrace
-                });
+                _logger.LogError(ex, "Error generating {Report} report", ReportName);
+                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }
     }

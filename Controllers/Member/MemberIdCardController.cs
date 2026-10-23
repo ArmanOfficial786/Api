@@ -1,14 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.Member;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Member;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
 using NexgenCosysReport.Utils.Report;
-using System.Text.Json;
+using System.Security.Claims;
 
 namespace NexgenCosysReport.Controllers.Member
 {
@@ -16,154 +14,128 @@ namespace NexgenCosysReport.Controllers.Member
     [ApiController]
     public class MemberIdCardController : ControllerBase
     {
+        private const string ReportName = "MemberIdCard";
+
         private readonly IMemberIdCard _memberIdCardService;
-        private readonly IMemberDetail _memberDetail;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
+        private readonly IReportHeaderProvider _headers;
         private readonly IJsReportService _jsReportService;
+        private readonly IReportDataCache _dataCache;
         private readonly IWebHostEnvironment _webHostEnvironment;
         private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly CustomHeaderResponse _headerResponse;
         private readonly ILogger<MemberIdCardController> _logger;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        // two 70 mm cards per row on A4 portrait
+        private static readonly PageSizeSetting PageSetting = PageSizeSetting.A4Portrait;
 
         public MemberIdCardController(
             IMemberIdCard memberIdCardService,
-            IMemberDetail memberDetail,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
+            IReportDataCache dataCache,
             IWebHostEnvironment webHostEnvironment,
             IOptions<ReportSettings> reportSettings,
             ILogger<MemberIdCardController> logger,
-            CustomHeaderResponse headerResponse,
-            ICommonHeaderRepository commonHeaderRepository)
+            IReportFileResponse reportFileResponse)
         {
             _memberIdCardService = memberIdCardService;
-            _memberDetail = memberDetail;
+            _headers = headers;
             _jsReportService = jsReportService;
+            _dataCache = dataCache;
             _webHostEnvironment = webHostEnvironment;
             _reportSettings = reportSettings;
             _logger = logger;
-            _headerResponse = headerResponse;
-            _commonHeaderRepository = commonHeaderRepository;
+            _reportFileResponse = reportFileResponse;
         }
 
         [HttpPost("MemberIdCard")]
-        public async Task<ActionResult> GetMemberIdCardData(
+        public async Task<IActionResult> GetMemberIdCardData(
             [FromBody] MemberIdCardRequest request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
             try
             {
                 if (request == null || !ModelState.IsValid)
-                    return BadRequest(new { success = false, message = "Invalid request" });
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
 
-                var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, "MemberIdCard");
+                var userScope = User.FindFirst("UserId")?.Value
+                    ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+                    ?? "anonymous";
 
-                ReportExportHelper.LogCacheState(
-                    upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+                var upperFormat = format.ToUpperInvariant();
 
-                // -- EXPORT — cache hit ? skip DB entirely -------------------------
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    _logger.LogInformation("? NO DB CALL — serving from cache");
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat,
-                        "MemberIdCardReport",
-                        _jsReportService, _logger);
-                }
+                var dataKey = ReportCacheKey.ForData(request, ReportName, userScope);
+                var reportKey = $"{dataKey}_NORMAL_{PageSetting.CacheTag}";
 
-                var webRoot = ReportUtils.GetWebRootPath(
-                    _webHostEnvironment, _reportSettings);
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: false,
+                    _jsReportService, _reportFileResponse, _logger, PageSetting, ct);
+                if (cached != null) return cached;
 
-                // -- STAGE 1: DB queries — concurrent ------------------------------
-                var memberTask = _memberIdCardService.GetMemberIdCardData(request);
-                var headerTask = _commonHeaderRepository.GetCommonHeaders();
-                await Task.WhenAll(memberTask, headerTask);
+                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
 
-                var memberIdCardData = memberTask.Result;
-                var headerData = headerTask.Result;
+                // company header (the provider already supplies the logo as an image value)
+                var headerTask = _headers.GetAsync(null, ct);
 
-                if (!memberIdCardData.Any())
-                    return NotFound(new { success = false, message = "No data found" });
+                // members with every image already converted, so the cached copy is never changed afterwards
+                var dataTask = _dataCache.GetOrLoadAsync(
+                    dataKey,
+                    async () =>
+                    {
+                        var members = await _memberIdCardService.GetMemberIdCardData(request);
+                        if (members == null || !members.Any()) return null;
 
-                // -- STAGE 2: Common images — read once, concurrent -----------------
-                var header = headerData.FirstOrDefault();
-                var companyLogoPath = header?.CompanyLogo ?? "";
+                        // shared signature images: read once, concurrently
+                        var userSignTask = ReportUtils.ReadCommonImageAsBase64Async(webRoot, "ArmanSignature.png", _logger);
+                        var authSignTask = ReportUtils.ReadCommonImageAsBase64Async(webRoot, "AuthSignature.png", _logger);
+                        await Task.WhenAll(userSignTask, authSignTask);
 
-                var logoTask = ReportUtils.ReadCommonImageAsBase64Async(webRoot, companyLogoPath, _logger);
-                var userSignTask = ReportUtils.ReadCommonImageAsBase64Async(webRoot, "ArmanSignature.png", _logger);
-                var authSignTask = ReportUtils.ReadCommonImageAsBase64Async(webRoot, "AuthSignature.png", _logger);
-                await Task.WhenAll(logoTask, userSignTask, authSignTask);
+                        foreach (var member in members)
+                        {
+                            member.UserSignature = userSignTask.Result;
+                            member.AuthSignature = authSignTask.Result;
+                        }
 
-                if (header != null)
-                    header.CompanyLogo = logoTask.Result;
+                        // per-member photos
+                        await ReportUtils.ConvertUniqueImagesToBase64Async(
+                            members, nameof(MemberIdCardModel.MemberPhoto), webRoot);
 
-                foreach (var member in memberIdCardData)
-                {
-                    member.UserSignature = userSignTask.Result;
-                    member.AuthSignature = authSignTask.Result;
-                }
+                        return members;
+                    },
+                    ct);
+                await Task.WhenAll(headerTask, dataTask);
 
-                // -- STAGE 3: Per-member unique images -----------------------------
-                await ReportUtils.ConvertUniqueImagesToBase64Async(
-                    memberIdCardData,
-                    nameof(MemberIdCardModel.MemberPhoto),
-                    webRoot);
+                var data = await dataTask;
+                if (data == null)
+                    return NotFound(new { success = false, StatusCode = 404, message = "No data found" });
 
-                // -- STAGE 4: Razor render + cache HTML ----------------------------
+                var totalRecords = data.Count();
+
                 var reportData = new Dictionary<string, object>
                 {
-                    { "MemberIdCardDataSet", memberIdCardData       },
-                    { "HeaderDataSet",       headerData             },
-                    { "TotalRecords",        memberIdCardData.Count },
+                    { "MemberIdCardDataSet", data },
+                    { "HeaderDataSet", await headerTask },
+                    { "TotalRecords", totalRecords },
+                    { "Format", upperFormat },
+                    { "PageSetting", PageSetting }
                 };
 
-                var htmlContent = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
                     reportKey: reportKey,
                     reportPath: "Views/Report/Member/MemberIdCard.cshtml",
-                    data: reportData);
+                    data: reportData,
+                    ct: ct);
 
-                // -- STAGE 5: PDF generation ---------------------------------------
-
-                if (upperFormat == "VIEW")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
-                 htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        totalRecord = memberIdCardData.Count(),
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false
-                    };
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-
-                    Response.Headers.Append(
-                        "Content-Disposition",
-                        "inline; filename=\"MemberIdCardReport.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
-                }
-
-                // -- EXPORT — return binary blob with attachment header -------------
-                return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat,
-                    "MemberIdCardReport",
-                    _jsReportService, _logger);
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: false,
+                    totalRecords: totalRecords,
+                    _jsReportService, _reportFileResponse, _logger, PageSetting, ct);
             }
             catch (Exception ex)
             {
-                _headerResponse.SetResponseHeaders(false, 500, $"Failed to generate report: {ex.Message}");
-                return StatusCode(500, new
-                {
-                    success = false,
-                    message = "An error occurred.",
-                    error = ex.Message,
-                });
+                _logger.LogError(ex, "Error generating {Report} report", ReportName);
+                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }
     }

@@ -1,263 +1,113 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Share;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Share
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<ShareDividendRowDto>) ?? new List<ShareDividendRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalMembers = Model.ContainsKey("TotalMembers") ? (Model["TotalMembers"] as int? ?? 0) : 0;
-    var totalPurchaseAmount = Model.ContainsKey("TotalPurchaseAmount") ? (Model["TotalPurchaseAmount"] as decimal? ?? 0) : 0;
-    var totalAggregateAmount = Model.ContainsKey("TotalAggregateAmount") ? (Model["TotalAggregateAmount"] as decimal? ?? 0) : 0;
-    var totalDividendPayableAmount = Model.ContainsKey("TotalDividendPayableAmount") ? (Model["TotalDividendPayableAmount"] as decimal? ?? 0) : 0;
-    var shareDividendPercent = Model.ContainsKey("ShareDividendPercent") ? (Model["ShareDividendPercent"] as decimal? ?? 0) : 0;
-    var dividendAmount = Model.ContainsKey("DividendAmount") ? (Model["DividendAmount"] as decimal? ?? 0) : 0;
-    var remainingReserveAmount = Model.ContainsKey("RemainingReserveAmount") ? (Model["RemainingReserveAmount"] as decimal? ?? 0) : 0;
-    var fiscalYear = Model["FiscalYear"]?.ToString() ?? "";
-    var officeName = Model["OfficeName"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var fontSize = "8pt";
+    var metaFontSize = "8.5pt";
+
+    string Text(string key, string fallback = "") =>
+        Model.TryGetValue(key, out var value) && value != null ? value.ToString() ?? fallback : fallback;
+
+    decimal Amount(string key) =>
+        Model.TryGetValue(key, out var value) && value != null ? Convert.ToDecimal(value) : 0m;
+
+    var rows = (Model["Rows"] as IEnumerable<ShareDividendRowDto>)?.ToList()
+        ?? new List<ShareDividendRowDto>();
+
+    var totalRecords = Amount("TotalRecords");
+    var totalMembers = Amount("TotalMembers");
+    var totalPurchaseAmount = Amount("TotalPurchaseAmount");
+    var totalAggregateAmount = Amount("TotalAggregateAmount");
+    var totalDividendPayableAmount = Amount("TotalDividendPayableAmount");
+    var shareDividendPercent = Amount("ShareDividendPercent");
+    var dividendAmount = Amount("DividendAmount");
+    var remainingReserveAmount = Amount("RemainingReserveAmount");
+
+    var fiscalYear = Text("FiscalYear");
+    var officeName = Text("OfficeName", "All");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Accounting-style: negative values shown in parentheses, matching the image.
-    Func<decimal, string> acct = v => v < 0
-        ? "(" + Math.Abs(v).ToString("N2") + ")"
-        : v.ToString("N2");
+    // accounting style: negative values shown in brackets
+    string Acct(decimal value) =>
+        value < 0 ? "(" + Math.Abs(value).ToString("N2") + ")" : value.ToString("N2");
 
-    // Grouped by member: member header once (Id + Name), then each of that
-    // member's share holdings underneath.
+    var table = new ReportTable(Model, title: "Share Dividend Report", sheetName: "ShareDividend")
+        .Column("Member ID", 9)
+        .Column("Member Name", 14)
+        .Column("Group", 11)
+        .Column("Holding From", 9)
+        .Column("Holding To", 9)
+        .Column("Purchase Amount (Rs)", 11, Align.Right)
+        .Column("Holding Days", 7, Align.Right)
+        .Column("Aggregate Amount (Rs)", 11, Align.Right)
+        .Column("% Reserve", 8, Align.Right)
+        .Column("Dividend Payable (Rs)", 11, Align.Right)
+        .Style(new ReportStyle { ZebraStripes = false })
+        .Sizing(rowMm: 5.5, headerMm: 10, firstPageExtraMm: 70)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 4px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            @"
+            /* long column titles wrap onto a second line */
+            table.sheet-table tr.r-header th { white-space: normal; line-height: 1.15; vertical-align: bottom; }
+            /* the two summary lines sit between two rules, like the old boxed block */
+            table.sheet-table tr.meta-title + tr.meta-row td { border-top: 1px solid #000; }
+            table.sheet-table tr.meta-spacer td              { border-top: 1px solid #000; }
+            table.sheet-table tr.r-data td.group-col         { color: #1F5C99; }");
+
+    // ── title block: two summary lines ──
+    table.MetaRow(Fmt.Join(
+        Fmt.Labeled("Branch :", officeName),
+        Fmt.Labeled("Financial Year :", fiscalYear),
+        Fmt.Labeled("Print Date :", generatedOn)));
+
+    table.MetaRow(Fmt.Join(
+        Fmt.Labeled("Share Amount :", totalPurchaseAmount.ToString("N0")),
+        Fmt.Labeled("Remaining Reserve :", Acct(remainingReserveAmount)),
+        Fmt.Labeled("Dividend Percentage :", shareDividendPercent.ToString("N0")),
+        Fmt.Labeled("Dividend Amount :", Acct(dividendAmount))));
+
+    // ── rows: member band (id + name), then that member's share holdings ──
     var memberGroups = rows
-        .GroupBy(r => new { r.MemberId, r.MemberName })
+        .GroupBy(row => new { row.MemberId, row.MemberName })
         .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Share Dividend Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+    foreach (var memberGroup in memberGroups)
+    {
+        table.GroupBy(
+            ReportCell.Left(memberGroup.Key.MemberId ?? ""),
+            ReportCell.Left(memberGroup.Key.MemberName ?? "", 3),
+            ReportCell.Left("", 6));
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            /* Bordered summary box, matching the image's boxed header block */
-            .summary-box {
-                border-top: 1px solid #000;
-                border-bottom: 1px solid #000;
-                margin: 10px 0;
-            }
-
-                .summary-box td {
-                    padding: 6px 10px;
-                    font-size: 9pt;
-                    text-align: left;
-                }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: normal;
-                line-height: 1.2;
-                vertical-align: bottom;
-            }
-
-            /* Member group header row (Member Id + Name only) */
-            .member-header-row td {
-                padding-top: 8px;
-                padding-bottom: 2px;
-                font-weight: bold;
-            }
-
-            /* Share holding rows under a member */
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .group-col {
-                color: #1F5C99;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+        foreach (var row in memberGroup)
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            table.Data(
+                ReportCell.Left("", 2),
+                new ReportCell(row.MemberGroup ?? "", Align.Left, 1, "group-col"),
+                ReportCell.Left(row.ShareHoldingPeriodFromOnBs ?? ""),
+                ReportCell.Left(row.ShareHoldingPeriodToOnBs ?? ""),
+                ReportCell.Right(row.PurchaseAmount.HasValue ? row.PurchaseAmount.Value.ToString("N2") : ""),
+                ReportCell.Right(row.HoldingNoDays?.ToString("N0") ?? ""),
+                ReportCell.Right(row.AggregateAmount.HasValue ? row.AggregateAmount.Value.ToString("N2") : ""),
+                ReportCell.Right(row.Reserve.HasValue ? row.Reserve.Value.ToString("N6") : ""),
+                ReportCell.Right(row.DividendPayableAmount.HasValue ? Acct(row.DividendPayableAmount.Value) : ""));
         }
+    }
 
-        <table class="data-table" data-sheet-name="ShareDividend">
-            <colgroup>
-                <col style="width:9%;" />
-                <col style="width:15%;" />
-                <col style="width:13%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
-                <col style="width:11%;" />
-                <col style="width:8%;" />
-                <col style="width:11%;" />
-                <col style="width:7%;" />
-                <col style="width:8%;" />
-            </colgroup>
-            <tbody>
-                <!-- Report Title -->
-                <tr class="meta-title">
-                    <td colspan="10">Share Dividend Report</td>
-                </tr>
-
-                <!-- Bordered summary box, two lines, matching the image -->
-                <tr class="summary-box">
-                    <td colspan="4"><strong>Branch :</strong> @officeName</td>
-                    <td colspan="3"><strong>Financial Year :</strong> @fiscalYear</td>
-                    <td colspan="3"><strong>Print Date :</strong> @generatedOn</td>
-                </tr>
-                <tr class="summary-box">
-                    <td colspan="3"><strong>Share Amount :</strong> @totalPurchaseAmount.ToString("N0")</td>
-                    <td colspan="3"><strong>Remaining Reserve :</strong> @acct(remainingReserveAmount)</td>
-                    <td colspan="2"><strong>Dividend Percentage :</strong> @shareDividendPercent.ToString("N0")</td>
-                    <td colspan="2"><strong>Dividend Amount :</strong> @acct(dividendAmount)</td>
-                </tr>
-
-                <!-- Table Header -->
-                <tr>
-                    <th>Member ID</th>
-                    <th>Member Name</th>
-                    <th>Group</th>
-                    <th>Holding From</th>
-                    <th>Holding To</th>
-                    <th class="text-right">Purchase Amount (Rs)</th>
-                    <th class="text-right">Holding Days</th>
-                    <th class="text-right">Aggregate Amount (Rs)</th>
-                    <th class="text-right">% Reserve</th>
-                    <th class="text-right">Dividend Payable (Rs)</th>
-                </tr>
-
-                @if (memberGroups.Any())
-                {
-                    foreach (var grp in memberGroups)
-                    {
-                        <!-- Member header band -->
-                        <tr class="member-header-row">
-                            <td>@(grp.Key.MemberId ?? "")</td>
-                            <td>@(grp.Key.MemberName ?? "")</td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                        </tr>
-
-                        <!-- That member's share holdings -->
-                        foreach (var row in grp)
-                        {
-                            <tr class="detail-row">
-                                <td></td>
-                                <td></td>
-                                <td class="group-col">@(row.MemberGroup ?? "")</td>
-                                <td>@(row.ShareHoldingPeriodFromOnBs ?? "")</td>
-                                <td>@(row.ShareHoldingPeriodToOnBs ?? "")</td>
-                                <td class="text-right">@(row.PurchaseAmount.HasValue ? row.PurchaseAmount.Value.ToString("N2") : "")</td>
-                                <td class="text-right">@(row.HoldingNoDays?.ToString("N0") ?? "")</td>
-                                <td class="text-right">@(row.AggregateAmount.HasValue ? row.AggregateAmount.Value.ToString("N2") : "")</td>
-                                <td class="text-right">@(row.Reserve.HasValue ? row.Reserve.Value.ToString("N6") : "")</td>
-                                <td class="text-right">@(row.DividendPayableAmount.HasValue ? acct(row.DividendPayableAmount.Value) : "")</td>
-                            </tr>
-                        }
-                    }
-
-                    <!-- Report-level grand total -->
-                    <tr class="grand-total-row">
-                        <td colspan="5" class="text-right">
-                            <strong>Total Members: @totalMembers &nbsp;&nbsp;|&nbsp;&nbsp; Total Records: @totalRecords</strong>
-                        </td>
-                        <td class="text-right"><strong>@totalPurchaseAmount.ToString("N2")</strong></td>
-                        <td></td>
-                        <td class="text-right"><strong>@totalAggregateAmount.ToString("N2")</strong></td>
-                        <td></td>
-                        <td class="text-right"><strong>@acct(totalDividendPayableAmount)</strong></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="10" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total(
+            $"Total Members: {totalMembers:N0}\u00A0\u00A0|\u00A0\u00A0Total Records: {totalRecords:N0}",
+            5,
+            totalPurchaseAmount.ToString("N2"),
+            "",
+            totalAggregateAmount.ToString("N2"),
+            "",
+            Acct(totalDividendPayableAmount));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

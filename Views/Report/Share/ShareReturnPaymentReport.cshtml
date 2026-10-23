@@ -1,220 +1,91 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Share;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Share
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<ShareReturnPaymentRowDto>) ?? new List<ShareReturnPaymentRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalMembers = Model.ContainsKey("TotalMembers") ? (Model["TotalMembers"] as int? ?? 0) : 0;
-    var totalCashAmount = Model.ContainsKey("TotalCashAmount") ? (Model["TotalCashAmount"] as decimal? ?? 0) : 0;
-    var totalTaxAmount = Model.ContainsKey("TotalTaxAmount") ? (Model["TotalTaxAmount"] as decimal? ?? 0) : 0;
-    var totalBonusShareAmount = Model.ContainsKey("TotalBonusShareAmount") ? (Model["TotalBonusShareAmount"] as decimal? ?? 0) : 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Share Return Payment Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var fontSize = "9pt";
+    const int ColumnCount = 9;
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-                text-align: left;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: normal;
-                line-height: 1.2;
-                vertical-align: bottom;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #ccc;
-            }
-
-            .sn-col {
-                text-align: center;
-                color: #555;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
         }
+        return fallback;
+    }
 
-        <table class="data-table" data-sheet-name="ShareReturnPayment">
-            <colgroup>
-                <col style="width:4%;" />
-                <col style="width:11%;" />
-                <col style="width:20%;" />
-                <col style="width:10%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:9%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="9">Share Return Payment Report</td>
-                </tr>
+    var rows = (Model["Rows"] as List<ShareReturnPaymentRowDto>) ?? new List<ShareReturnPaymentRowDto>();
 
-                <tr class="meta-row">
-                    <td colspan="9"><strong>Branch Name :</strong> @branchName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="9">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Till Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="9"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="9"></td></tr>
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("OfficeName", Text("BranchName", "All"));
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-                <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Member ID</th>
-                    <th>Member Name</th>
-                    <th>Pan/VAT No</th>
-                    <th>Account No</th>
-                    <th class="text-right">Cash Amount</th>
-                    <th class="text-right">Tax Amount</th>
-                    <th class="text-right">Bonus Share Amount</th>
-                    <th>Transaction Date</th>
-                </tr>
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalMembers = (int)TotalOr("TotalMembers", rows.Select(r => r.MemberId).Distinct().Count());
+    var totalCashAmount = TotalOr("TotalCashAmount", rows.Sum(r => r.CashAmount ?? 0));
+    var totalTaxAmount = TotalOr("TotalTaxAmount", rows.Sum(r => r.TaxAmount ?? 0));
+    var totalBonusShareAmount = TotalOr("TotalBonusShareAmount", rows.Sum(r => r.BonusShareAmount ?? 0));
 
-                @if (rows.Any())
-                {
-                    var sn = 0;
-                    foreach (var row in rows)
-                    {
-                        sn++;
-                        <tr class="detail-row">
-                            <td class="sn-col">@sn</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.PanVatNo ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td class="text-right">@(row.CashAmount?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.TaxAmount?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.BonusShareAmount?.ToString("N2") ?? "")</td>
-                            <td>@(row.TransactionOnBs ?? "")</td>
-                        </tr>
-                    }
+    var table = new ReportTable(Model, title: "Share Return Payment Report", sheetName: "ShareReturnPayment")
+        .Column("S.N.", 4, Align.Center)
+        .Column("Member ID", 11)
+        .Column("Member Name", 20)
+        .Column("Pan/VAT No", 10)
+        .Column("Account No", 12)
+        .Column("Cash Amount", 12, Align.Right)
+        .Column("Tax Amount", 12, Align.Right)
+        .Column("Bonus Share Amount", 12, Align.Right)
+        .Column("Transaction Date", 9)
+        .NoColumnHeader()
+        .Style(new ReportStyle
+        {
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 9, firstPageExtraMm: 65)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { white-space: normal; vertical-align: bottom; line-height: 1.2; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 1px solid #ccc; }\n" +
+            ".sn-col { color: #555; }");
 
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">
-                            Total Members: @totalMembers &nbsp;&nbsp;|&nbsp;&nbsp; Total Records: @totalRecords
-                        </td>
-                        <td></td>
-                        <td class="text-right">@totalCashAmount.ToString("N2")</td>
-                        <td class="text-right">@totalTaxAmount.ToString("N2")</td>
-                        <td class="text-right">@totalBonusShareAmount.ToString("N2")</td>
-                        <td></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+    table.MetaRow(Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("Till Date :", toDate)));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    table.Header();
+
+    var sn = 0;
+    foreach (var row in rows)
+    {
+        table.Data(
+            new ReportCell((++sn).ToString(), Align.Center, 1, "sn-col"),
+            ReportCell.Left(row.MemberId ?? ""),
+            ReportCell.Left(row.MemberName ?? ""),
+            ReportCell.Left(row.PanVatNo ?? ""),
+            ReportCell.Left(row.AccountNo ?? ""),
+            ReportCell.Right(row.CashAmount?.ToString("N2") ?? ""),
+            ReportCell.Right(row.TaxAmount?.ToString("N2") ?? ""),
+            ReportCell.Right(row.BonusShareAmount?.ToString("N2") ?? ""),
+            ReportCell.Left(row.TransactionOnBs ?? ""));
+    }
+
+    if (rows.Count > 0)
+    {
+        table.Total(
+            $"Total Members: {totalMembers}   |   Total Records: {totalRecords}", 4,
+            "",
+            totalCashAmount.ToString("N2"),
+            totalTaxAmount.ToString("N2"),
+            totalBonusShareAmount.ToString("N2"),
+            "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

@@ -213,6 +213,8 @@ namespace NexgenCosysReport.Services.ReportService
             {
                 // drop layout-only rows: logo header, page filler, "Page X of N"
                 table.SelectNodes(".//tr[contains(@class,'no-xl')]")?.ToList().ForEach(r => r.Remove());
+                // pictures (member photos) are not exported to Excel
+                table.SelectNodes(".//img")?.ToList().ForEach(img => img.Remove());
 
                 // merge the per-page <tbody> groups into one <tbody>
                 var bodies = table.SelectNodes("./tbody")?.ToList();
