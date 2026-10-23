@@ -1,249 +1,77 @@
-﻿@* Views/Report/Account/MainLedgerReport/LedgerDetailsReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Account.MainLedgerReport;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.MainLedgerReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<LedgerDetailsRowDto>) ?? new List<LedgerDetailsRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var openingBalance = Model["OpeningBalance"] as decimal? ?? 0;
-    var closingBalance = Model["ClosingBalance"] as decimal? ?? 0;
-    var accountType = Model["AccountType"]?.ToString() ?? "";
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var voucherType = Model["VoucherType"]?.ToString() ?? "All";
-    var ledgerHead = (Model["LedgerHead"] as List<string>) ?? new List<string>();
-    var showOpeningBalance = Model["ShowOpeningBalance"] as bool? ?? true;
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var fontSize = "8pt";
+    var metaFontSize = "8.5pt";
 
+    string Text(string key) => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? "" : "";
+    bool Flag(string key, bool fallback) => Model.TryGetValue(key, out var fv) && fv is bool fb ? fb : fallback;
+    decimal Dec(string key) => Model.TryGetValue(key, out var dv) && dv != null ? Convert.ToDecimal(dv) : 0m;
+
+    // negative amounts print in brackets
+    string Money(decimal? v) => v.HasValue ? (v.Value < 0 ? $"({Math.Abs(v.Value):N2})" : v.Value.ToString("N2")) : "";
+
+    var rows = (Model["Rows"] as IEnumerable<LedgerDetailsRowDto>)?.ToList() ?? new List<LedgerDetailsRowDto>();
+    var ledgerHead = (Model["LedgerHead"] as IEnumerable<string>)?.ToList() ?? new List<string>();
     var ledgerPath = string.Join(" > ", ledgerHead.Where(l => !string.IsNullOrWhiteSpace(l)));
 
-    string Fmt(decimal? v) => v.HasValue ? (v.Value < 0 ? $"({Math.Abs(v.Value):N2})" : v.Value.ToString("N2")) : "";
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Ledger Details Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName");
+    if (branchName == "") branchName = "All";
+    var voucherType = Text("VoucherType");
+    if (voucherType == "") voucherType = "All";
+    var showOpeningBalance = Flag("ShowOpeningBalance", true);
+    var openingBalance = Dec("OpeningBalance");
+    var closingBalance = Dec("ClosingBalance");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+    var totalRecords = Model.TryGetValue("TotalRecords", out var tr) && tr != null && Convert.ToInt32(tr) > 0
+        ? Convert.ToInt32(tr)
+        : rows.Count;
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
+    var table = new ReportTable(Model, title: "Ledger Details Report", sheetName: "LedgerDetails")
+        .Column("Voucher Date", 12)
+        .Column("Voucher No", 12)
+        .Column("Narration", 26)
+        .Column("Debit", 16, Align.Right)
+        .Column("Credit", 16, Align.Right)
+        .Column("Balance", 18, Align.Right)
+        .Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 75)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 4px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }");
 
-            .report-title {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
+    table.MetaRow(Fmt.Labeled("Ledger :", ledgerPath))
+         .MetaRow(
+            Fmt.Join(Fmt.Labeled("Branch :", branchName), Fmt.Labeled("Voucher Type :", voucherType)),
+            Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+            leftSpan: 3)
+         .MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+    if (showOpeningBalance)
+        table.MetaRow(Fmt.Labeled("Opening Balance :", Money(openingBalance)));
 
-            /* FIX: subheader moved into its own auto-layout table (no
-                           table-layout: fixed, no forced nowrap width constraints) so
-                           "Label : Value" pairs never overlap or clip — same fix already
-                           applied to TellerCashBalance, First/Second/Third Ledger
-                           Details reports. */
-            .meta-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 6px;
-            }
-
-                .meta-table td {
-                    padding: 3px 6px;
-                    font-size: 9pt;
-                    white-space: nowrap;
-                    vertical-align: top;
-                }
-
-            .meta-left {
-                text-align: left;
-                width: 50%;
-            }
-
-            .meta-right {
-                text-align: right;
-                width: 50%;
-            }
-
-            .meta-spacer td {
-                height: 8px;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-                /* FIX: headers now wrap (white-space: normal) instead of forcing
-                           single-line text into fixed-width columns. */
-                .data-table th {
-                    background: #f9f9f9;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    text-align: right;
-                    white-space: normal;
-                }
-
-                    .data-table th:nth-child(-n+2) {
-                        text-align: left;
-                    }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-                text-align: right;
-            }
-
-                .detail-row td:nth-child(-n+2) {
-                    text-align: left;
-                }
-
-            .opening-row td, .closing-row td {
-                font-weight: bold;
-                background: #f5f5f5;
-                border-top: 1px solid #666;
-                border-bottom: 1px solid #666;
-                text-align: right;
-            }
-
-                .opening-row td:first-child, .closing-row td:first-child {
-                    text-align: left;
-                }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-                text-align: right;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    foreach (var row in rows)
+    {
+        table.Data(new[]
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ReportCell.Left(row.VoucherOn.HasValue ? row.VoucherOn.Value.ToString("yyyy/MM/dd") : ""),
+            ReportCell.Left(row.VoucherNo ?? ""),
+            ReportCell.Left(row.Narration ?? ""),
+            ReportCell.Right(Money(row.DebitAmount)),
+            ReportCell.Right(Money(row.CreditAmount)),
+            ReportCell.Right(Money(row.BalanceAmount))
+        });
+    }
 
-        <div class="report-title">Ledger Details Report</div>
-
-        <table class="meta-table">
-            <tr>
-                <td colspan="2"><strong>Ledger :</strong> @ledgerPath</td>
-            </tr>
-            <tr>
-                <td class="meta-left"><strong>Branch :</strong> @branchName &nbsp;&nbsp;&nbsp; <strong>Voucher Type :</strong> @voucherType</td>
-                <td class="meta-right"><strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp; <strong>To Date :</strong> @toDate</td>
-            </tr>
-            <tr>
-                <td colspan="2"><strong>Report Generated On :</strong> @generatedOn</td>
-            </tr>
-            <tr class="meta-spacer"><td colspan="2"></td></tr>
-        </table>
-
-        <table class="data-table" data-sheet-name="LedgerDetails">
-            <colgroup>
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:26%;" />
-                <col style="width:16%;" />
-                <col style="width:16%;" />
-                <col style="width:18%;" />
-            </colgroup>
-            <tbody>
-                @if (showOpeningBalance)
-                {
-                    <tr class="opening-row">
-                        <td colspan="5" class="text-right">Opening Balance</td>
-                        <td class="text-right">@Fmt(openingBalance)</td>
-                    </tr>
-                }
-
-                <tr>
-                    <th>Voucher Date</th>
-                    <th>Voucher No</th>
-                    <th>Narration</th>
-                    <th>Debit</th>
-                    <th>Credit</th>
-                    <th>Balance</th>
-                </tr>
-
-                @if (rows.Any())
-                {
-                    foreach (var row in rows)
-                    {
-                        <tr class="detail-row">
-                            <td>@(row.VoucherOn.HasValue ? row.VoucherOn.Value.ToString("yyyy/MM/dd") : "")</td>
-                            <td>@(row.VoucherNo ?? "")</td>
-                            <td>@(row.Narration ?? "")</td>
-                            <td>@Fmt(row.DebitAmount)</td>
-                            <td>@Fmt(row.CreditAmount)</td>
-                            <td>@Fmt(row.BalanceAmount)</td>
-                        </tr>
-                    }
-
-                    <tr class="closing-row">
-                        <td colspan="5" class="text-right">Closing Balance</td>
-                        <td class="text-right">@Fmt(closingBalance)</td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="5" class="text-right">Total Records</td>
-                        <td class="text-right">@totalRecords</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="6" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Closing Balance", 5, Money(closingBalance));
+        table.Total("Total Records", 5, totalRecords.ToString());
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())
