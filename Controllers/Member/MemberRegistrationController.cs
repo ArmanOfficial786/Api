@@ -1,151 +1,127 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.Member;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Member;
+using NexgenCosysReport.Utils.Caching;
 using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
+using System.Security.Claims;
 
 namespace NexgenCosysReport.Controllers.Member
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class MemberRegistrationController : ControllerBase
     {
-        private readonly IMemberDetail _memberDetail;
-        private readonly IJsReportService _jsReportService;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
-        private readonly IReportFileResponse _reportFileResponse;
-        private readonly ILogger<MemberRegistrationController> _logger;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly IOptions<ReportSettings> _reportSettings;
+        private const string ReportName = "MemberRegistrationReport";
 
-        private static readonly PageSizeSetting PageSetting =
+        private readonly IMemberDetail _repository;
+        private readonly IReportHeaderProvider _headers;
+        private readonly IJsReportService _jsReportService;
+        private readonly IReportDataCache _dataCache;
+        private readonly ILogger<MemberRegistrationController> _logger;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        // normal: A2 landscape (22 columns); visual: same page as every visual report
+        private static readonly PageSizeSetting NPageSetting =
             PageSizeSetting.Custom(594, 420, PageUnit.mm, landscape: true);
+        private static readonly PageSizeSetting VPageSetting =
+            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         public MemberRegistrationController(
-            IMemberDetail memberDetail,
+            IMemberDetail repository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
+            IReportDataCache dataCache,
             ILogger<MemberRegistrationController> logger,
-            IWebHostEnvironment webHostEnvironment,
-            IOptions<ReportSettings> reportSettings,
-            IReportFileResponse reportFileResponse,
-            ICommonHeaderRepository commonHeaderRepository)
+            IReportFileResponse reportFileResponse)
         {
-            _memberDetail = memberDetail;
+            _repository = repository;
+            _headers = headers;
             _jsReportService = jsReportService;
+            _dataCache = dataCache;
             _logger = logger;
-            _webHostEnvironment = webHostEnvironment;
-            _reportSettings = reportSettings;
             _reportFileResponse = reportFileResponse;
-            _commonHeaderRepository = commonHeaderRepository;
         }
 
+        // POST api/MemberRegistration?format=VIEW
         [HttpPost]
-        public async Task<ActionResult<GeneralResponse<ReportResponseDtos>>> GenerateReport(
+        public async Task<IActionResult> GenerateReport(
             [FromBody] MemberDetailRequest request,
             [FromQuery] string format = "VIEW",
             CancellationToken ct = default)
         {
             try
             {
-                var response = new GeneralResponse<ReportResponseDtos>();
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out _))
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+
                 if (request == null || !ModelState.IsValid)
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
+
+                var upperFormat = format.ToUpperInvariant();
+                var isVisual = request.VisualReport;
+                var page = isVisual ? VPageSetting : NPageSetting;
+
+                // the DB data is cached once and shared by the normal and the visual view
+                var dataKey = ReportCacheKey.ForData(
+                    request, ReportName, userIdClaim, nameof(request.VisualReport));
+                var reportKey = $"{dataKey}_{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}";
+
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: false,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
+
+                // the header is the company header (no branch)
+                var headerTask = _headers.GetAsync("", ct);
+                var dataTask = _dataCache.GetOrLoadAsync(dataKey, async () =>
                 {
-                    response.isValid = false;
-                    response.statusCode = StatusCodes.Status400BadRequest;
-                    response.message = "Invalid request";
-                    return BadRequest(response);
-                }
+                    var loaded = await _repository.GetMemberRegistrationDetail(request);
+                    if (loaded == null || !loaded.Any())
+                        return null;
+                    return loaded;
+                }, ct);
+                await Task.WhenAll(headerTask, dataTask);
 
-
-                var upperFormat = format.ToUpper();
-
-                //var reportKey = ReportUtils.GenerateReportKey(request, "MemberRegistrationReport");
-
-                var reportKey = request.VisualReport
-                      ? ReportUtils.GenerateReportKey(request, "MemberRegistrationReport", "VISUAL")
-                      : ReportUtils.GenerateReportKey(request, "MemberRegistrationReport");
-
-                ReportExportHelper.LogCacheState(
-                    upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
-
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    _logger.LogInformation("? NO DB CALL — serving from cache");
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, "MemberDetailReport",
-                        _jsReportService, _logger, PageSetting, ct);
-                }
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-
-                var memberTask = _memberDetail.GetMemberRegistrationDetail(request);
-                var headerTask = _commonHeaderRepository.GetCommonHeaders();
-                await Task.WhenAll(memberTask, headerTask);
-
-                var allMemberData = memberTask.Result;
-                var headerData = headerTask.Result;
-
-                if (!allMemberData.Any())
+                var data = await dataTask;
+                if (data == null)
                     return NotFound(new { success = false, message = "No data found" });
-
-
-                var header = headerData.FirstOrDefault();
-                var companyLogoPath = header?.CompanyLogo ?? "";
-                var companyLogoBase64 = await ReportUtils.ReadCommonImageAsBase64Async(
-                                            webRoot, companyLogoPath, _logger);
-                if (header != null)
-                    header.CompanyLogo = companyLogoBase64;
-
 
                 var reportData = new Dictionary<string, object>
                 {
-                    { "MemberAllDetailDataSet", allMemberData       },
-                    { "HeaderDataSet",  headerData          },
-                    { "TotalRecords",   allMemberData.Count },
-                    { "Format",         upperFormat         },
-                    { "FromDate",       request.fromDate    },
-                    { "ToDate",         request.toDate      },
-                    { "BranchName",     "All"               },
+                    { "MemberAllDetailDataSet", data },
+                    { "HeaderDataSet", await headerTask },
+                    { "TotalRecords", data.Count },
+                    { "Format", upperFormat },
+                    { "FromDate", Convert.ToString(request.fromDate) ?? "" },
+                    { "ToDate", Convert.ToString(request.toDate) ?? "" },
+                    { "BranchName", "All" },
+                    { "PageSetting", page }
                 };
 
-                var htmlContent = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
-                    reportKey: reportKey,
-                    reportPath: request.VisualReport ? "Views/VisualReport/Member/VMemberRegistrationReport.cshtml" : "Views/Report/Member/MemberRegistrationReport.cshtml",
-                    data: reportData);
+                // NOTE: the visual view below must exist before a request with VisualReport = true is made
+                var viewPath = isVisual
+                    ? "Views/VisualReport/Member/VMemberRegistrationReport.cshtml"
+                    : "Views/Report/Member/MemberRegistrationReport.cshtml";
 
-                if (upperFormat == "VIEW")
-                {
-                    var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
-                     htmlContent, reportKey, PageSetting, ct);
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                    reportKey: reportKey, reportPath: viewPath, data: reportData, ct: ct);
 
-                    _logger.LogInformation("?? VIEW — jsreport Html recipe, {Bytes:N0} chars", viewHtml.Length);
-                    return Content(viewHtml, "text/html");
-
-                }
-
-                if (upperFormat == "PDF")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
-                        htmlContent, "PDF", reportKey, PageSetting, ct);
-                    return _reportFileResponse.BuildPdfResponse(pdfBytes);
-                }
-
-                return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, "MemberDetailReport",
-                    _jsReportService, _logger, PageSetting, ct);
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: false,
+                    totalRecords: data.Count,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "MemberRegistration report failed");
+                _logger.LogError(ex, "Error generating {Report} report", ReportName);
                 return StatusCode(500, new { success = false, error = ex.Message });
             }
         }
     }
 }
-
-

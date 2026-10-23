@@ -1,496 +1,256 @@
-﻿@model Dictionary<string, object>
+﻿@using Microsoft.AspNetCore.Html
 @using NexgenCosysReport.Dtos.RequestDtos.Member
+@using NexgenCosysReport.Services.ReportService.Table
+@model Dictionary<string, object>
 @{
     Layout = null;
 
-    var memberInfo = Model["MemberDetail"] as MemberDetailInfoDto;
-    var shareAccounts = Model["ShareAccounts"] as List<ShareAccountDto> ?? new List<ShareAccountDto>();
-    var savingAccounts = Model["SavingAccounts"] as List<SavingAccountDto> ?? new List<SavingAccountDto>();
-    var loanIssues = Model["LoanIssues"] as List<LoanIssueDto> ?? new List<LoanIssueDto>();
-    var groupGuarantees = Model["GroupGuarantees"] as List<GroupGuaranteeDto> ?? new List<GroupGuaranteeDto>();
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
 
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    // negatives in brackets (same as before); a missing text value prints "-"
+    string FormatAmount(decimal amount) => amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
+    string NullDisplay(object? value) => value == null || string.IsNullOrWhiteSpace(value.ToString()) ? "-" : value.ToString()!;
+
+    var memberInfo = Model.TryGetValue("MemberDetail", out var mi) ? mi as MemberDetailInfoDto : null;
+    var shareAccounts = (Model["ShareAccounts"] as List<ShareAccountDto>) ?? new List<ShareAccountDto>();
+    var savingAccounts = (Model["SavingAccounts"] as List<SavingAccountDto>) ?? new List<SavingAccountDto>();
+    var loanIssues = (Model["LoanIssues"] as List<LoanIssueDto>) ?? new List<LoanIssueDto>();
+    var groupGuarantees = (Model["GroupGuarantees"] as List<GroupGuaranteeDto>) ?? new List<GroupGuaranteeDto>();
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
     decimal totalShare = shareAccounts.Sum(x => x.ShareAmount);
     decimal totalSavingBalance = savingAccounts.Sum(x => x.Balance);
     decimal totalGuaranteeAmount = groupGuarantees.Sum(x => x.GuaranteeAmount);
 
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    // ── cell helpers (every row covers the 60 grid units) ──
+    ReportCell C(string t, int span, Align a = Align.Left, string? css = null) => new(t, a, span, css);
+    ReportCell R(string t, int span, string? css = null) => new(t, Align.Right, span, css);
+    ReportCell Hd(string t, int span, Align a = Align.Left) => new(t, a, span);          // column title
+    ReportCell Tt(string t, int span, Align a = Align.Right) => new(t, a, span, "tt");    // total line
+    ReportCell NoData(string t) => new(t, Align.Center, 60, "nd");
 
-    string FormatAmount(decimal amount) =>
-        amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
-
-    string NullDisplay(object value) =>
-        value == null || string.IsNullOrWhiteSpace(value?.ToString()) ? "-" : value.ToString();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Member Details Summary</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 8.5pt;
-                background: white;
-                color: #111;
-            }
-
-            /* ── Page wrapper ── */
-            .page-wrap {
-                width: 100%;
-                padding: 6px 10px;
-            }
-
-            /* ── Report meta rows ── */
-            .meta-line {
-                font-size: 8.5pt;
-                margin-bottom: 2px;
-            }
-
-            .report-title {
-                text-align: center;
-                font-size: 12pt;
-                font-weight: bold;
-                text-decoration: underline;
-                margin: 4px 0 6px 0;
-            }
-
-            .meta-row-wrap {
-                display: flex;
-                justify-content: space-between;
-                margin-bottom: 2px;
-                font-size: 8.5pt;
-            }
-
-            /* ── Section header ── */
-            .section-header {
-                font-weight: bold;
-                font-size: 9pt;
-                margin: 8px 0 2px 0;
-                border-bottom: 1.5px solid #333;
-                padding-bottom: 2px;
-            }
-
-            /* ── Common table ── */
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 8pt;
-                table-layout: auto;
-                margin-bottom: 6px;
-            }
-
-                .data-table th {
-                    background: #f0f0f0;
-                    border-top: 1.5px solid #333;
-                    border-bottom: 1px solid #555;
-                    border-left: 1px solid #ccc;
-                    border-right: 1px solid #ccc;
-                    padding: 3px 5px;
-                    font-weight: bold;
-                    text-align: left;
-                    white-space: nowrap;
-                }
-
-                .data-table td {
-                    border: 1px solid #ddd;
-                    padding: 3px 5px;
-                    vertical-align: middle;
-                    word-wrap: break-word;
-                }
-
-                .data-table tr:nth-child(even) td {
-                    background: #fafafa;
-                }
-
-            /* ── Grand total / sub-total rows ── */
-            .total-row td {
-                border-top: 1.5px solid #333;
-                border-bottom: 1.5px solid #333;
-                font-weight: bold;
-                background: #f5f5f5 !important;
-            }
-
-            .sub-total-row td {
-                border-top: 1px solid #aaa;
-                font-weight: bold;
-                background: #f9f9f9 !important;
-            }
-
-            /* ── Alignment helpers ── */
-            .tr {
-                text-align: right !important;
-            }
-
-            .tc {
-                text-align: center !important;
-            }
-
-            .tl {
-                text-align: left !important;
-            }
-
-            /* ── Loan sub-rows ── */
-            .loan-opening-row td {
-                background: #fff !important;
-            }
-
-            .loan-between-row td {
-                background: #fafafa !important;
-            }
-
-            .loan-payment-row td {
-                background: #f0f4f8 !important;
-                font-weight: bold;
-                border-top: 1px dashed #aaa;
-            }
-
-            /* ── No-data cell ── */
-            .no-data {
-                text-align: center;
-                color: #888;
-                font-style: italic;
-                padding: 6px;
-            }
-
-            @@media print {
-                body {
-                    margin: 0;
-                    padding: 0;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="page-wrap">
-
-        @* ── COMMON HEADER (logo + company info) ── *@
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Member Details Summary Report", sheetName: "MemberDetailsSummary")
+        .NoColumnHeader()                      // every block prints its own column titles (Header(...) below)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = true,
+            ZebraBackground = "#fafafa",
+            SectionBackground = "#fff",
+            HeaderBackground = "#f0f0f0"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 60)   // one text line per row
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td " +
+            "{ font-size: 8pt; line-height: 1.25; padding: 1px 5px; }" +
+            "table.sheet-table tr.r-header th { white-space: normal; border-top: 1.5px solid #333; border-bottom: 1px solid #555; border-left: 1px solid #ccc; border-right: 1px solid #ccc; }" +
+            "table.sheet-table tr.r-data td { border: 1px solid #ddd; }" +
+            // block titles: bold with a line under them
+            "table.sheet-table tr.r-section td { background: #fff; font-size: 9pt; border-top: 0; border-bottom: 1.5px solid #333; }" +
+            // total line
+            "table.sheet-table td.tt { font-weight: bold; background: #f5f5f5 !important; border-top: 1.5px solid #333 !important; border-bottom: 1.5px solid #333 !important; }" +
+            // loan lines: opening / between dates / total payment
+            "table.sheet-table td.lo { background: #fff !important; }" +
+            "table.sheet-table td.lb { background: #fafafa !important; }" +
+            "table.sheet-table td.lp { background: #f0f4f8 !important; font-weight: bold; border-top: 1px dashed #aaa !important; }" +
+            "table.sheet-table td.b { font-weight: bold; }" +
+            "table.sheet-table td.nd { color: #888; font-style: italic; }");
+
+    // one 60-unit grid carries all five blocks, so each block just chooses its own spans
+    for (var i = 0; i < 60; i++) table.Column("", 1);
+
+    // ── title block ──
+    table.MetaRow(
+        Fmt.Labeled("From Date :", NullDisplay(fromDate)),
+        Fmt.Labeled("To Date :", NullDisplay(toDate)));
+    table.MetaRow(Fmt.Labeled("Report Generated on :", generatedOn));
+
+    // ═══ 1. MEMBER DETAILS: 8 columns = 6 + 10 + 4 + 7 + 7 + 8 + 11 + 7 ═══
+    table.Spacer();
+    table.Section("Member Details");
+    table.Header(Hd("MemberId", 6), Hd("MemberName", 10), Hd("Gender", 4), Hd("Date Of Birth", 7),
+                 Hd("Registration Date", 7), Hd("Contact No", 8), Hd("Address", 11), Hd("Citizenship No", 7));
+    if (memberInfo != null)
+    {
+        table.Data(
+            C(NullDisplay(memberInfo.MemberId), 6),
+            C(NullDisplay(memberInfo.Name), 10),
+            C(NullDisplay(memberInfo.Sex), 4),
+            C(NullDisplay(memberInfo.DateOfBirth), 7),
+            C(NullDisplay(memberInfo.RegistrationDate), 7),
+            C(NullDisplay(memberInfo.MobileNo), 8),
+            C(NullDisplay(memberInfo.PermanentAddress), 11),
+            C(NullDisplay(memberInfo.CitizenshipNo), 7));
+    }
+    else
+    {
+        table.Data(NoData("Member information not available"));
+    }
+
+    // ═══ 2. SHARE TYPE: 5 columns = 20 + 10 + 10 + 10 + 10 ═══
+    table.Spacer();
+    table.Section("Share Type");
+    table.Header(Hd("Share Holder", 20), Hd("Previous Share", 10, Align.Right), Hd("Share Purchase", 10, Align.Right),
+                 Hd("Share Return", 10, Align.Right), Hd("Total Share", 10, Align.Right));
+    if (shareAccounts.Any())
+    {
+        decimal prev = shareAccounts.Sum(x => x.PreviousShare);
+        decimal purchase = shareAccounts.Sum(x => x.SharePurchase);
+        decimal ret = shareAccounts.Sum(x => x.ShareReturn);
+
+        table.Data(
+            C(NullDisplay(memberInfo?.Name), 20),
+            R(FormatAmount(prev), 10),
+            R(FormatAmount(purchase), 10),
+            R(FormatAmount(ret), 10),
+            R(FormatAmount(totalShare), 10));
+
+        // label spans the first 4 columns; the value fills Total Share
+        table.Data(Tt("Total :", 50), Tt(FormatAmount(totalShare), 10));
+    }
+    else
+    {
+        table.Data(NoData("No share records found"));
+    }
+
+    // ═══ 3. ACCOUNT OPENING: 9 columns = 7 + 7 + 5 + 5 + 7 + 8 + 7 + 7 + 7 ═══
+    table.Spacer();
+    table.Section("Account Opening");
+    table.Header(Hd("A/C No", 7), Hd("Deposit Type", 7), Hd("A/C Status", 5), Hd("Interest", 5, Align.Right),
+                 Hd("A/C Open Date", 7), Hd("Opening Balance", 8, Align.Right), Hd("Deposit Amount", 7, Align.Right),
+                 Hd("Withdraw Amount", 7, Align.Right), Hd("Total Balance", 7, Align.Right));
+    if (savingAccounts.Any())
+    {
+        decimal totalOpening = 0;
+        decimal totalDeposit = 0;
+        decimal totalWithdraw = 0;
+
+        foreach (var acc in savingAccounts)
+        {
+            totalOpening += acc.OpeningBalance;
+            totalDeposit += acc.DepositAmount;
+            totalWithdraw += acc.WithdrawAmount;
+
+            table.Data(
+                C(NullDisplay(acc.AccountNo), 7),
+                C(NullDisplay(acc.AccountType), 7),
+                C(NullDisplay(acc.Status), 5),
+                R(acc.InterestRate?.ToString("F2") ?? "0.00", 5),
+                C(NullDisplay(acc.OpeningDate), 7),
+                R(FormatAmount(acc.OpeningBalance), 8),
+                R(FormatAmount(acc.DepositAmount), 7),
+                R(FormatAmount(acc.WithdrawAmount), 7),
+                R(FormatAmount(acc.Balance), 7));
         }
 
-        @* ── REPORT TITLE ── *@
-        <div class="report-title">Member Details Summary Report</div>
+        // label spans the first 5 columns (31 units); the four amounts fill the rest
+        table.Data(Tt("Total :", 31), Tt(FormatAmount(totalOpening), 8), Tt(FormatAmount(totalDeposit), 7),
+                   Tt(FormatAmount(totalWithdraw), 7), Tt(FormatAmount(totalSavingBalance), 7));
+    }
+    else
+    {
+        table.Data(NoData("No saving accounts found"));
+    }
 
-        @* ── DATE META ── *@
-        <div class="meta-row-wrap">
-            <span><strong>From Date :</strong> @NullDisplay(fromDate)</span>
-            <span><strong>To Date :</strong> @NullDisplay(toDate)</span>
-        </div>
-        <div class="meta-line">
-            <strong>Report Generated on :</strong> @generatedOn
-        </div>
+    // ═══ 4. LOAN ISSUE DETAILS: 12 columns = 6 + 5 + 5 + 5 + 5 + 4 + 5 | 8 | 5 + 4 + 4 + 4 ═══
+    // each loan prints three lines: Opening Details, Between Date Details, Total Issue Payment
+    table.Spacer();
+    table.Section("Loan Issue Details");
+    table.Header(Hd("A/C NO", 6), Hd("Issue Date", 5), Hd("Maturity Date", 5), Hd("Principle Due", 5, Align.Right),
+                 Hd("Interest Due", 5, Align.Right), Hd("Penalty Due", 4, Align.Right), Hd("Total Due Amt", 5, Align.Right),
+                 Hd("Issue/Payment Details", 8), Hd("Issue Amount", 5, Align.Right), Hd("Prin Paid", 4, Align.Right),
+                 Hd("Int Paid", 4, Align.Right), Hd("Pent Paid", 4, Align.Right));
+    if (loanIssues.Any())
+    {
+        decimal grandIssue = 0;
+        decimal grandPrinPaid = 0;
+        decimal grandIntPaid = 0;
+        decimal grandPentPaid = 0;
 
-        @* ═══════════════════════════════════════════════════════
-       SECTION 1 — MEMBER DETAILS
-    ═══════════════════════════════════════════════════════ *@
-        <div class="section-header">Member Details</div>
-        <table class="data-table" data-sheet-name="MemberDetails">
-            <thead>
-                <tr>
-                    <th>MemberId</th>
-                    <th>MemberName</th>
-                    <th>Gender</th>
-                    <th>Date Of Birth</th>
-                    <th>Registration Date</th>
-                    <th>Contact No</th>
-                    <th>Address</th>
-                    <th>Citizenship No</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (memberInfo != null)
+        // the first 7 columns stay empty on the second and third line of a loan
+        ReportCell[] Blank(string css) => new[] { 6, 5, 5, 5, 5, 4, 5 }.Select(s => C("", s, Align.Left, css)).ToArray();
+
+        foreach (var loan in loanIssues)
+        {
+            grandIssue += loan.LoanAmount;
+            grandPrinPaid += loan.PrincipalPaid;
+            grandIntPaid += loan.InterestPaid;
+            grandPentPaid += loan.PenaltyPaid;
+
+            // opening details
+            table.Data(
+                C(NullDisplay(loan.LoanAccountNo), 6, Align.Left, "lo"),
+                C(NullDisplay(loan.IssueDate), 5, Align.Left, "lo"),
+                C(NullDisplay(loan.MaturityDate), 5, Align.Left, "lo"),
+                R(FormatAmount(loan.PrincipleDue), 5, "lo"),
+                R(FormatAmount(loan.InterestDue), 5, "lo"),
+                R(FormatAmount(loan.PenaltyDue), 4, "lo"),
+                R(FormatAmount(loan.TotalDue), 5, "lo"),
+                C("Opening Details:", 8, Align.Left, "lo b"),
+                R("0.00", 5, "lo"), R("0.00", 4, "lo"), R("0.00", 4, "lo"), R("0.00", 4, "lo"));
+
+            // between date details
+            table.Data(Blank("lb")
+                .Concat(new[]
                 {
-                    <tr>
-                        <td>@NullDisplay(memberInfo.MemberId)</td>
-                        <td>@NullDisplay(memberInfo.Name)</td>
-                        <td>@NullDisplay(memberInfo.Sex)</td>
-                        <td>@NullDisplay(memberInfo.DateOfBirth)</td>
-                        <td>@NullDisplay(memberInfo.RegistrationDate)</td>
-                        <td>@NullDisplay(memberInfo.MobileNo)</td>
-                        <td>@NullDisplay(memberInfo.PermanentAddress)</td>
-                        <td>@NullDisplay(memberInfo.CitizenshipNo)</td>
-                    </tr>
-                }
-                else
+                    C("Between Date Details:", 8, Align.Left, "lb b"),
+                    R(FormatAmount(loan.LoanAmount), 5, "lb"),
+                    R(FormatAmount(loan.PrincipalPaid), 4, "lb"),
+                    R(FormatAmount(loan.InterestPaid), 4, "lb"),
+                    R(FormatAmount(loan.PenaltyPaid), 4, "lb")
+                }).ToArray());
+
+            // total issue payment (per loan)
+            table.Data(Blank("lp")
+                .Concat(new[]
                 {
-                    <tr><td colspan="8" class="no-data">Member information not available</td></tr>
-                }
-            </tbody>
-        </table>
+                    C("Total Issue Payment:", 8, Align.Left, "lp"),
+                    R(FormatAmount(loan.LoanAmount), 5, "lp"),
+                    R(FormatAmount(loan.PrincipalPaid), 4, "lp"),
+                    R(FormatAmount(loan.InterestPaid), 4, "lp"),
+                    R(FormatAmount(loan.PenaltyPaid), 4, "lp")
+                }).ToArray());
+        }
 
-        @* ═══════════════════════════════════════════════════════
-       SECTION 2 — SHARE TYPE
-    ═══════════════════════════════════════════════════════ *@
-        <div class="section-header">Share Type</div>
-        <table class="data-table" data-sheet-name="ShareType">
-            <thead>
-                <tr>
-                    <th>Share Holder</th>
-                    <th class="tr">Previous Share</th>
-                    <th class="tr">Share Purchase</th>
-                    <th class="tr">Share Return</th>
-                    <th class="tr">Total Share</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (shareAccounts.Any())
-                {
-                    decimal prev = shareAccounts.Sum(x => x.PreviousShare);
-                    decimal purchase = shareAccounts.Sum(x => x.SharePurchase);
-                    decimal ret = shareAccounts.Sum(x => x.ShareReturn);
-                    <tr>
-                        <td>@NullDisplay(memberInfo?.Name)</td>
-                        <td class="tr">@FormatAmount(prev)</td>
-                        <td class="tr">@FormatAmount(purchase)</td>
-                        <td class="tr">@FormatAmount(ret)</td>
-                        <td class="tr">@FormatAmount(totalShare)</td>
-                    </tr>
-                    <tr class="total-row">
-                        <td colspan="4" class="tr">Total :</td>
-                        <td class="tr">@FormatAmount(totalShare)</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="5" class="no-data">No share records found</td></tr>
-                }
-            </tbody>
-        </table>
+        // label spans the first 8 columns (43 units); the four amounts fill the rest
+        table.Data(Tt("Total :", 43), Tt(FormatAmount(grandIssue), 5), Tt(FormatAmount(grandPrinPaid), 4),
+                   Tt(FormatAmount(grandIntPaid), 4), Tt(FormatAmount(grandPentPaid), 4));
+    }
+    else
+    {
+        table.Data(NoData("No loan records found"));
+    }
 
-        @* ═══════════════════════════════════════════════════════
-       SECTION 3 — ACCOUNT OPENING
-       Matches Image 2: A/C No | Deposit Type | A/C Status |
-       Interest | A/C Open Date | Opening Bal | Deposit Amt |
-       Withdraw Amt | Total Balance
-    ═══════════════════════════════════════════════════════ *@
-        <div class="section-header">Account Opening</div>
-        <table class="data-table" data-sheet-name="AccountOpening">
-            <thead>
-                <tr>
-                    <th>A/C No</th>
-                    <th>Deposit Type</th>
-                    <th>A/C Status</th>
-                    <th class="tr">Interest</th>
-                    <th>A/C Open Date</th>
-                    <th class="tr">Opening Balance</th>
-                    <th class="tr">Deposit Amount</th>
-                    <th class="tr">Withdraw Amount</th>
-                    <th class="tr">Total Balance</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (savingAccounts.Any())
-                {
-                    decimal totalOpening = 0;
-                    decimal totalDeposit = 0;
-                    decimal totalWithdraw = 0;
+    // ═══ 5. GROUP GUARANTEE DETAILS: 9 columns = 6 + 8 + 7 + 6 + 6 + 6 + 6 + 8 + 7 ═══
+    table.Spacer();
+    table.Section("Group Guarantee Details");
+    table.Header(Hd("A/C NO", 6), Hd("Loan Type", 8), Hd("Saving A/C No", 7), Hd("Saving Amount", 6, Align.Right),
+                 Hd("Share Amount", 6, Align.Right), Hd("Guarantee Date", 6), Hd("Lonee Id", 6), Hd("Lonee Name", 8),
+                 Hd("Loan Issue Amount", 7, Align.Right));
+    if (groupGuarantees.Any())
+    {
+        foreach (var g in groupGuarantees)
+        {
+            table.Data(
+                C(NullDisplay(g.AccountNo), 6),
+                C(NullDisplay(g.LoanType), 8),
+                C(NullDisplay(g.SavingAccountNo), 7),
+                R(FormatAmount(g.SavingAmount), 6),
+                R(FormatAmount(g.ShareAmount), 6),
+                C(NullDisplay(g.GuaranteeDate), 6),
+                C(NullDisplay(g.LoneyId), 6),
+                C(NullDisplay(g.LoneyName), 8),
+                R(FormatAmount(g.LoanIssueAmount), 7));
+        }
 
-                    foreach (var acc in savingAccounts)
-                    {
-                        totalOpening += acc.OpeningBalance;
-                        totalDeposit += acc.DepositAmount;
-                        totalWithdraw += acc.WithdrawAmount;
-                        <tr>
-                            <td>@NullDisplay(acc.AccountNo)</td>
-                            <td>@NullDisplay(acc.AccountType)</td>
-                            <td>@NullDisplay(acc.Status)</td>
-                            <td class="tr">@(acc.InterestRate?.ToString("F2") ?? "0.00")</td>
-                            <td>@NullDisplay(acc.OpeningDate)</td>
-                            <td class="tr">@FormatAmount(acc.OpeningBalance)</td>
-                            <td class="tr">@FormatAmount(acc.DepositAmount)</td>
-                            <td class="tr">@FormatAmount(acc.WithdrawAmount)</td>
-                            <td class="tr">@FormatAmount(acc.Balance)</td>
-                        </tr>
-                    }
-                    <tr class="total-row">
-                        <td colspan="5" class="tr">Total :</td>
-                        <td class="tr">@FormatAmount(totalOpening)</td>
-                        <td class="tr">@FormatAmount(totalDeposit)</td>
-                        <td class="tr">@FormatAmount(totalWithdraw)</td>
-                        <td class="tr">@FormatAmount(totalSavingBalance)</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="9" class="no-data">No saving accounts found</td></tr>
-                }
-            </tbody>
-        </table>
-
-        @* ═══════════════════════════════════════════════════════
-       SECTION 4 — LOAN ISSUE DETAILS
-       Matches Image 2:
-         Row 1: A/C NO | Issue Date | Maturity Date |
-                Principle Due | Interest Due | Penalty Due |
-                Total Due | "Opening Details" | 0 | 0 | 0 | 0
-         Row 2: (blank x7) | "Between Date Details" | Issue Amt | Prin Paid | Int Paid | Pent Paid
-         Row 3: (blank x7) | "Total Issue Payment"  | SUM | SUM | SUM | SUM  ← bold summary
-    ═══════════════════════════════════════════════════════ *@
-        <div class="section-header">Loan Issue Details</div>
-        <table class="data-table" data-sheet-name="LoanIssue">
-            <thead>
-                <tr>
-                    <th>A/C NO</th>
-                    <th>Issue Date</th>
-                    <th>Maturity Date</th>
-                    <th class="tr">Principle Due</th>
-                    <th class="tr">Interest Due</th>
-                    <th class="tr">Penalty Due</th>
-                    <th class="tr">Total Due Amt</th>
-                    <th>Issue/Payment Details</th>
-                    <th class="tr">Issue Amount</th>
-                    <th class="tr">Prin Paid</th>
-                    <th class="tr">Int Paid</th>
-                    <th class="tr">Pent Paid</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (loanIssues.Any())
-                {
-                    decimal grandIssue = 0;
-                    decimal grandPrinPaid = 0;
-                    decimal grandIntPaid = 0;
-                    decimal grandPentPaid = 0;
-
-                    foreach (var loan in loanIssues)
-                    {
-                        grandIssue += loan.LoanAmount;
-                        grandPrinPaid += loan.PrincipalPaid;
-                        grandIntPaid += loan.InterestPaid;
-                        grandPentPaid += loan.PenaltyPaid;
-
-                        @* ── Opening Details row ── *@
-                        <tr class="loan-opening-row">
-                            <td>@NullDisplay(loan.LoanAccountNo)</td>
-                            <td>@NullDisplay(loan.IssueDate)</td>
-                            <td>@NullDisplay(loan.MaturityDate)</td>
-                            <td class="tr">@FormatAmount(loan.PrincipleDue)</td>
-                            <td class="tr">@FormatAmount(loan.InterestDue)</td>
-                            <td class="tr">@FormatAmount(loan.PenaltyDue)</td>
-                            <td class="tr">@FormatAmount(loan.TotalDue)</td>
-                            <td><strong>Opening Details:</strong></td>
-                            <td class="tr">0.00</td>
-                            <td class="tr">0.00</td>
-                            <td class="tr">0.00</td>
-                            <td class="tr">0.00</td>
-                        </tr>
-
-                        @* ── Between Date Details row ── *@
-                        <tr class="loan-between-row">
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td><strong>Between Date Details:</strong></td>
-                            <td class="tr">@FormatAmount(loan.LoanAmount)</td>
-                            <td class="tr">@FormatAmount(loan.PrincipalPaid)</td>
-                            <td class="tr">@FormatAmount(loan.InterestPaid)</td>
-                            <td class="tr">@FormatAmount(loan.PenaltyPaid)</td>
-                        </tr>
-
-                        @* ── Total Issue Payment row (per loan) ── *@
-                        <tr class="loan-payment-row">
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td><strong>Total Issue Payment:</strong></td>
-                            <td class="tr">@FormatAmount(loan.LoanAmount)</td>
-                            <td class="tr">@FormatAmount(loan.PrincipalPaid)</td>
-                            <td class="tr">@FormatAmount(loan.InterestPaid)</td>
-                            <td class="tr">@FormatAmount(loan.PenaltyPaid)</td>
-                        </tr>
-                    }
-
-                    @* ── Grand Total row ── *@
-                    <tr class="total-row">
-                        <td colspan="8" class="tr">Total :</td>
-                        <td class="tr">@FormatAmount(grandIssue)</td>
-                        <td class="tr">@FormatAmount(grandPrinPaid)</td>
-                        <td class="tr">@FormatAmount(grandIntPaid)</td>
-                        <td class="tr">@FormatAmount(grandPentPaid)</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="12" class="no-data">No loan records found</td></tr>
-                }
-            </tbody>
-        </table>
-
-        @* ═══════════════════════════════════════════════════════
-       SECTION 5 — GROUP GUARANTEE DETAILS
-       Matches Image 2: A/C NO | Loan Type | Saving A/C No |
-       Saving Amount | Share Amount | Guarantee Date |
-       Lonee Id | Lonee Name | Loan Issue Amount
-    ═══════════════════════════════════════════════════════ *@
-        <div class="section-header">Group Guarantee Details</div>
-        <table class="data-table" data-sheet-name="GroupGuarantee">
-            <thead>
-                <tr>
-                    <th>A/C NO</th>
-                    <th>Loan Type</th>
-                    <th>Saving A/C No</th>
-                    <th class="tr">Saving Amount</th>
-                    <th class="tr">Share Amount</th>
-                    <th>Guarantee Date</th>
-                    <th>Lonee Id</th>
-                    <th>Lonee Name</th>
-                    <th class="tr">Loan Issue Amount</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (groupGuarantees.Any())
-                {
-                    foreach (var g in groupGuarantees)
-                    {
-                        <tr>
-                            <td>@NullDisplay(g.AccountNo)</td>
-                            <td>@NullDisplay(g.LoanType)</td>
-                            <td>@NullDisplay(g.SavingAccountNo)</td>
-                            <td class="tr">@FormatAmount(g.SavingAmount)</td>
-                            <td class="tr">@FormatAmount(g.ShareAmount)</td>
-                            <td>@NullDisplay(g.GuaranteeDate)</td>
-                            <td>@NullDisplay(g.LoneyId)</td>
-                            <td>@NullDisplay(g.LoneyName)</td>
-                            <td class="tr">@FormatAmount(g.LoanIssueAmount)</td>
-                        </tr>
-                    }
-                    <tr class="total-row">
-                        <td colspan="8" class="tr">Total :</td>
-                        <td class="tr">@FormatAmount(totalGuaranteeAmount)</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="9" class="no-data">No group guarantee records found</td></tr>
-                }
-            </tbody>
-        </table>
-
-    </div>
-</body>
-</html>
+        // label spans the first 8 columns (53 units); the value fills Loan Issue Amount
+        table.Data(Tt("Total :", 53), Tt(FormatAmount(totalGuaranteeAmount), 7));
+    }
+    else
+    {
+        table.Data(NoData("No group guarantee records found"));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

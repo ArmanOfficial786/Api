@@ -1,691 +1,110 @@
-﻿@* Views/Report/MemberRegistrationReport.cshtml *@
-@model Dictionary<string, object>
+﻿@using Microsoft.AspNetCore.Html
 @using NexgenCosysReport.Dtos.ReportDtos
 @using NexgenCosysReport.Dtos.RequestDtos.Member
+@using NexgenCosysReport.Services.ReportService.Table
+@model Dictionary<string, object>
 @{
     Layout = null;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+
+    // any property type prints as its text; a missing value prints blank (same as before)
+    string S(object? v) => v?.ToString() ?? "";
 
     var dataSet = (Model["MemberAllDetailDataSet"] as IEnumerable<MemberRegistrationDetail>)?.ToList()
                   ?? new List<MemberRegistrationDetail>();
 
-    var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "All";
-    var fromDate = Model.ContainsKey("FromDate") ? Model["FromDate"]?.ToString() : "";
-    var toDate = Model.ContainsKey("ToDate") ? Model["ToDate"]?.ToString() : "";
-    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
-
-    var isView = format == "VIEW";
-    var isExcel = format is "EXCEL" or "XLSX";
-
+    var branchName = Text("BranchName", "All");
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    int totalRecords = Model.ContainsKey("TotalRecords")
-                       ? Convert.ToInt32(Model["TotalRecords"])
-                       : dataSet.Count;
+    var totalRecords = Model.TryGetValue("TotalRecords", out var tr) && tr != null
+        ? Convert.ToInt32(tr)
+        : dataSet.Count;
+
+    var table = new ReportTable(Model, title: "Member Registration Report", sheetName: "MemberRegistrationReport")
+        .Column("S.N.", 2.09, Align.Center)
+        .Column("Member ID", 4.94)
+        .Column("Full Name", 6.65)
+        .Column("DOB", 4.56)
+        .Column("Sex", 2.66)
+        .Column("Caste", 3.61)
+        .Column("Religion", 3.61)
+        .Column("Email", 8.56)
+        .Column("Mobile", 5.23)
+        .Column("Phone", 4.75)
+        .Column("Nationality", 3.80)
+        .Column("Occupation", 4.56)
+        .Column("Citizenship No", 5.23)
+        .Column("Passport No", 4.28)
+        .Column("Grandfather", 5.23)
+        .Column("Father", 4.75)
+        .Column("Mother", 4.75)
+        .Column("Zone", 3.61)
+        .Column("District", 3.99)
+        .Column("VDC", 3.61)
+        .Column("Perm. Address", 5.51)
+        .Column("Reg. Date", 3.99)
+        .Style(new ReportStyle
+        {
+            ZebraStripes = false,
+            HeaderBackground = "#f2f2f2",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)   // addresses and e-mails may wrap to two lines
+        .Css(
+            "table.sheet-table tr.r-data td { font-size: 7pt; line-height: 1.3; padding: 3px 4px; border-bottom: 1px solid #e0e0e0; }" +
+            "table.sheet-table tr.r-header th { font-size: 6.8pt; padding: 4px; }" +
+            // total line
+            "table.sheet-table td.tt { font-weight: bold; background: #fff !important; border-top: 1.5px solid #000 !important; border-bottom: 1.5px solid #000 !important; }");
+
+    // ── title block ──
+    table.MetaRow(
+        Fmt.Labeled("Branch Name :", branchName),
+        Fmt.Labeled("From Date :", fromDate),
+        leftSpan: 13);
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Labeled("To Date :", toDate),
+        leftSpan: 13);
+
+    // ── rows ──
+    var sn = 0;
+    foreach (var row in dataSet)
+    {
+        sn++;
+        table.Data(
+            sn.ToString(),
+            S(row.MemberId),
+            S(row.Name),
+            S(row.DateOfBirth),
+            S(row.Sex),
+            S(row.Caste),
+            S(row.Religion),
+            S(row.EmailId),
+            S(row.MobileNo),
+            S(row.PhoneNo),
+            S(row.Nationality),
+            S(row.Occupation),
+            S(row.CitizenshipNo),
+            S(row.PassportNo),
+            S(row.GrandFatherName),
+            S(row.FatherName),
+            S(row.MotherName),
+            S(row.Zone),
+            S(row.District),
+            S(row.VDC),
+            S(row.PermanentAddress),
+            S(row.RegistrationDate));
+    }
+
+    // label spans the first 2 columns; the count spans the other 20, left-aligned (same as before)
+    if (dataSet.Count > 0)
+    {
+        table.Data(
+            new ReportCell("Total Records :", Align.Left, 2, "tt"),
+            new ReportCell(totalRecords.ToString(), Align.Left, 20, "tt"));
+    }
 }
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Member Registration Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 7pt;
-                background: @(isView ? "#d0d0d0" : "#fff");
-                @(isView ? "" : "margin-top: 25px;")
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .text-left {
-                text-align: left !important;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                table-layout: fixed;
-                font-family: Arial, sans-serif;
-                font-size: 7pt;
-            }
-
-                .data-table td,
-                .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    word-break: break-word;
-                    white-space: normal;
-                    vertical-align: middle;
-                    background: #fff;
-                    padding: 3px 4px;
-                    border: none;
-                    font-size: 7pt;
-                    line-height: 1.3;
-                }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .meta-title td {
-                text-align: center;
-                font-size: 13pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 6px 4px 4px;
-            }
-
-            .meta-row td {
-                padding: 3px 4px;
-                font-size: 7.5pt;
-            }
-
-            .meta-spacer td {
-                height: 5px;
-            }
-
-            .data-table th {
-                border-top: 1.5px solid #000;
-                border-bottom: 1px solid #000;
-                font-weight: bold;
-                background: #f2f2f2;
-                font-size: 6.8pt;
-                white-space: nowrap;
-                padding: 4px;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #e0e0e0;
-            }
-
-            .grand-total td {
-                border-top: 1.5px solid #000;
-                border-bottom: 1.5px solid #000;
-                font-weight: bold;
-                background: #fff;
-            }
-
-            /* ── column widths ───────────────────────────────────────────── */
-            col.c-sn {
-                width: 2.09%;
-            }
-
-            col.c-mid {
-                width: 4.94%;
-            }
-
-            col.c-name {
-                width: 6.65%;
-            }
-
-            col.c-dob {
-                width: 4.56%;
-            }
-
-            col.c-sex {
-                width: 2.66%;
-            }
-
-            col.c-caste {
-                width: 3.61%;
-            }
-
-            col.c-reli {
-                width: 3.61%;
-            }
-
-            col.c-email {
-                width: 8.56%;
-            }
-
-            col.c-mob {
-                width: 5.23%;
-            }
-
-            col.c-phone {
-                width: 4.75%;
-            }
-
-            col.c-nat {
-                width: 3.80%;
-            }
-
-            col.c-occ {
-                width: 4.56%;
-            }
-
-            col.c-cit {
-                width: 5.23%;
-            }
-
-            col.c-pass {
-                width: 4.28%;
-            }
-
-            col.c-gf {
-                width: 5.23%;
-            }
-
-            col.c-fa {
-                width: 4.75%;
-            }
-
-            col.c-mo {
-                width: 4.75%;
-            }
-
-            col.c-zone {
-                width: 3.61%;
-            }
-
-            col.c-dist {
-                width: 3.99%;
-            }
-
-            col.c-vdc {
-                width: 3.61%;
-            }
-
-            col.c-padd {
-                width: 5.51%;
-            }
-
-            col.c-reg {
-                width: 3.99%;
-            }
-
-            @@media print {
-                body {
-                    margin: 0;
-                    background: #fff;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-
-            /* ── VIEW chrome ─────────────────────────────────────────────── */
-            .view-outer {
-                background: #d0d0d0;
-                padding: 2px 16px 20px 16px;
-                min-height: 100vh;
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
-                cursor: grab;
-            }
-
-                .view-outer:active {
-                    cursor: grabbing;
-                }
-
-            .view-page {
-                background: #fff;
-                margin: 0 auto 24px auto;
-                box-shadow: 0 2px 8px rgba(0,0,0,.18);
-                width: 2169px;
-                overflow: hidden;
-            }
-
-            .view-page-footer {
-                background: #fff;
-                border-top: 1px solid #ccc;
-                text-align: center;
-                font-size: 9pt;
-                font-weight: bold;
-                padding: 6px 0;
-                width: 2169px;
-            }
-
-            .common-header-wrap {
-                width: 2169px;
-                overflow: hidden;
-            }
-
-            /*
-                     * #sourceWrap — in-flow, invisible.
-                     * opacity:0 keeps it hidden while still participating in layout
-                     * so getBoundingClientRect() returns real pixel heights.
-                     */
-            #sourceWrap {
-                opacity: 0;
-                pointer-events: none;
-                width: 2169px;
-            }
-
-            /*
-                     * #commonHeaderSource — visibility:hidden (NOT display:none).
-                     * display:none removes it from layout entirely; visibility:hidden
-                     * keeps it in layout so images render and innerHTML has real content.
-                     */
-            #commonHeaderSource {
-                visibility: hidden;
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 2169px;
-                pointer-events: none;
-            }
-    </style>
-</head>
-<body>
-
-    @* Common header — rendered for VIEW and PDF, skipped for Excel *@
-    @if (!isExcel)
-    {
-        <div id="commonHeaderSource">
-            @await Html.PartialAsync("_CommonHeader", Model)
-        </div>
-    }
-
-    @if (isView)
-    {
-        <div id="sourceWrap">
-            <table class="data-table" id="mainTable">
-                <colgroup>
-                    <col class="c-sn" />
-                    <col class="c-mid" />
-                    <col class="c-name" />
-                    <col class="c-dob" />
-                    <col class="c-sex" />
-                    <col class="c-caste" />
-                    <col class="c-reli" />
-                    <col class="c-email" />
-                    <col class="c-mob" />
-                    <col class="c-phone" />
-                    <col class="c-nat" />
-                    <col class="c-occ" />
-                    <col class="c-cit" />
-                    <col class="c-pass" />
-                    <col class="c-gf" />
-                    <col class="c-fa" />
-                    <col class="c-mo" />
-                    <col class="c-zone" />
-                    <col class="c-dist" />
-                    <col class="c-vdc" />
-                    <col class="c-padd" />
-                    <col class="c-reg" />
-                </colgroup>
-                <thead>
-                    <tr id="colHeaderRow">
-                        <th class="text-center">S.N.</th>
-                        <th>Member ID</th>
-                        <th>Full Name</th>
-                        <th>DOB</th>
-                        <th>Sex</th>
-                        <th>Caste</th>
-                        <th>Religion</th>
-                        <th>Email</th>
-                        <th>Mobile</th>
-                        <th>Phone</th>
-                        <th>Nationality</th>
-                        <th>Occupation</th>
-                        <th>Citizenship No</th>
-                        <th>Passport No</th>
-                        <th>Grandfather</th>
-                        <th>Father</th>
-                        <th>Mother</th>
-                        <th>Zone</th>
-                        <th>District</th>
-                        <th>VDC</th>
-                        <th>Perm. Address</th>
-                        <th>Reg. Date</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr class="meta-title" id="metaTitle">
-                        <td colspan="22">Member Registration Report</td>
-                    </tr>
-                    <tr class="meta-row" id="metaRow1">
-                        <td colspan="13"><strong>Branch Name :</strong> @branchName</td>
-                        <td colspan="9" class="text-right"><strong>From Date :</strong> @fromDate</td>
-                    </tr>
-                    <tr class="meta-row" id="metaRow2">
-                        <td colspan="13"><strong>Report Generated On :</strong> @generatedOn</td>
-                        <td colspan="9" class="text-right"><strong>To Date :</strong> @toDate</td>
-                    </tr>
-                    <tr class="meta-spacer" id="metaSpacer"><td colspan="22"></td></tr>
-
-                    @{
-                        int snV = 0;
-                    }
-                    @foreach (var row in dataSet)
-                    {
-                        snV++;
-                        <tr class="detail-row">
-                            <td class="text-center">@snV</td>
-                            <td>@row.MemberId</td>
-                            <td>@row.Name</td>
-                            <td>@row.DateOfBirth</td>
-                            <td>@row.Sex</td>
-                            <td>@row.Caste</td>
-                            <td>@row.Religion</td>
-                            <td>@row.EmailId</td>
-                            <td>@row.MobileNo</td>
-                            <td>@row.PhoneNo</td>
-                            <td>@row.Nationality</td>
-                            <td>@row.Occupation</td>
-                            <td>@row.CitizenshipNo</td>
-                            <td>@row.PassportNo</td>
-                            <td>@row.GrandFatherName</td>
-                            <td>@row.FatherName</td>
-                            <td>@row.MotherName</td>
-                            <td>@row.Zone</td>
-                            <td>@row.District</td>
-                            <td>@row.VDC</td>
-                            <td>@row.PermanentAddress</td>
-                            <td>@row.RegistrationDate</td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total" id="grandTotalRow">
-                        <td colspan="2">Total Records :</td>
-                        <td colspan="20">@totalRecords</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-
-        <div class="view-outer" id="viewOuter"></div>
-    }
-
-    @if (!isView)
-    {
-         @if (!isExcel)
-    {
-        @await Html.PartialAsync("_CommonHeader", Model)
-    }
-        <table class="data-table" id="mainTable"
-            @(isExcel ? Html.Raw("data-sheet-name=\"MemberRegistrationReport\"") : Html.Raw(""))>
-            <colgroup>
-                <col class="c-sn" />
-                <col class="c-mid" />
-                <col class="c-name" />
-                <col class="c-dob" />
-                <col class="c-sex" />
-                <col class="c-caste" />
-                <col class="c-reli" />
-                <col class="c-email" />
-                <col class="c-mob" />
-                <col class="c-phone" />
-                <col class="c-nat" />
-                <col class="c-occ" />
-                <col class="c-cit" />
-                <col class="c-pass" />
-                <col class="c-gf" />
-                <col class="c-fa" />
-                <col class="c-mo" />
-                <col class="c-zone" />
-                <col class="c-dist" />
-                <col class="c-vdc" />
-                <col class="c-padd" />
-                <col class="c-reg" />
-            </colgroup>
-            <thead>
-                <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Member ID</th>
-                    <th>Full Name</th>
-                    <th>DOB</th>
-                    <th>Sex</th>
-                    <th>Caste</th>
-                    <th>Religion</th>
-                    <th>Email</th>
-                    <th>Mobile</th>
-                    <th>Phone</th>
-                    <th>Nationality</th>
-                    <th>Occupation</th>
-                    <th>Citizenship No</th>
-                    <th>Passport No</th>
-                    <th>Grandfather</th>
-                    <th>Father</th>
-                    <th>Mother</th>
-                    <th>Zone</th>
-                    <th>District</th>
-                    <th>VDC</th>
-                    <th>Perm. Address</th>
-                    <th>Reg. Date</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr class="meta-title"><td colspan="22">Member Registration Report</td></tr>
-                <tr class="meta-row">
-                    <td colspan="13"><strong>Branch Name :</strong> @branchName</td>
-                    <td colspan="9" class="text-right"><strong>From Date :</strong> @fromDate</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="13"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="9" class="text-right"><strong>To Date :</strong> @toDate</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="22"></td></tr>
-
-                @{
-                    int snP = 0;
-                }
-                @foreach (var row in dataSet)
-                {
-                    snP++;
-                    <tr class="detail-row">
-                        <td class="text-center">@snP</td>
-                        <td>@row.MemberId</td>
-                        <td>@row.Name</td>
-                        <td>@row.DateOfBirth</td>
-                        <td>@row.Sex</td>
-                        <td>@row.Caste</td>
-                        <td>@row.Religion</td>
-                        <td>@row.EmailId</td>
-                        <td>@row.MobileNo</td>
-                        <td>@row.PhoneNo</td>
-                        <td>@row.Nationality</td>
-                        <td>@row.Occupation</td>
-                        <td>@row.CitizenshipNo</td>
-                        <td>@row.PassportNo</td>
-                        <td>@row.GrandFatherName</td>
-                        <td>@row.FatherName</td>
-                        <td>@row.MotherName</td>
-                        <td>@row.Zone</td>
-                        <td>@row.District</td>
-                        <td>@row.VDC</td>
-                        <td>@row.PermanentAddress</td>
-                        <td>@row.RegistrationDate</td>
-                    </tr>
-                }
-
-                <tr class="grand-total">
-                    <td colspan="2">Total Records :</td>
-                    <td colspan="20">@totalRecords</td>
-                </tr>
-            </tbody>
-        </table>
-    }
-
-    @if (isView)
-    {
-        <script>
-                (function () {
-                    'use strict';
-
-                    var MAX_RETRIES = 5;
-                    var RETRY_DELAY = 80;
-                    var retryCount  = 0;
-                    var PAGE_W      = 2169;
-                    var PAGE_CONT_H = 1480;
-
-                    function buildPages() {
-                        var tbl          = document.getElementById('mainTable');
-                        var colHdrRow    = document.getElementById('colHeaderRow');
-                        var metaTitle    = document.getElementById('metaTitle');
-                        var metaRow1     = document.getElementById('metaRow1');
-                        var metaRow2     = document.getElementById('metaRow2');
-                        var metaSpacer   = document.getElementById('metaSpacer');
-                        var grandTotalEl = document.getElementById('grandTotalRow');
-
-                        // Guard: DOM elements must exist
-                        if (!tbl || !colHdrRow) {
-                            if (retryCount++ < MAX_RETRIES)
-                                setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
-                            return;
-                        }
-
-                        // ── Measure fixed elements ────────────────────────────
-                        var colHdrH = colHdrRow.getBoundingClientRect().height;
-                        var metaH   = metaTitle.getBoundingClientRect().height
-                                    + metaRow1.getBoundingClientRect().height
-                                    + metaRow2.getBoundingClientRect().height
-                                    + metaSpacer.getBoundingClientRect().height;
-                        var gtH    = grandTotalEl ? grandTotalEl.getBoundingClientRect().height : 0;
-                        var gtHtml = grandTotalEl ? grandTotalEl.outerHTML : '';
-
-                        // ── Snapshot all detail rows ──────────────────────────
-                        var detailRows = tbl.querySelectorAll('tr.detail-row');
-                        var rowData    = Array.from(detailRows).map(function (r) {
-                            return { html: r.outerHTML, h: r.getBoundingClientRect().height };
-                        });
-
-                        // ── Retry if heights still zero ───────────────────────
-                        var allZero = rowData.length > 0 &&
-                                      rowData.every(function (r) { return r.h === 0; });
-                        if (allZero) {
-                            if (retryCount++ < MAX_RETRIES)
-                                setTimeout(function () { requestAnimationFrame(buildPages); }, RETRY_DELAY);
-                            return;
-                        }
-
-                        // ── Paginate ──────────────────────────────────────────
-                        var pages = [], cur = [], used = metaH + colHdrH;
-                        for (var i = 0; i < rowData.length; i++) {
-                            var rh    = rowData[i].h || 14;
-                            var extra = (i === rowData.length - 1) ? gtH : 0;
-                            if (used + rh + extra > PAGE_CONT_H && cur.length > 0) {
-                                pages.push(cur);
-                                cur  = [];
-                                used = colHdrH;
-                            }
-                            cur.push(i);
-                            used += rh;
-                        }
-                        if (cur.length > 0) pages.push(cur);
-
-                        var totalPages = pages.length || 1;
-
-                        // ── Snapshot reusable HTML ────────────────────────────
-                        var colgroupHtml  = tbl.querySelector('colgroup').outerHTML;
-                        var colHdrHtml    = colHdrRow.outerHTML;
-                        var metaHtml      = metaTitle.outerHTML
-                                          + metaRow1.outerHTML
-                                          + metaRow2.outerHTML
-                                          + metaSpacer.outerHTML;
-
-                        var commonHdrEl   = document.getElementById('commonHeaderSource');
-                        var commonHdrHtml = commonHdrEl ? commonHdrEl.innerHTML : '';
-
-                        // ── Remove source DOM (free memory) ───────────────────
-                        var sourceWrap = document.getElementById('sourceWrap');
-                        if (sourceWrap)  sourceWrap.parentNode.removeChild(sourceWrap);
-                        if (commonHdrEl) commonHdrEl.parentNode.removeChild(commonHdrEl);
-
-                        var viewOuter = document.getElementById('viewOuter');
-
-                        // ── Build page cards into a fragment (one reflow) ─────
-                        var fragment = document.createDocumentFragment();
-
-                        for (var p = 0; p < totalPages; p++) {
-                            var card = document.createElement('div');
-                            card.className = 'view-page';
-                            // data-page used by scrollToPage() for reliable targeting
-                            card.setAttribute('data-page', String(p + 1));
-
-                            var html = '';
-                            if (p === 0) {
-                                html += '<div class="common-header-wrap">' + commonHdrHtml + '</div>';
-                            }
-
-                            html += '<table class="data-table" style="width:' + PAGE_W + 'px;">'
-                                  + colgroupHtml
-                                  + '<thead>' + colHdrHtml + '</thead>'
-                                  + '<tbody>';
-
-                            if (p === 0) html += metaHtml;
-
-                            for (var r = 0; r < pages[p].length; r++) {
-                                html += rowData[pages[p][r]].html;
-                            }
-
-                            if (p === totalPages - 1) html += gtHtml;
-
-                            html += '</tbody></table>'
-                                  + '<div class="view-page-footer">Page '
-                                  + (p + 1) + ' of ' + totalPages + '</div>';
-
-                            card.innerHTML = html;
-                            fragment.appendChild(card);
-                        }
-
-                        viewOuter.appendChild(fragment);
-
-                        // ── Drag-to-scroll (horizontal, desktop) ──────────────
-                        (function (el) {
-                            var drag = false, sx = 0, ss = 0;
-                            el.addEventListener('mousedown', function (e) {
-                                if (e.button !== 0) return;
-                                drag = true; sx = e.clientX; ss = el.scrollLeft;
-                                el.style.userSelect = 'none';
-                                e.preventDefault();
-                            });
-                            document.addEventListener('mousemove', function (e) {
-                                if (drag) el.scrollLeft = ss - (e.clientX - sx);
-                            });
-                            document.addEventListener('mouseup', function () {
-                                drag = false; el.style.userSelect = '';
-                            });
-                        })(viewOuter);
-
-                        // ── scrollToPage — called by parent React window ──────
-                        // Uses window.scrollTo so the iframe's own vertical
-                        // scroll position moves, which is what the user sees
-                        // through the fixed-height iframe container.
-                        window.scrollToPage = function (pageNumber) {
-                            var target = document.querySelector(
-                                '.view-page[data-page="' + pageNumber + '"]'
-                            );
-                            if (!target) return;
-
-                            // offsetTop is relative to the nearest positioned ancestor.
-                            // Since .view-page cards are inside #viewOuter which has
-                            // no position set, offsetTop is relative to <body>.
-                            window.scrollTo({ top: target.offsetTop, behavior: 'smooth' });
-                        };
-
-                        // ── Notify parent React app of total pages ────────────
-                        if (window.parent && window.parent !== window) {
-                            window.parent.postMessage(
-                                { type: 'REPORT_PAGES_READY', totalPages: totalPages },
-                                '*'
-                            );
-                        }
-
-                    } // end buildPages
-
-                    // Two rAFs guarantee layout is resolved before measuring
-                    requestAnimationFrame(function () {
-                        requestAnimationFrame(buildPages);
-                    });
-
-                }());
-        </script>
-    }
-</body>
-</html>
+@await Html.PartialAsync("_SheetReport", table.Build())

@@ -1,160 +1,135 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.Member;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Member;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
+using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
-using System.Text.Json;
+using System.Security.Claims;
 
 namespace NexgenCosysReport.Controllers.Member
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class MemberDetailsSummaryController : ControllerBase
     {
-        private readonly IMemberDetailsSummary _memberDetailsSummary;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
+        private const string ReportName = "MemberDetailsSummary";
+
+        private readonly IMemberDetailsSummary _repository;
+        private readonly IReportHeaderProvider _headers;
         private readonly IJsReportService _jsReportService;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly CustomHeaderResponse _headerResponse;
-        private readonly IOptions<ReportSettings> _reportSettings;
+        private readonly IReportDataCache _dataCache;
         private readonly ILogger<MemberDetailsSummaryController> _logger;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        // normal: A4 landscape (60-unit grid, the loan block has 12 columns); visual: same page as every visual report
+        private static readonly PageSizeSetting NPageSetting =
+            PageSizeSetting.Custom(297, 210, PageUnit.mm, landscape: true);
+        private static readonly PageSizeSetting VPageSetting =
+            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         public MemberDetailsSummaryController(
-            IMemberDetailsSummary memberDetailsSummary,
-            ICommonHeaderRepository commonHeaderRepository,
+            IMemberDetailsSummary repository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
-            IWebHostEnvironment webHostEnvironment,
-            IOptions<ReportSettings> reportSettings,
+            IReportDataCache dataCache,
             ILogger<MemberDetailsSummaryController> logger,
-            CustomHeaderResponse headerResponse)
+            IReportFileResponse reportFileResponse)
         {
-            _memberDetailsSummary = memberDetailsSummary;
-            _commonHeaderRepository = commonHeaderRepository;
+            _repository = repository;
+            _headers = headers;
             _jsReportService = jsReportService;
-            _webHostEnvironment = webHostEnvironment;
-            _reportSettings = reportSettings;
+            _dataCache = dataCache;
             _logger = logger;
-            _headerResponse = headerResponse;
+            _reportFileResponse = reportFileResponse;
         }
 
+        // POST api/MemberDetailsSummary?format=VIEW
         [HttpPost]
-        public async Task<ActionResult> GenerateReport(          // ✅ ActionResult, no generic
+        public async Task<IActionResult> GenerateReport(
             [FromBody] MemberDetailsSummaryRequest request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
             try
             {
-                var reportName = "MemberDetailsSummary";
-                var upperFormat = format.ToUpper();
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out _))
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
 
-                // ── Validation ────────────────────────────────────────────────
                 if (request == null || !ModelState.IsValid || request.MemberRegistrationId <= 0)
                     return BadRequest(new { success = false, message = "Invalid request. MemberRegistrationId is required." });
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                var upperFormat = format.ToUpperInvariant();
+                var isVisual = request.VisualReport;
+                var page = isVisual ? VPageSetting : NPageSetting;
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+                // the DB data is cached once and shared by the normal and the visual view
+                var dataKey = ReportCacheKey.ForData(
+                    request, ReportName, userIdClaim, nameof(request.VisualReport));
+                var reportKey = $"{dataKey}_{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}";
 
-                // ── Cache hit — skip DB for non-VIEW ──────────────────────────
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: false,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
+
+                // the header is the company header (no branch)
+                var headerTask = _headers.GetAsync("", ct);
+                var dataTask = _dataCache.GetOrLoadAsync(dataKey, async () =>
                 {
-                    _logger.LogInformation("✅ NO DB CALL — serving from cache");
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, reportName,
-                        _jsReportService, _logger);
-                }
+                    var loaded = await _repository.GetMemberDetailsSummary(request);
+                    if (loaded == null || loaded.MemberInfo == null)
+                        return null;
+                    return loaded;
+                }, ct);
+                await Task.WhenAll(headerTask, dataTask);
 
-                // ── Parallel DB calls ─────────────────────────────────────────
-                var summaryTask = _memberDetailsSummary.GetMemberDetailsSummary(request);
-                var headerTask = _commonHeaderRepository.GetCommonHeaders();
-                await Task.WhenAll(summaryTask, headerTask);
-
-                var summaryData = await summaryTask;
-                var headerData = await headerTask;
-
-                // ── Member existence check ────────────────────────────────────
-                if (summaryData.MemberInfo == null)
+                var data = await dataTask;
+                if (data == null)
                     return NotFound(new { success = false, message = "Member not found" });
 
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-
-                // ── Convert company logo to Base64 ────────────────────────────
-                await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData,
-                    nameof(CommonHeader.CompanyLogo),
-                    webRoot));
-
-                // ── Report data dictionary ────────────────────────────────────
                 var reportData = new Dictionary<string, object>
                 {
-                    { "MemberDetail",    summaryData.MemberInfo         },
-                    { "ShareAccounts",   summaryData.ShareAccounts       },
-                    { "SavingAccounts",  summaryData.SavingAccounts      },
-                    { "LoanIssues",      summaryData.LoanIssues          },
-                    { "GroupGuarantees", summaryData.GroupGuarantees     },
-                    { "TotalShare",      summaryData.TotalShareRecords   },
-                    { "TotalSaving",     summaryData.TotalSavingRecords  },
-                    { "TotalLoan",       summaryData.TotalLoanRecords    },
-                    { "TotalGuarantee",  summaryData.TotalGuaranteeRecords },
-                    { "HeaderDataSet",   headerData                     },
-                    { "FromDate",        request.FromDate               },
-                    { "ToDate",          request.ToDate                 },
-                    { "Format",          upperFormat                    },
+                    { "MemberDetail", data.MemberInfo },
+                    { "ShareAccounts", data.ShareAccounts },
+                    { "SavingAccounts", data.SavingAccounts },
+                    { "LoanIssues", data.LoanIssues },
+                    { "GroupGuarantees", data.GroupGuarantees },
+                    { "TotalShare", data.TotalShareRecords },
+                    { "TotalSaving", data.TotalSavingRecords },
+                    { "TotalLoan", data.TotalLoanRecords },
+                    { "TotalGuarantee", data.TotalGuaranteeRecords },
+                    { "HeaderDataSet", await headerTask },
+                    { "FromDate", Convert.ToString(request.FromDate) ?? "" },
+                    { "ToDate", Convert.ToString(request.ToDate) ?? "" },
+                    { "Format", upperFormat },
+                    { "PageSetting", page }
                 };
 
-                // ── Razor render + cache HTML ─────────────────────────────────
-                var htmlContent = await Task.Run(() =>
-                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
-                        reportKey: reportKey,
-                        reportPath: request.VisualReport
-                            ? "Views/VisualReport/Member/VMemberDetailsSummaryReport.cshtml"
-                            : "Views/Report/Member/MemberDetailsSummaryReport.cshtml",
-                        data: reportData));
+                // NOTE: the visual view below must exist before a request with VisualReport = true is made
+                var viewPath = isVisual
+                    ? "Views/VisualReport/Member/VMemberDetailsSummaryReport.cshtml"
+                    : "Views/Report/Member/MemberDetailsSummaryReport.cshtml";
 
-                // ── VIEW — return binary PDF ──────────────────────────────────
-                if (upperFormat == "VIEW")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
-                        htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                    reportKey: reportKey, reportPath: viewPath, data: reportData, ct: ct);
 
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        totalRecord = 0,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false
-                    };
+                var totalRecords = (data.ShareAccounts?.Count ?? 0) + (data.SavingAccounts?.Count ?? 0) +
+                                   (data.LoanIssues?.Count ?? 0) + (data.GroupGuarantees?.Count ?? 0);
 
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", "inline; filename=\"MemberDetailSummary.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
-                }
-
-                // ── EXPORT — binary blob from cache ───────────────────────────
-                return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, reportName,
-                    _jsReportService, _logger);
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: false,
+                    totalRecords: totalRecords,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
             catch (Exception ex)
             {
-                _headerResponse.SetResponseHeaders(false, 500, $"Failed to generate report: {ex.Message}");
-                return StatusCode(500, new
-                {
-                    success = false,
-                    message = "An error occurred.",
-                    error = ex.Message,
-                });
+                _logger.LogError(ex, "Error generating {Report} report", ReportName);
+                return StatusCode(500, new { success = false, message = "An error occurred.", error = ex.Message });
             }
         }
     }
