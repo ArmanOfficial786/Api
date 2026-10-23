@@ -1,233 +1,103 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Remit;
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Remit
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<RemitReceiptPrintRowDto>) ?? new List<RemitReceiptPrintRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var transactionAmount = Model.ContainsKey("TransactionAmount") ? (Model["TransactionAmount"] as decimal? ?? 0) : 0;
-    var amountInWords = Model["AmountInWords"]?.ToString() ?? "";
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var isReceived = Model["IsReceived"]?.ToString() ?? "0";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Remit Receipt Print Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var fontSize = "9pt";
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-                text-align: left;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: normal;
-                line-height: 1.2;
-                vertical-align: bottom;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #ccc;
-            }
-
-            .sn-col {
-                text-align: center;
-                color: #555;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .words-row td {
-                padding: 6px;
-                font-style: italic;
-                border-top: 1px solid #000;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
         }
+        return fallback;
+    }
 
-        <table class="data-table" data-sheet-name="RemitReceiptPrint">
-            <colgroup>
-                <col style="width:4%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:14%;" />
-                <col style="width:9%;" />
-                <col style="width:14%;" />
-                <col style="width:14%;" />
-                <col style="width:9%;" />
-                <col style="width:8%;" />
-                <col style="width:6%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="10">Remit Receipt Print Report</td>
-                </tr>
+    // a missing amount prints blank (same as before); totals always print two decimals
+    string N(decimal? v) => v.HasValue ? v.Value.ToString("N2") : "";
 
-                <tr class="meta-row">
-                    <td colspan="10"><strong>Branch Name :</strong> @branchName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="10">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Till Date :</strong> @toDate
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Receipt Type :</strong> @(isReceived == "1" ? "Received" : "Payment")
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="10"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="10"></td></tr>
+    var rows = (Model["Rows"] as List<RemitReceiptPrintRowDto>) ?? new List<RemitReceiptPrintRowDto>();
 
-                <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>IME Code No</th>
-                    <th>Sender Name</th>
-                    <th>Name</th>
-                    <th>Country</th>
-                    <th>Receiver Name</th>
-                    <th>Receiver Address</th>
-                    <th>Date</th>
-                    <th class="text-right">Amount</th>
-                    <th>Entry By</th>
-                </tr>
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
+    var isReceived = Text("IsReceived", "0");
+    var amountInWords = Text("AmountInWords");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-                @if (rows.Any())
-                {
-                    var sn = 0;
-                    foreach (var row in rows)
-                    {
-                        sn++;
-                        <tr class="detail-row">
-                            <td class="sn-col">@sn</td>
-                            <td>@(row.IMECodeNo ?? "")</td>
-                            <td>@(row.SenderName ?? "")</td>
-                            <td>@(row.Name ?? "")</td>
-                            <td>@(row.Country ?? "")</td>
-                            <td>@(row.ReceiverName ?? "")</td>
-                            <td>@(row.ReceiverAddress ?? "")</td>
-                            <td>@(row.TransactionOnBs ?? "")</td>
-                            <td class="text-right">@(row.TransactionAmount?.ToString("N2") ?? "")</td>
-                            <td>@(row.EntryBy ?? "")</td>
-                        </tr>
-                    }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var transactionAmount = TotalOr("TransactionAmount", rows.Sum(r => r.TransactionAmount ?? 0m));
 
-                    <tr class="grand-total-row">
-                        <td colspan="8" class="text-right">
-                            Total Records: @totalRecords
-                        </td>
-                        <td class="text-right">@transactionAmount.ToString("N2")</td>
-                        <td></td>
-                    </tr>
+    var table = new ReportTable(Model, title: "Remit Receipt Print Report", sheetName: "RemitReceiptPrint")
+        .Column("S.N.", 4, Align.Center)
+        .Column("IME Code No", 11)
+        .Column("Sender Name", 11)
+        .Column("Name", 14)
+        .Column("Country", 9)
+        .Column("Receiver Name", 14)
+        .Column("Receiver Address", 14)
+        .Column("Date", 9)
+        .Column("Amount", 8, Align.Right)
+        .Column("Entry By", 6)
+        .Style(new ReportStyle
+        {
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 10, firstPageExtraMm: 75)   // column titles may wrap to two lines
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }" +
+            // column titles may wrap and sit at the bottom of the cell, as in the old report
+            "table.sheet-table tr.r-header th { white-space: normal; line-height: 1.2; vertical-align: bottom; }" +
+            "table.sheet-table tr.r-data td { border-bottom: 1px solid #ccc; }" +
+            // serial number in grey
+            "table.sheet-table tr.r-data td:first-child { color: #555; }" +
+            // "Amount in Words" line: italic with a rule above it
+            "table.sheet-table td.wd { font-style: italic; border-top: 1px solid #000 !important; border-bottom: 0 !important; padding-top: 5px; padding-bottom: 5px; }" +
+            "table.sheet-table td.wl { font-style: normal; font-weight: bold; }");
 
-                    <tr class="words-row">
-                        <td colspan="10">
-                            <strong>Amount in Words :</strong> @amountInWords
-                        </td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="10" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    // ── title block ──
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+    table.MetaRow(Fmt.Join(
+        Fmt.Labeled("From Date :", fromDate),
+        Fmt.Labeled("Till Date :", toDate),
+        Fmt.Labeled("Receipt Type :", isReceived == "1" ? "Received" : "Payment")));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    // ── rows ──
+    var sn = 0;
+    foreach (var row in rows)
+    {
+        sn++;
+        table.Data(
+            sn.ToString(),
+            row.IMECodeNo ?? "",
+            row.SenderName ?? "",
+            row.Name ?? "",
+            row.Country ?? "",
+            row.ReceiverName ?? "",
+            row.ReceiverAddress ?? "",
+            row.TransactionOnBs ?? "",
+            N(row.TransactionAmount),
+            row.EntryBy ?? "");
+    }
+
+    if (rows.Count > 0)
+    {
+        // label spans the first 8 columns; the amount fills column 9; Entry By stays empty
+        table.Total("Total Records: " + totalRecords, 8, transactionAmount.ToString("N2"), "");
+
+        // amount in words: bold label across 2 columns, italic value across the other 8
+        table.Data(
+            new ReportCell("Amount in Words :", Align.Left, 2, "wd wl"),
+            new ReportCell(amountInWords, Align.Left, 8, "wd"));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())
