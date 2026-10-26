@@ -1,4 +1,4 @@
-﻿@* Views/Report/Microfinance/MicrofinanceSheetReports/CenterCollectionSheetPrintReport.cshtml *@
+﻿@* 
 @using NexgenCosysReport.Dtos.RequestDtos.Microfinance.MicrofinanceSheetReports;
 @model Dictionary<string, object>
 @{
@@ -770,4 +770,134 @@
         </script>
     }
 </body>
-</html>
+</html> *@
+
+
+
+@using NexgenCosysReport.Dtos.RequestDtos.Microfinance.MicrofinanceSheetReports
+@using NexgenCosysReport.Services.ReportService.Table
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var fontSize = "6pt";
+    var metaFontSize = "8pt";
+
+    string Text(string key) => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? "" : "";
+    string N(decimal? v) => (v ?? 0m).ToString("N0");
+
+    var header = Model["Header"] as CenterCollectionSheetHeaderDto ?? new CenterCollectionSheetHeaderDto();
+    var rows = (Model["Rows"] as IEnumerable<CenterCollectionSheetRowDto>)?.ToList() ?? new List<CenterCollectionSheetRowDto>();
+
+    var tillDate = Text("TillDateAd");
+    if (tillDate == "") tillDate = Text("TillDate");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var table = new ReportTable(Model, title: "Collection Sheet Report", sheetName: "CollectionSheet")
+        .Column("S.N", 30, Align.Center)
+        .Column("MemberId", 70)
+        .Column("Member Name", 110);
+
+    for (var s = 1; s <= 4; s++)
+        table.Column($"S{s} AccountNo", 70)
+             .Column($"S{s} Bal Amt", 65, Align.Right)
+             .Column($"S{s} Dep Amt", 55, Align.Right)
+             .Column($"S{s} With Amt", 55, Align.Right);
+
+    for (var l = 1; l <= 4; l++)
+        table.Column($"L{l} AccountNo", 65)
+             .Column($"L{l} Pri Bal", 60, Align.Right)
+             .Column($"L{l} Pay Pri", 55, Align.Right)
+             .Column($"L{l} Pay Int", 55, Align.Right)
+             .Column($"L{l} Paid Pri", 50, Align.Right)
+             .Column($"L{l} Paid Int", 50, Align.Right);
+
+    table.Column("Total Receive Amount", 90, Align.Right);
+
+    table.Sizing(rowMm: 5, headerMm: 10, firstPageExtraMm: 80)
+         .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td " +
+            "{ font-size: " + fontSize + "; line-height: 1.2; padding: 1px 2px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            @"
+            table.sheet-table tr.r-header th, table.sheet-table tr.r-data td { border: 1px solid #999; }
+            table.sheet-table tr.r-data td { color: #1a3d7c; }
+            table.sheet-table tr.r-group td { border: none; }");
+
+    table.MetaRow(Fmt.Join(
+            Fmt.Labeled("Report Generated On :", generatedOn),
+            Fmt.Labeled("Till Date :", tillDate)))
+         .MetaRow(Fmt.Join(
+            Fmt.Labeled("Agent Name :", header.AgentName ?? ""),
+            Fmt.Labeled("Center Name :", header.CollectionCenterName ?? ""),
+            Fmt.Labeled("VDC :", header.VDCName ?? ""),
+            Fmt.Labeled("Address :", header.Address ?? "")))
+         .MetaRow(Fmt.Join(
+            Fmt.Labeled("Contact No :", header.ContactNo ?? ""),
+            Fmt.Labeled("Office :", header.OfficeName ?? ""),
+            Fmt.Labeled("Date :", "")));
+
+    // band over the column titles: Saving Details / Loan Details / Total
+    table.GroupBy(
+        ReportCell.Left("", 3),
+        ReportCell.Center("Saving Details", 16),
+        ReportCell.Center("Loan Details", 24),
+        ReportCell.Center("Total Receive Amount"));
+
+    var bandCells = new List<ReportCell> { ReportCell.Left("", 3) };
+    for (var s = 1; s <= 4; s++) bandCells.Add(ReportCell.Center($"Saving {s}", 4));
+    for (var l = 1; l <= 4; l++) bandCells.Add(ReportCell.Center($"Loan {l}", 6));
+    bandCells.Add(ReportCell.Left(""));
+    table.GroupBy(bandCells.ToArray());
+
+    void AddSaving(List<ReportCell> c, string? acNo, decimal? balance)
+    {
+        c.Add(ReportCell.Left(acNo ?? ""));
+        c.Add(ReportCell.Right(N(balance)));
+        c.Add(ReportCell.Right(""));
+        c.Add(ReportCell.Right(""));
+    }
+
+    void AddLoan(List<ReportCell> c, string? acNo, decimal? remaining, decimal? payablePri, decimal? payableInt)
+    {
+        c.Add(ReportCell.Left(acNo ?? ""));
+        c.Add(ReportCell.Right(N(remaining)));
+        c.Add(ReportCell.Right(N(payablePri)));
+        c.Add(ReportCell.Right(N(payableInt)));
+        c.Add(ReportCell.Right(""));
+        c.Add(ReportCell.Right(""));
+    }
+
+    foreach (var grp in rows.GroupBy(r => r.GroupName ?? "Ungrouped"))
+    {
+        table.GroupTitle("Group Name: " + grp.Key);
+
+        var sn = 0;
+        foreach (var row in grp)
+        {
+            var cells = new List<ReportCell>
+            {
+                ReportCell.Center((++sn).ToString()),
+                ReportCell.Left(row.MemberId ?? ""),
+                ReportCell.Left(row.MemberName ?? "")
+            };
+
+            AddSaving(cells, row.Saving1AcNo, row.Saving1Balance);
+            AddSaving(cells, row.Saving2AcNo, row.Saving2Balance);
+            AddSaving(cells, row.Saving3AcNo, row.Saving3Balance);
+            AddSaving(cells, row.Saving4AcNo, row.Saving4Balance);
+
+            AddLoan(cells, row.Loan1AcNo, row.Loan1RemPrinciple, row.Loan1PayablePri, row.Loan1PayableInt);
+            AddLoan(cells, row.Loan2AcNo, row.Loan2RemPrinciple, row.Loan2PayablePri, row.Loan2PayableInt);
+            AddLoan(cells, row.Loan3AcNo, row.Loan3RemPrinciple, row.Loan3PayablePri, row.Loan3PayableInt);
+            AddLoan(cells, row.Loan4AcNo, row.Loan4RemPrinciple, row.Loan4PayablePri, row.Loan4PayableInt);
+
+            cells.Add(ReportCell.Right(""));
+            table.Data(cells.ToArray());
+        }
+
+        table.SubTotal("Group Total:", 43, "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

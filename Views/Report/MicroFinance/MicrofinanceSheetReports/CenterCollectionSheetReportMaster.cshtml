@@ -1,234 +1,73 @@
-﻿@* Views/Report/Microfinance/MicrofinanceSheetReports/CenterCollectionSheetReportMaster.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Microfinance.MicrofinanceSheetReports;
+﻿@using System.Net
+@using NexgenCosysReport.Dtos.RequestDtos.Microfinance.MicrofinanceSheetReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var schemes = (Model["Schemes"] as List<CenterCollectionSheetReportMasterDto>) ?? new List<CenterCollectionSheetReportMasterDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var canView = Model["CanView"] as bool? ?? false;
-    var canModify = Model["CanModify"] as bool? ?? false;
-    var format = Model["Format"]?.ToString() ?? "VIEW";
+    var fontSize = "8pt";
+    var metaFontSize = "8.5pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    bool Flag(string key) => Model.TryGetValue(key, out var fv) && fv is bool fb && fb;
+
+    var schemes = (Model["Schemes"] as IEnumerable<CenterCollectionSheetReportMasterDto>)?.ToList()
+        ?? new List<CenterCollectionSheetReportMasterDto>();
+
+    var format = Text("Format", "VIEW");
     var isExcel = format == "EXCEL" || format == "XLSX";
+
+    // the View / Modify links only make sense on screen
+    var canView = Flag("CanView") && !isExcel;
+    var canModify = Flag("CanModify") && !isExcel;
+
+    var totalRecords = Model.TryGetValue("TotalRecords", out var tr) && tr != null && Convert.ToInt32(tr) > 0
+        ? Convert.ToInt32(tr)
+        : schemes.Count;
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Columns: SN, Saving Name, Saving Name Code, Loan Name, Loan Name Code
-    // + conditional View / Modify link columns
     var colCount = 5 + (canView ? 1 : 0) + (canModify ? 1 : 0);
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Center Collection Sheet Report Master</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+    string ActionLink(object? id, string action, string label) =>
+        $"<span class=\"action-link\" data-id=\"{WebUtility.HtmlEncode(Convert.ToString(id))}\" data-action=\"{action}\">{label}</span>";
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
+    var table = new ReportTable(Model, title: "Center Collection Sheet Report Master", sheetName: "CenterCollectionSheetReportMaster")
+        .Column("S.N.", 6, Align.Center)
+        .Column("Saving Name", 24)
+        .Column("Saving Name Code", 15)
+        .Column("Loan Name", 24)
+        .Column("Loan Name Code", 15);
+    if (canView) table.Column("View", 8, Align.Center);
+    if (canModify) table.Column("Modify", 8, Align.Center);
 
-            thead {
-                display: table-row-group;
-            }
+    table.Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 65)
+         .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td, table.sheet-table tr.r-note td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 4px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            "table.sheet-table .action-link { color: #0066cc; text-decoration: underline; cursor: pointer; }");
 
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
+    table.MetaPair("Total Schemes :", totalRecords.ToString(), "Generated :", generatedOn);
 
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .detail-row-alt td {
-                background: #f9f9f9;
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .action-link {
-                color: #0066cc;
-                text-decoration: underline;
-                cursor: pointer;
-            }
-
-            .empty-row {
-                text-align: center;
-                padding: 20px;
-                color: #666;
-                font-style: italic;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var sn = 0;
+    foreach (var row in schemes)
+    {
+        var cells = new List<ReportCell>
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ReportCell.Center((++sn).ToString()),
+            ReportCell.Left(row.SavingName ?? ""),
+            ReportCell.Left(row.SavingNameCode ?? ""),
+            ReportCell.Left(row.LoanName ?? ""),
+            ReportCell.Left(row.LoanNameCode ?? "")
+        };
+        if (canView) cells.Add(ReportCell.Raw(ActionLink(row.SycCollectionCenterScemeId, "view", "View"), Align.Center));
+        if (canModify) cells.Add(ReportCell.Raw(ActionLink(row.SycCollectionCenterScemeId, "modify", "Modify"), Align.Center));
+        table.Data(cells.ToArray());
+    }
 
-        <table class="data-table" data-sheet-name="CenterCollectionSheetReportMaster">
-            <colgroup>
-                <col style="width:6%;" />
-                <col style="width:24%;" />
-                <col style="width:15%;" />
-                <col style="width:24%;" />
-                <col style="width:15%;" />
-                @if (canView)
-                {
-                    <col style="width:8%;" />
-                }
-                @if (canModify)
-                {
-                    <col style="width:8%;" />
-                }
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="@colCount">Center Collection Sheet Report Master</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="@(colCount / 2)">
-                        <strong>Total Schemes :</strong> @totalRecords
-                    </td>
-                    <td colspan="@(colCount - colCount / 2)" class="text-right">
-                        <strong>Generated :</strong> @generatedOn
-                    </td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
-
-                <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Saving Name</th>
-                    <th>Saving Name Code</th>
-                    <th>Loan Name</th>
-                    <th>Loan Name Code</th>
-                    @if (canView)
-                    {
-                        <th class="text-center">View</th>
-                    }
-                    @if (canModify)
-                    {
-                        <th class="text-center">Modify</th>
-                    }
-                </tr>
-
-                @if (schemes.Any())
-                {
-                    var sn = 0;
-                    foreach (var row in schemes)
-                    {
-                        sn++;
-                        <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
-                            <td class="text-center">@sn</td>
-                            <td>@(row.SavingName ?? "")</td>
-                            <td>@(row.SavingNameCode ?? "")</td>
-                            <td>@(row.LoanName ?? "")</td>
-                            <td>@(row.LoanNameCode ?? "")</td>
-                            @if (canView)
-                            {
-                                <td class="text-center">
-                                    <span class="action-link" data-id="@row.SycCollectionCenterScemeId" data-action="view">View</span>
-                                </td>
-                            }
-                            @if (canModify)
-                            {
-                                <td class="text-center">
-                                    <span class="action-link" data-id="@row.SycCollectionCenterScemeId" data-action="modify">Modify</span>
-                                </td>
-                            }
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="@(colCount - 1)" class="text-right">Total Records</td>
-                        <td class="text-center">@totalRecords</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="@colCount" class="empty-row">No Record found...</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (schemes.Count > 0)
+        table.Total("Total Records", colCount - 1, totalRecords.ToString());
+    else
+        table.Note("No Record found...");
+}
+@await Html.PartialAsync("_SheetReport", table.Build())
