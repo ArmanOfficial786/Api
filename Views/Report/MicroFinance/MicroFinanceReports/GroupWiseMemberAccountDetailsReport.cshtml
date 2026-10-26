@@ -1,31 +1,42 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.MicroFinance.MicroFinanceReports
-@* Views/Report/Microfinance/MicrofinanceReport/GroupWiseMemberAccountDetailsReport.cshtml *@
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.MicroFinance.MicroFinanceReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    string Get(string key, string alt = null)
+    var fontSize = "10pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    bool Flag(string key) => Model.TryGetValue(key, out var fv) && fv is bool b && b;
+    decimal TotalOr(string key, decimal fallback)
     {
-        if (Model.TryGetValue(key, out var v) && v != null) return v.ToString();
-        if (alt != null && Model.TryGetValue(alt, out var v2) && v2 != null) return v2.ToString();
-        return "";
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
     }
 
+    // amounts always show two decimals, a missing amount prints 0.00 (same as before)
+    string N(decimal? v) => (v ?? 0m).ToString("N2");
+
     var rows = (Model["Rows"] as List<GroupWiseMemberAccountDetailsRowDto>) ?? new List<GroupWiseMemberAccountDetailsRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? rows.Count;
-    var totalBalance = Model["TotalBalance"] as decimal? ?? rows.Sum(r => r.Balance ?? 0);
-    var fromDate = Get("FromDate", "FromDateBs");
-    var toDate = Get("ToDate", "ToDateBs");
-    var groupByCollectionCenter = Model["GroupByCollectionCenter"] as bool? ?? false;
-    var groupByMemberGroup = Model["GroupByMemberGroup"] as bool? ?? false;
-    var groupByBranch = Model["GroupByBranch"] as bool? ?? false;
-    var format = Get("Format");
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-    var colCount = 8;
+
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalBalance = TotalOr("TotalBalance", rows.Sum(r => r.Balance ?? 0m));
+
+    var groupByBranch = Flag("GroupByBranch");
+    var groupByCollectionCenter = Flag("GroupByCollectionCenter");
+    var groupByMemberGroup = Flag("GroupByMemberGroup");
     var isGrouped = groupByBranch || groupByCollectionCenter || groupByMemberGroup;
 
-    // Group key (stable: keeps the SP's order inside each group)
+    // the group line shows every group level the user picked, side by side
     string KeyOf(GroupWiseMemberAccountDetailsRowDto r)
     {
         var parts = new List<string>();
@@ -35,211 +46,70 @@
         return string.Join("      ", parts);
     }
 
+    // groups keep the order of the repository rows; without grouping there is one group and no group lines
     var groups = isGrouped
         ? rows.GroupBy(KeyOf).Select(g => (Key: g.Key, Items: g.ToList())).ToList()
         : new List<(string Key, List<GroupWiseMemberAccountDetailsRowDto> Items)> { (Key: "", Items: rows) };
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Group Wise Member Account Details Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: "Times New Roman", Times, serif;
-                font-size: 10pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .meta {
-                padding: 8px 10px 6px 10px;
-            }
-
-            .meta-line {
-                margin-bottom: 8px;
-            }
-
-                .meta-line .lbl {
-                    font-weight: bold;
-                    margin-right: 6px;
-                }
-
-                .meta-line .gap {
-                    display: inline-block;
-                    width: 60px;
-                }
-
-            .meta-gen {
-                font-size: 8pt;
-                font-weight: bold;
-                margin-top: 10px;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                table-layout: fixed;
-            }
-
-                .data-table th,
-                .data-table td {
-                    padding: 6px 4px;
-                    vertical-align: middle;
-                    text-align: left;
-                    word-wrap: break-word;
-                    overflow-wrap: anywhere;
-                }
-
-                .data-table th {
-                    font-weight: bold;
-                    border-top: 1px solid #000;
-                    border-bottom: 1px solid #000;
-                    white-space: nowrap;
-                }
-
-                .data-table td {
-                    border-bottom: 1px solid #000;
-                    height: 28px;
-                }
-
-            .group-row td {
-                font-weight: bold;
-                border-bottom: 1px solid #000;
-                padding-top: 8px;
-            }
-
-            .sub-total-row td {
-                font-weight: bold;
-            }
-
-            .grand-total-row td {
-                font-weight: bold;
-                border-top: 1px solid #000;
-                border-bottom: 1px solid #000;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-header-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Group Wise Member Account Details Report", sheetName: "GroupWiseMemberAccountDetails")
+        .Column("S.N.", 4, Align.Center)
+        .Column("Collection Center Name", 17)
+        .Column("G. code", 7)
+        .Column("Group Name", 19)
+        .Column("Member Id", 10)
+        .Column("Member Name", 16)
+        .Column("Account No", 13)
+        .Column("Balance", 14, Align.Right)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            SubTotalBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 7, headerMm: 8, firstPageExtraMm: 70)   // one text line per row (the old report used 28 px rows)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-family: 'Times New Roman', Times, serif; font-size: " + fontSize + "; line-height: 1.25; padding: 1px 4px; }\n" +
+            // every data row and group line has a rule under it, as before
+            "table.sheet-table tr.r-data td { border-bottom: 1px solid #000; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 1px solid #000; }\n" +
+            "table.sheet-table tr.r-subtotal td { border-top: 0; border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-total td { border-top: 1px solid #000; border-bottom: 1px solid #000; }");
+
+    // ── title block ──
+    table.MetaRow(Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    // ── rows ──
+    var sn = 0;                                   // the serial number keeps counting across groups
+    foreach (var g in groups)
+    {
+        if (isGrouped)
+            table.GroupTitle(g.Key);
+
+        foreach (var row in g.Items)
+        {
+            sn++;
+            table.Data(
+                sn.ToString(),
+                row.CollectionCenterName ?? "",
+                row.GroupCode ?? "",
+                row.GroupName ?? "",
+                row.MemberId ?? "",
+                row.MemberName ?? "",
+                row.AccountNo ?? "",
+                N(row.Balance));
         }
 
-        <div class="meta">
-            <div class="meta-line">
-                <span class="lbl">From Date :</span> @fromDate
-                <span class="gap"></span>
-                <span class="lbl">To Date :</span> @toDate
-            </div>
-            <div class="meta-gen">Report Generated On:&nbsp; @generatedOn</div>
-        </div>
+        // label spans the first 7 columns; the value fills Balance
+        if (isGrouped)
+            table.SubTotal($"Sub Total ({g.Items.Count})", 7, N(g.Items.Sum(x => x.Balance ?? 0m)));
+    }
 
-        <table class="data-table" data-sheet-name="GroupWiseMemberAccountDetails">
-            <colgroup>
-                <col style="width:4%;" />
-                <col style="width:17%;" />
-                <col style="width:7%;" />
-                <col style="width:19%;" />
-                <col style="width:10%;" />
-                <col style="width:16%;" />
-                <col style="width:13%;" />
-                <col style="width:14%;" />
-            </colgroup>
-            <thead>
-                <tr>
-                    <th>S.N.</th>
-                    <th>Collection Center Name</th>
-                    <th>G. code</th>
-                    <th>Group Name</th>
-                    <th>Member Id</th>
-                    <th>Member Name</th>
-                    <th>Account No</th>
-                    <th class="text-right">Balance</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (rows.Any())
-                {
-                    var sn = 0;
-                    foreach (var g in groups)
-                    {
-                        if (isGrouped)
-                        {
-                            <tr class="group-row">
-                                <td colspan="@colCount">@g.Key</td>
-                            </tr>
-                        }
-
-                        foreach (var row in g.Items)
-                        {
-                            sn++;
-                            <tr>
-                                <td>@sn</td>
-                                <td>@(row.CollectionCenterName ?? "")</td>
-                                <td>@(row.GroupCode ?? "")</td>
-                                <td>@(row.GroupName ?? "")</td>
-                                <td>@(row.MemberId ?? "")</td>
-                                <td>@(row.MemberName ?? "")</td>
-                                <td>@(row.AccountNo ?? "")</td>
-                                <td class="text-right">@((row.Balance ?? 0).ToString("N2"))</td>
-                            </tr>
-                        }
-
-                        if (isGrouped)
-                        {
-                            <tr class="sub-total-row">
-                                <td colspan="7" class="text-right">Sub Total (@g.Items.Count)</td>
-                                <td class="text-right">@g.Items.Sum(x => x.Balance ?? 0).ToString("N2")</td>
-                            </tr>
-                        }
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="7" class="text-right">Grand Total (@totalRecords)</td>
-                        <td class="text-right">@totalBalance.ToString("N2")</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="@colCount" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+        table.Total($"Grand Total ({totalRecords})", 7, N(totalBalance));
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

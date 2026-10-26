@@ -1,304 +1,174 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Microfinance.MicrofinanceSheetReports
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Microfinance.MicrofinanceSheetReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "8pt";
+    const int ColumnCount = 10;   // number of .Column(...) lines below; every block below must add up to 10 columns
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    // a missing amount prints blank in the rows; totals always print two decimals
+    string N(decimal? v) => v.HasValue ? v.Value.ToString("N2") : "";
+    string N2(decimal v) => v.ToString("N2");
+
     var rows = (Model["Rows"] as List<CenterCollectionRowDto>) ?? new List<CenterCollectionRowDto>();
     var summary = (Model["Summary"] as List<CenterCollectionSummaryDto>) ?? new List<CenterCollectionSummaryDto>();
 
-    var totalDeposit = Model["TotalDeposit"] as decimal? ?? 0;
-    var totalWithdraw = Model["TotalWithdraw"] as decimal? ?? 0;
-    var totalLoanPrinciple = Model["TotalLoanPrinciple"] as decimal? ?? 0;
-    var totalLoan = Model["TotalLoan"] as decimal? ?? 0;
-
-    var tillDate = Model["TillDate"]?.ToString() ?? "";
-    var collectionCenterName = Model["CollectionCenterName"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var tillDate = Text("TillDate");
+    var collectionCenterName = Text("CollectionCenterName");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // ── Group detail rows by member, sorted for deterministic display —
-    // the SP's final SELECT has no ORDER BY, so ordering here is what
-    // guarantees a stable, alphabetical member sequence on every render.
+    // ── totals (from the controller, or summed from the rows) ──
+    var totalDeposit = TotalOr("TotalDeposit", rows.Sum(r => r.SCashReceived ?? 0));
+    var totalWithdraw = TotalOr("TotalWithdraw", rows.Sum(r => r.SCashWithdrawl ?? 0));
+    var totalLoanPrinciple = TotalOr("TotalLoanPrinciple", rows.Sum(r => r.LoanPrinciple ?? 0));
+    var totalLoan = TotalOr("TotalLoan", rows.Sum(r => r.TotalLoan ?? 0));
+
+    // detail rows grouped by member, sorted so the member order is the same on every render
+    // (the stored procedure's final select has no ORDER BY)
     var memberGroups = rows
         .GroupBy(r => new { r.MemberId, r.MemberName })
         .OrderBy(g => g.Key.MemberId, StringComparer.OrdinalIgnoreCase)
         .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Center Collection Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 8pt;
-                background: white;
-                color: #000;
-            }
+    // ── cell helpers: text, span ──
+    ReportCell T(string text, int span = 1, string? css = null) => new(text, Align.Left, span, css);
+    ReportCell R(string text, int span = 1, string? css = null) => new(text, Align.Right, span, css);
+    ReportCell C(string text, int span = 1, string? css = null) => new(text, Align.Center, span, css);
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 8pt;
-                table-layout: fixed;
-                margin-bottom: 20px;
-            }
-
-                .data-table td,
-                .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                    border: 1px solid #000;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-                border: none;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-                border: none;
-            }
-
-            .group-header th {
-                background: #fff;
-                text-align: center;
-                font-weight: bold;
-                border: 1px solid #000;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                text-align: left;
-                white-space: normal;
-            }
-
-            .subtotal-row td {
-                font-weight: bold;
-            }
-
-            .grand-total-row td {
-                font-weight: bold;
-                background: #f9f9f9;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    // one 10-column grid for the whole report: the member detail block uses all 10 columns,
+    // the summary block joins columns with spans
+    var table = new ReportTable(Model, title: "Center Collection Report", sheetName: "CenterCollection")
+        .Column("Account No.", 11)
+        .Column("Deposit Type", 11)
+        .Column("Deposit", 10, Align.Right)
+        .Column("Withdraw", 10, Align.Right)
+        .Column("Account No.", 11)
+        .Column("Loan Type", 11)
+        .Column("Principle", 10, Align.Right)
+        .Column("Interest", 9, Align.Right)
+        .Column("Penalty", 8, Align.Right)
+        .Column("Total", 9, Align.Right)
+        .NoColumnHeader()                     // every block writes its own header
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9",
+            GroupBackground = "#fff",
+            SubTotalBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)   // one text line per row
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; border: 1px solid #000; }\n" +
+            // header line of the summary block (a group row styled like a header)
+            "table.sheet-table tr.r-group td.sub-head { background: #f9f9f9; }");
+
+    // ── title block ──
+    table.MetaRow(Fmt.Labeled("Report Generated On:", generatedOn), Fmt.Labeled("Date :", tillDate));
+    table.MetaRow(HtmlString.Empty, Fmt.Labeled("Collection Center :", collectionCenterName));
+
+    // ═══ Block 1: member saving / loan detail (all 10 columns) ═══
+    table.GroupBy(C("Saving", 4), C("Loan", 6));
+    table.Header("Account No.", "Deposit Type", "Deposit", "Withdraw",
+                 "Account No.", "Loan Type", "Principle", "Interest", "Penalty", "Total");
+
+    if (memberGroups.Count > 0)
+    {
+        foreach (var group in memberGroups)
+        {
+            foreach (var row in group)
+            {
+                table.Data(
+                    row.SAccountNo ?? "",
+                    row.SAccountTypeName ?? "",
+                    N(row.SCashReceived),
+                    N(row.SCashWithdrawl),
+                    row.LAccountNo ?? "",
+                    row.LAccountTypeName ?? "",
+                    N(row.LoanPrinciple),
+                    N(row.LoanInterest),
+                    N(row.LoanPenalty),
+                    N(row.TotalLoan));
+            }
+
+            // member total: an empty label over the first 2 columns, then D / W / L / T in their own columns
+            table.SubTotal("", 2,
+                "D: " + N2(group.Sum(r => r.SCashReceived ?? 0)),
+                "W: " + N2(group.Sum(r => r.SCashWithdrawl ?? 0)),
+                "", "",
+                "L: " + N2(group.Sum(r => r.LoanPrinciple ?? 0)),
+                "", "",
+                "T: " + N2(group.Sum(r => r.TotalLoan ?? 0)));
         }
 
-        @* ==================== Title & Meta ==================== *@
-        <table class="data-table" style="margin-bottom:6px;">
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="2">Center Collection Report</td>
-                </tr>
-                <tr class="meta-row">
-                    <td><strong>Report Generated On:</strong> @generatedOn</td>
-                    <td class="text-right"><strong>Date :</strong> @tillDate</td>
-                </tr>
-                <tr class="meta-row">
-                    <td></td>
-                    <td class="text-right"><strong>Collection Center :</strong> @collectionCenterName</td>
-                </tr>
-            </tbody>
-        </table>
+        table.Total("Total :", 2,
+            "D: " + N2(totalDeposit),
+            "W: " + N2(totalWithdraw),
+            "", "",
+            "L: " + N2(totalLoanPrinciple),
+            "", "",
+            "T: " + N2(totalLoan));
+    }
+    else
+    {
+        table.Data(C("No data found", ColumnCount));
+    }
 
-        @* ==================== Table 1: Member-wise Saving/Loan Detail ==================== *@
-        <table class="data-table" data-sheet-name="CenterCollectionDetail">
-            <colgroup>
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:10%;" />
-                <col style="width:10%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:10%;" />
-                <col style="width:9%;" />
-                <col style="width:8%;" />
-                <col style="width:9%;" />
-            </colgroup>
-            <thead>
-                <tr class="group-header">
-                    <th colspan="4">Saving</th>
-                    <th colspan="6">Loan</th>
-                </tr>
-                <tr>
-                    <th>Account No.</th>
-                    <th>Deposit Type</th>
-                    <th class="text-right">Deposit</th>
-                    <th class="text-right">Withdraw</th>
-                    <th>Account No.</th>
-                    <th>Loan Type</th>
-                    <th class="text-right">Principle</th>
-                    <th class="text-right">Interest</th>
-                    <th class="text-right">Penalty</th>
-                    <th class="text-right">Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (memberGroups.Any())
-                {
-                    foreach (var group in memberGroups)
-                    {
-                        foreach (var row in group)
-                        {
-                            <tr>
-                                <td>@(row.SAccountNo ?? "")</td>
-                                <td>@(row.SAccountTypeName ?? "")</td>
-                                <td class="text-right">@(row.SCashReceived?.ToString("N2") ?? "")</td>
-                                <td class="text-right">@(row.SCashWithdrawl?.ToString("N2") ?? "")</td>
-                                <td>@(row.LAccountNo ?? "")</td>
-                                <td>@(row.LAccountTypeName ?? "")</td>
-                                <td class="text-right">@(row.LoanPrinciple?.ToString("N2") ?? "")</td>
-                                <td class="text-right">@(row.LoanInterest?.ToString("N2") ?? "")</td>
-                                <td class="text-right">@(row.LoanPenalty?.ToString("N2") ?? "")</td>
-                                <td class="text-right">@(row.TotalLoan?.ToString("N2") ?? "")</td>
-                            </tr>
-                        }
+    table.Spacer();
 
-                        var gDeposit = group.Sum(r => r.SCashReceived ?? 0);
-                        var gWithdraw = group.Sum(r => r.SCashWithdrawl ?? 0);
-                        var gPrinciple = group.Sum(r => r.LoanPrinciple ?? 0);
-                        var gTotal = group.Sum(r => r.TotalLoan ?? 0);
+    // ═══ Block 2: account type summary (SN | Account Type | Deposit | Withdraw | Account Type (2) | Principle | Interest | Penalty | TotalLoan) ═══
+    table.GroupBy(C("", 1), C("Saving", 3), C("Loan", 6));
+    table.GroupBy(
+        C("SN", 1, "sub-head"), T("Account Type", 1, "sub-head"), R("Deposit", 1, "sub-head"), R("WithDraw", 1, "sub-head"),
+        T("Account Type", 2, "sub-head"),
+        R("Principle", 1, "sub-head"), R("Interest", 1, "sub-head"), R("Penalty", 1, "sub-head"), R("TotalLoan", 1, "sub-head"));
 
-                        <tr class="subtotal-row">
-                            <td colspan="2"></td>
-                            <td class="text-right">D: @gDeposit.ToString("N2")</td>
-                            <td class="text-right">W: @gWithdraw.ToString("N2")</td>
-                            <td colspan="2"></td>
-                            <td class="text-right">L: @gPrinciple.ToString("N2")</td>
-                            <td colspan="2"></td>
-                            <td class="text-right">T: @gTotal.ToString("N2")</td>
-                        </tr>
-                    }
+    if (summary.Count > 0)
+    {
+        var sn = 0;
+        foreach (var row in summary)
+        {
+            sn++;
+            table.Data(
+                C(sn.ToString()),
+                T(row.SAccountTypeName ?? ""),
+                R(N(row.Deposit)),
+                R(N(row.WithDraw)),
+                T(row.LAccountTypeName ?? "", 2),
+                R(N(row.Principle)),
+                R(N(row.Interest)),
+                R(N(row.Penalty)),
+                R(N(row.TotalLoan)));
+        }
 
-                    <tr class="grand-total-row">
-                        <td colspan="2" class="text-right">Total :</td>
-                        <td class="text-right">D: @totalDeposit.ToString("N2")</td>
-                        <td class="text-right">W: @totalWithdraw.ToString("N2")</td>
-                        <td colspan="2"></td>
-                        <td class="text-right">L: @totalLoanPrinciple.ToString("N2")</td>
-                        <td colspan="2"></td>
-                        <td class="text-right">T: @totalLoan.ToString("N2")</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="10" class="text-center">No data found</td></tr>
-                }
-            </tbody>
-        </table>
-
-        @* ==================== Table 2: Account-Type Summary ==================== *@
-        <table class="data-table" data-sheet-name="CenterCollectionSummary">
-            <colgroup>
-                <col style="width:5%;" />
-                <col style="width:19%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:19%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:10%;" />
-            </colgroup>
-            <thead>
-                <tr class="group-header">
-                    <th></th>
-                    <th colspan="3">Saving</th>
-                    <th colspan="5">Loan</th>
-                </tr>
-                <tr>
-                    <th class="text-center">SN</th>
-                    <th>Account Type</th>
-                    <th class="text-right">Deposit</th>
-                    <th class="text-right">WithDraw</th>
-                    <th>Account Type</th>
-                    <th class="text-right">Principle</th>
-                    <th class="text-right">Interest</th>
-                    <th class="text-right">Penalty</th>
-                    <th class="text-right">TotalLoan</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (summary.Any())
-                {
-                    var sn = 0;
-                    foreach (var row in summary)
-                    {
-                        sn++;
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            <td>@(row.SAccountTypeName ?? "")</td>
-                            <td class="text-right">@(row.Deposit?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.WithDraw?.ToString("N2") ?? "")</td>
-                            <td>@(row.LAccountTypeName ?? "")</td>
-                            <td class="text-right">@(row.Principle?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.Interest?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.Penalty?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.TotalLoan?.ToString("N2") ?? "")</td>
-                        </tr>
-                    }
-                    <tr class="grand-total-row">
-                        <td colspan="2" class="text-right">Grand Total :</td>
-                        <td class="text-right">@summary.Sum(s => s.Deposit ?? 0).ToString("N2")</td>
-                        <td class="text-right">@summary.Sum(s => s.WithDraw ?? 0).ToString("N2")</td>
-                        <td></td>
-                        <td class="text-right">@summary.Sum(s => s.Principle ?? 0).ToString("N2")</td>
-                        <td class="text-right">@summary.Sum(s => s.Interest ?? 0).ToString("N2")</td>
-                        <td class="text-right">@summary.Sum(s => s.Penalty ?? 0).ToString("N2")</td>
-                        <td class="text-right">@summary.Sum(s => s.TotalLoan ?? 0).ToString("N2")</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="9" class="text-center">No data found</td></tr>
-                }
-            </tbody>
-        </table>
-
-    </div>
-</body>
-</html>
+        // label spans the first 2 columns; the 8 values fill the rest (the 2 empty ones sit under the loan account type)
+        table.Total("Grand Total :", 2,
+            N2(summary.Sum(s => s.Deposit ?? 0)),
+            N2(summary.Sum(s => s.WithDraw ?? 0)),
+            "", "",
+            N2(summary.Sum(s => s.Principle ?? 0)),
+            N2(summary.Sum(s => s.Interest ?? 0)),
+            N2(summary.Sum(s => s.Penalty ?? 0)),
+            N2(summary.Sum(s => s.TotalLoan ?? 0)));
+    }
+    else
+    {
+        table.Data(C("No data found", ColumnCount));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

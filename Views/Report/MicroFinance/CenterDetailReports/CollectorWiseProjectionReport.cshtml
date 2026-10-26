@@ -1,421 +1,235 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Microfinance.CenterDetailReports;
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Microfinance.CenterDetailReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<CollectorWiseProjectionRowDto>) ?? new List<CollectorWiseProjectionRowDto>();
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal Dec(string key) => Model.TryGetValue(key, out var dv) && dv != null ? Convert.ToDecimal(dv) : 0m;
 
-    var totalMemberProjection = Model["TotalMemberProjection"] as int? ?? 0;
-    var totalMThisMAdd = Model["TotalMThisMAdd"] as int? ?? 0;
-    var totalMUptoThisMAdd = Model["TotalMUptoThisMAdd"] as int? ?? 0;
-    var totalMUptoThisMRemove = Model["TotalMUptoThisMRemove"] as int? ?? 0;
-    var totalLoanProjection = Model["TotalLoanProjection"] as decimal? ?? 0;
-    var totalLUptoThisMAdd = Model["TotalLUptoThisMAdd"] as decimal? ?? 0;
-    var totalLUptoThisMProjected = Model["TotalLUptoThisMProjected"] as decimal? ?? 0;
-    var totalBalanceLoan = Model["TotalBalanceLoan"] as decimal? ?? 0;
-    var totalCenters = Model["TotalCenters"] as int? ?? 0;
-    var totalMembers = Model["TotalMembers"] as int? ?? 0;
-
-    var tillDateBs = Model["TillDate"]?.ToString() ?? "";
-    var tillDateAd = Model.ContainsKey("TillDateAd") ? Model["TillDateAd"]?.ToString() ?? "" : "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All Branch";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-
-    // helpers
-    Func<object?, decimal> D = o => Convert.ToDecimal(o ?? 0m);
-    Func<object?, string> N0 = o => D(o).ToString("N0");
-    Func<object?, string> N2 = o => D(o).ToString("N2");
-    Func<decimal, decimal, string> Pct = (added, projected) =>
+    // number helpers (the row values may be any numeric type)
+    decimal D(object? o) => Convert.ToDecimal(o ?? 0m);
+    string N0(object? o) => D(o).ToString("N0");
+    string N2(object? o) => D(o).ToString("N2");
+    string Pct(decimal added, decimal projected) =>
         projected == 0 ? "0" : Math.Round(added / projected * 100m, 0).ToString("N0");
 
-    // Totals not supplied by the controller are summed here
+    var rows = (Model["Rows"] as List<CollectorWiseProjectionRowDto>) ?? new List<CollectorWiseProjectionRowDto>();
+
+    var totalMemberProjection = Dec("TotalMemberProjection");
+    var totalMThisMAdd = Dec("TotalMThisMAdd");
+    var totalMUptoThisMAdd = Dec("TotalMUptoThisMAdd");
+    var totalMUptoThisMRemove = Dec("TotalMUptoThisMRemove");
+    var totalLoanProjection = Dec("TotalLoanProjection");
+    var totalLUptoThisMAdd = Dec("TotalLUptoThisMAdd");
+    var totalLUptoThisMProjected = Dec("TotalLUptoThisMProjected");
+    var totalBalanceLoan = Dec("TotalBalanceLoan");
+    var totalCenters = Dec("TotalCenters");
+    var totalMembers = Dec("TotalMembers");
+
+    // totals the controller does not supply are summed here
     var totalSavingProjection = rows.Sum(r => D(r.SavingProjection));
     var totalSaUptoThisMAdd = rows.Sum(r => D(r.SaUptoThisMAdd));
     var totalShareProjection = rows.Sum(r => D(r.ShareProjection));
     var totalShUptoThisMAdd = rows.Sum(r => D(r.ShUptoThisMAdd));
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Collector Wise Projection Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: "Times New Roman", Times, serif;
-                font-size: 6.5pt;
-                background: #fff;
-                color: #000;
-            }
+    var tillDateBs = Text("TillDate");
+    var tillDateAd = Text("TillDateAd");
+    var branchName = Text("BranchName", "All Branch");
+    var tillDateLabel = string.IsNullOrEmpty(tillDateAd) ? tillDateBs : $"{tillDateAd} ( {tillDateBs} )";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-            .report-container {
-                width: 100%;
-            }
+    // ── ONE SHARED GRID ──
+    // The two tables have different column widths (23 columns and 20 columns), but a report has one grid.
+    // Widths are in tenths of a percent (each table adds up to 1000). The shared grid has a column at every
+    // boundary of either table, and each table column then spans as many grid columns as it covers.
+    int[] w1 = new[] { 25, 125 }.Concat(Enumerable.Repeat(38, 20)).Concat(new[] { 90 }).ToArray();   // 2.5 / 12.5 / 20 x 3.8 / 9
+    int[] w2 = new[] { 25, 129 }.Concat(Enumerable.Repeat(47, 18)).ToArray();                        // 2.5 / 12.9 / 18 x 4.7
 
-            .meta {
-                width: 100%;
-                font-family: Arial, sans-serif;
-                font-size: 8pt;
-                padding: 2px 4px 4px 4px;
-            }
+    List<int> Bounds(int[] w)
+    {
+        var b = new List<int> { 0 };
+        var sum = 0;
+        foreach (var x in w) { sum += x; b.Add(sum); }
+        return b;
+    }
 
-                .meta div {
-                    padding: 1px 0;
-                }
+    var grid = Bounds(w1).Union(Bounds(w2)).OrderBy(x => x).ToList();
 
-                .meta .lbl {
-                    display: inline-block;
-                    min-width: 110px;
-                }
+    int[] SpansOf(int[] w)
+    {
+        var b = Bounds(w);
+        return Enumerable.Range(0, w.Length)
+            .Select(i => grid.Count(x => x > b[i] && x <= b[i + 1]))
+            .ToArray();
+    }
 
-            .section-title {
-                font-size: 9pt;
-                font-weight: bold;
-                text-align: center;
-                border: 1px solid #000;
-                border-bottom: none;
-                padding: 3px 0;
-            }
+    var s1 = SpansOf(w1);      // grid columns covered by each column of table 1
+    var s2 = SpansOf(w2);      // grid columns covered by each column of table 2
+    int Sp(int[] s, int from, int count) => s.Skip(from).Take(count).Sum();
 
-            .rpt {
-                width: 100%;
-                border-collapse: collapse;
-                table-layout: fixed;
-                margin-bottom: 14px;
-            }
+    // ── cell helpers ──
+    // header cell covering "count" table columns starting at "from"
+    ReportCell H(int[] s, string t, int from, int count = 1, string? css = null) => new(t, Align.Center, Sp(s, from, count), css);
 
-                .rpt th, .rpt td {
-                    border: 1px solid #000;
-                    padding: 2px 2px;
-                    font-size: 6.5pt;
-                    line-height: 1.2;
-                    vertical-align: middle;
-                    /* wrap instead of overflow / overlap */
-                    white-space: normal;
-                    overflow-wrap: anywhere;
-                    word-break: normal;
-                    overflow: hidden;
-                }
+    (string T, Align A) C(string t) => (t, Align.Center);
+    (string T, Align A) Nu(string t) => (t, Align.Right);
+    (string T, Align A) Nm(string t) => (t, Align.Left);
+    (string T, Align A) Z0 = ("0", Align.Right);
 
-                .rpt th {
-                    font-weight: bold;
-                    text-align: center;
-                    background: #fff;
-                }
+    // data cells, one per table column starting at column "from"
+    ReportCell[] Cells(int[] s, int from, string? css, params (string T, Align A)[] cols) =>
+        cols.Select((c, i) => new ReportCell(c.T, c.A, s[from + i], css)).ToArray();
 
-                .rpt td.num {
-                    text-align: right;
-                }
-
-                .rpt td.ctr {
-                    text-align: center;
-                }
-
-                .rpt td.name {
-                    text-align: left;
-                }
-
-                .rpt tr.total td {
-                    font-weight: bold;
-                }
-
-                .rpt thead {
-                    display: table-row-group;
-                }
-
-                .rpt tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-
-            @@media print {
-                .rpt thead {
-                    display: table-row-group;
-                }
-
-                .rpt tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Collector Wise Projection Report", sheetName: "CollectorWiseProjection")
+        .NoColumnHeader()                      // every table prints its own three-level header (Header(...) below)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#fff"
+        })
+        .Sizing(rowMm: 5, headerMm: 0, firstPageExtraMm: 70)   // tiny 6.5 pt text, one line per row
+        .Css(
+            "body { font-family: \"Times New Roman\", Times, serif; } " +
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td " +
+            "{ font-size: 6.5pt; line-height: 1.2; padding: 2px 2px; border: 1px solid #000; white-space: normal; overflow-wrap: anywhere; vertical-align: middle; }" +
+            "table.sheet-table tr.r-header th { font-weight: bold; text-align: center; background: #fff; height: auto; }" +
+            // merged-cell look: a hidden border joins the cells that stand for one cell spanning several header rows
+            "table.sheet-table tr.r-header th.hb { border-bottom: hidden !important; }" +
+            "table.sheet-table tr.r-header th.ht { border-top: hidden !important; }" +
+            "table.sheet-table td.b { font-weight: bold; }" +
+            // table titles: centred, boxed, open at the bottom (the header row closes the box)
+            "table.sheet-table tr.r-section td { background: #fff; text-align: center !important; font-size: 9pt; border: 1px solid #000; border-bottom: 0; padding: 3px 0; }");
 
-        <div class="meta">
-            <div><span class="lbl"><strong>Branch Name :</strong></span> @branchName</div>
-            <div><span class="lbl"><strong>Till Date :</strong></span> @(string.IsNullOrEmpty(tillDateAd) ? tillDateBs : $"{tillDateAd} ( {tillDateBs} )")</div>
-            <div><span class="lbl"><strong>Report Generated On :</strong></span> @generatedOn</div>
-        </div>
+    for (var i = 1; i < grid.Count; i++)
+        table.Column("", (grid[i] - grid[i - 1]) / 10.0);
 
-        @* ═════════════════ TABLE 1 : MEMBER / LOAN PROJECTION ═════════════════ *@
-        <div class="section-title">Member / Loan Projection</div>
-        <table class="rpt" data-sheet-name="MemberLoanProjection">
-            <colgroup>
-                <col style="width:2.5%;" />
-                <col style="width:12.5%;" />
-                @for (int i = 0; i < 20; i++)
-                {
-                    <col style="width:3.8%;" />
-                }
-                <col style="width:9%;" />
-            </colgroup>
-            <thead>
-                <tr>
-                    <th rowspan="3">SNo</th>
-                    <th rowspan="3">Staff's Name</th>
-                    <th colspan="2" rowspan="2">Annual Projection</th>
-                    <th colspan="9">Member</th>
-                    <th colspan="7">Loan('000)</th>
-                    <th colspan="2" rowspan="2">Total</th>
-                    <th>('000)</th>
-                </tr>
-                <tr>
-                    <th colspan="3">Upto Last Month</th>
-                    <th colspan="3">This Month</th>
-                    <th colspan="3">Upto This Month</th>
-                    <th colspan="2">Upto Last Month</th>
-                    <th colspan="2">This Month</th>
-                    <th colspan="3">Upto This Month</th>
-                    <th>Balance</th>
-                </tr>
-                <tr>
-                    <th>Member</th>
-                    <th>Loan</th>
-                    <th>Projected</th>
-                    <th>Added</th>
-                    <th>Removed</th>
-                    <th>Projected</th>
-                    <th>Added</th>
-                    <th>Removed</th>
-                    <th>Projected</th>
-                    <th>Added</th>
-                    <th>Removed</th>
-                    <th>Projected</th>
-                    <th>Added</th>
-                    <th>Projected</th>
-                    <th>Added</th>
-                    <th>Projected</th>
-                    <th>Added</th>
-                    <th>Progress</th>
-                    <th>Centre</th>
-                    <th>Member</th>
-                    <th>Loan</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (rows.Any())
-                {
-                    int sn1 = 0;
-                    foreach (var row in rows)
-                    {
-                        sn1++;
-                        <tr>
-                            <td class="ctr">@sn1</td>
-                            <td class="name">@(row.HurCollectorName ?? "")</td>
+    // ── title block ──
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+    table.MetaRow(Fmt.Labeled("Till Date :", tillDateLabel));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
 
-                            @* Annual projection *@
-                            <td class="num">@N0(row.MemberProjection)</td>
-                            <td class="num">@N0(row.LoanProjection)</td>
+    // ═══ TABLE 1: MEMBER / LOAN PROJECTION (23 columns) ═══
+    table.Section("Member / Loan Projection");
 
-                            @* Member – Upto Last Month  (no DTO field yet) *@
-                            <td class="num">0</td>
-                            <td class="num">0</td>
-                            <td class="num">0</td>
-                            @* Member – This Month *@
-                            <td class="num">0</td>
-                            <td class="num">@N0(row.MThisMAdd)</td>
-                            <td class="num">0</td>
-                            @* Member – Upto This Month *@
-                            <td class="num">0</td>
-                            <td class="num">@N0(row.MUptoThisMAdd)</td>
-                            <td class="num">@N0(row.MUptoThisMRemove)</td>
+    // header row 1
+    table.Header(
+        H(s1, "", 0, 1, "hb"), H(s1, "", 1, 1, "hb"), H(s1, "", 2, 2, "hb"),
+        H(s1, "Member", 4, 9), H(s1, "Loan('000)", 13, 7),
+        H(s1, "", 20, 2, "hb"), H(s1, "('000)", 22));
 
-                            @* Loan – Upto Last Month (no DTO field yet) *@
-                            <td class="num">0</td>
-                            <td class="num">0</td>
-                            @* Loan – This Month (no DTO field yet) *@
-                            <td class="num">0</td>
-                            <td class="num">0</td>
-                            @* Loan – Upto This Month *@
-                            <td class="num">@N0(row.LUptoThisMProjected)</td>
-                            <td class="num">@N0(row.LUptoThisMAdd)</td>
-                            <td class="num">@Pct(D(row.LUptoThisMAdd), D(row.LUptoThisMProjected))</td>
+    // header row 2
+    table.Header(
+        H(s1, "", 0, 1, "ht hb"), H(s1, "", 1, 1, "ht hb"), H(s1, "Annual Projection", 2, 2, "ht"),
+        H(s1, "Upto Last Month", 4, 3), H(s1, "This Month", 7, 3), H(s1, "Upto This Month", 10, 3),
+        H(s1, "Upto Last Month", 13, 2), H(s1, "This Month", 15, 2), H(s1, "Upto This Month", 17, 3),
+        H(s1, "Total", 20, 2, "ht"), H(s1, "Balance", 22));
 
-                            @* Total *@
-                            <td class="ctr">@N0(row.TotalCenter)</td>
-                            <td class="ctr">@N0(row.TotalMember)</td>
+    // header row 3 (columns 4 to 19)
+    var sub1 = new[]
+    {
+        "Projected", "Added", "Removed", "Projected", "Added", "Removed", "Projected", "Added", "Removed",
+        "Projected", "Added", "Projected", "Added", "Projected", "Added", "Progress"
+    };
+    table.Header(
+        new[] { H(s1, "SNo", 0, 1, "ht"), H(s1, "Staff's Name", 1, 1, "ht"), H(s1, "Member", 2), H(s1, "Loan", 3) }
+            .Concat(sub1.Select((t, i) => H(s1, t, 4 + i)))
+            .Concat(new[] { H(s1, "Centre", 20), H(s1, "Member", 21), H(s1, "Loan", 22) })
+            .ToArray());
 
-                            @* Balance *@
-                            <td class="num">@N2(row.BalanceLoan)</td>
-                        </tr>
-                    }
-                    <tr class="total">
-                        <td colspan="2" class="num">Total:</td>
-                        <td class="num">@N0(totalMemberProjection)</td>
-                        <td class="num">@N0(totalLoanProjection)</td>
-                        <td class="num">0</td>
-                        <td class="num">0</td>
-                        <td class="num">0</td>
-                        <td class="num">0</td>
-                        <td class="num">@N0(totalMThisMAdd)</td>
-                        <td class="num">0</td>
-                        <td class="num">0</td>
-                        <td class="num">@N0(totalMUptoThisMAdd)</td>
-                        <td class="num">@N0(totalMUptoThisMRemove)</td>
-                        <td class="num">0</td>
-                        <td class="num">0</td>
-                        <td class="num">0</td>
-                        <td class="num">0</td>
-                        <td class="num">@N0(totalLUptoThisMProjected)</td>
-                        <td class="num">@N0(totalLUptoThisMAdd)</td>
-                        <td class="num">@Pct(totalLUptoThisMAdd, totalLUptoThisMProjected)</td>
-                        <td class="ctr">@totalCenters</td>
-                        <td class="ctr">@totalMembers</td>
-                        <td class="num">@N2(totalBalanceLoan)</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="23" class="ctr">No data found for the selected criteria</td></tr>
-                }
-            </tbody>
-        </table>
+    var sn1 = 0;
+    foreach (var row in rows)
+    {
+        sn1++;
+        table.Data(Cells(s1, 0, null,
+            C(sn1.ToString()), Nm(row.HurCollectorName ?? ""),
+            // annual projection
+            Nu(N0(row.MemberProjection)), Nu(N0(row.LoanProjection)),
+            // member: upto last month (no DTO field yet), this month, upto this month
+            Z0, Z0, Z0,
+            Z0, Nu(N0(row.MThisMAdd)), Z0,
+            Z0, Nu(N0(row.MUptoThisMAdd)), Nu(N0(row.MUptoThisMRemove)),
+            // loan: upto last month and this month (no DTO field yet), upto this month
+            Z0, Z0,
+            Z0, Z0,
+            Nu(N0(row.LUptoThisMProjected)), Nu(N0(row.LUptoThisMAdd)),
+            Nu(Pct(D(row.LUptoThisMAdd), D(row.LUptoThisMProjected))),
+            // total centres / members and balance
+            C(N0(row.TotalCenter)), C(N0(row.TotalMember)),
+            Nu(N2(row.BalanceLoan))));
+    }
 
-        @* ═════════════════ TABLE 2 : SAVING / SHARE PROJECTION ═════════════════ *@
-        <div class="section-title">Saving /Share Projection</div>
-        <table class="rpt" data-sheet-name="SavingShareProjection">
-            <colgroup>
-                <col style="width:2.5%;" />
-                <col style="width:12.9%;" />
-                @for (int i = 0; i < 18; i++)
-                {
-                    <col style="width:4.7%;" />
-                }
-            </colgroup>
-            <thead>
-                <tr>
-                    <th rowspan="3">SNo</th>
-                    <th rowspan="3">Staff's Name</th>
-                    <th colspan="2" rowspan="2">Annual Projection</th>
-                    <th colspan="6">Saving('000)</th>
-                    <th colspan="6">Share('000)</th>
-                    <th colspan="2" rowspan="2">Total</th>
-                    <th colspan="2" rowspan="2">Balance('000)</th>
-                </tr>
-                <tr>
-                    <th colspan="2">Upto Last Month</th>
-                    <th colspan="2">This Month</th>
-                    <th colspan="2">Upto This Month</th>
-                    <th colspan="2">Upto Last Month</th>
-                    <th colspan="2">This Month</th>
-                    <th colspan="2">Upto This Month</th>
-                </tr>
-                <tr>
-                    <th>Saving</th>
-                    <th>Share</th>
-                    <th>Projected</th>
-                    <th>Added</th>
-                    <th>Projected</th>
-                    <th>Added</th>
-                    <th>Projected</th>
-                    <th>Added</th>
-                    <th>Projected</th>
-                    <th>Added</th>
-                    <th>Projected</th>
-                    <th>Added</th>
-                    <th>Projected</th>
-                    <th>Added</th>
-                    <th>Centre</th>
-                    <th>Member</th>
-                    <th>Saving</th>
-                    <th>Share</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (rows.Any())
-                {
-                    int sn2 = 0;
-                    foreach (var row in rows)
-                    {
-                        sn2++;
-                        <tr>
-                            <td class="ctr">@sn2</td>
-                            <td class="name">@(row.HurCollectorName ?? "")</td>
+    if (rows.Count > 0)
+    {
+        table.Data(
+            new[] { new ReportCell("Total:", Align.Right, Sp(s1, 0, 2), "b") }
+                .Concat(Cells(s1, 2, "b",
+                    Nu(N0(totalMemberProjection)), Nu(N0(totalLoanProjection)),
+                    Z0, Z0, Z0, Z0, Nu(N0(totalMThisMAdd)), Z0, Z0, Nu(N0(totalMUptoThisMAdd)), Nu(N0(totalMUptoThisMRemove)),
+                    Z0, Z0, Z0, Z0,
+                    Nu(N0(totalLUptoThisMProjected)), Nu(N0(totalLUptoThisMAdd)),
+                    Nu(Pct(totalLUptoThisMAdd, totalLUptoThisMProjected)),
+                    C(totalCenters.ToString("0")), C(totalMembers.ToString("0")),
+                    Nu(N2(totalBalanceLoan))))
+                .ToArray());
+    }
 
-                            @* Annual projection *@
-                            <td class="num">@N0(row.SavingProjection)</td>
-                            <td class="num">@N0(row.ShareProjection)</td>
+    // ═══ TABLE 2: SAVING / SHARE PROJECTION (20 columns) ═══
+    table.Spacer();
+    table.Section("Saving /Share Projection");
 
-                            @* Saving – Upto Last Month / This Month (no DTO field yet) *@
-                            <td class="num">0</td>
-                            <td class="num">0</td>
-                            <td class="num">0</td>
-                            <td class="num">0</td>
-                            @* Saving – Upto This Month *@
-                            <td class="num">0</td>
-                            <td class="num">@N0(row.SaUptoThisMAdd)</td>
+    // header row 1
+    table.Header(
+        H(s2, "", 0, 1, "hb"), H(s2, "", 1, 1, "hb"), H(s2, "", 2, 2, "hb"),
+        H(s2, "Saving('000)", 4, 6), H(s2, "Share('000)", 10, 6),
+        H(s2, "", 16, 2, "hb"), H(s2, "", 18, 2, "hb"));
 
-                            @* Share – Upto Last Month / This Month (no DTO field yet) *@
-                            <td class="num">0</td>
-                            <td class="num">0</td>
-                            <td class="num">0</td>
-                            <td class="num">0</td>
-                            @* Share – Upto This Month *@
-                            <td class="num">0</td>
-                            <td class="num">@N0(row.ShUptoThisMAdd)</td>
+    // header row 2
+    table.Header(
+        H(s2, "", 0, 1, "ht hb"), H(s2, "", 1, 1, "ht hb"), H(s2, "Annual Projection", 2, 2, "ht"),
+        H(s2, "Upto Last Month", 4, 2), H(s2, "This Month", 6, 2), H(s2, "Upto This Month", 8, 2),
+        H(s2, "Upto Last Month", 10, 2), H(s2, "This Month", 12, 2), H(s2, "Upto This Month", 14, 2),
+        H(s2, "Total", 16, 2, "ht"), H(s2, "Balance('000)", 18, 2, "ht"));
 
-                            @* Total *@
-                            <td class="ctr">@N0(row.TotalCenter)</td>
-                            <td class="ctr">@N0(row.TotalMember)</td>
+    // header row 3 (columns 4 to 15 are Projected / Added pairs)
+    table.Header(
+        new[] { H(s2, "SNo", 0, 1, "ht"), H(s2, "Staff's Name", 1, 1, "ht"), H(s2, "Saving", 2), H(s2, "Share", 3) }
+            .Concat(Enumerable.Range(0, 12).Select(i => H(s2, i % 2 == 0 ? "Projected" : "Added", 4 + i)))
+            .Concat(new[] { H(s2, "Centre", 16), H(s2, "Member", 17), H(s2, "Saving", 18), H(s2, "Share", 19) })
+            .ToArray());
 
-                            @* Balance saving / share (no DTO field yet) *@
-                            <td class="num">0.00</td>
-                            <td class="num">0.00</td>
-                        </tr>
-                    }
-                    <tr class="total">
-                        <td colspan="2" class="num">Total:</td>
-                        <td class="num">@N0(totalSavingProjection)</td>
-                        <td class="num">@N0(totalShareProjection)</td>
-                        <td class="num">0</td>
-                        <td class="num">0</td>
-                        <td class="num">0</td>
-                        <td class="num">0</td>
-                        <td class="num">0</td>
-                        <td class="num">@N0(totalSaUptoThisMAdd)</td>
-                        <td class="num">0</td>
-                        <td class="num">0</td>
-                        <td class="num">0</td>
-                        <td class="num">0</td>
-                        <td class="num">0</td>
-                        <td class="num">@N0(totalShUptoThisMAdd)</td>
-                        <td class="ctr">@totalCenters</td>
-                        <td class="ctr">@totalMembers</td>
-                        <td class="num">0.00</td>
-                        <td class="num">0.00</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="20" class="ctr">No data found for the selected criteria</td></tr>
-                }
-            </tbody>
-        </table>
+    var sn2 = 0;
+    foreach (var row in rows)
+    {
+        sn2++;
+        table.Data(Cells(s2, 0, null,
+            C(sn2.ToString()), Nm(row.HurCollectorName ?? ""),
+            // annual projection
+            Nu(N0(row.SavingProjection)), Nu(N0(row.ShareProjection)),
+            // saving: upto last month and this month (no DTO field yet), upto this month
+            Z0, Z0, Z0, Z0,
+            Z0, Nu(N0(row.SaUptoThisMAdd)),
+            // share: upto last month and this month (no DTO field yet), upto this month
+            Z0, Z0, Z0, Z0,
+            Z0, Nu(N0(row.ShUptoThisMAdd)),
+            // total centres / members
+            C(N0(row.TotalCenter)), C(N0(row.TotalMember)),
+            // balance saving / share (no DTO field yet)
+            Nu("0.00"), Nu("0.00")));
+    }
 
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Data(
+            new[] { new ReportCell("Total:", Align.Right, Sp(s2, 0, 2), "b") }
+                .Concat(Cells(s2, 2, "b",
+                    Nu(N0(totalSavingProjection)), Nu(N0(totalShareProjection)),
+                    Z0, Z0, Z0, Z0, Z0, Nu(N0(totalSaUptoThisMAdd)),
+                    Z0, Z0, Z0, Z0, Z0, Nu(N0(totalShUptoThisMAdd)),
+                    C(totalCenters.ToString("0")), C(totalMembers.ToString("0")),
+                    Nu("0.00"), Nu("0.00")))
+                .ToArray());
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())
