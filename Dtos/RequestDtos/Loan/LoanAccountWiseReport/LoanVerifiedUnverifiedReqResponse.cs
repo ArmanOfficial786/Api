@@ -5,19 +5,11 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport
     {
 
         public string? MemberRegistrationId { get; set; }
-
         public string ReportType { get; set; } = "V";
-
         public string? FromDateBs { get; set; }
         public string? ToDateBs { get; set; }
-
-
         public string? BranchIds { get; set; }
-
-
         public string OrderBy { get; set; } = "-1";
-
-
         public bool VisualReport { get; set; } = false;
     }
 
@@ -47,7 +39,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport
         public string? FromDateBs { get; set; }
         public string? ToDateBs { get; set; }
         public string? BranchName { get; set; }
-        public string? ReportType { get; set; }
+        public string? ReportType { get; set; } = "LoanVerified";
         public string? ReportTypeName { get; set; }
         public string? OrderBy { get; set; }
     }

@@ -4,27 +4,34 @@
 @{
     Layout = null;
 
-    var fontSize = "9pt";
+    // ── 1. Values from the controller ────────────────────────────────────
+    string Text(string key, string fallback = "") =>
+        Model.TryGetValue(key, out var value) && value != null ? value.ToString() ?? fallback : fallback;
 
-    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
-    string Money(decimal? value) => value.HasValue ? value.Value.ToString("N2") : "";
+    string Money(decimal? amount) => amount.HasValue ? amount.Value.ToString("N2") : "";
 
     var rows = (Model["Rows"] as List<LoanIssueDetailsRowDto>) ?? new List<LoanIssueDetailsRowDto>();
 
     var memberId = Text("MemberId");
     var memberName = Text("MemberName");
+    var branchName = Text("BranchName", "All");
     var fromDate = Text("FromDate");
     var toDate = Text("ToDate");
-    var branchName = Text("BranchName", "All");
-    var reportType = Text("ReportType", "LIR");
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var reportType = Text("ReportType", "LoanIssueReport");
 
-    var isMemberSearch = !string.IsNullOrEmpty(memberId);
-    var reportTitle = reportType.Equals("LIRR", StringComparison.OrdinalIgnoreCase)
+    var searchedByMember = memberId != "";
+
+    // "Enable Collection Center" ticked -> group the rows by center (like the webform)
+    var groupByCenter = Model.TryGetValue("EnableCollectionCenter", out var flag) && flag is true;
+
+    var title = reportType.Equals("LoanIssueReportReschedule", StringComparison.OrdinalIgnoreCase)
         ? "Loan Issue Report (Reschedule)."
         : "Loan Issue Report.";
 
-    var table = new ReportTable(Model, title: reportTitle, sheetName: "LoanIssueDetails")
+    // ── 2. Columns and look ──────────────────────────────────────────────
+    const int ColumnsBeforeAmount = 7;   // S.No ... Period: the Total label spans these
+
+    var table = new ReportTable(Model, title, sheetName: "LoanIssueDetails")
         .Column("S.No", 4, Align.Center)
         .Column("Member ID", 9)
         .Column("Name", 15)
@@ -35,19 +42,25 @@
         .Column("Issue Amount", 12, Align.Right)
         .Column("Int Rate", 8, Align.Right)
         .Column("Loan Status", 14)
-        .Style(new ReportStyle
-        {
-            ZebraStripes = false,
-            HeaderBackground = "#f9f9f9"
-        })
+        .Style(new ReportStyle { ZebraStripes = false })
         .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 65)
-        .Css(
-            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td " +
-            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
-            "table.sheet-table tr.r-data td { border-bottom: 1px solid #eee; }\n" +
-            ".sn-col { color: #555; }");
+        .Css(@"
+            table.sheet-table tr.r-header th,
+            table.sheet-table tr.r-data td,
+            table.sheet-table tr.r-group td,
+            table.sheet-table tr.r-total td   { font-size: 9pt; line-height: 1.25; padding: 1px 6px; }
 
-    if (isMemberSearch)
+            table.sheet-table tr.r-data td    { border-bottom: 1px solid #eee; }
+            .sn-col                           { color: #555; }
+
+            /* collection center heading: bold underlined name with a black line above it */
+            table.sheet-table tr.r-group td,
+            table.sheet-table tr.r-group td div.c
+                { background: none; font-weight: bold; text-decoration: underline; }
+            table.sheet-table tr.r-group td   { border-top: 1px solid #000; border-bottom: none; padding-top: 6px; }");
+
+    // ── 3. Header lines ──────────────────────────────────────────────────
+    if (searchedByMember)
     {
         table.MetaRow(Fmt.Labeled("Member :", $"{memberId} — {memberName}"));
         table.MetaRow(Fmt.Labeled("Branch :", branchName));
@@ -57,22 +70,47 @@
         table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
         table.MetaRow(Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
     }
-    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", DateTime.Now.ToString("yyyy/MM/dd")));
 
-    var sn = 0;
-    foreach (var row in rows)
+    // ── 4. Loan rows ─────────────────────────────────────────────────────
+    var serialNo = 0;   // keeps counting across groups: 1, 2, 3 ... (never restarts)
+
+    // Grouped:     one group per collection center, sorted by name.
+    //              Loans without a center form the group with an empty name, so they come first with no heading.
+    // Not grouped: a single group with an empty name, so the rows print as one plain list.
+    IEnumerable<IGrouping<string, LoanIssueDetailsRowDto>> groups = groupByCenter
+        ? rows.GroupBy(r => (r.CollectionCenterName ?? "").Trim(), StringComparer.OrdinalIgnoreCase)
+              .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+        : rows.GroupBy(_ => "");
+
+    foreach (var group in groups)
     {
-        table.Data(
-            new ReportCell((++sn).ToString(), Align.Center, 1, "sn-col"),
-            ReportCell.Left(row.MemberId ?? ""),
-            ReportCell.Left(row.FullName ?? ""),
-            ReportCell.Left(row.LoanAccountNo ?? ""),
-            ReportCell.Left(row.LoanTypeName ?? ""),
-            ReportCell.Left(row.LoanIssueDate ?? ""),
-            ReportCell.Left(row.Period ?? ""),
-            ReportCell.Right(Money(row.LoanIssueAmount)),
-            ReportCell.Right(row.InterestRate ?? ""),
-            ReportCell.Left(row.TransStatus ?? ""));
+        var centerName = group.Key;
+        if (centerName != "")
+            table.GroupTitle(centerName);
+
+        foreach (var loan in group)
+        {
+            table.Data(
+                new ReportCell((++serialNo).ToString(), Align.Center, 1, "sn-col"),
+                ReportCell.Left(loan.MemberId ?? ""),
+                ReportCell.Left(loan.FullName ?? ""),
+                ReportCell.Left(loan.LoanAccountNo ?? ""),
+                ReportCell.Left(loan.LoanTypeName ?? ""),
+                ReportCell.Left(loan.LoanIssueDate ?? ""),
+                ReportCell.Left(loan.Period ?? ""),
+                ReportCell.Right(Money(loan.LoanIssueAmount)),
+                ReportCell.Right(loan.InterestRate ?? ""),
+                ReportCell.Left(loan.TransStatus ?? ""));
+        }
+    }
+
+    // ── 5. Grand total ───────────────────────────────────────────────────
+    // The label covers the columns before Issue Amount; then the amount; then two blank cells.
+    if (rows.Count > 0)
+    {
+        var totalAmount = rows.Sum(r => r.LoanIssueAmount ?? 0m);
+        table.Total("Total :", ColumnsBeforeAmount, Fmt.Amount(totalAmount), "", "");
     }
 }
 @await Html.PartialAsync("_SheetReport", table.Build())

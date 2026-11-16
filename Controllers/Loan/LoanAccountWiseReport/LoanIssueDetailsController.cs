@@ -4,7 +4,6 @@ using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Loan.LoanAccountWiseReport;
-using NexgenCosysReport.Utils.Caching;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
 
@@ -52,7 +51,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAccountWiseReport
             {
                 var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out _))
-                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+                    return Unauthorized(new { success = false, StatusCode = 401, message = "Unauthorized" });
 
                 if (request == null || !ModelState.IsValid)
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
@@ -60,16 +59,25 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAccountWiseReport
                 var upperFormat = format.ToUpperInvariant();
                 var page = PageSetting;
 
-                var dataKey = ReportCacheKey.ForData(
-                    request, ReportName, userIdClaim, nameof(request.VisualReport));
+                // Cache key from the WHOLE request (member / dates / branches / collection centers /
+                // ReportType / EnableCollectionCenter / OrderBy ...) plus the user.
+                // Any change in the request gives a different key, so one report is never served for another.
+                var dataKey = $"{ReportUtils.GenerateReportKey(request, ReportName)}_{userIdClaim}";
                 var reportKey = $"{dataKey}_{page.CacheTag}";
 
+                // 1) key is in the cache -> served from cache, no DB
                 var cached = await ReportExportHelper.TryServeAsync(
                     reportKey, upperFormat, ReportName, pdfView: false,
                     _jsReportService, _reportFileResponse, _logger, page, ct);
                 if (cached != null) return cached;
 
-                var headerTask = _headers.GetAsync(request.BranchIds ?? "", ct);
+                // 2) key is not in the cache -> read the DB
+                var branchForHeader =
+                    !string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1" && !request.BranchIds.Contains(',')
+                        ? request.BranchIds
+                        : "";
+
+                var headerTask = _headers.GetAsync(branchForHeader, ct);
                 var dataTask = _dataCache.GetOrLoadAsync(dataKey, async () =>
                 {
                     var loaded = await _repository.GetReportDataAsync(request);
@@ -81,21 +89,22 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAccountWiseReport
 
                 var data = await dataTask;
                 if (data == null)
-                    return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
+                    return NotFound(new { success = false, StatusCode = 404, message = "No data found" });
 
                 var reportData = new Dictionary<string, object>
                 {
-                    { "Rows", data.Rows },
+                    { "Rows",         data.Rows },
                     { "TotalRecords", data.TotalRecords },
                     { "HeaderDataSet", await headerTask },
-                    { "MemberId", data.MemberId ?? "" },
-                    { "MemberName", data.MemberName ?? "" },
-                    { "FromDate", data.FromDateBs ?? "" },
-                    { "ToDate", data.ToDateBs ?? "" },
-                    { "BranchName", data.BranchName ?? "All" },
-                    { "ReportType", data.ReportType ?? "LIR" },
-                    { "Format", upperFormat },
-                    { "PageSetting", page }
+                    { "MemberId",     data.MemberId ?? "" },
+                    { "MemberName",   data.MemberName ?? "" },
+                    { "FromDate",     data.FromDateBs ?? "" },
+                    { "ToDate",       data.ToDateBs ?? "" },
+                    { "BranchName",   data.BranchName ?? "All" },
+                    { "ReportType",   data.ReportType ?? "LoanIssueReport" },
+                    { "EnableCollectionCenter", data.EnableCollectionCenter },   // true -> the view groups by collection center
+                    { "Format",       upperFormat },
+                    { "PageSetting",  page }
                 };
 
                 var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
@@ -103,12 +112,16 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAccountWiseReport
                     reportPath: "Views/Report/Loan/LoanAccountWiseReport/LoanIssueDetailsReport.cshtml",
                     data: reportData, ct: ct);
 
+                // 3) return the VIEW or the export
                 return await ReportExportHelper.CompleteAsync(
                     html, reportKey, upperFormat, ReportName, pdfView: false,
                     totalRecords: data.Rows.Count,
                     _jsReportService, _reportFileResponse, _logger, page, ct);
             }
-
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { success = false, StatusCode = 400, message = ex.Message });
+            }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error generating {Report} report", ReportName);

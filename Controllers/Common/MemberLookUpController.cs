@@ -1,4 +1,5 @@
 // Controllers/MemberLookUpController.cs
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
@@ -11,26 +12,31 @@ namespace NexgenCosysReport.Controllers.Common
     {
         private readonly IMemberLookUp _repo;
         private readonly ILogger<MemberLookUpController> _logger;
+        private readonly ITokenService _tokenService;
 
         public MemberLookUpController(
             IMemberLookUp repo,
-            ILogger<MemberLookUpController> logger)
+            ILogger<MemberLookUpController> logger,
+            ITokenService tokenService)
         {
             _repo = repo;
             _logger = logger;
+            _tokenService = tokenService;
         }
 
         /// <summary>
         /// Loads the grid — 10 records per page with optional column filters.
         /// GET /api/MemberLookUp/search?Page=1&MemberName=Ram&Gender=Male
         /// </summary>
+        [Authorize]
         [HttpGet("search")]
         public async Task<ActionResult<Pagination<MemberLookUpDtos>>> Search(
             [FromQuery] MemberLookUpRequest request)
         {
             try
             {
-                long userId = GetUserId();   // ?? replace with your actual claim/session
+                if (_tokenService.GetUserIdFromPrincipal(User) is not long userId)
+                    return Unauthorized(new { message = "User not authenticated." });
                 var result = await _repo.GetMemberListAsync(request, userId);
                 return Ok(result);
             }

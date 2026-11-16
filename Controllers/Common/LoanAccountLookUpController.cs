@@ -3,7 +3,6 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using System.Security.Claims;
 
 namespace NexgenCosysReport.Controllers.Common
 {
@@ -13,30 +12,35 @@ namespace NexgenCosysReport.Controllers.Common
     public class LoanAccountLookUpController : ControllerBase
     {
         private readonly ILoanAccountLookUp _repo;
+        private readonly ITokenService _tokenService;
         private readonly ILogger<LoanAccountLookUpController> _logger;
         private readonly IWebHostEnvironment _env;
 
         public LoanAccountLookUpController(
             ILoanAccountLookUp repo,
             ILogger<LoanAccountLookUpController> logger,
-            IWebHostEnvironment env)
+            IWebHostEnvironment env,
+            ITokenService tokenService)
         {
             _repo = repo;
             _logger = logger;
             _env = env;
+            _tokenService = tokenService;
         }
 
         /// <summary>
         /// Loads the grid, 10 records per page.
         /// GET /api/LoanAccountLookUp/search?Page=1
         /// </summary>
+        [Authorize]
         [HttpGet("search")]
         public async Task<ActionResult<Pagination<LoanAccountLookUpDtos>>> Search(
             [FromQuery] LoanAccountLookUpRequest request)
         {
             try
             {
-                long userId = GetUserId();
+                if (_tokenService.GetUserIdFromPrincipal(User) is not long userId)
+                    return Unauthorized(new { message = "User not authenticated." });
                 var result = await _repo.GetLoanAccountListAsync(request, userId);
                 return Ok(result);
             }
@@ -58,12 +62,14 @@ namespace NexgenCosysReport.Controllers.Common
         /// Called when user clicks the "Sel" button on a row.
         /// GET /api/LoanAccountLookUp/select/204
         /// </summary>
+        [Authorize]
         [HttpGet("select/{loanIssueId:long}")]
         public async Task<ActionResult<LoanAccountSelectedDto>> Select(long loanIssueId)
         {
             try
             {
-                long userId = GetUserId();
+                if (_tokenService.GetUserIdFromPrincipal(User) is not long userId)
+                    return Unauthorized(new { message = "User not authenticated." });
                 var account = await _repo.GetSelectedLoanAccountAsync(loanIssueId, userId);
 
                 if (account == null)
@@ -89,17 +95,6 @@ namespace NexgenCosysReport.Controllers.Common
         private string ErrorMessage(Exception ex) =>
             _env.IsDevelopment() ? ex.Message : "An unexpected error occurred.";
 
-        // -- Extract userId from JWT claims ------------------------------------
-        private long GetUserId()
-        {
-            var userIdClaim =
-                User.FindFirst("UserId")?.Value
-                ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
-            if (string.IsNullOrWhiteSpace(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                throw new UnauthorizedAccessException("UserId claim is missing or invalid.");
-
-            return userId;
-        }
     }
 }

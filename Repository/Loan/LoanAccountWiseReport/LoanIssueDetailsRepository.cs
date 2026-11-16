@@ -1,5 +1,4 @@
-﻿
-using Dapper;
+﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
@@ -18,22 +17,24 @@ namespace NexgenCosysReport.Repository.Loan.LoanAccountWiseReport
         private readonly ILogger<LoanIssueDetailsRepository> _logger;
 
         private const string DefaultReportType = "LIR";
+
+        // Report type -> stored procedure (same as the webform)
         private static readonly Dictionary<string, string> ProcedureMap = new(StringComparer.OrdinalIgnoreCase)
         {
-            { "LIR", "sp_7_16_LoanIssueReport" },
-            { "LIRR", "sp_7_16_RescheduleLoanIssueReport" }
+            { "LoanIssueReport",  "sp_7_16_LoanIssueReport" },
+            { "LoanIssueReportReschedule", "sp_7_16_RescheduleLoanIssueReport" }
         };
 
-
+        // "Order By" dropdown value -> SQL (identical to the webform)
         private static readonly Dictionary<string, string> OrderByMap = new(StringComparer.OrdinalIgnoreCase)
         {
-            { "MemberId", "substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId " },
-            { "FullName", "FullName" },
-            { "LoanAccountNo", "substring(LoanAccountNo, 1,(len(LoanAccountNo)-charindex('-', LoanAccountNo))-1), LoanAccountNo " },
-            { "LoanTypeName", "LoanTypeName" },
+            { "MemberId",        "substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId " },
+            { "FullName",        "FullName" },
+            { "LoanAccountNo",   "substring(LoanAccountNo, 1,(len(LoanAccountNo)-charindex('-', LoanAccountNo))-1), LoanAccountNo " },
+            { "LoanTypeName",    "LoanTypeName" },
             { "LoanIssueAmount", "LoanIssueAmount DESC" },
-            { "LoanIssueDate", "LoanIssueDate" },
-            { "InterestRate", "InterestRate DESC" }
+            { "LoanIssueDate",   "LoanIssueDate" },
+            { "InterestRate",    "InterestRate DESC" }
         };
 
         public LoanIssueDetailsRepository(
@@ -46,20 +47,17 @@ namespace NexgenCosysReport.Repository.Loan.LoanAccountWiseReport
             _logger = logger;
         }
 
-        private string ResolveProcedureName(string? reportType, out string resolvedType)
+        // blank -> LIR (webform default); anything unknown -> 400
+        private static string ResolveProcedureName(string? reportType, out string resolvedType)
         {
-            if (!string.IsNullOrWhiteSpace(reportType) && ProcedureMap.TryGetValue(reportType, out var procedureName))
-            {
-                resolvedType = reportType;
-                return procedureName;
-            }
+            resolvedType = string.IsNullOrWhiteSpace(reportType)
+                ? DefaultReportType
+                : reportType.Trim().ToUpperInvariant();
 
-            _logger.LogWarning(
-                "LoanIssueDetails: Unrecognized report type '{ReportType}' — falling back to '{Default}'.",
-                reportType, DefaultReportType);
+            if (!ProcedureMap.TryGetValue(resolvedType, out var procedureName))
+                throw new ArgumentException($"Unknown ReportType '{reportType}'. Use LIR or LIRR.");
 
-            resolvedType = DefaultReportType;
-            return ProcedureMap[DefaultReportType];
+            return procedureName;
         }
 
         private static string BuildSqlOrderBy(string? orderBy)
@@ -72,6 +70,7 @@ namespace NexgenCosysReport.Repository.Loan.LoanAccountWiseReport
                 : string.Empty;
         }
 
+        // "1, 2 ,x,3" -> "1,2,3"; empty / -1 / junk -> "-1" (= no filter)
         private static string SanitizeIdList(string? ids)
         {
             if (string.IsNullOrWhiteSpace(ids) || ids == "-1" || ids == "string")
@@ -101,69 +100,61 @@ namespace NexgenCosysReport.Repository.Loan.LoanAccountWiseReport
                 var sqlFilterExp = new StringBuilder();
                 string? memberName = null;
 
-
+                // ── Mode 1: by member id (dates are ignored, like the webform) ──
                 if (!string.IsNullOrWhiteSpace(request.MemberId))
                 {
+                    var memberId = request.MemberId.Trim();
 
-                    sqlFilterExp.Append(" And MR.MemberId = @MemberIdFilter");
+                    // The procedure builds dynamic SQL from this text, so it must be a literal,
+                    // not a parameter. Escape ' so it cannot break out of the string.
+                    sqlFilterExp.Append(" And MR.MemberId = '")
+                                .Append(memberId.Replace("'", "''"))
+                                .Append("'");
 
-                    var name = await connection.QueryFirstOrDefaultAsync<string>(
-                        @"SELECT FirstName + ' ' +
-                                 CASE WHEN MiddleName = '' THEN '' ELSE MiddleName + ' ' END +
-                                 LastName
+                    memberName = await connection.QueryFirstOrDefaultAsync<string>(
+                        @"SELECT LTRIM(RTRIM(REPLACE(
+                                 ISNULL(FirstName, '') + ' ' + ISNULL(MiddleName, '') + ' ' + ISNULL(LastName, ''),
+                                 '  ', ' ')))
                           FROM MemMemberRegistration WHERE MemberId = @MemberId",
-                        new { MemberId = request.MemberId.Trim() });
-                    memberName = name;
+                        new { MemberId = memberId });
                 }
+                // ── Mode 2: by issue date range (Nepali dates -> AD) ──
                 else if (!string.IsNullOrEmpty(request.FromDateBs) && !string.IsNullOrEmpty(request.ToDateBs))
                 {
                     var fromDateAd = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
                     var toDateAd = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
 
-                    var fromDateStr = fromDateAd.ToString("yyyy-MM-dd");
-                    var toDateStr = toDateAd.ToString("yyyy-MM-dd");
-
-
                     sqlFilterExp.Append(" And ls.LoanIssueOn between '")
-                                .Append(fromDateStr).Append("' And '")
-                                .Append(toDateStr).Append("' ");
+                                .Append(fromDateAd.ToString("yyyy-MM-dd")).Append("' And '")
+                                .Append(toDateAd.ToString("yyyy-MM-dd")).Append("' ");
                 }
                 else
                 {
                     throw new ArgumentException("Either MemberId or both FromDateBs and ToDateBs must be supplied.");
                 }
 
+                // ── Branch + collection center apply to both modes (same as the webform) ──
                 if (branchIds != "-1")
-                {
                     sqlFilterExp.Append(" And LS.UsmOfficeId in(").Append(branchIds).Append(")");
-                }
 
-                if (request.EnableCollectionCenter && collectionCenterIds != "-1")
-                {
+                // Webform filters by the selected centers whenever the list is not -1.
+                // EnableCollectionCenter only controls grouping, not filtering.
+                if (collectionCenterIds != "-1")
                     sqlFilterExp.Append(" And LS.SycCollectionCenterId in(").Append(collectionCenterIds).Append(")");
-                }
-
-                var sqlFilterExpOrderBy = BuildSqlOrderBy(request.OrderBy);
 
                 var parameters = new DynamicParameters();
                 parameters.Add("@SqlFilterExp", sqlFilterExp.ToString(), DbType.String, size: -1);
-                parameters.Add("@SqlFilterExpOrderBy", sqlFilterExpOrderBy, DbType.String, size: -1);
-
-                if (!string.IsNullOrWhiteSpace(request.MemberId))
-                {
-                    parameters.Add("@MemberIdFilter", request.MemberId.Trim());
-                }
+                parameters.Add("@SqlFilterExpOrderBy", BuildSqlOrderBy(request.OrderBy), DbType.String, size: -1);
 
                 var rows = await connection.QueryAsync<LoanIssueDetailsRowDto>(
                     procedureName,
                     parameters,
                     commandType: CommandType.StoredProcedure,
-                    commandTimeout: 120
-                );
+                    commandTimeout: 120);
 
                 var resultList = rows.AsList();
 
-                string branchName = "All";
+                var branchName = "All";
                 if (branchIds != "-1")
                 {
                     var names = await connection.QueryAsync<string>(
@@ -185,6 +176,10 @@ namespace NexgenCosysReport.Repository.Loan.LoanAccountWiseReport
                     OrderBy = request.OrderBy,
                     EnableCollectionCenter = request.EnableCollectionCenter
                 };
+            }
+            catch (ArgumentException)
+            {
+                throw; // bad input, not a server fault: the controller returns 400
             }
             catch (Exception ex)
             {
