@@ -4,17 +4,11 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
     public class LoanStatementVerificationRequestDto
     {
 
-        public long MemberRegistrationId { get; set; } = -1;
-
-
+        public string? MemberId { get; set; }
         public string? FromDateBs { get; set; }
         public string? ToDateBs { get; set; }
-
         public string? BranchIds { get; set; }
-
-
         public long CollectorId { get; set; } = -1;
-
         public string OrderBy { get; set; } = "-1";
 
 
@@ -27,6 +21,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
         public string? MemberName { get; set; }
         public string? LoanAccountNo { get; set; }
         public string? PassBookVerifiedTill { get; set; }
+        public string? PassBookVerifyTill { get; set; }
         public string? VerifiedDate { get; set; }
         public DateTime? VerifiedTime { get; set; }
         public string? VerifiedBy { get; set; }

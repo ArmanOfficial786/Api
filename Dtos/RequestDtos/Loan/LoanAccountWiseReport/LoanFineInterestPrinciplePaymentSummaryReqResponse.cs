@@ -4,29 +4,16 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
     public class LoanFineInterestPrinciplePaymentSummaryRequestDto
     {
 
-        public long MemberRegistrationId { get; set; } = 0;
-
-
+        public string? MemberId { get; set; }
         public string? FromDateBs { get; set; }
         public string? ToDateBs { get; set; }
-
         public string? BranchIds { get; set; }
-
-
+        public string ReportType { get; set; } = "Payment";
         public string? CollectionCenterId { get; set; } = "-1";
-
-
         public bool EnableCollectionCenter { get; set; } = false;
-
-
         public string? CollectorId { get; set; } = "-1";
-
-
         public string SelectAllOrOnlyCash { get; set; } = "-1";
-
-
         public string OrderBy { get; set; } = "-1";
-
         public bool VisualReport { get; set; } = false;
     }
 
@@ -61,5 +48,6 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
         public string? CollectorName { get; set; }
         public string? SelectAllOrOnlyCash { get; set; }
         public string? OrderBy { get; set; }
+        public string ReportType { get; set; } = "Payment";
     }
 }

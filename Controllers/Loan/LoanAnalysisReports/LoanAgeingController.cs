@@ -26,7 +26,7 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAnalysisReport
         private readonly IReportFileResponse _reportFileResponse;
 
         private static readonly PageSizeSetting NPageSetting =
-            PageSizeSetting.Custom(220, 297, PageUnit.mm, landscape: false);
+            PageSizeSetting.Custom(350, 297, PageUnit.mm, landscape: false);
         private static readonly PageSizeSetting VPageSetting =
             PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 

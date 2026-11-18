@@ -5,19 +5,10 @@
     Layout = null;
 
     var fontSize = "9pt";
-    const int ColumnCount = 8;
 
     string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
-    decimal TotalOr(string key, decimal fallback)
-    {
-        if (Model.TryGetValue(key, out var tv) && tv != null)
-        {
-            var dv = Convert.ToDecimal(tv);
-            if (dv != 0) return dv;
-        }
-        return fallback;
-    }
     string N(decimal? value) => (value ?? 0m).ToString("N2");
+    decimal RowTotal(LoanFineInterestPrinciplePaymentSummaryRowDto r) => (r.Fine ?? 0) + (r.Interest ?? 0) + (r.Principal ?? 0);
 
     var rows = (Model["Rows"] as List<LoanFineInterestPrinciplePaymentSummaryRowDto>) ?? new List<LoanFineInterestPrinciplePaymentSummaryRowDto>();
 
@@ -25,28 +16,45 @@
     var toDate = Text("ToDate");
     var branchName = Text("BranchName", "All");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-
     var hasDateRange = !string.IsNullOrEmpty(fromDate) && !string.IsNullOrEmpty(toDate);
 
-    var loanTypeGroups = rows
-        .GroupBy(r => r.LoanTypeName ?? "")
+    // Payment = one row per transaction (has Date). Summary SP returns no date, so that column is hidden.
+    var isSummary = string.Equals(Text("ReportType", "Payment"), "Summary", StringComparison.OrdinalIgnoreCase);
+    var showDate = !isSummary;
+    var columnCount = showDate ? 9 : 8;
+
+    // Webform "Enable Collection Center": outer group = collection center, inner group = loan type
+    var enableCenter = Model.TryGetValue("EnableCollectionCenter", out var ecValue) && ecValue is bool ecFlag && ecFlag;
+
+    string[] Amounts(decimal f, decimal i, decimal p) =>
+        showDate
+            ? new[] { N(f), N(i), N(p), N(f + i + p), "" }
+            : new[] { N(f), N(i), N(p), N(f + i + p) };
+
+    var centerGroups = rows
+        .GroupBy(r => enableCenter ? (r.CollectionCenterName ?? "") : "")
         .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
         .ToList();
 
-    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
-    var totalFine = TotalOr("TotalFine", rows.Sum(r => r.Fine ?? 0));
-    var totalInterest = TotalOr("TotalInterest", rows.Sum(r => r.Interest ?? 0));
-    var totalPrincipal = TotalOr("TotalPrincipal", rows.Sum(r => r.Principal ?? 0));
+    var totalRecords = rows.Count;
+    var totalFine = rows.Sum(r => r.Fine ?? 0);
+    var totalInterest = rows.Sum(r => r.Interest ?? 0);
+    var totalPrincipal = rows.Sum(r => r.Principal ?? 0);
 
-    var table = new ReportTable(Model, title: "Loan Fine Interest Principle Payment Report", sheetName: "LoanFineInterestPrinciplePaymentSummary")
-        .Column("S.No", 6)
-        .Column("Member Id", 14)
-        .Column("Name", 19)
-        .Column("Account No", 14)
-        .Column("Fine Amt", 11, Align.Right)
-        .Column("Interest Amt", 12, Align.Right)
-        .Column("Principal Amt", 12, Align.Right)
-        .Column("Date", 12)
+    var table = new ReportTable(Model, title: "Loan Fine Interest Principle Payment Report", sheetName: "LoanFineInterestPrinciplePayment")
+        .Column("S.No", showDate ? 5 : 6)
+        .Column("Member Id", showDate ? 12 : 13)
+        .Column("Name", showDate ? 18 : 20)
+        .Column("Account No", showDate ? 13 : 15)
+        .Column("Fine Amt", showDate ? 9 : 11, Align.Right)
+        .Column("Interest Amt", showDate ? 10 : 12, Align.Right)
+        .Column("Principal Amt", showDate ? 10 : 12, Align.Right)
+        .Column("Total Amt", showDate ? 10 : 11, Align.Right);
+
+    if (showDate)
+        table = table.Column("Date", 13);
+
+    table = table
         .Style(new ReportStyle
         {
             ZebraStripes = false,
@@ -64,44 +72,78 @@
             "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; padding-top: 6px; padding-bottom: 3px; }\n" +
             "table.sheet-table tr.r-data td { border-bottom: 0; }\n" +
             "table.sheet-table tr.r-subtotal td { border-top: 1px solid #000; border-bottom: 2px solid #000; padding-top: 5px; padding-bottom: 5px; }\n" +
-            ".loan-type-label { font-weight: bold; text-decoration: underline; }");
+            ".loan-type-label { font-weight: bold; text-decoration: underline; }\n" +
+            ".center-label { font-weight: bold; }");
 
     table.MetaRow(Fmt.Labeled("Branch Name:", branchName));
     if (hasDateRange)
         table.MetaRow(Fmt.Join(Fmt.Labeled("From Date:", fromDate), Fmt.Labeled("Till Date:", toDate)));
     table.MetaRow(Fmt.Labeled("Report Generated On:", generatedOn));
 
-    foreach (var group in loanTypeGroups)
+    foreach (var centerGroup in centerGroups)
     {
-        table.GroupBy(new ReportCell(group.Key, Align.Left, ColumnCount, "loan-type-label"));
-
-        var sn = 0;
-        decimal groupFine = 0, groupInterest = 0, groupPrincipal = 0;
-
-        foreach (var row in group)
+        if (enableCenter)
         {
-            groupFine += row.Fine ?? 0;
-            groupInterest += row.Interest ?? 0;
-            groupPrincipal += row.Principal ?? 0;
-
-            table.Data(
-                (++sn).ToString(),
-                row.MemberId ?? "",
-                row.FullName ?? "",
-                row.LoanAccountNo ?? "",
-                N(row.Fine),
-                N(row.Interest),
-                N(row.Principal),
-                row.DateOnBs ?? "");
+            var centerText = string.IsNullOrWhiteSpace(centerGroup.Key) ? "-" : centerGroup.Key;
+            table.GroupBy(new ReportCell("Collection Center: " + centerText, Align.Left, columnCount, "center-label"));
         }
 
-        table.SubTotal("Total:", 4, N(groupFine), N(groupInterest), N(groupPrincipal), "");
+        decimal centerFine = 0, centerInterest = 0, centerPrincipal = 0;
+
+        var loanTypeGroups = centerGroup
+            .GroupBy(r => r.LoanTypeName ?? "")
+            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        foreach (var group in loanTypeGroups)
+        {
+            table.GroupBy(new ReportCell(group.Key, Align.Left, columnCount, "loan-type-label"));
+
+            var sn = 0;
+            decimal groupFine = 0, groupInterest = 0, groupPrincipal = 0;
+
+            foreach (var row in group)
+            {
+                var fine = row.Fine ?? 0;
+                var interest = row.Interest ?? 0;
+                var principal = row.Principal ?? 0;
+
+                groupFine += fine;
+                groupInterest += interest;
+                groupPrincipal += principal;
+
+                var cells = new List<string>
+                {
+                    (++sn).ToString(),
+                    row.MemberId ?? "",
+                    row.FullName ?? "",
+                    row.LoanAccountNo ?? "",
+                    N(fine),
+                    N(interest),
+                    N(principal),
+                    N(RowTotal(row))
+                };
+                if (showDate)
+                    cells.Add(row.DateOnBs ?? "");
+
+                table.Data(cells.ToArray());
+            }
+
+            table.SubTotal("Total:", 4, Amounts(groupFine, groupInterest, groupPrincipal));
+
+            centerFine += groupFine;
+            centerInterest += groupInterest;
+            centerPrincipal += groupPrincipal;
+        }
+
+        if (enableCenter)
+            table.SubTotal("Center Total:", 4, Amounts(centerFine, centerInterest, centerPrincipal));
     }
 
     if (rows.Count > 0)
     {
-        table.Total("Grand Total", 4, N(totalFine), N(totalInterest), N(totalPrincipal), "");
-        table.Total("Total Records", ColumnCount - 1, totalRecords.ToString());
+        table.Total("Grand Total", 4, Amounts(totalFine, totalInterest, totalPrincipal));
+        table.Total("Total Records", columnCount - 1, totalRecords.ToString());
     }
 }
 @await Html.PartialAsync("_SheetReport", table.Build())

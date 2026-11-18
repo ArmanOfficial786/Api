@@ -1,5 +1,4 @@
-﻿// Repository/Loan/LoanAnalysisReport/LoanTypeWiseRepository.cs
-using Dapper;
+﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
@@ -13,6 +12,10 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
 {
     public class LoanTypeWiseRepository : ILoanTypeWiseRepository
     {
+        private const string BranchColumn = "OfficeName";
+        private const string CollectionCenterColumn = "CollectionCenterName";
+        private const string MemberGroupColumn = "GroupName";
+
         private readonly AppDbContext _context;
         private readonly IDateConverterService _dateConverter;
         private readonly ILogger<LoanTypeWiseRepository> _logger;
@@ -27,41 +30,66 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
             _logger = logger;
         }
 
-        private static string SanitizeBranchIds(string? branchIds)
+        private static string SanitizeIdList(string? ids)
         {
-            if (string.IsNullOrWhiteSpace(branchIds) || branchIds == "-1" || branchIds == "string")
+            if (string.IsNullOrWhiteSpace(ids) || ids == "-1" || ids == "string")
                 return "-1";
 
-            var validIds = branchIds
+            var validIds = ids
                 .Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(id => long.TryParse(id, out _));
+                .Where(id => long.TryParse(id, out _))
+                .Select(id => long.Parse(id).ToString());
 
             var joined = string.Join(",", validIds);
             return string.IsNullOrEmpty(joined) ? "-1" : joined;
         }
 
-        private static string BuildSqlOrderBy(string? orderBy)
+        private static long? ParseSingleId(string? id)
         {
-            if (string.IsNullOrEmpty(orderBy) || orderBy == "-1")
-                return string.Empty;
+            if (string.IsNullOrWhiteSpace(id) || id == "-1" || id == "string")
+                return null;
 
-            return orderBy.Trim() switch
-            {
-                "LoanType" => " order by LoanTypeName",
-                "DisburseAmount" => " order by DisburseAmount",
-                _ => string.Empty
-            };
+            return long.TryParse(id.Trim(), out var value) && value != -1 ? value : null;
         }
 
-        // FIX: "-1" and "All" (case-insensitive) are both treated as "no filter"
-        // sentinels here — previously only "-1" was recognized, so a request
-        // sending LoanGuarantee: "All" (as the reported request did) was
-        // filtered as And LS.LoanGuarantee = 'All', which matches no rows and
-        // silently zeroed out the entire result set.
-        private static bool IsGuaranteeFilterActive(string? loanGuarantee) =>
-            !string.IsNullOrEmpty(loanGuarantee) &&
-            loanGuarantee != "-1" &&
-            !loanGuarantee.Equals("All", StringComparison.OrdinalIgnoreCase);
+        private static string? NormalizeGuarantee(string? loanGuarantee)
+        {
+            if (string.IsNullOrWhiteSpace(loanGuarantee))
+                return null;
+
+            var value = loanGuarantee.Trim();
+
+            if (value.Equals("Group Guarantee", StringComparison.OrdinalIgnoreCase))
+                return "Group Guarantee";
+
+            if (value.Equals("Collateral", StringComparison.OrdinalIgnoreCase))
+                return "Collateral";
+
+            return null;
+        }
+
+        private static string BuildSqlOrderBy(LoanTypeWiseRequestDto request)
+        {
+            var parts = new List<string>();
+
+            if (request.GroupByBranch)
+                parts.Add(BranchColumn);
+
+            if (request.EnableCollectionCenter)
+                parts.Add(CollectionCenterColumn);
+
+            if (request.GroupByMemberGroup)
+                parts.Add(MemberGroupColumn);
+
+            var orderBy = request.OrderBy?.Trim();
+
+            if (orderBy == "LoanType")
+                parts.Add("LoanTypeName");
+            else if (orderBy == "DisburseAmount")
+                parts.Add("DisburseAmount");
+
+            return parts.Count == 0 ? string.Empty : " order by " + string.Join(", ", parts);
+        }
 
         public async Task<LoanTypeWiseData> GetReportDataAsync(LoanTypeWiseRequestDto request)
         {
@@ -73,7 +101,17 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                     throw new ArgumentException("From Date and To Date are required.");
                 }
 
-                var branchIds = SanitizeBranchIds(request.BranchIds);
+                if (string.IsNullOrWhiteSpace(request.BranchIds))
+                {
+                    throw new ArgumentException("Please select Branch Name");
+                }
+
+                var branchIds = SanitizeIdList(request.BranchIds);
+                var collectionCenterIds = SanitizeIdList(request.CollectionCenterId);
+                var loanTypeId = ParseSingleId(request.LoanTypeId);
+                var memberGroupId = ParseSingleId(request.MemberGroupId);
+                var collectorId = ParseSingleId(request.CollectorId);
+                var guarantee = NormalizeGuarantee(request.LoanGuarantee);
 
                 var connectionString = _context.Database.GetConnectionString();
                 using var connection = new SqlConnection(connectionString);
@@ -87,9 +125,9 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
 
                 var sqlFilterExp = new StringBuilder();
 
-                if (!string.IsNullOrEmpty(request.LoanTypeId) && request.LoanTypeId != "-1")
+                if (loanTypeId.HasValue)
                 {
-                    sqlFilterExp.Append(" And Ltm.LmtLoanTypeMasterId = ").Append(request.LoanTypeId);
+                    sqlFilterExp.Append(" And Ltm.LmtLoanTypeMasterId = ").Append(loanTypeId.Value);
                 }
 
                 if (branchIds != "-1")
@@ -97,46 +135,44 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                     sqlFilterExp.Append(" And LS.UsmOfficeId in(").Append(branchIds).Append(")");
                 }
 
-                if (!string.IsNullOrEmpty(request.MemberGroupId) && request.MemberGroupId != "-1")
+                if (memberGroupId.HasValue)
                 {
-                    sqlFilterExp.Append(" AND MR.SycMemberGroupId = ").Append(request.MemberGroupId);
+                    sqlFilterExp.Append(" AND MR.SycMemberGroupId = ").Append(memberGroupId.Value);
                 }
 
-                if (!string.IsNullOrEmpty(request.CollectorId) && request.CollectorId != "-1")
+                if (collectorId.HasValue)
                 {
-                    sqlFilterExp.Append(" And LS.HurCollectorId = ").Append(request.CollectorId);
+                    sqlFilterExp.Append(" And LS.HurCollectorId = ").Append(collectorId.Value);
                 }
 
-                if (!string.IsNullOrEmpty(request.CollectionCenterId) && request.CollectionCenterId != "-1")
+                if (collectionCenterIds != "-1")
                 {
-                    sqlFilterExp.Append(" And LS.SycCollectionCenterId in(").Append(request.CollectionCenterId).Append(")");
+                    sqlFilterExp.Append(" And LS.SycCollectionCenterId in(").Append(collectionCenterIds).Append(")");
                 }
 
-                if (IsGuaranteeFilterActive(request.LoanGuarantee))
+                if (guarantee != null)
                 {
-                    sqlFilterExp.Append(" And LS.LoanGuarantee = '").Append(request.LoanGuarantee).Append("'");
+                    sqlFilterExp.Append(" And LS.LoanGuarantee = '").Append(guarantee).Append("'");
                 }
 
-                if (request.ShareType != -1)
+                if (request.ShareType > 0)
                 {
-                    sqlFilterExp.Append(" And shm.ShmShareTypeId = ").Append(request.ShareType);
+                    sqlFilterExp.Append(" And exists (select 1 from ShmShareAllotment shm")
+                                .Append(" where shm.MemMemberRegistrationId = Mr.MemMemberRegistrationId")
+                                .Append(" and shm.IsActive = 1")
+                                .Append(" and shm.ShmShareTypeId = ").Append(request.ShareType)
+                                .Append(")");
                 }
 
                 var sqlLoanIssueDate = new StringBuilder();
-                if (!string.IsNullOrEmpty(fromDateStr) && !string.IsNullOrEmpty(toDateStr))
-                {
-                    sqlLoanIssueDate.Append(" And LL.LoanIssueOn >= '").Append(fromDateStr)
-                                    .Append("' and LL.LoanIssueOn <= '").Append(toDateStr).Append("'");
-                }
+                sqlLoanIssueDate.Append(" And LL.LoanIssueOn >= '").Append(fromDateStr)
+                                .Append("' and LL.LoanIssueOn <= '").Append(toDateStr).Append("'");
 
                 var transactionDate = new StringBuilder();
-                if (!string.IsNullOrEmpty(fromDateStr) && !string.IsNullOrEmpty(toDateStr))
-                {
-                    transactionDate.Append(" And T.TransactionOn >= '").Append(fromDateStr)
-                                   .Append("' and T.TransactionOn <= '").Append(toDateStr).Append("'");
-                }
+                transactionDate.Append(" And T.TransactionOn >= '").Append(fromDateStr)
+                               .Append("' and T.TransactionOn <= '").Append(toDateStr).Append("'");
 
-                var sqlOrderExp = BuildSqlOrderBy(request.OrderBy);
+                var sqlOrderExp = BuildSqlOrderBy(request);
 
                 var parameters = new DynamicParameters();
                 parameters.Add("@SqlFilterExp", sqlFilterExp.ToString(), DbType.String, size: -1);
@@ -158,43 +194,51 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                 )).AsList();
 
                 string branchName = "All";
+                long companyBranchId = -1;
+
                 if (branchIds != "-1")
                 {
                     var names = await connection.QueryAsync<string>(
                         $"SELECT OfficeName FROM UsmOffice WHERE UsmOfficeId IN ({branchIds})");
                     var nameList = names.Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
                     branchName = nameList.Count > 0 ? string.Join(", ", nameList) : "All";
+
+                    var idParts = branchIds.Split(',');
+                    if (!request.SameCompanyName && idParts.Length == 1)
+                    {
+                        companyBranchId = long.Parse(idParts[0]);
+                    }
                 }
 
                 string? loanTypeName = null;
-                if (!string.IsNullOrEmpty(request.LoanTypeId) && request.LoanTypeId != "-1")
+                if (loanTypeId.HasValue)
                 {
                     loanTypeName = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT LoanTypeName FROM LmtLoanTypeMaster WHERE LmtLoanTypeMasterId = @Id",
-                        new { Id = request.LoanTypeId });
+                        new { Id = loanTypeId.Value });
                 }
 
                 string? memberGroupName = null;
-                if (!string.IsNullOrEmpty(request.MemberGroupId) && request.MemberGroupId != "-1")
+                if (memberGroupId.HasValue)
                 {
                     memberGroupName = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT Name FROM SycMemberGroup WHERE SycMemberGroupId = @Id",
-                        new { Id = request.MemberGroupId });
+                        new { Id = memberGroupId.Value });
                 }
 
                 string? collectionCenterName = null;
-                if (!string.IsNullOrEmpty(request.CollectionCenterId) && request.CollectionCenterId != "-1")
+                if (collectionCenterIds != "-1")
                 {
                     collectionCenterName = await connection.QueryFirstOrDefaultAsync<string>(
-                        $"SELECT STRING_AGG(CollectionCenterName, ', ') FROM SycCollectionCenter WHERE SycCollectionCenterId IN ({request.CollectionCenterId})");
+                        $"SELECT STRING_AGG(CollectionCenterName, ', ') FROM SycCollectionCenter WHERE SycCollectionCenterId IN ({collectionCenterIds})");
                 }
 
                 string? collectorName = null;
-                if (!string.IsNullOrEmpty(request.CollectorId) && request.CollectorId != "-1")
+                if (collectorId.HasValue)
                 {
                     collectorName = await connection.QueryFirstOrDefaultAsync<string>(
                         "SELECT CollectorFullName FROM HurCollector WHERE HurCollectorId = @Id",
-                        new { Id = request.CollectorId });
+                        new { Id = collectorId.Value });
                 }
 
                 return new LoanTypeWiseData
@@ -216,7 +260,13 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                     LoanGuarantee = request.LoanGuarantee,
                     OrderBy = request.OrderBy,
                     ShowOpeningBalance = request.ShowOpeningBalance,
-                    ShowDetail = request.ShowDetail
+                    ShowDetail = request.ShowDetail,
+                    EnableCollectionCenter = request.EnableCollectionCenter,
+                    GroupByBranch = request.GroupByBranch,
+                    GroupByMemberGroup = request.GroupByMemberGroup,
+                    ViewCollector = request.ViewCollector,
+                    SameCompanyName = request.SameCompanyName,
+                    CompanyBranchId = companyBranchId
                 };
             }
             catch (Exception ex)

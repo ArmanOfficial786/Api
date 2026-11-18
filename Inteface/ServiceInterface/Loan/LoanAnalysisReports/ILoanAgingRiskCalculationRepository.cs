@@ -5,6 +5,6 @@ namespace NexgenCosysReport.Inteface.ServiceInterface.Loan.LoanAnalysisReport
 {
     public interface ILoanAgingRiskCalculationRepository
     {
-        Task<LoanAgingRiskCalculationData> GetReportDataAsync(LoanAgingRiskCalculationRequestDto request);
+        Task<LoanAgingRiskCalculationData> GetReportDataAsync(LoanAgingRiskCalculationRequestDto request, long userId);
     }
 }

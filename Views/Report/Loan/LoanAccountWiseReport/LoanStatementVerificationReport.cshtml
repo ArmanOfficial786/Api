@@ -72,7 +72,11 @@
 
     foreach (var row in rows)
     {
-        var verifiedTill = row.PassBookVerifiedTill ?? "";
+        // The SP column may be spelled either way; use whichever one has a value
+        var verifiedTill = !string.IsNullOrEmpty(row.PassBookVerifiedTill)
+            ? row.PassBookVerifiedTill
+            : (row.PassBookVerifyTill ?? "");
+
         table.Data(
             ReportCell.Left(row.MemberId ?? ""),
             ReportCell.Left(row.MemberName ?? ""),

@@ -1,293 +1,4 @@
-﻿@* @using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
-@model Dictionary<string, object>
-@{
-    Layout = null;
-
-    var rows = (Model["Rows"] as List<LoanDetailsRowDto>) ?? new List<LoanDetailsRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalDisburseAmount = Model["TotalDisburseAmount"] as decimal? ?? 0;
-    var totalRepaidTill = Model["TotalRepaidTill"] as decimal? ?? 0;
-    var totalRepaid = Model["TotalRepaid"] as decimal? ?? 0;
-    var totalBalanceAmount = Model["TotalBalanceAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-
-    // Grouped by Loan Type: a label line, then a numbered list of loans of
-    // that type, then a subtotal for that loan type - matches the legacy
-    // report exactly.
-    var loanTypeGroups = rows
-        .GroupBy(r => r.LoanTypeName)
-        .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan Principle Detail Payment Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 8pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 8pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 3px 4px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 8pt;
-                text-align: left;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: normal;
-                line-height: 1.2;
-                vertical-align: bottom;
-            }
-
-            /* Loan Type section label, underlined like the legacy report */
-            .loantype-label-row td {
-                padding-top: 10px;
-                padding-bottom: 2px;
-            }
-
-            .loantype-label {
-                font-weight: bold;
-                border-bottom: 1px solid #000;
-                padding-bottom: 2px;
-                display: inline-block;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .sn-col {
-                text-align: center;
-                color: #555;
-            }
-
-            .loan-account {
-                color: #1F5C99;
-            }
-
-            /* Per-loan-type subtotal */
-            .group-total-row td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-                padding-top: 4px;
-                padding-bottom: 8px;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .positive {
-                color: #006600;
-            }
-
-            .negative {
-                color: #CC0000;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
-        {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
-
-        <table class="data-table" data-sheet-name="LoanDetails">
-            <colgroup>
-                <col style="width:6%;" />
-                <col style="width:10%;" />
-                <col style="width:16%;" />
-                <col style="width:10%;" />
-                <col style="width:10%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-            </colgroup>
-            <tbody>
-                <!-- Report Title -->
-                <tr class="meta-title">
-                    <td colspan="9">Loan Principle Detail Payment Report</td>
-                </tr>
-
-                <!-- Metadata: stacked, left-aligned -->
-                <tr class="meta-row">
-                    <td colspan="9"><strong>Branch Name :</strong> @branchName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="9">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="9"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="9"></td></tr>
-
-                <!-- Table Header -->
-                <tr>
-                    <th>Loan Type</th>
-                    <th>Member ID</th>
-                    <th>Member Name</th>
-                    <th>Loan A/C No.</th>
-                    <th>Payment Mode</th>
-                    <th class="text-right">Disburse Amount</th>
-                    <th class="text-right">Previous Received</th>
-                    <th class="text-right">Received Between</th>
-                    <th class="text-right">Balance</th>
-                </tr>
-
-                @if (loanTypeGroups.Any())
-                {
-                    foreach (var grp in loanTypeGroups)
-                    {
-                        <!-- Loan Type section label -->
-                        <tr class="loantype-label-row">
-                            <td colspan="9"><span class="loantype-label">@(grp.Key ?? "")</span></td>
-                        </tr>
-
-                        <!-- Loans of this type, numbered -->
-                        var sn = 0;
-                        var groupDisburse = 0m;
-                        var groupPrevious = 0m;
-                        var groupReceived = 0m;
-                        var groupBalance = 0m;
-                        foreach (var row in grp)
-                        {
-                            sn++;
-                            groupDisburse += row.DisburseAmount ?? 0;
-                            groupPrevious += row.RepaidTill ?? 0;
-                            groupReceived += row.Repaid ?? 0;
-                            groupBalance += row.BalanceAmount ?? 0;
-                            <tr class="detail-row">
-                                <td class="sn-col">@sn</td>
-                                <td>@(row.MemberId ?? "")</td>
-                                <td>@(row.FullName ?? "")</td>
-                                <td class="loan-account">@(row.LoanAccountNo ?? "")</td>
-                                <td>@(row.PaymentMode ?? "")</td>
-                                <td class="text-right">@(row.DisburseAmount.HasValue ? row.DisburseAmount.Value.ToString("N2") : "")</td>
-                                <td class="text-right">@(row.RepaidTill.HasValue ? row.RepaidTill.Value.ToString("N2") : "")</td>
-                                <td class="text-right">@(row.Repaid.HasValue ? row.Repaid.Value.ToString("N2") : "")</td>
-                                <td class="text-right @(row.BalanceAmount.HasValue && row.BalanceAmount.Value > 0 ? "negative" : "positive")">@(row.BalanceAmount.HasValue ? row.BalanceAmount.Value.ToString("N2") : "")</td>
-                            </tr>
-                        }
-
-                        <!-- Per-loan-type subtotal -->
-                        <tr class="group-total-row">
-                            <td colspan="5"></td>
-                            <td class="text-right">@groupDisburse.ToString("N2")</td>
-                            <td class="text-right">@groupPrevious.ToString("N2")</td>
-                            <td class="text-right">@groupReceived.ToString("N2")</td>
-                            <td class="text-right">@groupBalance.ToString("N2")</td>
-                        </tr>
-                    }
-
-                    <!-- Report-level grand total -->
-                    <tr class="grand-total-row">
-                        <td colspan="5" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalDisburseAmount.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalRepaidTill.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalRepaid.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalBalanceAmount.ToString("N2")</strong></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="9" class="text-right"><strong>Total Records: @totalRecords</strong></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html> *@
+﻿@* 
 
 
 
@@ -394,6 +105,111 @@
         table.Total("Grand Total", 5,
             Fmt.Amount(totalDisburse), Fmt.Amount(totalRepaidTill), Fmt.Amount(totalRepaid), Fmt.Amount(totalBalance));
         table.Total("Total Records :", 8, totalRecords.ToString());
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build()) *@
+
+
+
+
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var fontSize = "7.5pt";
+    var metaFontSize = "8pt";
+
+    var rows = (Model["Rows"] as IEnumerable<LoanDetailsRowDto>)?.ToList() ?? new List<LoanDetailsRowDto>();
+    var branchName = Model.TryGetValue("BranchName", out var b) ? b?.ToString() ?? "All" : "All";
+    var fromDate = Model.TryGetValue("FromDate", out var fd) ? fd?.ToString() ?? "" : "";
+    var toDate = Model.TryGetValue("ToDate", out var td) ? td?.ToString() ?? "" : "";
+    var reportType = Model.TryGetValue("ReportType", out var rt) ? rt?.ToString() ?? "D" : "D";
+    var isSummary = string.Equals(reportType, "S", StringComparison.OrdinalIgnoreCase);
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var v) && v != null)
+        {
+            var d = Convert.ToDecimal(v);
+            if (d != 0) return d;
+        }
+        return fallback;
+    }
+
+    var totalDisburse = TotalOr("TotalDisburseAmount", rows.Sum(x => x.DisburseAmount ?? 0));
+    var totalRepaidTill = TotalOr("TotalRepaidTill", rows.Sum(x => x.RepaidTill ?? 0));
+    var totalRepaid = TotalOr("TotalRepaid", rows.Sum(x => x.Repaid ?? 0));
+    var totalBalance = TotalOr("TotalBalanceAmount", rows.Sum(x => x.BalanceAmount ?? 0));
+
+    var table = new ReportTable(Model, title: "Loan Principle Detail Payment Report", sheetName: "LoanDetails")
+        .Column("S.N.", 6, Align.Center)
+        .Column("Member ID", 10)
+        .Column("Member Name", 16)
+        .Column("Loan A/C No.", 10)
+        .Column("Payment Mode", 10)
+        .Column("Disburse Amount", 12, Align.Right)
+        .Column("Previous Received", 12, Align.Right)
+        .Column("Received Between", 12, Align.Right)
+        .Column("Balance", 12, Align.Right)
+        .Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 75)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 3px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            @"
+            table.sheet-table tr.r-data td.loan-account { color: #1F5C99; }
+            table.sheet-table tr.r-data td.negative     { color: #CC0000; }
+            table.sheet-table tr.r-data td.positive     { color: #006600; }");
+
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName))
+         .MetaRow(Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)))
+         .MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    foreach (var grp in rows.GroupBy(x => (x.LoanTypeName ?? "").Trim()))
+    {
+        decimal gDisburse = 0, gPrevious = 0, gReceived = 0, gBalance = 0;
+
+        if (!isSummary)
+            table.GroupTitle(grp.Key);
+
+        var sn = 0;
+        foreach (var row in grp)
+        {
+            gDisburse += row.DisburseAmount ?? 0;
+            gPrevious += row.RepaidTill ?? 0;
+            gReceived += row.Repaid ?? 0;
+            gBalance += row.BalanceAmount ?? 0;
+
+            if (!isSummary)
+            {
+                table.Data(new[]
+                {
+                    ReportCell.Center((++sn).ToString()),
+                    ReportCell.Left(row.MemberId ?? ""),
+                    ReportCell.Left(row.FullName ?? ""),
+                    new ReportCell(row.LoanAccountNo ?? "", Align.Left, 1, "loan-account"),
+                    ReportCell.Left(row.PaymentMode ?? ""),
+                    ReportCell.Right(Fmt.Amount(row.DisburseAmount)),
+                    ReportCell.Right(Fmt.Amount(row.RepaidTill)),
+                    ReportCell.Right(Fmt.Amount(row.Repaid)),
+                    new ReportCell(Fmt.Amount(row.BalanceAmount), Align.Right, 1, row.BalanceAmount > 0 ? "negative" : "positive")
+                });
+            }
+        }
+
+        // Detail: "Sub Total" after the loans. Summary: one line per loan type with its totals.
+        table.SubTotal(isSummary ? grp.Key : "Sub Total", 5,
+            Fmt.Amount(gDisburse), Fmt.Amount(gPrevious), Fmt.Amount(gReceived), Fmt.Amount(gBalance));
+    }
+
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", 5,
+            Fmt.Amount(totalDisburse), Fmt.Amount(totalRepaidTill), Fmt.Amount(totalRepaid), Fmt.Amount(totalBalance));
     }
 }
 @await Html.PartialAsync("_SheetReport", table.Build())

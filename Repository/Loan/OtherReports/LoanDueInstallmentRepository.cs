@@ -125,7 +125,7 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                                  CASE WHEN MiddleName = '' THEN '' ELSE MiddleName + ' ' END +
                                  LastName
                           FROM MemMemberRegistration 
-                          WHERE MemberId = @MemberId AND IsActive = 1",
+                          WHERE MemberId = @MemberId",
                         new { MemberId = request.MemberId.Trim() });
                     memberName = name;
                 }

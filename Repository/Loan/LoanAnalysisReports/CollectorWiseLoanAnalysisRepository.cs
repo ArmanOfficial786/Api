@@ -1,5 +1,4 @@
-﻿// Repository/Loan/LoanAnalysisReport/CollectorWiseLoanAnalysisRepository.cs
-using Dapper;
+﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
@@ -26,6 +25,7 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
             _logger = logger;
         }
 
+        // positive numeric ids only; "-1" means "all"
         private static string SanitizeIdList(string? ids)
         {
             if (string.IsNullOrWhiteSpace(ids) || ids == "-1" || ids == "string")
@@ -33,10 +33,12 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
 
             var validIds = ids
                 .Split(new[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(id => long.TryParse(id, out _));
+                .Where(id => long.TryParse(id, out var v) && v > 0)
+                .Select(id => long.Parse(id).ToString())
+                .Distinct()
+                .ToList();
 
-            var joined = string.Join(",", validIds);
-            return string.IsNullOrEmpty(joined) ? "-1" : joined;
+            return validIds.Count == 0 ? "-1" : string.Join(",", validIds);
         }
 
         private static string BuildSqlOrderBy(string? orderBy)
@@ -59,18 +61,45 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
 
         private static string GetPenaltyTypeName(string penaltyType)
         {
-            return penaltyType?.Trim().ToUpper() switch
+            return penaltyType switch
             {
                 "R" => "Remaining Principle",
                 "A" => "After Maturity",
-                "S" => "Schedule Wise",
                 _ => "Schedule Wise"
             };
         }
 
-        private static string GetReportModeName(string reportMode)
+        // "D" or "0" = Detail; anything else ("S", "1") = Summary
+        private static bool IsDetailMode(string? mode)
         {
-            return reportMode == "0" ? "Detail" : "Summary";
+            var v = (mode ?? "").Trim().ToUpperInvariant();
+            return v == "D" || v == "0";
+        }
+
+        private static string GetReportModeName(string? reportMode)
+            => IsDetailMode(reportMode) ? "Detail" : "Summary";
+
+        private static CollectorWiseLoanAnalysisSummaryRowDto BuildSummaryRow(
+            string name, IEnumerable<CollectorWiseLoanAnalysisRowDto> items, bool isHeader)
+        {
+            var list = items.ToList();
+            return new CollectorWiseLoanAnalysisSummaryRowDto
+            {
+                GroupName = name,
+                IsGroupHeader = isHeader,
+                OpeningBalance = list.Sum(r => r.OpeningBalance ?? 0),
+                OpeningActiveCount = list.Sum(r => r.OpeningActiveLoanCount ?? 0),
+                DisburseAmount = list.Sum(r => r.LoanIssueAmount ?? 0),
+                PaymentAmount = list.Sum(r => r.PaidAmount ?? 0),
+                BalanceAmount = list.Sum(r => r.BalanceAmount ?? 0),
+                BalanceActiveCount = list.Sum(r => r.CurrentActiveLoanCount ?? 0),
+                ClosingBalance = list.Sum(r => r.ClosingBalance ?? 0),
+                ClosingActiveCount = list.Sum(r => r.TotalActiveLoanCount ?? 0),
+                GoodAmt = list.Sum(r => r.Goodloan ?? 0),
+                DueAmt = list.Sum(r => r.OverDue ?? 0),
+                Due1To365 = list.Sum(r => r.Arrearfrm1to365 ?? 0),
+                DueGt365 = list.Sum(r => r.Arreargrtthan365 ?? 0)
+            };
         }
 
         public async Task<CollectorWiseLoanAnalysisData> GetReportDataAsync(CollectorWiseLoanAnalysisRequestDto request)
@@ -89,12 +118,15 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                 string collectorId = "-1";
                 if (!string.IsNullOrEmpty(request.CollectorId) &&
                     request.CollectorId != "-1" &&
-                    long.TryParse(request.CollectorId, out var cId))
+                    long.TryParse(request.CollectorId, out var cId) && cId > 0)
                 {
                     collectorId = cId.ToString();
                 }
 
                 var connectionString = _context.Database.GetConnectionString();
+                if (string.IsNullOrEmpty(connectionString))
+                    throw new InvalidOperationException("Database connection string is not configured.");
+
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
@@ -106,7 +138,7 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
 
                 var sqlFilterExpOrderBy = BuildSqlOrderBy(request.OrderBy);
 
-                var penaltyType = request.PenaltyType?.Trim().ToUpper();
+                var penaltyType = (request.PenaltyType ?? "S").Trim().ToUpperInvariant();
                 if (penaltyType != "S" && penaltyType != "R" && penaltyType != "A")
                     penaltyType = "S";
 
@@ -189,47 +221,56 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
             }
         }
 
-
         public async Task<CollectorWiseLoanAnalysisSummaryData> GetSummaryReportDataAsync(CollectorWiseLoanAnalysisRequestDto request)
         {
             var detail = await GetReportDataAsync(request);
 
-            var grouped = detail.Rows
-                .GroupBy(r => r.CollectorName ?? "Unassigned")
-                .Select(g => new CollectorWiseLoanAnalysisSummaryRowDto
+            static string Clean(string? s) => string.IsNullOrWhiteSpace(s) ? "Unassigned" : s.Trim();
+
+            var outputRows = new List<CollectorWiseLoanAnalysisSummaryRowDto>(); // rows that are printed
+            var leafRows = new List<CollectorWiseLoanAnalysisSummaryRowDto>();   // used for grand totals (no double counting)
+
+            if (IsDetailMode(request.ReportMode))
+            {
+                // DETAIL: bold collector row, followed by its loan types
+                foreach (var collector in detail.Rows.GroupBy(r => Clean(r.CollectorName)).OrderBy(g => g.Key))
                 {
-                    GroupName = g.Key,
-                    OpeningBalance = g.Sum(r => r.OpeningBalance ?? 0),
-                    OpeningActiveCount = g.Sum(r => r.OpeningActiveLoanCount ?? 0),
-                    DisburseAmount = g.Sum(r => r.LoanIssueAmount ?? 0),
-                    PaymentAmount = g.Sum(r => r.PaidAmount ?? 0),
-                    BalanceAmount = g.Sum(r => r.BalanceAmount ?? 0),
-                    BalanceActiveCount = g.Sum(r => r.CurrentActiveLoanCount ?? 0),
-                    ClosingBalance = g.Sum(r => r.ClosingBalance ?? 0),
-                    ClosingActiveCount = g.Sum(r => r.TotalActiveLoanCount ?? 0),
-                    GoodAmt = g.Sum(r => r.Goodloan ?? 0),
-                    DueAmt = g.Sum(r => r.OverDue ?? 0),
-                    Due1To365 = g.Sum(r => r.Arrearfrm1to365 ?? 0),
-                    DueGt365 = g.Sum(r => r.Arreargrtthan365 ?? 0)
-                })
-                .OrderBy(r => r.GroupName)
-                .ToList();
+                    outputRows.Add(BuildSummaryRow(collector.Key, collector, isHeader: true));
+
+                    foreach (var loanType in collector.GroupBy(r => Clean(r.LoanType)).OrderBy(g => g.Key))
+                    {
+                        var row = BuildSummaryRow(loanType.Key, loanType, isHeader: false);
+                        outputRows.Add(row);
+                        leafRows.Add(row);
+                    }
+                }
+            }
+            else
+            {
+                // SUMMARY: one row per loan type
+                foreach (var loanType in detail.Rows.GroupBy(r => Clean(r.LoanType)).OrderBy(g => g.Key))
+                {
+                    var row = BuildSummaryRow(loanType.Key, loanType, isHeader: false);
+                    outputRows.Add(row);
+                    leafRows.Add(row);
+                }
+            }
 
             return new CollectorWiseLoanAnalysisSummaryData
             {
-                Rows = grouped,
-                TotalOpeningBalance = grouped.Sum(r => r.OpeningBalance),
-                TotalOpeningActiveCount = grouped.Sum(r => r.OpeningActiveCount),
-                TotalDisburseAmount = grouped.Sum(r => r.DisburseAmount),
-                TotalPaymentAmount = grouped.Sum(r => r.PaymentAmount),
-                TotalBalanceAmount = grouped.Sum(r => r.BalanceAmount),
-                TotalBalanceActiveCount = grouped.Sum(r => r.BalanceActiveCount),
-                TotalClosingBalance = grouped.Sum(r => r.ClosingBalance),
-                TotalClosingActiveCount = grouped.Sum(r => r.ClosingActiveCount),
-                TotalGoodAmt = grouped.Sum(r => r.GoodAmt),
-                TotalDueAmt = grouped.Sum(r => r.DueAmt),
-                TotalDue1To365 = grouped.Sum(r => r.Due1To365),
-                TotalDueGt365 = grouped.Sum(r => r.DueGt365),
+                Rows = outputRows,
+                TotalOpeningBalance = leafRows.Sum(r => r.OpeningBalance),
+                TotalOpeningActiveCount = leafRows.Sum(r => r.OpeningActiveCount),
+                TotalDisburseAmount = leafRows.Sum(r => r.DisburseAmount),
+                TotalPaymentAmount = leafRows.Sum(r => r.PaymentAmount),
+                TotalBalanceAmount = leafRows.Sum(r => r.BalanceAmount),
+                TotalBalanceActiveCount = leafRows.Sum(r => r.BalanceActiveCount),
+                TotalClosingBalance = leafRows.Sum(r => r.ClosingBalance),
+                TotalClosingActiveCount = leafRows.Sum(r => r.ClosingActiveCount),
+                TotalGoodAmt = leafRows.Sum(r => r.GoodAmt),
+                TotalDueAmt = leafRows.Sum(r => r.DueAmt),
+                TotalDue1To365 = leafRows.Sum(r => r.Due1To365),
+                TotalDueGt365 = leafRows.Sum(r => r.DueGt365),
                 FromDateBs = detail.FromDateBs,
                 ToDateBs = detail.ToDateBs,
                 FromDateAd = detail.FromDateAd,

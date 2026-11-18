@@ -97,6 +97,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
     public class CollectorWiseLoanAnalysisSummaryRowDto
     {
         public string? GroupName { get; set; }   // collector name — shown under "Loan Type" header per the image
+        public bool IsGroupHeader { get; set; }
 
         public decimal OpeningBalance { get; set; }
         public int OpeningActiveCount { get; set; }

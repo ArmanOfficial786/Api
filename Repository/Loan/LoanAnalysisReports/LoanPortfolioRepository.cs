@@ -35,7 +35,7 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
             return string.IsNullOrEmpty(joined) ? "-1" : joined;
         }
 
-        public async Task<LoanPortfolioData> GetReportDataAsync(LoanPortfolioRequestDto request)
+        public async Task<LoanPortfolioData> GetReportDataAsync(LoanPortfolioRequestDto request, long userId)
         {
             try
             {
@@ -45,11 +45,28 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
-                var sqlFilterExp = string.Empty;
-                if (branchIds != "-1")
+                // ── User office restriction (webform lists only the user's offices) ──
+                var allowedOfficeIds = (await connection.QueryAsync<long>(
+                    "SELECT DISTINCT UsmOfficeId FROM UsmRelationUserToOffice WHERE UsmUserId = @UserId",
+                    new { UserId = userId })).ToList();
+
+                if (allowedOfficeIds.Count == 0)
+                    throw new UnauthorizedAccessException("User has no office access.");
+
+                if (branchIds == "-1")
                 {
-                    sqlFilterExp = $" And v.UsmOfficeId in ({branchIds})";
+                    // Nothing selected = all of the user's offices
+                    branchIds = string.Join(",", allowedOfficeIds);
                 }
+                else
+                {
+                    var requested = branchIds.Split(',').Select(long.Parse).ToList();
+                    if (requested.Except(allowedOfficeIds).Any())
+                        throw new UnauthorizedAccessException("You do not have access to one or more selected branches.");
+                }
+
+                var sqlFilterExp = $" And v.UsmOfficeId in ({branchIds})";
+                //upto it
 
                 var parameters = new DynamicParameters();
                 parameters.Add("@SqlFilterExp", sqlFilterExp, DbType.String, size: -1);
@@ -99,14 +116,11 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
                 new() { Particulars = "Outstanding", NoofLoan = outstandingRaw.Outstanding },
                     };
 
-                string branchName = "All";
-                if (branchIds != "-1")
-                {
-                    var names = await connection.QueryAsync<string>(
-                        $"SELECT OfficeName FROM UsmOffice WHERE UsmOfficeId IN ({branchIds})");
-                    var nameList = names.Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
-                    branchName = nameList.Count > 0 ? string.Join(", ", nameList) : "All";
-                }
+                // after
+                var names = await connection.QueryAsync<string>(
+                    $"SELECT OfficeName FROM UsmOffice WHERE UsmOfficeId IN ({branchIds})");
+                var nameList = names.Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+                var branchName = nameList.Count > 0 ? string.Join(", ", nameList) : "All";
 
                 return new LoanPortfolioData
                 {

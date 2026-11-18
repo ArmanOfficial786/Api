@@ -5,6 +5,6 @@ namespace NexgenCosysReport.Inteface.ServiceInterface.Loan.OtherReports
 {
     public interface ILoanStatementVerificationRepository
     {
-        Task<LoanStatementVerificationData> GetReportDataAsync(LoanStatementVerificationRequestDto request);
+        Task<LoanStatementVerificationData> GetReportDataAsync(LoanStatementVerificationRequestDto request, long userId);
     }
 }

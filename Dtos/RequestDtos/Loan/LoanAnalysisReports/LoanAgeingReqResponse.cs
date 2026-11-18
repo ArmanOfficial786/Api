@@ -1,5 +1,4 @@
-﻿// Dtos/RequestDtos/Loan/LoanAnalysisReport/LoanAgeingRequestDto.cs
-namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+﻿namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
 {
     public class LoanAgeingRequestDto
     {
@@ -19,7 +18,9 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
     {
         public string? MemberId { get; set; }
         public string? FullName { get; set; }
+        public string? NameInNepali { get; set; }                  // NEW
         public string? ContactAddress { get; set; }
+        public string? AddressInNepali { get; set; }               // NEW
         public string? ContactNo { get; set; }
         public string? LoanAccountNo { get; set; }
         public long? LmtLoanIssueId { get; set; }
@@ -28,6 +29,8 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
         public string? MaturityOnBs { get; set; }
         public DateTime? MaturityOn { get; set; }
         public string? LoanTypeName { get; set; }
+        public string? LoanTypeNameInNepali { get; set; }          // NEW
+        public string? LoanGuarantee { get; set; }                 // NEW
         public decimal? PrinciplePaidAmt { get; set; }
         public decimal? TotalPrincipalAmount { get; set; }
         public decimal? RemainingPrinciplefromSche { get; set; }
@@ -38,6 +41,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
         public string? DefaultDateBs { get; set; }
         public string? LoanODorNormal { get; set; }
         public string? PaymentMode { get; set; }
+        public string? PaymentDurationTypeInNepali { get; set; }   // NEW
         public string? PrincapalPaymentMode { get; set; }
     }
 
@@ -70,5 +74,6 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
         public string? ShowLoanIssueDateName { get; set; }
         public string? OrderBy { get; set; }
         public bool IsNepaliReport { get; set; }
+        public long CompanyBranchId { get; set; } = -1;
     }
 }

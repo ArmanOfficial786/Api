@@ -5,7 +5,7 @@
 @{
     Layout = null;
 
-    var fontSize = "7pt";
+    var fontSize = "6.5pt";
     var metaFontSize = "8pt";
     var nepaliDigits = false;
 
@@ -19,6 +19,8 @@
         return new string(s.Select(c => c >= '0' && c <= '9' ? map[c - '0'] : c).ToArray());
     }
 
+    string Pick(string? en, string? ne) => isNepali && !string.IsNullOrWhiteSpace(ne) ? ne! : (en ?? "");
+
     string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
     decimal TotalOr(string key, decimal fallback)
     {
@@ -30,25 +32,40 @@
         return fallback;
     }
 
-    var sections = (Model["Sections"] as IEnumerable<LoanAgeingSectionDto>)?.Where(s => s.Rows.Any()).ToList()
+    bool IsOverdraft(LoanAgeingRowDto r) => string.Equals(r.LoanODorNormal, "O", StringComparison.OrdinalIgnoreCase);
+
+    string SectionTitle(string? name) => name switch
+    {
+        "Greater than 365 Days" => L("Defaulter Greater Than 12 Months (Bad Loan):", "१२ महिना भन्दा बढी म्याद नाघेको (खराब ऋण):"),
+        _ => (name ?? "") + ":"
+    };
+
+    int SectionRank(string? name) => name switch
+    {
+        "Greater than 365 Days" => 0,
+        "181 to 365 Days" => 1,
+        "91 to 180 Days" => 2,
+        "1 to 90 Days" => 3,
+        _ => 4
+    };
+
+    var sections = (Model["Sections"] as IEnumerable<LoanAgeingSectionDto>)?
+        .Where(s => s.Rows.Any())
+        .OrderBy(s => SectionRank(s.SectionName))
+        .ToList()
         ?? new List<LoanAgeingSectionDto>();
     var allRows = sections.SelectMany(s => s.Rows).ToList();
 
-    var tillDate = Text("TillDate");
     var branchName = Text("BranchName", "All");
     var memberGroupName = Text("MemberGroupName");
     var collectorName = Text("CollectorName");
-    var penaltyType = Text("PenaltyType", "S");
-    var penaltyTypeName = Text("PenaltyTypeName", "Schedule Wise");
-    var ageingOnName = Text("AgeingOnName", "Principle");
-    var showLoanIssueDateName = Text("ShowLoanIssueDateName", "Issue Date");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-    var badgeClass = penaltyType == "S" ? "badge-schedule" : penaltyType == "R" ? "badge-remaining" : "badge-maturity";
 
     var totalRecords = Model.TryGetValue("TotalRecords", out var tr) && tr != null && Convert.ToInt32(tr) > 0
         ? Convert.ToInt32(tr)
         : allRows.Count;
-    var totalLoanIssue = TotalOr("TotalLoanIssueAmount", allRows.Sum(x => x.LoanIssueAmount ?? 0));
+    var totalDisburse = TotalOr("TotalLoanIssueAmount", allRows.Sum(x => x.LoanIssueAmount ?? 0));
+    var totalBalance = TotalOr("TotalPrincipalAmount", allRows.Sum(x => x.TotalPrincipalAmount ?? 0));
     var totalOverDue = TotalOr("TotalOverDue", allRows.Sum(x => x.OverDue ?? 0));
 
     var nepaliFont = isNepali
@@ -56,75 +73,86 @@
         : "";
 
     var table = new ReportTable(Model, title: L("Loan Ageing Report", "ऋण एजिङ प्रतिवेदन"), sheetName: "LoanAgeing")
-        .Column(L("S.N.", "क्र.सं."), 3.5, Align.Center)
-        .Column(L("Member Id", "सदस्य नं."), 8)
-        .Column(L("Full Name", "पुरा नाम"), 13)
-        .Column(L("Loan A/c No", "ऋण खाता नं."), 9)
-        .Column(L("Loan Type", "ऋणको किसिम"), 9)
-        .Column(L("Issue Date", "ऋण जारी मिति"), 9)
-        .Column(L("Maturity Date", "ऋण म्याद मिति"), 9)
-        .Column(L("Loan Amount", "ऋण रकम"), 10, Align.Right)
-        .Column(L("Paid", "सावाँ भुक्तानी"), 9, Align.Right)
-        .Column(L("Overdue", "म्याद नाघेको रकम"), 10, Align.Right)
-        .Column(L("Due Days", "म्याद नाघेको दिन"), 8, Align.Center)
-        .Sizing(rowMm: 6.5, headerMm: 9, firstPageExtraMm: 75)
+        .Column(L("S.N.", "क्र.सं."), 3, Align.Center)
+        .Column(L("Member Id", "सदस्य नं."), 6.5)
+        .Column(L("Member Name", "सदस्यको नाम"), 8)
+        .Column(L("Contact Address", "सम्पर्क ठेगाना"), 7)
+        .Column(L("Contact No", "सम्पर्क नं."), 7)
+        .Column(L("A/C No", "खाता नं."), 6.5)
+        .Column(L("Payment Mode", "भुक्तानी तरिका"), 5.5)
+        .Column(L("Loan Type", "ऋणको किसिम"), 7)
+        .Column(L("Loan Guarantee", "ऋण धितो"), 7.5)
+        .Column(L("Issue Date", "ऋण जारी मिति"), 5.5)
+        .Column(L("Maturity Date", "म्याद मिति"), 5.5)
+        .Column(L("Disburse Amt", "ऋण रकम"), 7.5, Align.Right)
+        .Column(L("Balance Amt", "बाँकी रकम"), 7.5, Align.Right)
+        .Column(L("From Inst No", "किस्ता नं. देखि"), 4, Align.Center)
+        .Column(L("Default Date", "म्याद नाघेको मिति"), 5.5)
+        .Column(L("Over Due", "म्याद नाघेको रकम"), 7.5, Align.Right)
+        .Sizing(rowMm: 8.5, headerMm: 9, firstPageExtraMm: 60)
         .Css(
             nepaliFont +
             "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-section td, " +
             "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
-            "{ font-size: " + fontSize + "; line-height: 1.3; padding: 2px 3px; }\n" +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 3px; }\n" +
             "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
             @"
-            table.sheet-table tr.r-data td.negative { color: #CC0000; }
-            .penalty-badge { display: inline-block; padding: 2px 10px; border-radius: 3px; font-size: 8pt; font-weight: bold; }
-            .badge-schedule  { background: #d1ecf1; color: #0c5460; }
-            .badge-remaining { background: #fff3cd; color: #856404; }
-            .badge-maturity  { background: #f8d7da; color: #721c24; }");
+            table.sheet-table tr.r-data td.negative { color: #CC0000; }");
 
     var filterParts = new List<IHtmlContent>();
     if (!string.IsNullOrEmpty(memberGroupName)) filterParts.Add(Fmt.Labeled(L("Member Group :", "सदस्य समूह :"), memberGroupName));
     if (!string.IsNullOrEmpty(collectorName)) filterParts.Add(Fmt.Labeled(L("Collector :", "संकलक :"), collectorName));
 
-    table.MetaPair(L("Branch :", "शाखा :"), branchName, L("Till Date :", "मिति सम्म :"), Nd(tillDate))
-         .MetaRow(
-             Fmt.Labeled(L("Penalty Type :", "जरिवाना किसिम :"), Fmt.Badge(penaltyTypeName, $"penalty-badge {badgeClass}")),
-             Fmt.Labeled(L("Ageing On :", "एजिङ आधार :"), ageingOnName));
+    table.MetaRow(Fmt.Labeled(L("Branch Name :", "शाखाको नाम :"), branchName));
     if (filterParts.Count > 0) table.MetaRow(Fmt.Join(filterParts.ToArray()));
-    table.MetaPair(L("Date On :", "मिति आधार :"), showLoanIssueDateName,
-                   L("Report Generated On :", "प्रतिवेदन तयार मिति :"), Nd(generatedOn));
+    table.MetaRow(Fmt.Labeled(L("Report Generated On :", "प्रतिवेदन तयार मिति :"), Nd(generatedOn)));
 
     foreach (var section in sections)
     {
-        var sectionName = section.SectionName ?? "";
-        table.Section(sectionName);
+        table.Section(SectionTitle(section.SectionName));
 
         var sn = 0;
         foreach (var row in section.Rows)
         {
+            var od = IsOverdraft(row);
+
             table.Data(new[]
             {
                 ReportCell.Center(Nd((++sn).ToString())),
                 ReportCell.Left(row.MemberId ?? ""),
-                ReportCell.Left(row.FullName ?? ""),
+                ReportCell.Left(Pick(row.FullName, row.NameInNepali)),
+                ReportCell.Left(Pick(row.ContactAddress, row.AddressInNepali)),
+                ReportCell.Left(Nd(row.ContactNo)),
                 ReportCell.Left(row.LoanAccountNo ?? ""),
-                ReportCell.Left(row.LoanTypeName ?? ""),
+                ReportCell.Left(Pick(row.PaymentMode, row.PaymentDurationTypeInNepali)),
+                ReportCell.Left(Pick(row.LoanTypeName, row.LoanTypeNameInNepali)),
+                ReportCell.Left(row.LoanGuarantee ?? ""),
                 ReportCell.Left(Nd(row.LoanIssueOnBs)),
-                ReportCell.Left(Nd(row.MaturityOnBs)),
+                ReportCell.Left(od ? Nd(row.MaturityOnBs) : ""),
                 ReportCell.Right(Nd(Fmt.Amount(row.LoanIssueAmount))),
-                ReportCell.Right(Nd(Fmt.Amount(row.PrinciplePaidAmt))),
-                new ReportCell(Nd(Fmt.Amount(row.OverDue)), Align.Right, 1, row.OverDue > 0 ? "negative" : null),
-                ReportCell.Center(Nd((row.DueDays ?? 0).ToString()))
+                ReportCell.Right(Nd(Fmt.Amount(row.TotalPrincipalAmount))),
+                ReportCell.Center(Nd((row.InstallmentNo ?? 0).ToString())),
+                ReportCell.Left(od ? Nd(row.DefaultDateBs) : ""),
+                new ReportCell(Nd(Fmt.Amount(row.OverDue)), Align.Right, 1, row.OverDue > 0 ? "negative" : null)
             });
         }
 
-        table.SubTotal(sectionName + L(" Sub Total", " उप-जम्मा"), 7,
-            Nd(Fmt.Amount(section.TotalLoanIssueAmount)), "", Nd(Fmt.Amount(section.TotalOverDue)), Nd(section.TotalRecords.ToString()));
+        table.SubTotal((section.SectionName ?? "") + L(" Sub Total", " उप-जम्मा") + " (" + Nd(section.TotalRecords.ToString()) + ")", 11,
+            Nd(Fmt.Amount(section.TotalLoanIssueAmount)),
+            Nd(Fmt.Amount(section.TotalPrincipalAmount)),
+            "",
+            "",
+            Nd(Fmt.Amount(section.TotalOverDue)));
     }
 
     if (allRows.Count > 0)
     {
-        table.Total(L("Grand Total", "कुल जम्मा"), 7,
-            Nd(Fmt.Amount(totalLoanIssue)), "", Nd(Fmt.Amount(totalOverDue)), Nd(totalRecords.ToString()));
+        table.Total(L("Grand Total", "कुल जम्मा") + " (" + Nd(totalRecords.ToString()) + ")", 11,
+            Nd(Fmt.Amount(totalDisburse)),
+            Nd(Fmt.Amount(totalBalance)),
+            "",
+            "",
+            Nd(Fmt.Amount(totalOverDue)));
     }
 }
 @await Html.PartialAsync("_SheetReport", table.Build())

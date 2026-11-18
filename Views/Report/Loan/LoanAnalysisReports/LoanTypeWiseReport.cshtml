@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Html
+﻿@* @using Microsoft.AspNetCore.Html
 @using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
 @using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
@@ -176,6 +176,258 @@
 
         foreach (var g in summary)
         {
+            var cells = new List<ReportCell>
+            {
+                ReportCell.Left(g.Name),
+                ReportCell.Right(g.Count.ToString()),
+                ReportCell.Right(Fmt.Amount(g.Disburse)),
+                ReportCell.Right(Fmt.Amount(g.Repaid)),
+                new ReportCell(Fmt.Amount(g.Balance), Align.Right, 1, g.Balance < 0 ? "negative" : null)
+            };
+            if (showOpening)
+            {
+                cells.Add(ReportCell.Right(Fmt.Amount(g.Opening)));
+                cells.Add(ReportCell.Right(Fmt.Amount(g.Closing)));
+            }
+            table.Data(cells.ToArray());
+        }
+
+        if (rows.Count > 0)
+        {
+            var totals = new List<string>
+            {
+                totalRecords.ToString(), Fmt.Amount(totalDisburse), Fmt.Amount(totalRepaid), Fmt.Amount(totalBalance)
+            };
+            if (showOpening)
+            {
+                totals.Add(Fmt.Amount(totalOpening));
+                totals.Add(Fmt.Amount(totalClosing));
+            }
+            table.Total("Grand Total", 1, totals.ToArray());
+        }
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build()) *@
+
+
+
+
+@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var fontSize = "7.5pt";
+    var metaFontSize = "8pt";
+
+    string Text(string key) => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? "" : "";
+    bool Flag(string key, bool fallback) => Model.TryGetValue(key, out var fv) && fv is bool fb ? fb : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    var rows = (Model["Rows"] as IEnumerable<LoanTypeWiseRowDto>)?.ToList() ?? new List<LoanTypeWiseRowDto>();
+    var branchName = Text("BranchName");
+    if (branchName == "") branchName = "All";
+    var fromDate = Text("FromDate");
+    if (fromDate == "") fromDate = Text("FromDateBs");
+    var toDate = Text("ToDate");
+    if (toDate == "") toDate = Text("ToDateBs");
+    var loanTypeName = Text("LoanTypeName");
+    var memberGroupName = Text("MemberGroupName");
+    var collectionCenterName = Text("CollectionCenterName");
+    var collectorName = Text("CollectorName");
+    var loanGuarantee = Text("LoanGuarantee");
+    var orderBy = Text("OrderBy");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var showDetail = Flag("ShowDetail", true);
+    var showOpening = Flag("ShowOpeningBalance", false);
+    var viewCollector = Flag("ViewCollector", false);
+    var groupByBranch = Flag("GroupByBranch", false);
+    var groupByMemberGroup = Flag("GroupByMemberGroup", false);
+    var enableCollectionCenter = Flag("EnableCollectionCenter", false);
+
+    var totalRecords = Model.TryGetValue("TotalRecords", out var tr) && tr != null && Convert.ToInt32(tr) > 0
+        ? Convert.ToInt32(tr)
+        : rows.Count;
+    var totalDisburse = TotalOr("TotalDisburseAmount", rows.Sum(x => x.DisburseAmount ?? 0));
+    var totalRepaid = TotalOr("TotalRepaid", rows.Sum(x => x.Repaid ?? 0));
+    var totalBalance = TotalOr("TotalBalanceAmount", rows.Sum(x => x.BalanceAmount ?? 0));
+    var totalOpening = TotalOr("TotalOpeningBalance", rows.Sum(x => x.OpeningBalance ?? 0));
+    var totalClosing = TotalOr("TotalClosingBalance", rows.Sum(x => x.ClosingBalance ?? 0));
+
+    var isGuaranteeFiltered = !string.IsNullOrEmpty(loanGuarantee)
+        && loanGuarantee != "-1"
+        && !loanGuarantee.Equals("All", StringComparison.OrdinalIgnoreCase);
+
+    var activeLevels = (groupByBranch ? 1 : 0) + (enableCollectionCenter ? 1 : 0) + (groupByMemberGroup ? 1 : 0);
+
+    string SectionLabel(string label, string value) => activeLevels > 1 ? label + " : " + value : value;
+
+    var table = new ReportTable(Model,
+        title: showDetail ? "Loan Type Wise Report" : "Loan Type Wise Details Report",
+        sheetName: "LoanTypeWise");
+
+    if (showDetail)
+    {
+        table.Column("S.N.", 4, Align.Center)
+             .Column("Member Id", 9)
+             .Column("Member Name", 16);
+        if (viewCollector) table.Column("Collector", 12);
+        table.Column("Loan A/c No", 11)
+             .Column("Loan Type", 11)
+             .Column("Disburse Amount", 11, Align.Right)
+             .Column("Repaid", 11, Align.Right)
+             .Column("Balance Amount", 11, Align.Right);
+        if (showOpening)
+            table.Column("Opening Balance", 11, Align.Right)
+                 .Column("Closing Balance", 11, Align.Right);
+    }
+    else
+    {
+        table.Column("Loan Type Name", 34)
+             .Column("No. of Loan", 12, Align.Right)
+             .Column("Disburse", 14, Align.Right)
+             .Column("Repaid", 14, Align.Right)
+             .Column("Balance", 14, Align.Right);
+        if (showOpening)
+            table.Column("Opening Balance", 14, Align.Right)
+                 .Column("Closing Balance", 14, Align.Right);
+    }
+
+    table.Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 75)
+         .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-section td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 3px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            @"
+            table.sheet-table tr.r-data td.negative { color: #CC0000; }
+            table.sheet-table tr.r-data td.positive { color: #006600; }");
+
+    var filters = new List<IHtmlContent>();
+    if (!string.IsNullOrEmpty(loanTypeName)) filters.Add(Fmt.Labeled("Loan Type :", loanTypeName));
+    if (!string.IsNullOrEmpty(memberGroupName)) filters.Add(Fmt.Labeled("Member Group :", memberGroupName));
+    if (!string.IsNullOrEmpty(collectionCenterName)) filters.Add(Fmt.Labeled("Collection Center :", collectionCenterName));
+    if (!string.IsNullOrEmpty(collectorName)) filters.Add(Fmt.Labeled("Collector :", collectorName));
+    if (isGuaranteeFiltered) filters.Add(Fmt.Labeled("Loan Guarantee :", loanGuarantee));
+
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName))
+         .MetaRow(Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
+    if (filters.Count > 0) table.MetaRow(Fmt.Join(filters.ToArray()));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    var started = false;
+    string branchKey = "";
+    string centerKey = "";
+    string groupKey = "";
+
+    void Sections(string branch, string center, string group)
+    {
+        var branchChanged = groupByBranch && (!started || branch != branchKey);
+        var centerChanged = enableCollectionCenter && (!started || branchChanged || center != centerKey);
+        var groupChanged = groupByMemberGroup && (!started || branchChanged || centerChanged || group != groupKey);
+
+        if (branchChanged) table.Section(SectionLabel("Branch", branch));
+        if (centerChanged) table.Section(SectionLabel("Collection Center", center));
+        if (groupChanged) table.Section(SectionLabel("Member Group", group));
+
+        branchKey = branch;
+        centerKey = center;
+        groupKey = group;
+        started = true;
+    }
+
+    if (showDetail)
+    {
+        var sn = 0;
+
+        var ordered = rows
+            .OrderBy(x => groupByBranch ? x.OfficeName ?? "" : "")
+            .ThenBy(x => enableCollectionCenter ? x.CollectionCenterName ?? "" : "")
+            .ThenBy(x => groupByMemberGroup ? x.GroupName ?? "" : "")
+            .ToList();
+
+        foreach (var row in ordered)
+        {
+            Sections(row.OfficeName ?? "", row.CollectionCenterName ?? "", row.GroupName ?? "");
+
+            var cells = new List<ReportCell>
+            {
+                ReportCell.Center((++sn).ToString()),
+                ReportCell.Left(row.MemberId ?? ""),
+                ReportCell.Left(row.FullName ?? "")
+            };
+            if (viewCollector) cells.Add(ReportCell.Left(row.CollectorName ?? ""));
+            cells.Add(ReportCell.Left(row.LoanAccountNo ?? ""));
+            cells.Add(ReportCell.Left(row.LoanTypeName ?? ""));
+            cells.Add(ReportCell.Right(Fmt.Amount(row.DisburseAmount)));
+            cells.Add(ReportCell.Right(Fmt.Amount(row.Repaid)));
+            cells.Add(new ReportCell(Fmt.Amount(row.BalanceAmount), Align.Right, 1, row.BalanceAmount > 0 ? "negative" : "positive"));
+            if (showOpening)
+            {
+                cells.Add(ReportCell.Right(Fmt.Amount(row.OpeningBalance)));
+                cells.Add(ReportCell.Right(Fmt.Amount(row.ClosingBalance)));
+            }
+            table.Data(cells.ToArray());
+        }
+
+        if (rows.Count > 0)
+        {
+            var labelSpan = 5 + (viewCollector ? 1 : 0);
+            var columnCount = labelSpan + 3 + (showOpening ? 2 : 0);
+            var totals = new List<string> { Fmt.Amount(totalDisburse), Fmt.Amount(totalRepaid), Fmt.Amount(totalBalance) };
+            if (showOpening)
+            {
+                totals.Add(Fmt.Amount(totalOpening));
+                totals.Add(Fmt.Amount(totalClosing));
+            }
+            table.Total("Grand Total", labelSpan, totals.ToArray());
+            table.Total("Total Records", columnCount - 1, totalRecords.ToString());
+        }
+    }
+    else
+    {
+        var grouped = rows
+            .GroupBy(x => new
+            {
+                Branch = groupByBranch ? x.OfficeName ?? "" : "",
+                Center = enableCollectionCenter ? x.CollectionCenterName ?? "" : "",
+                Group = groupByMemberGroup ? x.GroupName ?? "" : "",
+                Type = x.LoanTypeName ?? ""
+            })
+            .Select(g => new
+            {
+                g.Key.Branch,
+                g.Key.Center,
+                g.Key.Group,
+                Name = g.Key.Type,
+                Count = g.Count(),
+                Disburse = g.Sum(x => x.DisburseAmount ?? 0m),
+                Repaid = g.Sum(x => x.Repaid ?? 0m),
+                Balance = g.Sum(x => x.BalanceAmount ?? 0m),
+                Opening = g.Sum(x => x.OpeningBalance ?? 0m),
+                Closing = g.Sum(x => x.ClosingBalance ?? 0m)
+            });
+
+        var summary = (orderBy == "DisburseAmount"
+                ? grouped.OrderBy(g => g.Branch).ThenBy(g => g.Center).ThenBy(g => g.Group).ThenBy(g => g.Disburse)
+                : grouped.OrderBy(g => g.Branch).ThenBy(g => g.Center).ThenBy(g => g.Group).ThenBy(g => g.Name))
+            .ToList();
+
+        foreach (var g in summary)
+        {
+            Sections(g.Branch, g.Center, g.Group);
+
             var cells = new List<ReportCell>
             {
                 ReportCell.Left(g.Name),

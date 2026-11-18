@@ -5,6 +5,6 @@ namespace NexgenCosysReport.Inteface.ServiceInterface.Loan.OtherReports
 {
     public interface ILoanFineInterestPrinciplePaymentSummaryRepository
     {
-        Task<LoanFineInterestPrinciplePaymentSummaryData> GetReportDataAsync(LoanFineInterestPrinciplePaymentSummaryRequestDto request);
+        Task<LoanFineInterestPrinciplePaymentSummaryData> GetReportDataAsync(LoanFineInterestPrinciplePaymentSummaryRequestDto request, long userId);
     }
 }

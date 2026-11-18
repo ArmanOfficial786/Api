@@ -1,4 +1,4 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+﻿@* @using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
 @using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
@@ -99,6 +99,117 @@
     {
         table.Total("Grand Total", 4, N(totalPrincipleAmount), N(totalInterest), N(totalInstallmentAmount), "");
         table.Total("Total Records", ColumnCount - 1, totalRecords.ToString());
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build()) *@
+
+
+
+
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+@using NexgenCosysReport.Services.ReportService.Table
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    var fontSize = "9pt";
+    const int ColumnCount = 7;   // same 7 columns as the WebForms report
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+    string N(decimal? value) => (value ?? 0m).ToString("N2");
+
+    var rows = (Model["Rows"] as List<LoanDefaulterDueSummaryRowDto>) ?? new List<LoanDefaulterDueSummaryRowDto>();
+
+    var tillDate = Text("TillDate");
+    var branchName = Text("BranchName", "All");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // one block per member, in the order the SP returned them
+    var memberGroups = rows
+        .GroupBy(r => new { r.MemberId, r.FullName, r.MobileNo, r.TemporaryAddressDetail })
+        .ToList();
+
+    var totalPrincipleAmount = TotalOr("TotalPrincipleAmount", rows.Sum(r => r.PrincipleAmount ?? 0));
+    var totalInterest = TotalOr("TotalInterest", rows.Sum(r => r.Interest ?? 0));
+    var totalInstallmentAmount = TotalOr("TotalInstallmentAmount", rows.Sum(r => r.InstallamentAmount ?? 0));
+
+    var table = new ReportTable(Model, title: "Loan Defaulter - Due Summary", sheetName: "LoanDefaulterDueSummary")
+        .Column("S.N.", 6)
+        .Column("Loan A/C No", 13)
+        .Column("Loan Type", 22)
+        .Column("Date", 12)
+        .Column("Principle", 15, Align.Right)
+        .Column("Interest", 15, Align.Right)
+        .Column("Installment", 15, Align.Right)
+        .Style(new ReportStyle
+        {
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            SubTotalBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; padding-top: 8px; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-subtotal td { border-top: 1px solid #000; }\n" +
+            "table.sheet-table tr.r-total td { border-top: 1px solid #000; }");
+
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+    table.MetaRow(Fmt.Labeled("Filter By:- Tilldate:", tillDate));
+
+    var sn = 0;   // runs across members (108, 109, 110 ...), as in WebForms
+    foreach (var memberGroup in memberGroups)
+    {
+        var memberRows = memberGroup.ToList();
+
+        // member header: [blank] [MemberId + Name] [Mobile + Address]
+        table.GroupBy(
+            ReportCell.Left(""),
+            ReportCell.Left($"{memberGroup.Key.MemberId}\u00A0\u00A0{memberGroup.Key.FullName}", 2),
+            ReportCell.Left($"{memberGroup.Key.MobileNo ?? ""}\u00A0\u00A0{memberGroup.Key.TemporaryAddressDetail ?? ""}", ColumnCount - 3));
+
+        foreach (var row in memberRows)
+        {
+            table.Data(
+                (++sn).ToString(),
+                row.LoanAccountNo ?? "",
+                row.LoanTypeName ?? "",
+                row.DateOnBS ?? "",
+                N(row.PrincipleAmount),
+                N(row.Interest),
+                N(row.InstallamentAmount));
+        }
+
+        // per-member subtotal: label spans the first 4 columns, then 3 amounts
+        table.SubTotal(
+            "", 4,
+            N(memberRows.Sum(r => r.PrincipleAmount ?? 0)),
+            N(memberRows.Sum(r => r.Interest ?? 0)),
+            N(memberRows.Sum(r => r.InstallamentAmount ?? 0)));
+    }
+
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", 4,
+            N(totalPrincipleAmount),
+            N(totalInterest),
+            N(totalInstallmentAmount));
+        // "Total Records" row removed: the WebForms report doesn't have it
     }
 }
 @await Html.PartialAsync("_SheetReport", table.Build())

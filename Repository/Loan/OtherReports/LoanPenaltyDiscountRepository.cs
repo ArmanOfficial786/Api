@@ -92,7 +92,7 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                     var name = await connection.QueryFirstOrDefaultAsync<string>(
                         @"SELECT FirstName + ' ' +
                            CASE WHEN MiddleName = '' THEN '' ELSE MiddleName + ' ' END +
-                           LastName FROM MemMemberRegistration WHERE MemberId = @MemberId AND IsActive = 1",
+                           LastName FROM MemMemberRegistration WHERE MemberId = @MemberId",
                         new { MemberId = request.MemberId.Trim() });
                     memberName = name;
                 }

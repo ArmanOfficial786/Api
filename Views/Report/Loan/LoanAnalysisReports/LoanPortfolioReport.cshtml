@@ -1,111 +1,4 @@
 ﻿@* 
-@using Microsoft.AspNetCore.Html
-@using NexgenCosysReport.Dtos.ReportDtos
-@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
-@using NexgenCosysReport.Services.ReportService
-@model Dictionary<string, object>
-@{
-    Layout = null;
-
-    var particulars = (Model["Particulars"] as List<LoanPortfolioParticularsDto>) ?? new List<LoanPortfolioParticularsDto>();
-    var outstanding = (Model["Outstanding"] as List<LoanPortfolioOutstandingDto>) ?? new List<LoanPortfolioOutstandingDto>();
-    var loanTypeWise = (Model["LoanTypeWise"] as List<LoanPortfolioLoanTypeWiseDto>) ?? new List<LoanPortfolioLoanTypeWiseDto>();
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-
-    var lay = (Model.TryGetValue("PageSetting", out var ps) ? ps as PageSizeSetting : null)
-              ?? throw new InvalidOperationException("PageSetting missing in the report data.");
-    var cw = lay.ContentWidthMm - 1;
-    var cols = new[] { 45.0, 15, 40 }.Select(p => Math.Round(cw * p / 100, 2)).ToArray();
-
-    // Flatten every section into one row list: (kind, col1, col2, col3)
-    //   sec = gray section bar | kv = label + number | th = loan-type header | tr = loan-type row
-    var items = new List<(string K, string A, string B, string C)>();
-    if (particulars.Any())
-    {
-        items.Add(("sec", "Particulars", "", ""));
-        items.AddRange(particulars.Select(r => ("kv", r.Particulars ?? "", r.NoofLoan?.ToString() ?? "", "")));
-    }
-    if (outstanding.Any())
-    {
-        items.Add(("sec", "Loan Outstanding Details (Gender Wise)", "", ""));
-        items.AddRange(outstanding.Select(r => ("kv", r.Particulars ?? "", r.NoofLoan?.ToString() ?? "", "")));
-    }
-    if (loanTypeWise.Any())
-    {
-        items.Add(("sec", "Loan Details (Loan Type Wise)", "", ""));
-        items.Add(("th", "Lone Type", "Total No", "Remaining Principal"));
-        items.AddRange(loanTypeWise.Select(r => ("tr", r.LoanTypeName ?? "",
-            r.NoofLoan?.ToString() ?? "",
-            r.LoanIssueAmount.HasValue ? r.LoanIssueAmount.Value.ToString("N2") : "")));
-    }
-
-    Func<int, IHtmlContent> subheader = @<text>
-        <tr class="meta-title"><td colspan="3">Loan Portfolio Report</td></tr>
-        <tr class="meta-row"><td class="meta-label"><strong>Branch Name:</strong></td><td colspan="2">@branchName</td></tr>
-        <tr class="meta-row"><td class="meta-label"><strong>Report Generated On:</strong></td><td colspan="2">@generatedOn</td></tr>
-        <tr class="meta-spacer"><td colspan="3"></td></tr>
-    </text>;
-
-    Func<int, IHtmlContent> row = @<text>
-        @{
-            var it = items[item];
-        }
-        @if (it.K == "sec")
-        {
-            <tr class="section-header"><td colspan="3"><div class="c">@it.A</div></td></tr>
-        }
-        else if (it.K == "th")
-        {
-            <tr class="type-header">
-                <th>@it.A</th>
-                <th class="text-center">@it.B</th>
-                <th class="text-right">@it.C</th>
-            </tr>
-        }
-        else if (it.K == "kv")
-        {
-            <tr class="kv-row">
-                <td><div class="c">@it.A</div></td>
-                <td class="text-left">@it.B</td>
-                <td></td>
-            </tr>
-        }
-        else
-        {
-            <tr class="type-row">
-                <td><div class="c">@it.A</div></td>
-                <td class="text-center">@it.B</td>
-                <td class="text-right">@it.C</td>
-            </tr>
-        }
-    </text>;
-
-    var css = @"
-        .meta-label { white-space: nowrap; }
-        .section-header td { background: #808080; color: #000; font-weight: bold; border-top: 1px solid #000; border-bottom: 1px solid #000; }
-        .kv-row td, .type-row td { color: #1a3d7c; }
-        .type-header th { text-align: left; font-weight: bold; border-bottom: 1px solid #000; background: transparent; }
-    ";
-
-    var sheet = new SheetReport
-    {
-        Data = Model,
-        Title = "Loan Portfolio Report",
-        SheetName = "LoanPortfolio",
-        Cols = cols,
-        RowCount = items.Count,
-        Subheader = subheader,
-        Row = row,
-        KeepWithNext = i => items[i].K == "sec" || items[i].K == "th",
-        RowMm = 5.5,                  // row height; the renderer measures the real rows, this is only the server estimate
-        HeaderMm = 0,                 // no repeating column header; "th" is an inline row
-        FirstPageExtraMm = 70,        // common header + title + meta rows (server estimate only)
-        ExtraCss = css
-    };
-}
-@await Html.PartialAsync("_SheetReport", sheet)
- *@
 
 
 
@@ -172,4 +65,69 @@
 
 
 
+ *@
 
+
+
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    // ── 1. DATA ──
+    var particulars = (Model["Particulars"] as List<LoanPortfolioParticularsDto>) ?? new();
+    var outstanding = (Model["Outstanding"] as List<LoanPortfolioOutstandingDto>) ?? new();
+    var loanTypeWise = (Model["LoanTypeWise"] as List<LoanPortfolioLoanTypeWiseDto>) ?? new();
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // ── 2. COLUMNS, STYLE, SIZES in table ──
+    //.Column(data,width,alignitems)
+    var table = new ReportTable(Model, title: "Loan Portfolio Report", sheetName: "LoanPortfolio")
+        .Column("Particulars", 45)
+        .Column("Total No", 15, Align.Center)
+        .Column("Remaining Principal", 40, Align.Right)
+        .NoColumnHeader()
+        .Style(new ReportStyle
+        {
+            SectionBackground = "#808080",
+            DataText = "#1a3d7c",
+            HeaderBackground = "transparent",
+            ZebraStripes = false
+        })
+        .Sizing(rowMm: 5.5, firstPageExtraMm: 70);
+
+    // ── 3. TITLE BLOCK ──
+    table.Meta("Branch Name:", branchName)
+         .Meta("Report Generated On:", generatedOn);
+
+    // ── 4. ROWS ──
+    if (particulars.Any())
+    {
+        table.Section("Particulars");
+        foreach (var p in particulars)
+            table.Pair(p.Particulars ?? "", Fmt.Int(p.NoofLoan));
+    }
+
+    if (outstanding.Any())
+    {
+        table.Section("Loan Outstanding Details (Gender Wise)");
+        foreach (var o in outstanding)
+            table.Pair(o.Particulars ?? "", Fmt.Int(o.NoofLoan));
+    }
+
+    if (loanTypeWise.Any())
+    {
+        table.Section("Loan Details (Loan Type Wise)");
+        table.Header("Loan Type", "Total No", "Remaining Principal");
+        foreach (var t in loanTypeWise)
+            table.Data(t.LoanTypeName ?? "", Fmt.Int(t.NoofLoan), Fmt.Amount(t.LoanIssueAmount));
+
+        // Total row, as in the webform
+        table.Total("Total:", 1,
+            Fmt.Int(loanTypeWise.Sum(t => t.NoofLoan ?? 0)),
+            Fmt.Amount(loanTypeWise.Sum(t => t.LoanIssueAmount ?? 0)));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())
