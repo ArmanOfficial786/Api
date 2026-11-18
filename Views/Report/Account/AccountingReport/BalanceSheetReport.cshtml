@@ -1,44 +1,52 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.Account
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
-
 @{
     Layout = null;
 
-    var rows = (Model["BalanceSheetRows"] as IEnumerable<BalanceSheetDto>)
-               ?.ToList() ?? new List<BalanceSheetDto>();
+    var fontSize = "8pt";
+    var metaFontSize = "8.5pt";
 
-    var reportType = Model.ContainsKey("ReportType") ? Model["ReportType"]?.ToString() : "Summary";
-    var branchName = Model.ContainsKey("BranchName") ? Model["BranchName"]?.ToString() : "All";
-    var fiscalYearLabel = Model.ContainsKey("FiscalYearLabel") ? Model["FiscalYearLabel"]?.ToString() : "";
-    var tillDate = Model.ContainsKey("TillDate") ? Model["TillDate"]?.ToString() : "";
-    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
-    var includePrevious = Model.ContainsKey("IncludePreviousYearBalance") && Convert.ToBoolean(Model["IncludePreviousYearBalance"]);
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    string Text(string key, string fallback = "") =>
+        Model.TryGetValue(key, out var value) && value != null ? value.ToString() ?? fallback : fallback;
 
+    var rows = (Model["BalanceSheetRows"] as IEnumerable<BalanceSheetDto>)?.ToList()
+        ?? new List<BalanceSheetDto>();
+
+    var reportType = Text("ReportType", "Summary");
+    var branchName = Text("BranchName", "All");
+    var fiscalYearLabel = Text("FiscalYearLabel");
+    var tillDate = Text("TillDate");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-    var colCount = includePrevious ? 6 : 5;
 
-    decimal grandDebit = rows.Sum(x => x.DebitAmount);
-    decimal grandCredit = rows.Sum(x => x.CreditAmount);
+    var includePrevious = Model.TryGetValue("IncludePreviousYearBalance", out var includePreviousValue)
+        && includePreviousValue is bool includePreviousFlag
+        && includePreviousFlag;
 
-    // LIABILITIES (incl. UNDISTRIBUTED SURPLUS) then ASSETS (incl. ACCUMULATED LOSS) -
-    // matches the AcoAccountTypeId IN (1,2) filter and balancing-figure inserts in the SP.
+    decimal grandDebit = rows.Sum(row => row.DebitAmount);
+    decimal grandCredit = rows.Sum(row => row.CreditAmount);
+
+    // LIABILITIES (incl. UNDISTRIBUTED SURPLUS) first, then ASSETS (incl. ACCUMULATED LOSS)
     var groupedByLedgerHead = rows
-        .GroupBy(x => x.LedgerHead ?? "-")
-        .OrderByDescending(g => g.Key == "LIABILITIES")
+        .GroupBy(row => row.LedgerHead ?? "-")
+        .OrderByDescending(ledgerGroup => ledgerGroup.Key == "LIABILITIES")
         .ToList();
 
-    var totalLiabilities = groupedByLedgerHead.Where(g => g.Key == "LIABILITIES").SelectMany(g => g).Sum(r => r.CurrentAmount);
-    var totalAssets = groupedByLedgerHead.Where(g => g.Key == "ASSETS").SelectMany(g => g).Sum(r => r.CurrentAmount);
+    var totalLiabilities = groupedByLedgerHead.Where(ledgerGroup => ledgerGroup.Key == "LIABILITIES")
+        .SelectMany(ledgerGroup => ledgerGroup).Sum(row => row.CurrentAmount);
+    var totalAssets = groupedByLedgerHead.Where(ledgerGroup => ledgerGroup.Key == "ASSETS")
+        .SelectMany(ledgerGroup => ledgerGroup).Sum(row => row.CurrentAmount);
     var difference = totalLiabilities - totalAssets;
-    var isBalanced = Math.Abs(difference) < 1m; // allow for rounding noise
+    var isBalanced = Math.Abs(difference) < 1m;   // allow for rounding noise
 
     string FormatAmount(decimal amount) =>
         amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
 
-    // Deepest available sub-ledger label for a row, "SubLedger — SubLedger1 — SubLedger2"
-    // when present (Detail mode); Summary/SubLedger modes always have '-' below SubLedger.
-    string FormatSubLedgerDisplay(BalanceSheetDto row)
+    string LedgerLabel(int? ledgerNo, string mainLedger) =>
+        ledgerNo == null ? mainLedger : $"{ledgerNo}\u00A0\u00A0\u00A0{mainLedger}";
+
+    // deepest available label: "SubLedger — SubLedger1 — SubLedger2" (Detail mode)
+    string SubLedgerLabel(BalanceSheetDto row)
     {
         var parts = new List<string>();
         if (!string.IsNullOrEmpty(row.SubLedger) && row.SubLedger != "-") parts.Add(row.SubLedger);
@@ -46,503 +54,125 @@
         if (!string.IsNullOrEmpty(row.SubLedger2) && row.SubLedger2 != "-") parts.Add(row.SubLedger2);
         return parts.Count > 0 ? string.Join(" — ", parts) : "-";
     }
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Balance Sheet Report</title>
-    <style>
-            /* ── RESET ── */
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                margin: 0;
-                padding: 0;
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-            }
-
-            /* ── CONTAINER ── */
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            /* ── STOP THEAD REPEATING ── */
-            thead {
-                display: table-row-group;
-            }
-
-            /* ── TABLE BASE ── */
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td,
-                .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    white-space: normal;
-                    vertical-align: middle;
-                    background: #FFFFFF;
-                }
-
-                /* ── COLUMN HEADER ROW ── */
-                .data-table th {
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    padding: 5px 8px;
-                    font-weight: bold;
-                }
-
-            /* ── META ROWS ── */
-            .meta-title td {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 4px 8px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            /* ── LEDGER HEAD GROUP HEADER (LIABILITIES / ASSETS) ── */
-            .ledger-head-row td {
-                font-weight: bold;
-                border-top: 1px solid #ccc;
-                border-bottom: 1px solid #ccc;
-                padding: 5px 8px;
-                background: #FFFFFF;
-            }
-
-            /* ── MAIN LEDGER SUB-HEADER (SubLedger / Detail modes) ── */
-            .main-ledger-row td {
-                font-weight: bold;
-                padding: 3px 8px;
-                background: #FFFFFF;
-                border-bottom: 1px solid #ccc;
-            }
-
-            /* ── DETAIL DATA ROWS ── */
-            .detail-row td {
-                padding: 2px 8px;
-                background: #FFFFFF;
-                border-bottom: 1px solid #ccc;
-            }
-
-            /* ── GROUP SEPARATOR LINE ── */
-            .group-separator td {
-                border-bottom: 1.5px solid #000;
-                padding: 0;
-                height: 0;
-                line-height: 0;
-                font-size: 0;
-                background: #FFFFFF;
-            }
-
-            /* ── GRAND TOTAL ── */
-            .grand-total td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                padding: 5px 8px;
-                background: #FFFFFF;
-            }
-
-            /* ── BALANCE CHECK BLOCK ── */
-            .balance-check-row td {
-                border: 1px solid #000;
-                background: #f0f0f0;
-                text-align: left;
-                padding: 6px;
-                font-weight: bold;
-            }
-
-            .balance-check-value td {
-                border: 1px solid #000;
-                text-align: right;
-                padding: 6px;
-            }
-
-            .balanced-ok {
-                color: #196f3d;
-            }
-
-            .balanced-diff {
-                color: #b03a2e;
-            }
-
-            /* ── TEXT ALIGNMENT HELPERS ── */
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-left {
-                text-align: left !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            /* ── PRINT ── */
-            @@media print {
-                body {
-                    margin: 0;
-                    padding: 0;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-
-                    tr.ledger-head-row,
-                    tr.main-ledger-row {
-                        page-break-after: avoid;
-                        break-after: avoid;
-                    }
-
-                tbody tr.detail-row {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @* ── COMMON HEADER ── *@
-        @if (!isExcel)
+    // Debit | Credit | Current Year | [Previous Year]
+    ReportCell[] AmountCells(decimal debit, decimal credit, decimal current, decimal previous, string css = null)
+    {
+        var cells = new List<ReportCell>
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            new ReportCell(Fmt.Amount(debit), Align.Right, 1, css),
+            new ReportCell(Fmt.Amount(credit), Align.Right, 1, css),
+            new ReportCell(FormatAmount(current), Align.Right, 1, css)
+        };
+        if (includePrevious)
+            cells.Add(new ReportCell(FormatAmount(previous), Align.Right, 1, css));
+        return cells.ToArray();
+    }
+
+    ReportCell[] WithLeading(ReportCell[] leadingCells, ReportCell[] amountCells) =>
+        leadingCells.Concat(amountCells).ToArray();
+
+    var columnCount = includePrevious ? 6 : 5;
+
+    var table = new ReportTable(Model, title: "Balance Sheet Report", sheetName: "BalanceSheetReport")
+        .Column("Ledger Head", 16)
+        .Column("Sub Ledger", includePrevious ? 28 : 34)
+        .Column("Debit Amount", 14, Align.Right)
+        .Column("Credit Amount", 14, Align.Right)
+        .Column("Current Year", includePrevious ? 14 : 28, Align.Right);
+
+    if (includePrevious)
+        table.Column("Previous Year", 14, Align.Right);
+
+    table
+        .Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 80)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 4px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            @"
+            table.sheet-table tr.r-data td.bold   { font-weight: bold; }
+            table.sheet-table tr.r-data td.indent { padding-left: 12mm; }
+            table.sheet-table tr.r-group td.boxed { border: 1px solid #000; }
+            table.sheet-table tr.r-group td.balanced-ok   { color: #196f3d; }
+            table.sheet-table tr.r-group td.balanced-diff { color: #b03a2e; }");
+
+    table.MetaPair("Branch Name :", branchName, "Fiscal Year :", fiscalYearLabel)
+         .MetaPair("Report Generated On :", generatedOn, "As At :", tillDate + " (B.S.)");
+
+    foreach (var ledgerGroup in groupedByLedgerHead)
+    {
+        // LIABILITIES / ASSETS group line with its totals
+        table.GroupBy(WithLeading(
+            new[] { ReportCell.Left(ledgerGroup.Key, 2) },
+            AmountCells(
+                ledgerGroup.Sum(row => row.DebitAmount),
+                ledgerGroup.Sum(row => row.CreditAmount),
+                ledgerGroup.Sum(row => row.CurrentAmount),
+                ledgerGroup.Sum(row => row.PreviousAmount))));
+
+        var mainLedgerGroups = ledgerGroup
+            .GroupBy(row => new { row.LedgerNo, row.MainLedger })
+            .OrderBy(mainGroup => mainGroup.Key.LedgerNo ?? int.MaxValue)
+            .ToList();
+
+        foreach (var mainGroup in mainLedgerGroups)
+        {
+            var mainCss = reportType == "Summary" ? null : "bold";
+
+            table.Data(WithLeading(
+                new[]
+                {
+                    new ReportCell("", Align.Left, 1, mainCss),
+                    new ReportCell(LedgerLabel(mainGroup.Key.LedgerNo, mainGroup.Key.MainLedger), Align.Left, 1, mainCss)
+                },
+                AmountCells(
+                    mainGroup.Sum(row => row.DebitAmount),
+                    mainGroup.Sum(row => row.CreditAmount),
+                    mainGroup.Sum(row => row.CurrentAmount),
+                    mainGroup.Sum(row => row.PreviousAmount),
+                    mainCss)));
+
+            if (reportType == "Summary") continue;
+
+            foreach (var row in mainGroup)
+            {
+                if (reportType == "SubLedger" && (string.IsNullOrEmpty(row.SubLedger) || row.SubLedger == "-"))
+                    continue;
+
+                var label = reportType == "SubLedger" ? row.SubLedger : SubLedgerLabel(row);
+
+                table.Data(WithLeading(
+                    new[]
+                    {
+                        ReportCell.Left(""),
+                        new ReportCell(label, Align.Left, 1, "indent")
+                    },
+                    AmountCells(row.DebitAmount, row.CreditAmount, row.CurrentAmount, row.PreviousAmount)));
+            }
         }
+    }
 
-        @*
-        Columns (5 or 6 depending on IncludePreviousYearBalance):
-        Ledger Head | Sub Ledger (LedgerNo inline) | Debit Amount | Credit Amount | Current Year | [Previous Year]
-    *@
-        <table class="data-table" data-sheet-name="BalanceSheetReport">
-            <colgroup>
-                <col style="width:16%;" />
-                <col style="width:@(includePrevious ? 28 : 34)%;" />
-                <col style="width:14%;" />
-                <col style="width:14%;" />
-                <col style="width:@(includePrevious ? 14 : 28)%;" />
-                @if (includePrevious)
-                {
-                    <col style="width:14%;" />
-                }
-            </colgroup>
-            <tbody>
+    if (rows.Count > 0)
+    {
+        var grandTotalValues = includePrevious
+            ? new[] { Fmt.Amount(grandDebit), Fmt.Amount(grandCredit), "", "" }
+            : new[] { Fmt.Amount(grandDebit), Fmt.Amount(grandCredit), "" };
+        table.Total("Grand Total :", 2, grandTotalValues);
 
-                @* ── REPORT TITLE ── *@
-                <tr class="meta-title">
-                    <td colspan="@colCount">Balance Sheet Report</td>
-                </tr>
-
-                @* ── META INFO ── *@
-                <tr class="meta-row">
-                    <td colspan="3"><strong>Branch Name :</strong> @branchName</td>
-                    <td colspan="@(colCount - 3)" class="text-right"><strong>Fiscal Year :</strong> @fiscalYearLabel</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="@(colCount - 3)" class="text-right"><strong>As At :</strong> @tillDate (B.S.)</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
-
-                @* ── COLUMN HEADERS ── *@
-                <tr>
-                    <th class="text-left">Ledger Head</th>
-                    <th class="text-left">Sub Ledger</th>
-                    <th class="text-right">Debit Amount</th>
-                    <th class="text-right">Credit Amount</th>
-                    <th class="text-right">Current Year</th>
-                    @if (includePrevious)
-                    {
-                        <th class="text-right">Previous Year</th>
-                    }
-                </tr>
-
-                @* ══════════════════════════════════════════════
-               SUMMARY MODE
-               LedgerHead group header → MainLedger rows
-               LedgerNo shown inline: "90   BANK BALANCE"
-            ══════════════════════════════════════════════ *@
-                @if (reportType == "Summary")
-                {
-                    foreach (var ledgerGroup in groupedByLedgerHead)
-                    {
-                        decimal lhDebit = ledgerGroup.Sum(x => x.DebitAmount);
-                        decimal lhCredit = ledgerGroup.Sum(x => x.CreditAmount);
-                        decimal lhCurrent = ledgerGroup.Sum(x => x.CurrentAmount);
-                        decimal lhPrevious = ledgerGroup.Sum(x => x.PreviousAmount);
-
-                        var mainLedgerGroups = ledgerGroup
-                            .GroupBy(x => new { x.LedgerNo, x.MainLedger })
-                            .OrderBy(g => g.Key.LedgerNo ?? int.MaxValue)
-                            .ToList();
-
-                        @* LedgerHead group header row *@
-                        <tr class="ledger-head-row">
-                            <td colspan="2">@ledgerGroup.Key</td>
-                            <td class="text-right">@lhDebit.ToString("N2")</td>
-                            <td class="text-right">@lhCredit.ToString("N2")</td>
-                            <td class="text-right">@FormatAmount(lhCurrent)</td>
-                            @if (includePrevious)
-                            {
-                                <td class="text-right">@FormatAmount(lhPrevious)</td>
-                            }
-                        </tr>
-
-                        foreach (var mainGroup in mainLedgerGroups)
-                        {
-                            decimal mlDebit = mainGroup.Sum(x => x.DebitAmount);
-                            decimal mlCredit = mainGroup.Sum(x => x.CreditAmount);
-                            decimal mlCurrent = mainGroup.Sum(x => x.CurrentAmount);
-                            decimal mlPrevious = mainGroup.Sum(x => x.PreviousAmount);
-
-                            @* MainLedger summary row — LedgerNo inline in Sub Ledger cell *@
-                            <tr class="detail-row">
-                                <td style="padding:3px 8px;"></td>
-                                <td style="padding:3px 8px;">
-                                    <span style="display:inline-block; min-width:40px;">@mainGroup.Key.LedgerNo</span>
-                                    @mainGroup.Key.MainLedger
-                                </td>
-                                <td class="text-right" style="padding:3px 8px;">@mlDebit.ToString("N2")</td>
-                                <td class="text-right" style="padding:3px 8px;">@mlCredit.ToString("N2")</td>
-                                <td class="text-right" style="padding:3px 8px;">@FormatAmount(mlCurrent)</td>
-                                @if (includePrevious)
-                                {
-                                    <td class="text-right" style="padding:3px 8px;">@FormatAmount(mlPrevious)</td>
-                                }
-                            </tr>
-                        }
-
-                        <tr class="group-separator"><td colspan="@colCount"></td></tr>
-                    }
-
-                    <tr class="grand-total">
-                        <td colspan="2" class="text-right">Grand Total :</td>
-                        <td class="text-right">@grandDebit.ToString("N2")</td>
-                        <td class="text-right">@grandCredit.ToString("N2")</td>
-                        <td></td>
-                        @if (includePrevious)
-                        {
-                            <td></td>
-                        }
-                    </tr>
-                }
-
-                @* ══════════════════════════════════════════════
-               SUBLEDGER MODE
-               LedgerHead → MainLedger sub-header → SubLedger rows
-            ══════════════════════════════════════════════ *@
-                else if (reportType == "SubLedger")
-                {
-                    foreach (var ledgerGroup in groupedByLedgerHead)
-                    {
-                        decimal lhDebit = ledgerGroup.Sum(x => x.DebitAmount);
-                        decimal lhCredit = ledgerGroup.Sum(x => x.CreditAmount);
-                        decimal lhCurrent = ledgerGroup.Sum(x => x.CurrentAmount);
-                        decimal lhPrevious = ledgerGroup.Sum(x => x.PreviousAmount);
-
-                        var mainLedgerGroups = ledgerGroup
-                            .GroupBy(x => new { x.LedgerNo, x.MainLedger })
-                            .OrderBy(g => g.Key.LedgerNo ?? int.MaxValue)
-                            .ToList();
-
-                        @* LedgerHead group header row *@
-                        <tr class="ledger-head-row">
-                            <td colspan="2">@ledgerGroup.Key</td>
-                            <td class="text-right">@lhDebit.ToString("N2")</td>
-                            <td class="text-right">@lhCredit.ToString("N2")</td>
-                            <td class="text-right">@FormatAmount(lhCurrent)</td>
-                            @if (includePrevious)
-                            {
-                                <td class="text-right">@FormatAmount(lhPrevious)</td>
-                            }
-                        </tr>
-
-                        foreach (var mainGroup in mainLedgerGroups)
-                        {
-                            decimal mlDebit = mainGroup.Sum(x => x.DebitAmount);
-                            decimal mlCredit = mainGroup.Sum(x => x.CreditAmount);
-                            decimal mlCurrent = mainGroup.Sum(x => x.CurrentAmount);
-                            decimal mlPrevious = mainGroup.Sum(x => x.PreviousAmount);
-
-                            @* MainLedger sub-header — LedgerNo inline *@
-                            <tr class="main-ledger-row">
-                                <td style="padding:3px 8px;"></td>
-                                <td style="padding:3px 8px;">
-                                    <span style="display:inline-block; min-width:40px;">@mainGroup.Key.LedgerNo</span>
-                                    @mainGroup.Key.MainLedger
-                                </td>
-                                <td class="text-right" style="padding:3px 8px;">@mlDebit.ToString("N2")</td>
-                                <td class="text-right" style="padding:3px 8px;">@mlCredit.ToString("N2")</td>
-                                <td class="text-right" style="padding:3px 8px;">@FormatAmount(mlCurrent)</td>
-                                @if (includePrevious)
-                                {
-                                    <td class="text-right" style="padding:3px 8px;">@FormatAmount(mlPrevious)</td>
-                                }
-                            </tr>
-
-                            foreach (var row in mainGroup)
-                            {
-                                if (string.IsNullOrEmpty(row.SubLedger) || row.SubLedger == "-")
-                                    continue;
-
-                                @* SubLedger detail row *@
-                                <tr class="detail-row">
-                                    <td></td>
-                                    <td style="padding:2px 8px 2px 56px;">@row.SubLedger</td>
-                                    <td class="text-right">@row.DebitAmount.ToString("N2")</td>
-                                    <td class="text-right">@row.CreditAmount.ToString("N2")</td>
-                                    <td class="text-right">@FormatAmount(row.CurrentAmount)</td>
-                                    @if (includePrevious)
-                                    {
-                                        <td class="text-right">@FormatAmount(row.PreviousAmount)</td>
-                                    }
-                                </tr>
-                            }
-                        }
-
-                        <tr class="group-separator"><td colspan="@colCount"></td></tr>
-                    }
-
-                    <tr class="grand-total">
-                        <td colspan="2" class="text-right">Grand Total :</td>
-                        <td class="text-right">@grandDebit.ToString("N2")</td>
-                        <td class="text-right">@grandCredit.ToString("N2")</td>
-                        <td></td>
-                        @if (includePrevious)
-                        {
-                            <td></td>
-                        }
-                    </tr>
-                }
-
-                @* ══════════════════════════════════════════════
-               DETAIL MODE
-               LedgerHead → MainLedger sub-header → every row (SubLedger — SubLedger1 — SubLedger2)
-            ══════════════════════════════════════════════ *@
-                else if (reportType == "Detail")
-                {
-                    foreach (var ledgerGroup in groupedByLedgerHead)
-                    {
-                        decimal lhDebit = ledgerGroup.Sum(x => x.DebitAmount);
-                        decimal lhCredit = ledgerGroup.Sum(x => x.CreditAmount);
-                        decimal lhCurrent = ledgerGroup.Sum(x => x.CurrentAmount);
-                        decimal lhPrevious = ledgerGroup.Sum(x => x.PreviousAmount);
-
-                        var mainLedgerGroups = ledgerGroup
-                            .GroupBy(x => new { x.LedgerNo, x.MainLedger })
-                            .OrderBy(g => g.Key.LedgerNo ?? int.MaxValue)
-                            .ToList();
-
-                        @* LedgerHead group header row *@
-                        <tr class="ledger-head-row">
-                            <td colspan="2">@ledgerGroup.Key</td>
-                            <td class="text-right">@lhDebit.ToString("N2")</td>
-                            <td class="text-right">@lhCredit.ToString("N2")</td>
-                            <td class="text-right">@FormatAmount(lhCurrent)</td>
-                            @if (includePrevious)
-                            {
-                                <td class="text-right">@FormatAmount(lhPrevious)</td>
-                            }
-                        </tr>
-
-                        foreach (var mainGroup in mainLedgerGroups)
-                        {
-                            decimal mlDebit = mainGroup.Sum(x => x.DebitAmount);
-                            decimal mlCredit = mainGroup.Sum(x => x.CreditAmount);
-                            decimal mlCurrent = mainGroup.Sum(x => x.CurrentAmount);
-                            decimal mlPrevious = mainGroup.Sum(x => x.PreviousAmount);
-
-                            @* MainLedger sub-header — LedgerNo inline *@
-                            <tr class="main-ledger-row">
-                                <td style="padding:3px 8px;"></td>
-                                <td style="padding:3px 8px;">
-                                    <span style="display:inline-block; min-width:40px;">@mainGroup.Key.LedgerNo</span>
-                                    @mainGroup.Key.MainLedger
-                                </td>
-                                <td class="text-right" style="padding:3px 8px;">@mlDebit.ToString("N2")</td>
-                                <td class="text-right" style="padding:3px 8px;">@mlCredit.ToString("N2")</td>
-                                <td class="text-right" style="padding:3px 8px;">@FormatAmount(mlCurrent)</td>
-                                @if (includePrevious)
-                                {
-                                    <td class="text-right" style="padding:3px 8px;">@FormatAmount(mlPrevious)</td>
-                                }
-                            </tr>
-
-                            foreach (var row in mainGroup)
-                            {
-                                @* Individual ledger detail row (SubLedger — SubLedger1 — SubLedger2) *@
-                                <tr class="detail-row">
-                                    <td></td>
-                                    <td style="padding:2px 8px 2px 56px;">@FormatSubLedgerDisplay(row)</td>
-                                    <td class="text-right">@row.DebitAmount.ToString("N2")</td>
-                                    <td class="text-right">@row.CreditAmount.ToString("N2")</td>
-                                    <td class="text-right">@FormatAmount(row.CurrentAmount)</td>
-                                    @if (includePrevious)
-                                    {
-                                        <td class="text-right">@FormatAmount(row.PreviousAmount)</td>
-                                    }
-                                </tr>
-                            }
-                        }
-
-                        <tr class="group-separator"><td colspan="@colCount"></td></tr>
-                    }
-
-                    <tr class="grand-total">
-                        <td colspan="2" class="text-right">Grand Total :</td>
-                        <td class="text-right">@grandDebit.ToString("N2")</td>
-                        <td class="text-right">@grandCredit.ToString("N2")</td>
-                        <td></td>
-                        @if (includePrevious)
-                        {
-                            <td></td>
-                        }
-                    </tr>
-                }
-
-                @* ── BALANCE CHECK (Total Liabilities vs Total Assets) ── *@
-                <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
-                <tr class="balance-check-row">
-                    <td colspan="2">Total Liabilities (incl. Capital &amp; Surplus) :</td>
-                    <td colspan="@(colCount - 2)" class="balance-check-value" style="border:1px solid #000; text-align:right; padding:6px;">@FormatAmount(totalLiabilities)</td>
-                </tr>
-                <tr class="balance-check-row">
-                    <td colspan="2">Total Assets (incl. Accumulated Loss) :</td>
-                    <td colspan="@(colCount - 2)" class="balance-check-value" style="border:1px solid #000; text-align:right; padding:6px;">@FormatAmount(totalAssets)</td>
-                </tr>
-                <tr class="balance-check-row">
-                    <td colspan="2">@(isBalanced ? "Balanced" : "Difference") :</td>
-                    <td colspan="@(colCount - 2)" class="@(isBalanced ? "balanced-ok" : "balanced-diff")" style="border:1px solid #000; text-align:right; padding:6px; font-weight:bold;">@FormatAmount(difference)</td>
-                </tr>
-
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+        // balance check: Total Liabilities vs Total Assets
+        table.Spacer();
+        table.GroupBy(
+            new ReportCell("Total Liabilities (incl. Capital & Surplus) :", Align.Left, 2, "boxed"),
+            new ReportCell(FormatAmount(totalLiabilities), Align.Right, columnCount - 2, "boxed"));
+        table.GroupBy(
+            new ReportCell("Total Assets (incl. Accumulated Loss) :", Align.Left, 2, "boxed"),
+            new ReportCell(FormatAmount(totalAssets), Align.Right, columnCount - 2, "boxed"));
+        table.GroupBy(
+            new ReportCell(isBalanced ? "Balanced :" : "Difference :", Align.Left, 2, "boxed"),
+            new ReportCell(FormatAmount(difference), Align.Right, columnCount - 2,
+                "boxed " + (isBalanced ? "balanced-ok" : "balanced-diff")));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

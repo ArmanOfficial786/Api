@@ -1,267 +1,94 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal Dec(string key) => Model.TryGetValue(key, out var dv) && dv != null ? Convert.ToDecimal(dv) : 0m;
+    string Money(decimal? value) => (value ?? 0m).ToString("N2");
+    string S(object? value) => $"{value}";
+
     var memberInfo = Model["MemberInfo"] as LoanStatementDateWiseMemberInfoDto;
     var rows = (Model["Rows"] as List<LoanStatementDateWiseRowDto>) ?? new List<LoanStatementDateWiseRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalPrincipal = Model["TotalPrincipal"] as decimal? ?? 0;
-    var totalInterest = Model["TotalInterest"] as decimal? ?? 0;
-    var totalFine = Model["TotalFine"] as decimal? ?? 0;
-    var totalInstallmentAmt = Model["TotalInstallmentAmt"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All Branch";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All Branch");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan Statement Details - Date wise</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-                border: none;
-            }
-
-            .meta-spacer td {
-                height: 8px;
-                border: none;
-            }
-
-            .info-grid-row td {
-                border: 1px solid #000;
-                padding: 5px 8px;
-            }
-
-            .info-label {
-                font-weight: bold;
-                width: 15%;
-            }
-
-            .info-value {
-                width: 35%;
-            }
-
-            .section-header td {
-                text-align: center;
-                font-weight: bold;
-                font-size: 10pt;
-                padding: 6px;
-                border: none;
-            }
-
-            .data-table th {
-                border-top: none;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-                font-weight: bold;
-            }
-
-            .detail-row td {
-                border-bottom: none;
-            }
-
-            .grand-total-row td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Loan Statement Details - Date wise", sheetName: "LoanStatementDateWise")
+        .Column("S.No", 7)
+        .Column("Installment Amount", 17, Align.Right)
+        .Column("Interest Amount", 15, Align.Right)
+        .Column("Fine Amount", 13, Align.Right)
+        .Column("Principal Amount", 16, Align.Right)
+        .Column("Balance Amount", 16, Align.Right)
+        .Column("Payment Date", 16)
+        .NoColumnHeader()
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 65)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 0; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-data td.info-label, table.sheet-table tr.r-data td.info-value " +
+            "{ border: 1px solid #000; padding: 2px 8px; }\n" +
+            "table.sheet-table tr.r-data td.info-label { font-weight: bold; white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-data td.sec-title { font-weight: bold; font-size: 10pt; padding: 6px; }\n" +
+            "table.sheet-table tr.r-total td { border-top: 1px solid #000; border-bottom: 0; }");
 
-        <table class="data-table" data-sheet-name="LoanStatementDateWise">
-            <colgroup>
-                <col style="width:14%;" />
-                <col style="width:36%;" />
-                <col style="width:14%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:0%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="7">Loan Statement Details - Date wise</td>
-                </tr>
+    table.MetaRow(Fmt.Labeled("Branch Name:", branchName));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+    table.MetaRow(Fmt.Labeled("Filter By:-", $"From Date: {fromDate}\u00A0\u00A0\u00A0To Date: {toDate}"));
 
-                <tr class="meta-row">
-                    <td colspan="7"><strong>Branch Name:</strong> @branchName</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="7"></td></tr>
-                <tr class="meta-row">
-                    <td colspan="7"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="7"></td></tr>
-                <tr class="meta-row">
-                    <td colspan="7"><strong>Filter By:-</strong> From Date: @fromDate &nbsp; To Date: @toDate</td>
-                </tr>
+    ReportCell Label(string text) => new ReportCell(text, Align.Left, 1, "info-label");
+    ReportCell Value(string text, int span = 1) => new ReportCell(text, Align.Left, span, "info-value");
 
-                @if (memberInfo != null)
-                {
-                    <tr class="info-grid-row">
-                        <td class="info-label">MemberID</td>
-                        <td class="info-value">@(memberInfo.MemberId ?? "")</td>
-                        <td class="info-label">Member Name</td>
-                        <td class="info-value" colspan="4">@(memberInfo.FullName ?? "")</td>
-                    </tr>
-                    <tr class="info-grid-row">
-                        <td class="info-label">Address</td>
-                        <td class="info-value">@(memberInfo.Address ?? "")</td>
-                        <td class="info-label">Contact No</td>
-                        <td class="info-value" colspan="4">@(memberInfo.ContactNo ?? "")</td>
-                    </tr>
-                    <tr class="info-grid-row">
-                        <td class="info-label">Account No</td>
-                        <td class="info-value">@(memberInfo.LoanAccountNo ?? "")</td>
-                        <td class="info-label">Loan Type</td>
-                        <td class="info-value" colspan="4">@(memberInfo.LoanTypeName ?? "")</td>
-                    </tr>
-                    <tr class="info-grid-row">
-                        <td class="info-label">Loan Issue Amount</td>
-                        <td class="info-value">@(memberInfo.LoanIssueAmount?.ToString("N2"))</td>
-                        <td class="info-label">Interest Rate</td>
-                        <td class="info-value" colspan="4">@(memberInfo.InterestRate ?? "")</td>
-                    </tr>
-                    <tr class="info-grid-row">
-                        <td class="info-label">Term of Loan</td>
-                        <td class="info-value">@(memberInfo.Period ?? "")</td>
-                        <td class="info-label">Installment Payment</td>
-                        <td class="info-value" colspan="4">@(memberInfo.PaymentType ?? "")</td>
-                    </tr>
-                    <tr class="info-grid-row">
-                        <td class="info-label">Loan Issue Date</td>
-                        <td class="info-value">@(memberInfo.LoanIssueDate ?? "")</td>
-                        <td class="info-label">Loan Maturity Date</td>
-                        <td class="info-value" colspan="4">@(memberInfo.MaturityDateBs ?? "")</td>
-                    </tr>
-                    <tr class="meta-spacer"><td colspan="7"></td></tr>
-                }
+    if (memberInfo != null)
+    {
+        table.Data(Label("MemberID"), Value(S(memberInfo.MemberId)), Label("Member Name"), Value(S(memberInfo.FullName), 4));
+        table.Data(Label("Address"), Value(S(memberInfo.Address)), Label("Contact No"), Value(S(memberInfo.ContactNo), 4));
+        table.Data(Label("Account No"), Value(S(memberInfo.LoanAccountNo)), Label("Loan Type"), Value(S(memberInfo.LoanTypeName), 4));
+        table.Data(Label("Loan Issue Amount"), Value(memberInfo.LoanIssueAmount?.ToString("N2") ?? ""), Label("Interest Rate"), Value(S(memberInfo.InterestRate), 4));
+        table.Data(Label("Term of Loan"), Value(S(memberInfo.Period)), Label("Installment Payment"), Value(S(memberInfo.PaymentType), 4));
+        table.Data(Label("Loan Issue Date"), Value(S(memberInfo.LoanIssueDate)), Label("Loan Maturity Date"), Value(S(memberInfo.MaturityDateBs), 4));
+        table.Spacer();
+    }
 
-                <tr class="section-header">
-                    <td colspan="7">Loan Statement Details</td>
-                </tr>
+    table.Data(new ReportCell("Loan Statement Details", Align.Center, 7, "sec-title"));
+    table.Header();
 
-                <tr>
-                    <th>S.No</th>
-                    <th class="text-right">Installment Amount</th>
-                    <th class="text-right">Interest Amount</th>
-                    <th class="text-right">Fine Amount</th>
-                    <th class="text-right">Principal Amount</th>
-                    <th class="text-right">Balance Amount</th>
-                    <th>Payment Date</th>
-                </tr>
+    var sn = 0;
+    foreach (var row in rows)
+    {
+        table.Data(
+            (++sn).ToString(),
+            Money(row.InstallmentAmt),
+            Money(row.Interest),
+            Money(row.Fine),
+            Money(row.Principal),
+            Money(row.BalanceAmount),
+            row.DateOnBs ?? "");
+    }
 
-                @if (rows.Any())
-                {
-                    var sn = 0;
-                    foreach (var row in rows)
-                    {
-                        sn++;
-                        <tr class="detail-row">
-                            <td>@sn</td>
-                            <td class="text-right">@(row.InstallmentAmt.HasValue ? row.InstallmentAmt.Value.ToString("N2") : "0.00")</td>
-                            <td class="text-right">@(row.Interest.HasValue ? row.Interest.Value.ToString("N2") : "0.00")</td>
-                            <td class="text-right">@(row.Fine.HasValue ? row.Fine.Value.ToString("N2") : "0.00")</td>
-                            <td class="text-right">@(row.Principal.HasValue ? row.Principal.Value.ToString("N2") : "0.00")</td>
-                            <td class="text-right">@(row.BalanceAmount.HasValue ? row.BalanceAmount.Value.ToString("N2") : "0.00")</td>
-                            <td>@(row.DateOnBs ?? "")</td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td class="text-right">Total:</td>
-                        <td class="text-right">@totalInstallmentAmt.ToString("N2")</td>
-                        <td class="text-right">@totalInterest.ToString("N2")</td>
-                        <td class="text-right">@totalFine.ToString("N2")</td>
-                        <td class="text-right">@totalPrincipal.ToString("N2")</td>
-                        <td colspan="2"></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Total:", 1,
+            Dec("TotalInstallmentAmt").ToString("N2"),
+            Dec("TotalInterest").ToString("N2"),
+            Dec("TotalFine").ToString("N2"),
+            Dec("TotalPrincipal").ToString("N2"),
+            "",
+            "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

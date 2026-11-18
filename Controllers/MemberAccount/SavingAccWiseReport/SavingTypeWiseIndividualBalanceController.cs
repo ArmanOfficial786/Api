@@ -1,14 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.SavingAcWiseReport;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.SavingAcWiseReport;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
-using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
 {
@@ -23,6 +21,9 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
         private readonly CustomHeaderResponse _headerResponse;
         private readonly IOptions<ReportSettings> _reportSettings;
         private readonly ILogger<SavingTypeWiseIndividualBalanceController> _logger;
+        private readonly IReportFileResponse _reportFileResponse;
+
+
 
         public SavingTypeWiseIndividualBalanceController(
             ISavingTypeWiseIndividualBalance savingTypeService,
@@ -31,7 +32,8 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
             IWebHostEnvironment webHostEnvironment,
             CustomHeaderResponse headerResponse,
             IOptions<ReportSettings> reportSettings,
-            ILogger<SavingTypeWiseIndividualBalanceController> logger)
+            ILogger<SavingTypeWiseIndividualBalanceController> logger,
+            IReportFileResponse reportFileResponse)
         {
             _savingTypeService = savingTypeService;
             _commonHeaderRepository = commonHeaderRepository;
@@ -40,40 +42,57 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
             _headerResponse = headerResponse;
             _reportSettings = reportSettings;
             _logger = logger;
+            _reportFileResponse = reportFileResponse;
         }
+
+        private static readonly PageSizeSetting PageSetting = PageSizeSetting.A4Portrait;
+
 
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] SavingTypeWiseIndividualBalanceRequest request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW", CancellationToken ct = default)
         {
             try
             {
                 var reportName = "SavingTypeWiseIndividualBalance";
                 var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                //  var reportKey = ReportUtils.GenerateReportKey(request, reportName);
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+                var reportKey = ReportUtils.GenerateReportKey(request, reportName, request.VisualReport ? "VISUAL" : "");
 
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, reportName,
-                        _jsReportService, _logger);
-                }
+                var cached = await ReportExportHelper.TryServeAsync(
+                reportKey, upperFormat, reportName, pdfView: false,
+                _jsReportService, _reportFileResponse, _logger, PageSetting, ct);
+                if (cached != null) return cached;
 
-                // Fetch data
-                var dataTask = _savingTypeService.GetSavingTypeWiseIndividualBalance(request);
+
+
+                //if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
+                //{
+                //    return await ReportExportHelper.ExportFromCacheAsync(
+                //        reportKey, upperFormat, reportName,
+                //        _jsReportService, _logger);
+                //}
+
+                var timer = System.Diagnostics.Stopwatch.StartNew();
+                void Lap(string step) { _logger.LogInformation("{Step}: {Ms} ms", step, timer.ElapsedMilliseconds); timer.Restart(); }
+
                 string? branchIdForHeader = null;
                 if (!request.SameCompanyName && !string.IsNullOrEmpty(request.BranchId) &&
                     request.BranchId != "-1" && !request.BranchId.Contains(','))
                 {
                     branchIdForHeader = request.BranchId;
                 }
+
+                // Fetch data
+                var dataTask = _savingTypeService.GetSavingTypeWiseIndividualBalance(request);
+                Lap("Repository");
                 var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
+                Lap("header");
 
                 await Task.WhenAll(dataTask, headerTask);
+                Lap("Repository + header");
 
                 var data = await dataTask;
                 var headerData = await headerTask;
@@ -107,7 +126,8 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
                     { "GroupByMemberGroup", request.GroupByMemberGroup },
                     { "ViewDetail", request.ViewDetail },
                     { "OrderBy", request.OrderBy },
-                    { "Format", upperFormat }
+                    { "Format", upperFormat },
+                    { "PageSetting", PageSetting }
                 };
 
                 var htmlContent = await Task.Run(() =>
@@ -117,31 +137,26 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
                             ? "Views/VisualReport/VSavingTypeWiseIndividualBalanceReport.cshtml"
                             : "Views/Report/MemberAC/SavingAcWiseReport/SavingTypeWiseIndividualBalance.cshtml",
                         data: reportData));
+                Lap("Razor render");
 
                 if (upperFormat == "VIEW")
                 {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.Rows.Count
-                    };
 
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
 
-                    return new FileContentResult(pdfBytes, "application/pdf");
+                    var viewHtmlNormal = await _jsReportService.ExportReportToRawHtmlAsync(
+                      htmlContent, reportKey, PageSetting, ct);
+                    Lap("Export to raw HTML");
+                    var Pagination = SheetHtml.CountSheets(viewHtmlNormal);
+                    _reportFileResponse.AppendPaginationHeaders(Pagination, data.Rows.Count);
+                    return Content(viewHtmlNormal, "text/html");
+                    Lap("Return");
+
+
                 }
 
                 return await ReportExportHelper.ExportFromCacheAsync(
                     reportKey, upperFormat, reportName,
-                    _jsReportService, _logger);
+                    _jsReportService, _logger, PageSetting, ct);
             }
             catch (Exception ex)
             {

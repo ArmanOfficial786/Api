@@ -1,54 +1,52 @@
-﻿// Controllers/AccountOperation/MemberSummaryController.cs
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.SavingAcWiseReport;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.SavingAcWiseReport;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
 using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
-using System.Text.Json;
+using System.Security.Claims;
 
 namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
 {
     [ApiController]
     [Route("api/[controller]")]
+    [Authorize]
     public class MemberSummaryController : ControllerBase
     {
-        // Page size setting: 240mm x 297mm (A4 Portrait)
-        private static readonly PageSizeSetting PageSetting =
-            PageSizeSetting.Custom(250, 297, PageUnit.mm, landscape: false);
+        private const string ReportName = "MemberSummaryReport";
 
         private readonly IMemberSummary _memberSummaryService;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
+        private readonly IReportHeaderProvider _headers;
         private readonly IJsReportService _jsReportService;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly CustomHeaderResponse _headerResponse;
-        private readonly IOptions<ReportSettings> _reportSettings;
+        private readonly IReportDataCache _dataCache;
         private readonly ILogger<MemberSummaryController> _logger;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        private static readonly PageSizeSetting NPageSetting =
+            PageSizeSetting.Custom(250, 297, PageUnit.mm, landscape: false);
+        private static readonly PageSizeSetting VPageSetting =
+            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         public MemberSummaryController(
             IMemberSummary memberSummaryService,
-            ICommonHeaderRepository commonHeaderRepository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
-            IWebHostEnvironment webHostEnvironment,
-            IOptions<ReportSettings> reportSettings,
+            IReportDataCache dataCache,
             ILogger<MemberSummaryController> logger,
-            CustomHeaderResponse headerResponse)
+            IReportFileResponse reportFileResponse)
         {
             _memberSummaryService = memberSummaryService;
-            _commonHeaderRepository = commonHeaderRepository;
+            _headers = headers;
             _jsReportService = jsReportService;
-            _webHostEnvironment = webHostEnvironment;
-            _reportSettings = reportSettings;
+            _dataCache = dataCache;
             _logger = logger;
-            _headerResponse = headerResponse;
+            _reportFileResponse = reportFileResponse;
         }
 
-        [HttpPost()]
+        [HttpPost]
         public async Task<IActionResult> GenerateReport(
             [FromBody] MemberSummaryRequest request,
             [FromQuery] string format = "VIEW",
@@ -56,70 +54,53 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
         {
             try
             {
-                // Validate till date
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out _))
+                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+
+                if (request == null)
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
+
                 if (string.IsNullOrEmpty(request.TillDate) || request.TillDate == "-1")
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Till Date is required" });
+
+                if ((string.IsNullOrEmpty(request.BranchIds) || request.BranchIds == "-1") && !request.SameCompanyName)
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Please select Branch Office" });
+
+                var upperFormat = format.ToUpperInvariant();
+                var isVisual = request.VisualReport;
+                var page = isVisual ? VPageSetting : NPageSetting;
+
+                var dataKey = ReportCacheKey.ForData(
+                    request, ReportName, userIdClaim, nameof(request.VisualReport));
+                var reportKey = $"{dataKey}_{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}";
+
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: request.VisualReport,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
+
+                var branchIdForHeader = !request.SameCompanyName
+                    && !string.IsNullOrEmpty(request.BranchIds)
+                    && request.BranchIds != "-1"
+                    && !request.BranchIds.Contains(',')
+                        ? request.BranchIds
+                        : "";
+
+                var headerTask = _headers.GetAsync(branchIdForHeader, ct);
+                var dataTask = _dataCache.GetOrLoadAsync(dataKey, async () =>
                 {
-                    return BadRequest(new { success = false, message = "Till Date is required" });
-                }
-
-                // Validate branch selection
-                if (string.IsNullOrEmpty(request.BranchIds) || request.BranchIds == "-1")
-                {
-                    if (!request.SameCompanyName)
-                    {
-                        return BadRequest(new { success = false, message = "Please select Branch Office" });
-                    }
-                }
-
-                var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, "MemberSummaryReport");
-
-                ReportExportHelper.LogCacheState(
-                    upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
-
-                // Serve from cache if available
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    _logger.LogInformation("Serving MemberSummaryReport from cache");
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, "MemberSummaryReport",
-                        _jsReportService, _logger, PageSetting, ct);
-                }
-
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-
-                // Fetch data
-                var dataTask = _memberSummaryService.GetMemberSummaryReport(request);
-
-                string? branchIdForHeader = null;
-                if (!request.SameCompanyName && !string.IsNullOrEmpty(request.BranchIds) &&
-                    request.BranchIds != "-1" && !request.BranchIds.Contains(','))
-                {
-                    branchIdForHeader = request.BranchIds;
-                }
-                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
-
-                await Task.WhenAll(dataTask, headerTask);
+                    var loaded = await _memberSummaryService.GetMemberSummaryReport(request);
+                    if (loaded == null || loaded.Rows == null || !loaded.Rows.Any())
+                        return null;
+                    return loaded;
+                }, ct);
+                await Task.WhenAll(headerTask, dataTask);
 
                 var data = await dataTask;
-                var headerData = await headerTask;
+                if (data == null)
+                    return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
 
-                if (!data.Rows.Any())
-                {
-                    return NotFound(new { success = false, message = "No data found" });
-                }
-
-                // Convert company logo to base64
-                var header = headerData.FirstOrDefault();
-                if (header != null && !string.IsNullOrEmpty(header.CompanyLogo))
-                {
-                    var companyLogoBase64 = await ReportUtils.ReadCommonImageAsBase64Async(
-                        webRoot, header.CompanyLogo, _logger);
-                    header.CompanyLogo = companyLogoBase64;
-                }
-
-                // Build report data
                 var reportData = new Dictionary<string, object>
                 {
                     { "Rows", data.Rows },
@@ -129,54 +110,37 @@ namespace NexgenCosysReport.Controllers.MemberAccount.SavingAccWiseReport
                     { "TotalLoan", data.TotalLoan },
                     { "GrandTotal", data.GrandTotal },
                     { "SavingTypeTotals", data.SavingTypeTotals },
-                    { "HeaderDataSet", headerData },
+                    { "HeaderDataSet", await headerTask },
                     { "TillDate", request.TillDate },
-                    { "BranchName", request.SameCompanyName ? "Same Company" : request.BranchName },
+                    { "BranchName", request.SameCompanyName ? "Same Company" : (request.BranchName ?? "") },
                     { "CollectionCenter", request.CollectionCenterId ?? "All" },
                     { "MemberGroup", request.MemberGroupId ?? "All" },
                     { "EnableCollectionCenterGroup", request.EnableCollectionCenterGroup },
                     { "EnableMemberGroupGroup", request.EnableMemberGroupGroup },
                     { "OrderBy", request.OrderBy },
-                    { "Format", upperFormat }
+                    { "VisualReport", request.VisualReport },
+                    { "Format", upperFormat },
+                    { "PageSetting", page }
                 };
 
-                // Render HTML
-                var htmlContent = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                string viewPath = request.VisualReport
+                    ? "Views/VisualReport/AccountOperation/VMemberSummaryReport.cshtml"
+                    : "Views/Report/MemberAC/SavingAcWiseReport/MemberSummary.cshtml";
+
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
                     reportKey: reportKey,
-                    reportPath: request.VisualReport
-                        ? "Views/VisualReport/AccountOperation/VMemberSummaryReport.cshtml"
-                        : "Views/Report/MemberAC/SavingAcWiseReport/MemberSummary.cshtml",
-                    data: reportData);
+                    reportPath: viewPath,
+                    data: reportData, ct: ct);
 
-                if (upperFormat == "VIEW")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.Rows.Count
-                    };
-
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{"MemberSummaryReport"}.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
-                }
-
-                return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, "MemberSummaryReport",
-                    _jsReportService, _logger);
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: request.VisualReport,
+                    totalRecords: data.Rows.Count,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "MemberSummary report generation failed");
-                return StatusCode(500, new { success = false, message = ex.Message, inner = ex.InnerException?.Message });
+                _logger.LogError(ex, "Error generating {Report} report", ReportName);
+                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }
     }

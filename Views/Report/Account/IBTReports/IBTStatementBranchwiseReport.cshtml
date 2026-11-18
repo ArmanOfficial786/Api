@@ -1,294 +1,136 @@
-﻿@* Views/Report/Account/IBTReports/IBTStatementBranchwiseReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Account.IBTReports;
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Account.IBTReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
+
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal Dec(string key) => Model.TryGetValue(key, out var dv) && dv != null ? Convert.ToDecimal(dv) : 0m;
+
+    // negatives in brackets and a missing amount prints 0.00 (same as before)
+    string N(decimal? v) => v.HasValue ? (v.Value < 0 ? $"({Math.Abs(v.Value):N2})" : v.Value.ToString("N2")) : "0.00";
 
     var detailRows = (Model["DetailRows"] as List<IBTStatementBranchwiseRowDto>) ?? new List<IBTStatementBranchwiseRowDto>();
     var ledgerGroupRows = (Model["LedgerGroupRows"] as List<IBTStatementBranchwiseLedgerGroupRowDto>) ?? new List<IBTStatementBranchwiseLedgerGroupRowDto>();
     var interestRows = (Model["InterestRows"] as List<IBTStatementBranchwiseInterestRowDto>) ?? new List<IBTStatementBranchwiseInterestRowDto>();
 
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["LoginBranchName"]?.ToString() ?? "";
-    var reportType = Model["ReportType"]?.ToString() ?? "Detail";
-    var interestRate = Model["InterestRate"] as decimal? ?? 0;
-    var minimumClosingBalance = Model["MinimumClosingBalance"] as decimal? ?? 0;
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("LoginBranchName");
+    var reportType = Text("ReportType", "Detail");
+    var interestRate = Dec("InterestRate");
+    var minimumClosingBalance = Dec("MinimumClosingBalance");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var reportTitle = "IBT Statement Branchwise Report";
+    var isSubLedger = reportType == "SubLedger";
+    var isInterest = reportType == "InterestCalculation";
 
-    string Fmt(decimal? v) => v.HasValue ? (v.Value < 0 ? $"({Math.Abs(v.Value):N2})" : v.Value.ToString("N2")) : "0.00";
+    // the report type decides the sheet name and the columns; only one layout is printed per request
+    var sheetName = isSubLedger ? "IBTStatementLedgerWise" : isInterest ? "IBTStatementInterest" : "IBTStatementDetail";
+    var columnCount = isSubLedger || isInterest ? 5 : 7;
+
+    var table = new ReportTable(Model, title: "IBT Statement Branchwise Report", sheetName: sheetName)
+        .Style(new ReportStyle
+        {
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: isInterest ? 85 : 75)   // one text line per row
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; border: 1px solid #000; }" +
+            // column titles may wrap, as in the old report
+            "table.sheet-table tr.r-header th { white-space: normal; }");
+
+    if (isSubLedger)
+    {
+        table.Column("Main Ledger", 20)
+             .Column("Sub Ledger", 20)
+             .Column("Debit", 20, Align.Right)
+             .Column("Credit", 20, Align.Right)
+             .Column("Balance", 20, Align.Right);
+    }
+    else if (isInterest)
+    {
+        table.Column("Voucher Date", 15)
+             .Column("Voucher No", 15)
+             .Column("Narration", 35)
+             .Column("Closing Balance", 17.5, Align.Right)
+             .Column("Interest Amount", 17.5, Align.Right);
+    }
+    else
+    {
+        table.Column("VoucherNo", 12)
+             .Column("VoucherOnBs", 11)
+             .Column("LedgerName", 14)
+             .Column("Description", 33)
+             .Column("DebitAmount", 10, Align.Right)
+             .Column("CreditAmount", 10, Align.Right)
+             .Column("Balance", 10, Align.Right);
+    }
+
+    // ── title block: left part takes the first half of the columns, the right part the rest ──
+    var leftSpan = columnCount / 2;
+    table.MetaRow(
+        Fmt.Labeled("Branch Name :", branchName),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+        leftSpan);
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+    if (isInterest)
+    {
+        table.MetaRow(
+            Fmt.Labeled("Interest Rate :", interestRate.ToString("N2") + "%"),
+            Fmt.Labeled("Minimum Closing Balance :", N(minimumClosingBalance)),
+            leftSpan);
+    }
+
+    // ── rows ──
+    if (isSubLedger)
+    {
+        foreach (var row in ledgerGroupRows)
+        {
+            table.Data(
+                row.MainLedger ?? "",
+                row.SubLedger ?? "",
+                N(row.DebitAmount),
+                N(row.CreditAmount),
+                N(row.Balance));
+        }
+        if (!ledgerGroupRows.Any())
+            table.Data(ReportCell.Center("No data found for the selected criteria", columnCount));
+    }
+    else if (isInterest)
+    {
+        foreach (var row in interestRows)
+        {
+            table.Data(
+                row.VoucherDate ?? "",
+                row.VoucherNo ?? "",
+                row.Narration ?? "",
+                N(row.ClosingBalance),
+                N(row.InterestAmount));
+        }
+        if (!interestRows.Any())
+            table.Data(ReportCell.Center("No data found for the selected criteria", columnCount));
+    }
+    else
+    {
+        foreach (var row in detailRows)
+        {
+            table.Data(
+                row.VoucherNo ?? "",
+                row.VoucherOnBs ?? "",
+                row.MainLedger ?? "",
+                row.Narration ?? "",
+                N(row.DebitAmount),
+                N(row.CreditAmount),
+                N(row.Balance));
+        }
+        if (!detailRows.Any())
+            table.Data(ReportCell.Center("No data found for the selected criteria", columnCount));
+    }
 }
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>@reportTitle</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .report-title {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            /* Own auto-layout table for the subheader so long labels never
-                           wrap or overlap — same fix applied throughout this thread. */
-            .meta-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 6px;
-            }
-
-                .meta-table td {
-                    padding: 3px 6px;
-                    font-size: 9pt;
-                    white-space: nowrap;
-                    vertical-align: top;
-                }
-
-            .meta-left {
-                text-align: left;
-                width: 50%;
-            }
-
-            .meta-right {
-                text-align: right;
-                width: 50%;
-            }
-
-            .meta-spacer td {
-                height: 8px;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                    border: 1px solid #000;
-                }
-
-                .data-table th {
-                    background: #f9f9f9;
-                    text-align: left;
-                    white-space: normal;
-                    font-weight: bold;
-                }
-
-                    .data-table th.text-right,
-                    .data-table td.text-right {
-                        text-align: right;
-                    }
-
-            .grand-total-row td {
-                font-weight: bold;
-                background: #f9f9f9;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
-        {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
-
-        <div class="report-title">@reportTitle</div>
-
-        <table class="meta-table">
-            <tr>
-                <td class="meta-left"><strong>Branch Name :</strong> @branchName</td>
-                <td class="meta-right"><strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp; <strong>To Date :</strong> @toDate</td>
-            </tr>
-            <tr>
-                <td class="meta-left"><strong>Report Generated On :</strong> @generatedOn</td>
-                <td class="meta-right"></td>
-            </tr>
-            @if (reportType == "InterestCalculation")
-            {
-                <tr>
-                    <td class="meta-left"><strong>Interest Rate :</strong> @interestRate.ToString("N2")%</td>
-                    <td class="meta-right"><strong>Minimum Closing Balance :</strong> @Fmt(minimumClosingBalance)</td>
-                </tr>
-            }
-            <tr class="meta-spacer"><td colspan="2"></td></tr>
-        </table>
-
-        @if (reportType == "SubLedger")
-        {
-            <table class="data-table" data-sheet-name="IBTStatementLedgerWise">
-                <colgroup>
-                    <col style="width:20%;" />
-                    <col style="width:20%;" />
-                    <col style="width:20%;" />
-                    <col style="width:20%;" />
-                    <col style="width:20%;" />
-                </colgroup>
-                <tbody>
-                    <tr>
-                        <th>Main Ledger</th>
-                        <th>Sub Ledger</th>
-                        <th class="text-right">Debit</th>
-                        <th class="text-right">Credit</th>
-                        <th class="text-right">Balance</th>
-                    </tr>
-                    @if (ledgerGroupRows.Any())
-                    {
-                        foreach (var row in ledgerGroupRows)
-                        {
-                            <tr>
-                                <td>@(row.MainLedger ?? "")</td>
-                                <td>@(row.SubLedger ?? "")</td>
-                                <td class="text-right">@Fmt(row.DebitAmount)</td>
-                                <td class="text-right">@Fmt(row.CreditAmount)</td>
-                                <td class="text-right">@Fmt(row.Balance)</td>
-                            </tr>
-                        }
-                    }
-                    else
-                    {
-                        <tr><td colspan="5" class="text-center">No data found for the selected criteria</td></tr>
-                    }
-                </tbody>
-            </table>
-        }
-        else if (reportType == "InterestCalculation")
-        {
-            <table class="data-table" data-sheet-name="IBTStatementInterest">
-                <colgroup>
-                    <col style="width:15%;" />
-                    <col style="width:15%;" />
-                    <col style="width:35%;" />
-                    <col style="width:17.5%;" />
-                    <col style="width:17.5%;" />
-                </colgroup>
-                <tbody>
-                    <tr>
-                        <th>Voucher Date</th>
-                        <th>Voucher No</th>
-                        <th>Narration</th>
-                        <th class="text-right">Closing Balance</th>
-                        <th class="text-right">Interest Amount</th>
-                    </tr>
-                    @if (interestRows.Any())
-                    {
-                        foreach (var row in interestRows)
-                        {
-                            <tr>
-                                <td>@(row.VoucherDate ?? "")</td>
-                                <td>@(row.VoucherNo ?? "")</td>
-                                <td>@(row.Narration ?? "")</td>
-                                <td class="text-right">@Fmt(row.ClosingBalance)</td>
-                                <td class="text-right">@Fmt(row.InterestAmount)</td>
-                            </tr>
-                        }
-                    }
-                    else
-                    {
-                        <tr><td colspan="5" class="text-center">No data found for the selected criteria</td></tr>
-                    }
-                </tbody>
-            </table>
-        }
-        else
-        {
-            <table class="data-table" data-sheet-name="IBTStatementDetail">
-                <colgroup>
-                    <col style="width:12%;" />
-                    <col style="width:11%;" />
-                    <col style="width:14%;" />
-                    <col style="width:33%;" />
-                    <col style="width:10%;" />
-                    <col style="width:10%;" />
-                    <col style="width:10%;" />
-                </colgroup>
-                <tbody>
-                    <tr>
-                        <th>VoucherNo</th>
-                        <th>VoucherOnBs</th>
-                        <th>LedgerName</th>
-                        <th>Description</th>
-                        <th class="text-right">DebitAmount</th>
-                        <th class="text-right">CreditAmount</th>
-                        <th class="text-right">Balance</th>
-                    </tr>
-                    @if (detailRows.Any())
-                    {
-                        foreach (var row in detailRows)
-                        {
-                            <tr>
-                                <td>@(row.VoucherNo ?? "")</td>
-                                <td>@(row.VoucherOnBs ?? "")</td>
-                                <td>@(row.MainLedger ?? "")</td>
-                                <td>@(row.Narration ?? "")</td>
-                                <td class="text-right">@Fmt(row.DebitAmount)</td>
-                                <td class="text-right">@Fmt(row.CreditAmount)</td>
-                                <td class="text-right">@Fmt(row.Balance)</td>
-                            </tr>
-                        }
-                    }
-                    else
-                    {
-                        <tr><td colspan="7" class="text-center">No data found for the selected criteria</td></tr>
-                    }
-                </tbody>
-            </table>
-        }
-    </div>
-</body>
-</html>
+@await Html.PartialAsync("_SheetReport", table.Build())

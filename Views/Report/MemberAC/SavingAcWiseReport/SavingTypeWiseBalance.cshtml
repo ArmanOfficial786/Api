@@ -1,298 +1,139 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.SavingAcWiseReport;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.SavingAcWiseReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    // Raw rows from the SP. Grouped by Saving Type and summed into one row per
-    // type - matches the legacy DevExpress report's group-header/footer output.
-    var rows = (Model["Rows"] as List<SavingTypeWiseBalanceRowDto>) ?? new List<SavingTypeWiseBalanceRowDto>();
+    var fontSize = "9pt";
 
-    var totalOpening = Model["TotalOpening"] as decimal? ?? 0;
-    var totalDeposit = Model["TotalDeposit"] as decimal? ?? 0;
-    var totalWithdraw = Model["TotalWithdraw"] as decimal? ?? 0;
-    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
-    var totalClosing = Model["TotalClosing"] as decimal? ?? 0;
-
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "";
-    var isNepali = Model["IsNepali"] as bool? ?? false;
-    var openingBalance = Model["OpeningBalance"] as bool? ?? false;
-    var percentageBalance = Model["PercentageBalance"] as bool? ?? false;
-    var groupByBranch = Model["GroupByBranch"] as bool? ?? false;
-    var groupByCollectionCenter = Model["GroupByCollectionCenter"] as bool? ?? false;
-    var groupByMemberGroup = Model["GroupByMemberGroup"] as bool? ?? false;
-    var viewCollector = Model["ViewCollector"] as bool? ?? false;
-    var orderBy = Model["OrderBy"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-    var showHeader = !Model.TryGetValue("ShowHeader", out var shVal) || (shVal is bool sh && sh);
-
-    string FormatAmount(decimal amount) =>
-        amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
-
-    string NullDisplay(string value) =>
-        string.IsNullOrWhiteSpace(value) ? "-" : value;
-
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    bool Flag(string key) => Model.TryGetValue(key, out var fv) && fv is bool b && b;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+    string FormatAmount(decimal amount) => amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
+    string NullDisplay(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
     string FormatPercentage(decimal amount) => amount.ToString("F2") + "%";
 
-    // --- Group by Saving Type, summing the money columns AND the row-level
-    //     TransAccCount (number of accounts that had activity), rather than
-    //     deriving it from a distinct AccountNo count in the view - that field
-    //     is not reliably populated on every row, TransAccCount is. ---
+    var rows = (Model["Rows"] as List<SavingTypeWiseBalanceRowDto>) ?? new List<SavingTypeWiseBalanceRowDto>();
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName");
+    var openingBalance = Flag("OpeningBalance");
+    var percentageBalance = Flag("PercentageBalance");
+    var groupByBranch = Flag("GroupByBranch");
+    var groupByCollectionCenter = Flag("GroupByCollectionCenter");
+    var groupByMemberGroup = Flag("GroupByMemberGroup");
+    var viewCollector = Flag("ViewCollector");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
     var groups = rows
         .GroupBy(r => string.IsNullOrWhiteSpace(r.SavingType) ? "-" : r.SavingType)
-        .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
-        .Select(g => new
+        .OrderBy(x => x.Key, StringComparer.OrdinalIgnoreCase)
+        .Select(x => new
         {
-            SavingType = g.Key,
-            TransAccCount = g.Sum(r => r.TransAccCount),
-            Opening = g.Sum(r => r.Opening),
-            Deposit = g.Sum(r => r.Deposit),
-            Withdraw = g.Sum(r => r.Withdraw),
-            Balance = g.Sum(r => r.Balance),
-            BranchName = g.Select(r => r.BranchName).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
-            CollectionCenterName = g.Select(r => r.CollectionCenterName).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
-            MemberGroupName = g.Select(r => r.MemberGroupName).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
-            Collector = g.Select(r => r.MemberName).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))
+            SavingType = x.Key,
+            TransAccCount = x.Sum(r => r.TransAccCount),
+            Opening = x.Sum(r => r.Opening),
+            Deposit = x.Sum(r => r.Deposit),
+            Withdraw = x.Sum(r => r.Withdraw),
+            Balance = x.Sum(r => r.Balance),
+            BranchName = x.Select(r => r.BranchName).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
+            CollectionCenterName = x.Select(r => r.CollectionCenterName).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
+            MemberGroupName = x.Select(r => r.MemberGroupName).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
+            Collector = x.Select(r => r.MemberName).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v))
         })
         .ToList();
 
-    decimal grandBalanceForPct = groups.Sum(g => g.Balance);
-    int grandTransAccCount = groups.Sum(g => g.TransAccCount);
+    decimal grandBalanceForPct = groups.Sum(x => x.Balance);
+    int grandTransAccCount = groups.Sum(x => x.TransAccCount);
 
-    int colCount = 4; // Saving Type, Trans Acc Count, Deposit, Withdraw
-    colCount++; // Balance
-    if (openingBalance) colCount++;
-    if (percentageBalance) colCount++;
-    if (viewCollector) colCount++;
-    if (groupByBranch) colCount++;
-    if (groupByCollectionCenter) colCount++;
-    if (groupByMemberGroup) colCount++;
+    var totalOpening = TotalOr("TotalOpening", groups.Sum(x => x.Opening));
+    var totalDeposit = TotalOr("TotalDeposit", groups.Sum(x => x.Deposit));
+    var totalWithdraw = TotalOr("TotalWithdraw", groups.Sum(x => x.Withdraw));
+    var totalBalance = TotalOr("TotalBalance", groups.Sum(x => x.Balance));
 
-    int totalLabelColspan = colCount - (openingBalance ? 1 : 0) - 3 /*TransAccCount+Deposit+Withdraw*/ - 1 /*Balance*/ - (percentageBalance ? 1 : 0);
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Saving Type Wise Balance Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var numericColumns = (openingBalance ? 1 : 0) + 3 + 1 + (percentageBalance ? 1 : 0);
 
-            body {
-                margin: 0;
-                padding: 0;
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-            }
+    var table = new ReportTable(Model, title: "Saving Type Wise Balance Report", sheetName: "SavingTypeWiseBalance");
+    if (groupByBranch) table.Column("Branch", 14);
+    if (groupByCollectionCenter) table.Column("Collection Center", 14);
+    if (groupByMemberGroup) table.Column("Member Group", 14);
+    if (viewCollector) table.Column("Collector", 14);
+    table.Column("Saving Type", 22);
+    var labelColumns = (groupByBranch ? 1 : 0) + (groupByCollectionCenter ? 1 : 0) + (groupByMemberGroup ? 1 : 0) + (viewCollector ? 1 : 0) + 1;
+    if (openingBalance) table.Column("Opening", 12, Align.Right);
+    table.Column("Trans Acc Count", 10, Align.Right);
+    table.Column("Deposit", 12, Align.Right);
+    table.Column("Withdraw", 12, Align.Right);
+    table.Column("Balance", 12, Align.Right);
+    if (percentageBalance) table.Column("%", 8, Align.Right);
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            /* Stop <thead> from re-printing on every page */
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-            }
-
-                .data-table td, .data-table th {
-                    padding: 4px 6px;
-                }
-
-                .data-table th {
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                }
-
-                .data-table tbody tr td {
-                    border-bottom: 1px solid #eee;
-                }
-
-                .data-table tr,
-                .grand-total td {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-                border: none;
-            }
-
-            .meta-row td {
-                padding: 4px 6px;
-                font-size: 9pt;
-                border: none;
-            }
-
-            .meta-spacer td {
-                height: 8px;
-                border: none;
-            }
-
-            .grand-total td {
-                border-top: 2px solid #000;
-                font-weight: bold;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                body {
-                    margin: 0;
-                    padding: 0;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel && showHeader)
+    table.NoColumnHeader()
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 60)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 3px 6px; }\n" +
+            "table.sheet-table tr.r-header th { white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 1px solid #eee; }\n" +
+            "table.sheet-table tr.r-total td { border-top: 2px solid #000; border-bottom: 0; }");
 
-        <table class="data-table">
-            <thead>
-                @if (showHeader)
-                {
-                    <tr class="meta-title">
-                        <td colspan="@colCount">Saving Type Wise Balance Report</td>
-                    </tr>
-                    <tr class="meta-row">
-                        <td colspan="@colCount">
-                            <strong>Branch:</strong> @branchName &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>From Date:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>To Date:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>Report Generated On:</strong> @generatedOn
-                            @if (openingBalance)
-                            {
-                                <text>&nbsp;&nbsp;|&nbsp;&nbsp; <strong>With Opening Balance</strong></text>
-                            }
-                            @if (percentageBalance)
-                            {
-                                <text>&nbsp;&nbsp;|&nbsp;&nbsp; <strong>With Percentage</strong></text>
-                            }
-                        </td>
-                    </tr>
-                    <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
-                }
-                <tr>
-                    @if (groupByBranch)
-                    {
-                        <th>Branch</th>
-                    }
-                    @if (groupByCollectionCenter)
-                    {
-                        <th>Collection Center</th>
-                    }
-                    @if (groupByMemberGroup)
-                    {
-                        <th>Member Group</th>
-                    }
-                    @if (viewCollector)
-                    {
-                        <th>Collector</th>
-                    }
-                    <th>Saving Type</th>
-                    @if (openingBalance)
-                    {
-                        <th class="text-right">Opening</th>
-                    }
-                    <th class="text-right">Trans Acc Count</th>
-                    <th class="text-right">Deposit</th>
-                    <th class="text-right">Withdraw</th>
-                    <th class="text-right">Balance</th>
-                    @if (percentageBalance)
-                    {
-                        <th class="text-right">%</th>
-                    }
-                </tr>
-            </thead>
-            <tbody>
-                @if (groups.Any())
-                {
-                    foreach (var g in groups)
-                    {
-                        <tr>
-                            @if (groupByBranch)
-                            {
-                                <td>@NullDisplay(g.BranchName)</td>
-                            }
-                            @if (groupByCollectionCenter)
-                            {
-                                <td>@NullDisplay(g.CollectionCenterName)</td>
-                            }
-                            @if (groupByMemberGroup)
-                            {
-                                <td>@NullDisplay(g.MemberGroupName)</td>
-                            }
-                            @if (viewCollector)
-                            {
-                                <td>@NullDisplay(g.Collector)</td>
-                            }
-                            <td>@g.SavingType</td>
-                            @if (openingBalance)
-                            {
-                                <td class="text-right">@FormatAmount(g.Opening)</td>
-                            }
-                            <td class="text-right">@g.TransAccCount</td>
-                            <td class="text-right">@FormatAmount(g.Deposit)</td>
-                            <td class="text-right">@FormatAmount(g.Withdraw)</td>
-                            <td class="text-right">@FormatAmount(g.Balance)</td>
-                            @if (percentageBalance)
-                            {
-                                <td class="text-right">@FormatPercentage(grandBalanceForPct == 0 ? 0 : (g.Balance / grandBalanceForPct) * 100)</td>
-                            }
-                        </tr>
-                    }
-                    <tr class="grand-total">
-                        <td colspan="@totalLabelColspan"><strong>Grand Total:</strong></td>
-                        @if (openingBalance)
-                        {
-                            <td class="text-right"><strong>@FormatAmount(totalOpening)</strong></td>
-                        }
-                        <td class="text-right"><strong>@grandTransAccCount</strong></td>
-                        <td class="text-right"><strong>@FormatAmount(totalDeposit)</strong></td>
-                        <td class="text-right"><strong>@FormatAmount(totalWithdraw)</strong></td>
-                        <td class="text-right"><strong>@FormatAmount(totalBalance)</strong></td>
-                        @if (percentageBalance)
-                        {
-                            <td class="text-right"><strong>100.00%</strong></td>
-                        }
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="@colCount" class="text-center">No data found</td></tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    table.MetaRow(Fmt.Labeled("Branch:", branchName));
+    table.MetaRow(Fmt.Join(Fmt.Labeled("From Date:", fromDate), Fmt.Labeled("To Date:", toDate)));
+    table.MetaRow(Fmt.Labeled("Report Generated On:", generatedOn));
+    if (openingBalance || percentageBalance)
+    {
+        var options = new List<string>();
+        if (openingBalance) options.Add("With Opening Balance");
+        if (percentageBalance) options.Add("With Percentage");
+        table.MetaRow(Fmt.Labeled("Options:", string.Join(", ", options)));
+    }
+
+    table.Header();
+
+    foreach (var grp in groups)
+    {
+        var values = new List<string>();
+        if (groupByBranch) values.Add(NullDisplay(grp.BranchName));
+        if (groupByCollectionCenter) values.Add(NullDisplay(grp.CollectionCenterName));
+        if (groupByMemberGroup) values.Add(NullDisplay(grp.MemberGroupName));
+        if (viewCollector) values.Add(NullDisplay(grp.Collector));
+        values.Add(grp.SavingType);
+        if (openingBalance) values.Add(FormatAmount(grp.Opening));
+        values.Add(grp.TransAccCount.ToString());
+        values.Add(FormatAmount(grp.Deposit));
+        values.Add(FormatAmount(grp.Withdraw));
+        values.Add(FormatAmount(grp.Balance));
+        if (percentageBalance)
+            values.Add(FormatPercentage(grandBalanceForPct == 0 ? 0 : (grp.Balance / grandBalanceForPct) * 100));
+
+        table.Data(values.ToArray());
+    }
+
+    if (groups.Count > 0)
+    {
+        var totalValues = new List<string>();
+        if (openingBalance) totalValues.Add(FormatAmount(totalOpening));
+        totalValues.Add(grandTransAccCount.ToString());
+        totalValues.Add(FormatAmount(totalDeposit));
+        totalValues.Add(FormatAmount(totalWithdraw));
+        totalValues.Add(FormatAmount(totalBalance));
+        if (percentageBalance) totalValues.Add("100.00%");
+
+        table.Total("Grand Total:", labelColumns, totalValues.ToArray());
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

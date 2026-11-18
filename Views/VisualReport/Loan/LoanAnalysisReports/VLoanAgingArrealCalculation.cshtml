@@ -1,0 +1,117 @@
+﻿@using NexgenCosysReport.Dtos.ReportDtos
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@using NexgenCosysReport.Services.ReportService.Visual
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    // ── 1. DATA (set by the controller, same keys as the normal report) ──
+    var arrearRows = (Model["Rows"] as List<LoanAgingArrealCalculationRowDto>) ?? new();
+    var totalRecords = Model["TotalRecords"] as int? ?? 0;
+    var totalLoanIssue = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
+    var totalBalance = Model["TotalBalanceAmount"] as decimal? ?? 0;
+    var totalGoodAmount = Model["TotalGoodloan"] as decimal? ?? 0;      // "Good Amt." column
+    var totalRisk = Model["TotalArrear"] as decimal? ?? 0;              // "Risk Amt." column
+    var totalProvision = Model["TotalProvision"] as decimal? ?? 0;
+    var tillDate = Model["TillDate"]?.ToString() ?? "";
+    var branchName = Model["BranchName"]?.ToString() ?? "All";
+    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "All";
+    var penaltyTypeName = Model["PenaltyTypeName"]?.ToString() ?? "Schedule Wise";
+    var collectionCenterName = Model["CollectionCenterName"]?.ToString() ?? "";
+    var collectorName = Model["CollectorName"]?.ToString() ?? "";
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var memberGroupFiltered = !string.IsNullOrEmpty(memberGroupName) && memberGroupName != "All";
+    var collectionCenterFiltered = !string.IsNullOrEmpty(collectionCenterName);
+    var collectorFiltered = !string.IsNullOrEmpty(collectorName);
+
+    // totals fall back to the sum of the rows when the controller did not send them
+    if (totalRecords == 0) totalRecords = arrearRows.Count;
+    if (totalLoanIssue == 0) totalLoanIssue = arrearRows.Sum(row => row.LoanIssueAmount ?? 0);
+    if (totalBalance == 0) totalBalance = arrearRows.Sum(row => row.BalanceAmount ?? 0);
+    if (totalGoodAmount == 0) totalGoodAmount = arrearRows.Sum(row => row.Goodloan ?? 0);
+    if (totalRisk == 0) totalRisk = arrearRows.Sum(row => row.Arrear ?? 0);
+    if (totalProvision == 0) totalProvision = arrearRows.Sum(row => row.TotalProvision ?? 0);
+
+    // ── 2. NUMBERS FOR THE KPI CARDS ──
+    decimal Percent(decimal part, decimal whole) => whole == 0 ? 0 : Math.Round(part / whole * 100, 2);
+    var averageBalance = totalRecords == 0 ? 0 : totalBalance / totalRecords;
+    var goodPercent = Percent(totalGoodAmount, totalBalance);
+    var riskPercent = Percent(totalRisk, totalBalance);
+    var provisionPercent = Percent(totalProvision, totalBalance);
+
+    // ── 3. CHART ROWS: one row per arrear-age range (every chart reads these rows) ──
+    // Age = the "Days" column. Ranges with no loans are left out, so the charts show no empty slices.
+    var ageRanges = new (string Name, int From, int To)[]
+    {
+        ("Current", 0, 0),
+        ("1-30", 1, 30),
+        ("31-90", 31, 90),
+        ("91-180", 91, 180),
+        ("181-365", 181, 365),
+        ("> 365", 366, int.MaxValue)
+    };
+
+    var ageRows = ageRanges.Select(range =>
+    {
+        var loansInRange = arrearRows.Where(row =>
+        {
+            var days = Math.Max(0, row.Noofdays ?? 0);
+            return days >= range.From && days <= range.To;
+        }).ToList();
+
+        var balance = loansInRange.Sum(row => row.BalanceAmount ?? 0);
+        var risk = loansInRange.Sum(row => row.Arrear ?? 0);
+        var provision = loansInRange.Sum(row => row.TotalProvision ?? 0);
+
+        return new
+        {
+            name = range.Name,
+            loans = loansInRange.Count,
+            balance,
+            risk,
+            provision,
+            riskPct = balance == 0 ? 0m : Math.Round(risk / balance * 100, 2),
+            avg = loansInRange.Count == 0 ? 0m : balance / loansInRange.Count
+        };
+    }).Where(bucket => bucket.loans > 0).ToList();
+
+    // ── 4. REPORT: data, title ──
+    var report = new VisualReport(Model, title: "Loan Arrear Risk Calculation Report - Visual", sheetName: "LoanAgingArrealCalculation")
+        .PrintedTitle("Loan Arrear Risk Calculation Report — Visual Summary")
+        .NoDataWhen(!arrearRows.Any())
+        .ChartRows(ageRows)
+        .Sizing(chartRowMm: 75);
+
+    // ── 5. TITLE BLOCK (a line is drawn under it automatically) ──
+    report.MetaLeft("Branch :", branchName)
+          .MetaLeft("Penalty Type :", penaltyTypeName)
+          .MetaRight("Till Date :", tillDate)
+          .MetaRight("Report Generated On :", generatedOn);
+
+    if (memberGroupFiltered) report.MetaLeft("Member Group :", memberGroupName);
+    if (collectionCenterFiltered) report.MetaLeft("Collection Center :", collectionCenterName);
+    if (collectorFiltered) report.MetaLeft("Collector :", collectorName);
+
+    // ── 6. BLOCKS (the builder decides which page each one lands on) ──
+    report.Kpis(kpis => kpis
+            .Add("Total Loans", totalRecords.ToString("N0"), $"avg balance {averageBalance:N2} / loan")
+            .Add("Balance Amount", totalBalance.ToString("N2"), $"disbursed {totalLoanIssue:N2}")
+            .Add("Good Amount", totalGoodAmount.ToString("N2"), $"{goodPercent:0.00}% of balance")
+            .Add("Risk Amount", totalRisk.ToString("N2"), $"{riskPercent:0.00}% of balance")
+            .Add("Total Provision", totalProvision.ToString("N2"), $"{provisionPercent:0.00}% of balance"))
+          .ChartGrid(3, grid => grid
+            .Donut("Balance by Arrear Age (days)", "balance", money: true)
+            .Donut("Risk Amount by Arrear Age (days)", "risk", money: true)
+            .Donut("Provision by Arrear Age (days)", "provision", money: true))
+          .ChartGrid(2, grid => grid
+            .Grouped("Balance, Risk and Provision by Arrear Age",
+                     new VisualSeries("Balance", "balance", "#2563eb"),
+                     new VisualSeries("Risk", "risk", "#f59e0b"),
+                     new VisualSeries("Provision", "provision", "#ef4444"))
+            .BarLine("Risk Share (%) of Balance by Arrear Age", "riskPct", "#f59e0b", "#8b5cf6", format: "percent")
+            .Bar("No. of Loans by Arrear Age", "loans", "#10b981", thickness: 26)
+            .Bar("Average Balance per Loan by Arrear Age", "avg", "#2563eb"));
+}
+@await Html.PartialAsync("_SheetReport", await report.BuildAsync(Html))

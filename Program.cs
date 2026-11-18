@@ -10,7 +10,9 @@ using Microsoft.OpenApi;
 using NexgenCosysReport.DbContext;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Extensions;
+using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
 using NexgenCosysReport.Utils.Report;
 using System.Text;
 
@@ -194,6 +196,8 @@ Console.WriteLine($"[Startup] WebRootPath = '{settingsCheck?.WebRootPath}'");
 // Services
 builder.Services.AddHttpClient();
 builder.Services.AddMemoryCache();
+builder.Services.AddSingleton<IReportDataCache, ReportDataCache>();
+builder.Services.AddScoped<IReportHeaderProvider, ReportHeaderProvider>();
 builder.Services.AddScoped<CustomHeaderResponse>();
 builder.Services.AddHostedService<ProgressiveTempCleanupService>();
 

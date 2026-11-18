@@ -13,6 +13,8 @@ namespace NexgenCosysReport.Dtos.RequestDtos.Account.OthersReport
 
         // "Transaction Date" or "Member Id" — matches ddlOrderBy SelectedItem text (legacy passes display text, not value)
         public string OrderBy { get; set; } = "Transaction Date";
+
+        public bool VisualReport { get; set; } = false;
     }
 
     // Columns match the SP's final SELECT list exactly

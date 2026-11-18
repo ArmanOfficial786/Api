@@ -1,17 +1,11 @@
-﻿
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Loan.LoanAccountWiseReport;
-using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Loan.LoanAccountWiseReport
 {
@@ -20,145 +14,109 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAccountWiseReport
     [Authorize]
     public class LoanIssueDetailsController : ControllerBase
     {
+        private const string ReportName = "LoanIssueDetails";
+
         private readonly ILoanIssueDetailsRepository _repository;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
+        private readonly IReportHeaderProvider _headers;
         private readonly IJsReportService _jsReportService;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly CustomHeaderResponse _headerResponse;
-        private readonly IOptions<ReportSettings> _reportSettings;
+        private readonly IReportDataCache _dataCache;
         private readonly ILogger<LoanIssueDetailsController> _logger;
-        private readonly IDateConverterService _dateConverter;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        private static readonly PageSizeSetting PageSetting = PageSizeSetting.A4Landscape;
 
         public LoanIssueDetailsController(
             ILoanIssueDetailsRepository repository,
-            ICommonHeaderRepository commonHeaderRepository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
-            IWebHostEnvironment webHostEnvironment,
-            CustomHeaderResponse headerResponse,
-            IOptions<ReportSettings> reportSettings,
+            IReportDataCache dataCache,
             ILogger<LoanIssueDetailsController> logger,
-            IDateConverterService dateConverter)
+            IReportFileResponse reportFileResponse)
         {
             _repository = repository;
-            _commonHeaderRepository = commonHeaderRepository;
+            _headers = headers;
             _jsReportService = jsReportService;
-            _webHostEnvironment = webHostEnvironment;
-            _headerResponse = headerResponse;
-            _reportSettings = reportSettings;
+            _dataCache = dataCache;
             _logger = logger;
-            _dateConverter = dateConverter;
+            _reportFileResponse = reportFileResponse;
         }
 
-        [HttpPost()]
+        [HttpPost]
         public async Task<IActionResult> GenerateReport(
             [FromBody] LoanIssueDetailsRequestDto request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
             try
             {
                 var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                {
-                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                }
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out _))
+                    return Unauthorized(new { success = false, StatusCode = 401, message = "Unauthorized" });
 
                 if (request == null || !ModelState.IsValid)
-                {
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
-                }
 
+                var upperFormat = format.ToUpperInvariant();
+                var page = PageSetting;
 
-                var reportName = "LoanIssueDetails";
-                var upperFormat = format.ToUpper();
+                // Cache key from the WHOLE request (member / dates / branches / collection centers /
+                // ReportType / EnableCollectionCenter / OrderBy ...) plus the user.
+                // Any change in the request gives a different key, so one report is never served for another.
+                var dataKey = $"{ReportUtils.GenerateReportKey(request, ReportName)}_{userIdClaim}";
+                var reportKey = $"{dataKey}_{page.CacheTag}";
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                // 1) key is in the cache -> served from cache, no DB
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: false,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+                // 2) key is not in the cache -> read the DB
+                var branchForHeader =
+                    !string.IsNullOrEmpty(request.BranchIds) && request.BranchIds != "-1" && !request.BranchIds.Contains(',')
+                        ? request.BranchIds
+                        : "";
 
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
+                var headerTask = _headers.GetAsync(branchForHeader, ct);
+                var dataTask = _dataCache.GetOrLoadAsync(dataKey, async () =>
                 {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat,
-                        reportName,
-                        _jsReportService, _logger);
-                }
-
-                string? branchIdForHeader = null;
-                if (!string.IsNullOrEmpty(request.BranchIds) &&
-                    request.BranchIds != "-1" && !request.BranchIds.Contains(','))
-                {
-                    branchIdForHeader = request.BranchIds;
-                }
-
-                var dataTask = _repository.GetReportDataAsync(request);
-                var headerTask = _commonHeaderRepository.GetCommonHeaders();
-
-                await Task.WhenAll(dataTask, headerTask);
+                    var loaded = await _repository.GetReportDataAsync(request);
+                    if (loaded == null || loaded.Rows == null || !loaded.Rows.Any())
+                        return null;
+                    return loaded;
+                }, ct);
+                await Task.WhenAll(headerTask, dataTask);
 
                 var data = await dataTask;
-                var headerData = await headerTask;
-
-                if (!data.Rows.Any())
-                {
-                    return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
-                }
-
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-
-                await ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData, nameof(CommonHeader.CompanyLogo), webRoot);
+                if (data == null)
+                    return NotFound(new { success = false, StatusCode = 404, message = "No data found" });
 
                 var reportData = new Dictionary<string, object>
                 {
-                    { "Rows", data.Rows },
+                    { "Rows",         data.Rows },
                     { "TotalRecords", data.TotalRecords },
-                    { "HeaderDataSet", headerData },
-                    { "MemberId", data.MemberId ?? "" },
-                    { "MemberName", data.MemberName ?? "" },
-                    { "FromDate", data.FromDateBs ?? "" },
-                    { "ToDate", data.ToDateBs ?? "" },
-                    { "BranchName", data.BranchName ?? "All" },
-                    { "ReportType", data.ReportType },
-                    { "OrderBy", data.OrderBy ?? "" },
-                    { "EnableCollectionCenter", data.EnableCollectionCenter },
-                    { "Format", upperFormat }
+                    { "HeaderDataSet", await headerTask },
+                    { "MemberId",     data.MemberId ?? "" },
+                    { "MemberName",   data.MemberName ?? "" },
+                    { "FromDate",     data.FromDateBs ?? "" },
+                    { "ToDate",       data.ToDateBs ?? "" },
+                    { "BranchName",   data.BranchName ?? "All" },
+                    { "ReportType",   data.ReportType ?? "LoanIssueReport" },
+                    { "EnableCollectionCenter", data.EnableCollectionCenter },   // true -> the view groups by collection center
+                    { "Format",       upperFormat },
+                    { "PageSetting",  page }
                 };
 
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                    reportKey: reportKey,
+                    reportPath: "Views/Report/Loan/LoanAccountWiseReport/LoanIssueDetailsReport.cshtml",
+                    data: reportData, ct: ct);
 
-                string viewPath = request.VisualReport ? "Views/VisualReport/Account/VAccountStatementReport.cshtml"
-                    : "Views/Report/Loan/LoanAccountWiseReport/LoanIssueDetailsReport.cshtml";
-
-                var htmlContent = await Task.Run(() =>
-                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
-                        reportKey: reportKey,
-                        reportPath: viewPath,
-                        data: reportData));
-
-                if (upperFormat == "VIEW")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.Rows.Count
-                    };
-
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
-                }
-                return await ReportExportHelper.ExportFromCacheAsync(
-                 reportKey, upperFormat,
-                 reportName,
-                 _jsReportService, _logger);
+                // 3) return the VIEW or the export
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: false,
+                    totalRecords: data.Rows.Count,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
             catch (ArgumentException ex)
             {
@@ -166,13 +124,8 @@ namespace NexgenCosysReport.Controllers.Loan.LoanAccountWiseReport
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating LoanIssueDetails report");
-                return StatusCode(500, new
-                {
-                    message = ex.Message,
-                    inner = ex.InnerException?.Message,
-                    stack = ex.StackTrace
-                });
+                _logger.LogError(ex, "Error generating {Report} report", ReportName);
+                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }
     }

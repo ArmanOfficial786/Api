@@ -1,12 +1,198 @@
-﻿// Controllers/Microfinance/MicrofinanceSheetReports/CenterCollectionSheetPrintController.cs
+﻿//// Controllers/Microfinance/MicrofinanceSheetReports/CenterCollectionSheetPrintController.cs
+//using Microsoft.AspNetCore.Authorization;
+//using Microsoft.AspNetCore.Mvc;
+//using Microsoft.Extensions.Options;
+//using NexgenCosysReport.Dtos.ReportDtos;
+//using NexgenCosysReport.Dtos.RequestDtos.Microfinance.MicrofinanceSheetReports;
+//using NexgenCosysReport.Inteface.ReportInterface;
+//using NexgenCosysReport.Inteface.ServiceInterface.Common;
+//using NexgenCosysReport.Inteface.ServiceInterface.Microfinance.MicrofinanceSheetReports;
+//using NexgenCosysReport.Utils.Enum;
+//using NexgenCosysReport.Utils.Report;
+//using System.Security.Claims;
+
+//namespace NexgenCosysReport.Controllers.Microfinance.MicrofinanceSheetReports
+//{
+//    [ApiController]
+//    [Route("api/[controller]")]
+//    [Authorize]
+//    public class CenterCollectionSheetPrintController : ControllerBase
+//    {
+//        private readonly ICenterCollectionSheetPrintRepository _repository;
+//        private readonly ICommonHeaderRepository _commonHeaderRepository;
+//        private readonly IJsReportService _jsReportService;
+//        private readonly IWebHostEnvironment _webHostEnvironment;
+//        private readonly CustomHeaderResponse _headerResponse;
+//        private readonly IReportFileResponse _reportFileResponse;
+//        private readonly IOptions<ReportSettings> _reportSettings;
+//        private readonly ILogger<CenterCollectionSheetPrintController> _logger;
+
+//        private static readonly PageSizeSetting PageSetting =
+//          PageSizeSetting.Custom(250, 297, PageUnit.mm, landscape: false);
+
+//        public CenterCollectionSheetPrintController(
+//            ICenterCollectionSheetPrintRepository repository,
+//            ICommonHeaderRepository commonHeaderRepository,
+//            IJsReportService jsReportService,
+//            IWebHostEnvironment webHostEnvironment,
+//            CustomHeaderResponse headerResponse,
+//            IOptions<ReportSettings> reportSettings,
+//            ILogger<CenterCollectionSheetPrintController> logger,
+//            IReportFileResponse reportFileResponse)
+//        {
+//            _repository = repository;
+//            _commonHeaderRepository = commonHeaderRepository;
+//            _jsReportService = jsReportService;
+//            _webHostEnvironment = webHostEnvironment;
+//            _headerResponse = headerResponse;
+//            _reportSettings = reportSettings;
+//            _logger = logger;
+//            _reportFileResponse = reportFileResponse;
+//        }
+
+//        [HttpPost]
+//        public async Task<IActionResult> GenerateReport(
+//            [FromBody] CenterCollectionSheetPrintRequestDto request,
+//            [FromQuery] string format = "VIEW",
+//            CancellationToken ct = default)
+//        {
+//            try
+//            {
+//                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+//                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
+//                {
+//                    return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
+//                }
+
+//                if (request == null || !ModelState.IsValid)
+//                {
+//                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
+//                }
+
+
+
+//                var reportName = "CenterCollectionSheetPrint";
+//                var upperFormat = format.ToUpper();
+
+//                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+
+//                ReportExportHelper.LogCacheState(upperFormat, reportKey,
+//                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+
+//                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
+//                {
+//                    return await ReportExportHelper.ExportFromCacheAsync(
+//                        reportKey, upperFormat,
+//                        reportName,
+//                        _jsReportService, _logger);
+//                }
+
+//                var dataTask = _repository.GetReportDataAsync(request);
+//                var headerTask = _commonHeaderRepository.GetCommonHeaders("");
+
+//                await Task.WhenAll(dataTask, headerTask);
+
+//                var data = await dataTask;
+//                var headerData = await headerTask;
+
+//                if (!data.Rows.Any())
+//                {
+//                    return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
+//                }
+
+//                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
+
+//                await ReportUtils.ConvertUniqueImagesToBase64Async(
+//                    headerData, nameof(CommonHeader.CompanyLogo), webRoot);
+
+//                var reportData = new Dictionary<string, object>
+//               {
+//               { "Header", data.Header ?? new CenterCollectionSheetHeaderDto() },
+//               { "Rows", data.Rows },
+//               { "TotalSaving1Balance", data.TotalSaving1Balance },
+//               { "TotalSaving2Balance", data.TotalSaving2Balance },
+//               { "TotalSaving3Balance", data.TotalSaving3Balance },
+//               { "TotalSaving4Balance", data.TotalSaving4Balance },
+//               { "TotalLoan1RemPrinciple", data.TotalLoan1RemPrinciple },
+//               { "TotalLoan1PayablePri", data.TotalLoan1PayablePri },
+//               { "TotalLoan1PayableInt", data.TotalLoan1PayableInt },
+//               { "TotalLoan2RemPrinciple", data.TotalLoan2RemPrinciple },
+//               { "TotalLoan2PayablePri", data.TotalLoan2PayablePri },
+//               { "TotalLoan2PayableInt", data.TotalLoan2PayableInt },
+//               { "TotalLoan3RemPrinciple", data.TotalLoan3RemPrinciple },
+//               { "TotalLoan3PayablePri", data.TotalLoan3PayablePri },
+//               { "TotalLoan3PayableInt", data.TotalLoan3PayableInt },
+//               { "TotalLoan4RemPrinciple", data.TotalLoan4RemPrinciple },
+//               { "TotalLoan4PayablePri", data.TotalLoan4PayablePri },
+//               { "TotalLoan4PayableInt", data.TotalLoan4PayableInt },
+//               { "HeaderDataSet", headerData ?? new List<CommonHeader>() },
+//               { "TillDate", data.TillDateBs ?? "" },
+//               { "TillDateAd", data.TillDateAd ?? "" },
+//               { "SheetType", data.SheetType ?? "A" },
+//               { "SheetTypeName", data.SheetTypeName ?? "Saving And Loan" },
+//               { "Format", upperFormat }
+//               };
+
+//                string viewPath = request.VisualReport
+//                    ? "Views/VisualReport/Microfinance/VCenterCollectionSheetPrintReport.cshtml"
+//                    : "Views/Report/MicroFinance/MicrofinanceSheetReports/CenterCollectionSheetPrintReport.cshtml";
+
+//                var htmlContent = await Task.Run(() =>
+//                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
+//                        reportKey: reportKey,
+//                        reportPath: viewPath,
+//                        data: reportData));
+
+
+//                if (upperFormat == "VIEW")
+//                {
+//                    var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
+//                        htmlContent, reportKey, PageSetting, ct);
+
+//                    _logger.LogInformation("VIEW — jsreport Html recipe, {Bytes:N0} chars", viewHtml.Length);
+//                    return Content(viewHtml, "text/html");
+//                }
+
+//                // Handle PDF format
+//                if (upperFormat == "PDF")
+//                {
+//                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
+//                        htmlContent, "PDF", reportKey, PageSetting, ct);
+//                    return _reportFileResponse.BuildPdfResponse(pdfBytes);
+//                }
+
+//                // Handle other formats
+//                return await ReportExportHelper.ExportFromCacheAsync(
+//                    reportKey, upperFormat, "MemberAccountDetail",
+//                    _jsReportService, _logger, PageSetting, ct); ;
+//            }
+//            catch (Exception ex)
+//            {
+//                _logger.LogError(ex, "Error generating CenterCollectionSheetPrint report");
+//                return StatusCode(500, new
+//                {
+//                    message = ex.Message,
+//                    inner = ex.InnerException?.Message,
+//                    stack = ex.StackTrace
+//                });
+//            }
+//        }
+//    }
+//}
+
+
+
+
+
+
+
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Microfinance.MicrofinanceSheetReports;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Microfinance.MicrofinanceSheetReports;
+using NexgenCosysReport.Utils.Caching;
 using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
@@ -18,34 +204,33 @@ namespace NexgenCosysReport.Controllers.Microfinance.MicrofinanceSheetReports
     [Authorize]
     public class CenterCollectionSheetPrintController : ControllerBase
     {
-        private readonly ICenterCollectionSheetPrintRepository _repository;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
-        private readonly IJsReportService _jsReportService;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly CustomHeaderResponse _headerResponse;
-        private readonly IReportFileResponse _reportFileResponse;
-        private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly ILogger<CenterCollectionSheetPrintController> _logger;
+        private const string ReportName = "CenterCollectionSheetPrint";
 
-        private static readonly PageSizeSetting PageSetting =
-          PageSizeSetting.Custom(250, 297, PageUnit.mm, landscape: false);
+        private readonly ICenterCollectionSheetPrintRepository _repository;
+        private readonly IReportHeaderProvider _headers;
+        private readonly IJsReportService _jsReportService;
+        private readonly IReportDataCache _dataCache;
+        private readonly ILogger<CenterCollectionSheetPrintController> _logger;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        // 44 columns need a wide sheet: A2 landscape
+        private static readonly PageSizeSetting NPageSetting =
+            PageSizeSetting.Custom(594, 420, PageUnit.mm, landscape: true);
+        private static readonly PageSizeSetting VPageSetting =
+            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         public CenterCollectionSheetPrintController(
             ICenterCollectionSheetPrintRepository repository,
-            ICommonHeaderRepository commonHeaderRepository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
-            IWebHostEnvironment webHostEnvironment,
-            CustomHeaderResponse headerResponse,
-            IOptions<ReportSettings> reportSettings,
+            IReportDataCache dataCache,
             ILogger<CenterCollectionSheetPrintController> logger,
             IReportFileResponse reportFileResponse)
         {
             _repository = repository;
-            _commonHeaderRepository = commonHeaderRepository;
+            _headers = headers;
             _jsReportService = jsReportService;
-            _webHostEnvironment = webHostEnvironment;
-            _headerResponse = headerResponse;
-            _reportSettings = reportSettings;
+            _dataCache = dataCache;
             _logger = logger;
             _reportFileResponse = reportFileResponse;
         }
@@ -59,122 +244,83 @@ namespace NexgenCosysReport.Controllers.Microfinance.MicrofinanceSheetReports
             try
             {
                 var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                {
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out _))
                     return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                }
 
                 if (request == null || !ModelState.IsValid)
-                {
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
-                }
 
+                var upperFormat = format.ToUpperInvariant();
+                var isVisual = request.VisualReport;
+                var page = isVisual ? VPageSetting : NPageSetting;
 
+                var dataKey = ReportCacheKey.ForData(
+                    request, ReportName, userIdClaim, nameof(request.VisualReport));
+                var reportKey = $"{dataKey}_{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}";
 
-                var reportName = "CenterCollectionSheetPrint";
-                var upperFormat = format.ToUpper();
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: false,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
-
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
-
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
+                var headerTask = _headers.GetAsync((string?)null, ct);
+                var dataTask = _dataCache.GetOrLoadAsync(dataKey, async () =>
                 {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat,
-                        reportName,
-                        _jsReportService, _logger);
-                }
-
-                var dataTask = _repository.GetReportDataAsync(request);
-                var headerTask = _commonHeaderRepository.GetCommonHeaders("");
-
-                await Task.WhenAll(dataTask, headerTask);
+                    var loaded = await _repository.GetReportDataAsync(request);
+                    if (loaded == null || !loaded.Rows.Any()) return null;
+                    return loaded;
+                }, ct);
+                await Task.WhenAll(headerTask, dataTask);
 
                 var data = await dataTask;
-                var headerData = await headerTask;
-
-                if (!data.Rows.Any())
-                {
+                if (data == null)
                     return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
-                }
-
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-
-                await ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData, nameof(CommonHeader.CompanyLogo), webRoot);
 
                 var reportData = new Dictionary<string, object>
-               {
-               { "Header", data.Header ?? new CenterCollectionSheetHeaderDto() },
-               { "Rows", data.Rows },
-               { "TotalSaving1Balance", data.TotalSaving1Balance },
-               { "TotalSaving2Balance", data.TotalSaving2Balance },
-               { "TotalSaving3Balance", data.TotalSaving3Balance },
-               { "TotalSaving4Balance", data.TotalSaving4Balance },
-               { "TotalLoan1RemPrinciple", data.TotalLoan1RemPrinciple },
-               { "TotalLoan1PayablePri", data.TotalLoan1PayablePri },
-               { "TotalLoan1PayableInt", data.TotalLoan1PayableInt },
-               { "TotalLoan2RemPrinciple", data.TotalLoan2RemPrinciple },
-               { "TotalLoan2PayablePri", data.TotalLoan2PayablePri },
-               { "TotalLoan2PayableInt", data.TotalLoan2PayableInt },
-               { "TotalLoan3RemPrinciple", data.TotalLoan3RemPrinciple },
-               { "TotalLoan3PayablePri", data.TotalLoan3PayablePri },
-               { "TotalLoan3PayableInt", data.TotalLoan3PayableInt },
-               { "TotalLoan4RemPrinciple", data.TotalLoan4RemPrinciple },
-               { "TotalLoan4PayablePri", data.TotalLoan4PayablePri },
-               { "TotalLoan4PayableInt", data.TotalLoan4PayableInt },
-               { "HeaderDataSet", headerData ?? new List<CommonHeader>() },
-               { "TillDate", data.TillDateBs ?? "" },
-               { "TillDateAd", data.TillDateAd ?? "" },
-               { "SheetType", data.SheetType ?? "A" },
-               { "SheetTypeName", data.SheetTypeName ?? "Saving And Loan" },
-               { "Format", upperFormat }
-               };
+                {
+                    { "Header", data.Header ?? new CenterCollectionSheetHeaderDto() },
+                    { "Rows", data.Rows },
+                    { "TotalSaving1Balance", data.TotalSaving1Balance },
+                    { "TotalSaving2Balance", data.TotalSaving2Balance },
+                    { "TotalSaving3Balance", data.TotalSaving3Balance },
+                    { "TotalSaving4Balance", data.TotalSaving4Balance },
+                    { "TotalLoan1RemPrinciple", data.TotalLoan1RemPrinciple },
+                    { "TotalLoan1PayablePri", data.TotalLoan1PayablePri },
+                    { "TotalLoan1PayableInt", data.TotalLoan1PayableInt },
+                    { "TotalLoan2RemPrinciple", data.TotalLoan2RemPrinciple },
+                    { "TotalLoan2PayablePri", data.TotalLoan2PayablePri },
+                    { "TotalLoan2PayableInt", data.TotalLoan2PayableInt },
+                    { "TotalLoan3RemPrinciple", data.TotalLoan3RemPrinciple },
+                    { "TotalLoan3PayablePri", data.TotalLoan3PayablePri },
+                    { "TotalLoan3PayableInt", data.TotalLoan3PayableInt },
+                    { "TotalLoan4RemPrinciple", data.TotalLoan4RemPrinciple },
+                    { "TotalLoan4PayablePri", data.TotalLoan4PayablePri },
+                    { "TotalLoan4PayableInt", data.TotalLoan4PayableInt },
+                    { "HeaderDataSet", await headerTask },
+                    { "TillDate", data.TillDateBs ?? "" },
+                    { "TillDateAd", data.TillDateAd ?? "" },
+                    { "SheetType", data.SheetType ?? "A" },
+                    { "SheetTypeName", data.SheetTypeName ?? "Saving And Loan" },
+                    { "Format", upperFormat },
+                    { "PageSetting", page }
+                };
 
-                string viewPath = request.VisualReport
+                var viewPath = isVisual
                     ? "Views/VisualReport/Microfinance/VCenterCollectionSheetPrintReport.cshtml"
-                    : "Views/Report/MicroFinance/MicrofinanceSheetReports/CenterCollectionSheetPrintReport.cshtml";
+                    : "Views/Report/Microfinance/MicrofinanceSheetReports/CenterCollectionSheetPrintReport.cshtml";
 
-                var htmlContent = await Task.Run(() =>
-                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
-                        reportKey: reportKey,
-                        reportPath: viewPath,
-                        data: reportData));
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                    reportKey: reportKey, reportPath: viewPath, data: reportData, ct: ct);
 
-
-                if (upperFormat == "VIEW")
-                {
-                    var viewHtml = await _jsReportService.ExportReportToRawHtmlAsync(
-                        htmlContent, reportKey, ct);
-
-                    _logger.LogInformation("VIEW — jsreport Html recipe, {Bytes:N0} chars", viewHtml.Length);
-                    return Content(viewHtml, "text/html");
-                }
-
-                // Handle PDF format
-                if (upperFormat == "PDF")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
-                        htmlContent, "PDF", reportKey, PageSetting, ct);
-                    return _reportFileResponse.BuildPdfResponse(pdfBytes);
-                }
-
-                // Handle other formats
-                return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, "MemberAccountDetail",
-                    _jsReportService, _logger, PageSetting, ct); ;
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: false,
+                    totalRecords: data.Rows.Count,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating CenterCollectionSheetPrint report");
-                return StatusCode(500, new
-                {
-                    message = ex.Message,
-                    inner = ex.InnerException?.Message,
-                    stack = ex.StackTrace
-                });
+                _logger.LogError(ex, "Error generating {Report} report", ReportName);
+                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }
     }

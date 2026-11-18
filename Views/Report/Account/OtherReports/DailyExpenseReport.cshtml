@@ -1,235 +1,98 @@
-﻿<!-- Views/Report/Account/OthersReport/DailyExpenseReport.cshtml -->
+﻿@using Microsoft.AspNetCore.Html
 @using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    // amounts always show two decimals, a missing amount prints 0.00 (same as before)
+    string N(decimal? v) => (v ?? 0m).ToString("N2");
+
     var rows = (Model["Rows"] as List<DailyExpenseRowDto>) ?? new List<DailyExpenseRowDto>();
-    var totalDebitAmount = Model["TotalDebitAmount"] as decimal? ?? 0;
-    var totalCreditAmount = Model["TotalCreditAmount"] as decimal? ?? 0;
-    var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchNames = Text("BranchNames", "All");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Two-level grouping matching the image exactly: MainLedger (bold header) ->
-    // SubLedger rows -> a subtotal line ALWAYS shown, repeating the group name,
-    // even when the group has only one sub-ledger row.
-    // Rows must arrive pre-sorted by MainLedger, SubLedger (see repository ORDER BY)
-    // since GroupBy preserves first-seen order, not sorted order.
+    var totalDebit = TotalOr("TotalDebitAmount", rows.Sum(r => r.DebitAmount ?? 0));
+    var totalCredit = TotalOr("TotalCreditAmount", rows.Sum(r => r.CreditAmount ?? 0));
+    var totalBalance = TotalOr("TotalBalance", rows.Sum(r => r.Balance ?? 0));
+
+    // grouped by main ledger, in the order the repository returned the rows:
+    // it must already be sorted by MainLedger, SubLedger
     var mainLedgerGroups = rows.GroupBy(r => r.MainLedger ?? "").ToList();
-}
 
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Daily Expense Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-                font-weight: bold;
-            }
-
-            .main-ledger-row td {
-                font-weight: bold;
-                padding-top: 10px;
-                padding-bottom: 2px;
-                border: none;
-            }
-
-            .main-ledger-row.first-group td {
-                padding-top: 4px;
-            }
-
-            .sub-ledger-row td {
-                color: #1565c0;
-                padding-left: 20px;
-                border: none;
-            }
-
-            .subtotal-row td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Daily Expense Report", sheetName: "DailyExpense")
+        .Column("Particulars", 40)
+        .Column("Debit Amount", 20, Align.Right)
+        .Column("Credit Amount", 20, Align.Right)
+        .Column("Balance", 20, Align.Right)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            DataText = "#1565c0",              // sub-ledger rows are blue
+            GroupBackground = "#fff",
+            SubTotalBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)   // one text line per row
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            // main ledger line: bold, no rules
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; padding-top: 8px; }\n" +
+            // sub-ledger rows: no rules, name indented
+            "table.sheet-table tr.r-data td { border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-data td.sub-ledger { padding-left: 20px; }\n" +
+            "table.sheet-table tr.r-subtotal td { border-top: 1px solid #000; }");
+
+    // ── title block ──
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchNames));
+
+    // ── rows: one block per main ledger (ledger line, sub-ledgers, ledger total) ──
+    foreach (var group in mainLedgerGroups)
+    {
+        var groupRows = group.ToList();
+
+        // main ledger line: one cell spanning all columns
+        table.GroupTitle(group.Key);
+
+        foreach (var row in groupRows)
+        {
+            table.Data(
+                new ReportCell(row.SubLedger ?? "", Align.Left, 1, "sub-ledger"),
+                ReportCell.Right(N(row.DebitAmount)),
+                ReportCell.Right(N(row.CreditAmount)),
+                ReportCell.Right(N(row.Balance)));
         }
 
-        <table class="data-table" data-sheet-name="DailyExpense">
-            <colgroup>
-                <col style="width:40%;" />
-                <col style="width:20%;" />
-                <col style="width:20%;" />
-                <col style="width:20%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="4">Daily Expense Report</td>
-                </tr>
+        // the ledger total is always printed, even for a ledger with one sub-ledger row
+        table.SubTotal(group.Key, 1,
+            N(groupRows.Sum(r => r.DebitAmount ?? 0)),
+            N(groupRows.Sum(r => r.CreditAmount ?? 0)),
+            N(groupRows.Sum(r => r.Balance ?? 0)));
+    }
 
-                <tr class="meta-row">
-                    <td></td>
-                    <td colspan="2"><strong>From Date :</strong> @fromDate</td>
-                    <td class="text-right"><strong>To Date :</strong> @toDate</td>
-                </tr>
-                <tr class="meta-row">
-                    <td><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="2"><strong>Branch Name :</strong> @branchNames</td>
-                    <td></td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="4"></td></tr>
-
-                <tr>
-                    <th>Particulars</th>
-                    <th class="text-right">Debit Amount</th>
-                    <th class="text-right">Credit Amount</th>
-                    <th class="text-right">Balance</th>
-                </tr>
-
-                @if (mainLedgerGroups.Any())
-                {
-                    bool isFirstGroup = true;
-                    foreach (var group in mainLedgerGroups)
-                    {
-                        var groupRows = group.ToList();
-
-                        <tr class="main-ledger-row @(isFirstGroup ? "first-group" : "")">
-                            <td colspan="4">@group.Key</td>
-                        </tr>
-                        isFirstGroup = false;
-
-                        foreach (var row in groupRows)
-                        {
-                            <tr class="sub-ledger-row">
-                                <td>@(row.SubLedger ?? "")</td>
-                                <td class="text-right">@(row.DebitAmount.HasValue ? row.DebitAmount.Value.ToString("N2") : "0.00")</td>
-                                <td class="text-right">@(row.CreditAmount.HasValue ? row.CreditAmount.Value.ToString("N2") : "0.00")</td>
-                                <td class="text-right">@(row.Balance.HasValue ? row.Balance.Value.ToString("N2") : "0.00")</td>
-                            </tr>
-                        }
-
-                        <!-- Subtotal ALWAYS shown per group, regardless of how many
-                             sub-ledger rows it has — matches the image, where even a
-                             single-row group (FINANCIAL EXPENSE / INTEREST EXPENSES)
-                             still gets its own totals line. -->
-                        <tr class="subtotal-row">
-                            <td class="text-right">@group.Key</td>
-                            <td class="text-right">@groupRows.Sum(r => r.DebitAmount ?? 0).ToString("N2")</td>
-                            <td class="text-right">@groupRows.Sum(r => r.CreditAmount ?? 0).ToString("N2")</td>
-                            <td class="text-right">@groupRows.Sum(r => r.Balance ?? 0).ToString("N2")</td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td class="text-right">Grand Total</td>
-                        <td class="text-right">@totalDebitAmount.ToString("N2")</td>
-                        <td class="text-right">@totalCreditAmount.ToString("N2")</td>
-                        <td class="text-right">@totalBalance.ToString("N2")</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="4" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+        table.Total("Grand Total", 1, N(totalDebit), N(totalCredit), N(totalBalance));
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

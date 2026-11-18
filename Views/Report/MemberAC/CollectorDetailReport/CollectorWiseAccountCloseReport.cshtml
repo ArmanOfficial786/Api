@@ -1,192 +1,85 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.CollectorDetailReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
+
+    var fontSize = "9.5pt";
+    const int ColumnCount = 8;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
     var rows = (Model["Rows"] as List<CollectorWiseAccountCloseRowDto>) ?? new List<CollectorWiseAccountCloseRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalCharge = Model["TotalCharge"] as decimal? ?? rows.Sum(r => r.Charge ?? 0);
-    var totalNetAmount = Model["TotalNetAmount"] as decimal? ?? rows.Sum(r => r.NetAmount ?? 0);
-    var totalCloseAmount = Model["TotalCloseAmount"] as decimal? ?? rows.Sum(r => r.CloseAmount ?? 0);
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var collectorName = Model["CollectorName"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var collectorName = Text("CollectorName");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    Func<decimal, string> N = v => v.ToString("N2");
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Collector Wise Account Close Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var totalCharge = TotalOr("TotalCharge", rows.Sum(r => r.Charge ?? 0));
+    var totalNetAmount = TotalOr("TotalNetAmount", rows.Sum(r => r.NetAmount ?? 0));
+    var totalCloseAmount = TotalOr("TotalCloseAmount", rows.Sum(r => r.CloseAmount ?? 0));
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9.5pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9.5pt;
-            }
-
-                .data-table td, .data-table th {
-                    padding: 4px 6px;
-                    vertical-align: top;
-                }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            /* -------- Title row -------- */
-            .report-title td {
-                text-align: center;
-                font-size: 15pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 10px 6px 12px 6px;
-            }
-
-            /* -------- Meta rows -------- */
-            .meta-row td {
-                padding: 2px 6px;
-                font-size: 9.5pt;
-            }
-
-            .meta-right {
-                text-align: right;
-            }
-
-            /* -------- Column header row -------- */
-            .column-header-row th {
-                text-align: left;
-                font-weight: bold;
-                border-top: none;
-                border-bottom: 1.5px solid #000;
-                white-space: nowrap;
-                padding: 4px 6px 6px 6px;
-            }
-
-            /* -------- Detail rows -------- */
-            .detail-row td {
-                padding: 3px 6px;
-            }
-
-            /* -------- Grand total -------- */
-            .grand-total-row td {
-                border-top: 1.5px solid #000;
-                font-weight: bold;
-                padding: 6px 6px;
-            }
-
-            @@media print {
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Collector Wise Account Close Report", sheetName: "CollectorWiseAccountClose")
+        .Column("Member Id", 11)
+        .Column("Member Name", 19)
+        .Column("Account No", 11)
+        .Column("Opened Date", 11)
+        .Column("Closed Date", 11)
+        .Column("Charge", 11, Align.Right)
+        .Column("Net Amount", 13, Align.Right)
+        .Column("Close Amount", 13, Align.Right)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 60)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 0; border-bottom: 1.5px solid #000; white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-total td { border-top: 1.5px solid #000; border-bottom: 0; }");
 
-        <table class="data-table">
-            <colgroup>
-                <col style="width:11%;" />
-                <col style="width:19%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:13%;" />
-                <col style="width:13%;" />
-            </colgroup>
-            <tbody>
-                <tr class="report-title">
-                    <td colspan="8">Collector Wise Account Close Report</td>
-                </tr>
+    table.MetaRow(
+        Fmt.Join(),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+        4);
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On:", generatedOn),
+        Fmt.Labeled("Collector Name :", collectorName),
+        4);
 
-                <tr class="meta-row">
-                    <td colspan="4"></td>
-                    <td colspan="4" class="meta-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="4"><strong>Report Generated On:</strong> @generatedOn</td>
-                    <td colspan="4" class="meta-right"><strong>Collector Name :</strong> @collectorName</td>
-                </tr>
+    foreach (var row in rows)
+    {
+        table.Data(
+            row.MemberId ?? "",
+            row.MemberName ?? "",
+            row.AccountNo ?? "",
+            row.AccountOpenOnBs ?? "",
+            row.AccountCloseOnBs ?? "",
+            Fmt.Amount(row.Charge ?? 0),
+            Fmt.Amount(row.NetAmount ?? 0),
+            Fmt.Amount(row.CloseAmount ?? 0));
+    }
 
-                <tr class="column-header-row">
-                    <th>Member Id</th>
-                    <th>Member Name</th>
-                    <th>Account No</th>
-                    <th>Opened Date</th>
-                    <th>Closed Date</th>
-                    <th class="text-right">Charge</th>
-                    <th class="text-right">Net Amount</th>
-                    <th class="text-right">Close Amount</th>
-                </tr>
-
-                @if (rows.Any())
-                {
-                    foreach (var row in rows)
-                    {
-                        <tr class="detail-row">
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td>@(row.AccountOpenOnBs ?? "")</td>
-                            <td>@(row.AccountCloseOnBs ?? "")</td>
-                            <td class="text-right">@N(row.Charge ?? 0)</td>
-                            <td class="text-right">@N(row.NetAmount ?? 0)</td>
-                            <td class="text-right">@N(row.CloseAmount ?? 0)</td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="5" class="text-right">Grand Total:</td>
-                        <td class="text-right">@N(totalCharge)</td>
-                        <td class="text-right">@N(totalNetAmount)</td>
-                        <td class="text-right">@N(totalCloseAmount)</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="8" class="text-center">No account closed transactions found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total:", ColumnCount - 3,
+            totalCharge.ToString("N2"),
+            totalNetAmount.ToString("N2"),
+            totalCloseAmount.ToString("N2"));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

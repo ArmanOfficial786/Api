@@ -1,266 +1,97 @@
-﻿@* Views/Report/Loan/OtherReports/LoanSummaryReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+    const int ColumnCount = 9;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+    string Money(decimal? value) => value.HasValue ? value.Value.ToString("N2") : "";
+
     var rows = (Model["Rows"] as List<LoanSummaryRowDto>) ?? new List<LoanSummaryRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalMembers = Model.ContainsKey("TotalMembers") ? (Model["TotalMembers"] as int? ?? 0) : 0;
-    var totalLoanIssueAmount = Model["TotalLoanIssueAmount"] as decimal? ?? 0;
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var loanTypeName = Model["LoanTypeName"]?.ToString() ?? "";
-    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var branchName = Text("BranchName", "All");
+    var loanTypeName = Text("LoanTypeName");
+    var memberGroupName = Text("MemberGroupName");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName);
-    var isLoanTypeFiltered = !string.IsNullOrEmpty(loanTypeName);
-
-    // Grouped by member, like the legacy report: member header once,
-    // then a numbered list of that member's loans underneath.
     var memberGroups = rows
         .GroupBy(r => new { r.MemberId, r.FullName })
         .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan Summary Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalMembers = memberGroups.Count;
+    var totalLoanIssueAmount = TotalOr("TotalLoanIssueAmount", rows.Sum(r => r.LoanIssueAmount ?? 0));
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-                text-align: left;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: normal;
-                line-height: 1.2;
-                vertical-align: bottom;
-            }
-
-            /* Member group header row (Member Id + Name only) */
-            .member-header-row td {
-                padding-top: 6px;
-                padding-bottom: 2px;
-                font-weight: bold;
-            }
-
-            /* Loan rows under a member, numbered, each with a bottom rule */
-            .detail-row td {
-                border-bottom: 1px solid #ccc;
-            }
-
-            .sn-col {
-                text-align: center;
-                color: #555;
-            }
-
-            .loan-account {
-                color: #1F5C99;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Loan Summary Report", sheetName: "LoanSummary")
+        .Column("MemberId", 9)
+        .Column("Name", 17)
+        .Column("", 5, Align.Center)
+        .Column("A/C No", 12)
+        .Column("Loan Type", 13)
+        .Column("Disburse Date", 12)
+        .Column("Disburse Amount", 13, Align.Right)
+        .Column("Period", 9)
+        .Column("Interest Rate", 10)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9",
+            GroupBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; padding-top: 6px; padding-bottom: 2px; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 1px solid #ccc; }\n" +
+            ".sn-col { color: #555; }\n" +
+            ".loan-account { color: #1F5C99; }");
+
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+    if (!string.IsNullOrEmpty(loanTypeName)) table.MetaRow(Fmt.Labeled("Loan Type :", loanTypeName));
+    if (!string.IsNullOrEmpty(memberGroupName)) table.MetaRow(Fmt.Labeled("Member Group :", memberGroupName));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    foreach (var grp in memberGroups)
+    {
+        table.GroupBy(
+            ReportCell.Left(grp.Key.MemberId ?? ""),
+            ReportCell.Left(grp.Key.FullName ?? "", ColumnCount - 1));
+
+        var sn = 0;
+        foreach (var row in grp)
+        {
+            table.Data(
+                ReportCell.Left(""),
+                ReportCell.Left(""),
+                new ReportCell((++sn).ToString(), Align.Center, 1, "sn-col"),
+                new ReportCell(row.LoanAccountNo ?? "", Align.Left, 1, "loan-account"),
+                ReportCell.Left(row.LoanTypeName ?? ""),
+                ReportCell.Left(row.LoanIssueDate ?? ""),
+                ReportCell.Right(Money(row.LoanIssueAmount)),
+                ReportCell.Left(row.Period ?? ""),
+                ReportCell.Left(row.InterestRate ?? ""));
         }
+    }
 
-        <table class="data-table" data-sheet-name="LoanSummary">
-            <colgroup>
-                <col style="width:9%;" />
-                <col style="width:17%;" />
-                <col style="width:5%;" />
-                <col style="width:12%;" />
-                <col style="width:13%;" />
-                <col style="width:12%;" />
-                <col style="width:13%;" />
-                <col style="width:9%;" />
-                <col style="width:10%;" />
-            </colgroup>
-            <tbody>
-                <!-- Report Title -->
-                <tr class="meta-title">
-                    <td colspan="9">Loan Summary Report</td>
-                </tr>
-
-                <!-- Metadata: stacked, left-aligned -->
-                <tr class="meta-row">
-                    <td colspan="9"><strong>Branch Name :</strong> @branchName</td>
-                </tr>
-                @if (isLoanTypeFiltered)
-                {
-                    <tr class="meta-row">
-                        <td colspan="9"><strong>Loan Type :</strong> @loanTypeName</td>
-                    </tr>
-                }
-                @if (isMemberGroupFiltered)
-                {
-                    <tr class="meta-row">
-                        <td colspan="9"><strong>Member Group :</strong> @memberGroupName</td>
-                    </tr>
-                }
-                <tr class="meta-row">
-                    <td colspan="9"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="9"></td></tr>
-
-                <!-- Table Header -->
-                <tr>
-                    <th>MemberId</th>
-                    <th>Name</th>
-                    <th></th>
-                    <th>A/C No</th>
-                    <th>Loan Type</th>
-                    <th>Disburse Date</th>
-                    <th class="text-right">Disburse Amount</th>
-                    <th>Period</th>
-                    <th>Interest Rate</th>
-                </tr>
-
-                @if (memberGroups.Any())
-                {
-                    foreach (var grp in memberGroups)
-                    {
-                        <!-- Member header band -->
-                        <tr class="member-header-row">
-                            <td>@(grp.Key.MemberId ?? "")</td>
-                            <td>@(grp.Key.FullName ?? "")</td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                        </tr>
-
-                        <!-- That member's loans, numbered -->
-                        var sn = 0;
-                        foreach (var row in grp)
-                        {
-                            sn++;
-                            <tr class="detail-row">
-                                <td></td>
-                                <td></td>
-                                <td class="sn-col">@sn</td>
-                                <td class="loan-account">@(row.LoanAccountNo ?? "")</td>
-                                <td>@(row.LoanTypeName ?? "")</td>
-                                <td>@(row.LoanIssueDate ?? "")</td>
-                                <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
-                                <td>@(row.Period ?? "")</td>
-                                <td>@(row.InterestRate ?? "")</td>
-                            </tr>
-                        }
-                    }
-
-                    <!-- Grand Total Row -->
-                    <tr class="grand-total-row">
-                        <td colspan="6" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalLoanIssueAmount.ToString("N2")</strong></td>
-                        <td colspan="2"></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="9" class="text-right">
-                            <strong>Total Members: @totalMembers &nbsp;&nbsp;&nbsp; Total Loans: @totalRecords</strong>
-                        </td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", 6, totalLoanIssueAmount.ToString("N2"), "", "");
+        table.Total($"Total Members: {totalMembers}  |  Total Loans: {totalRecords}", ColumnCount);
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

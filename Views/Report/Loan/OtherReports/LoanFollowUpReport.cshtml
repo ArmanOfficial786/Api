@@ -1,204 +1,62 @@
-﻿@* Views/Report/Loan/OtherReports/LoanFollowUpReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+
     var rows = (Model["Rows"] as List<LoanFollowUpRowDto>) ?? new List<LoanFollowUpRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var memberName = Model["MemberName"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
+    var memberName = Text("MemberName");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-    var isMemberSearch = !string.IsNullOrEmpty(memberName);
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan Follow Up Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .report-title {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 15pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 0;
-            }
-
-            .meta-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 4px;
-            }
-
-                .meta-table td {
-                    padding: 3px 6px;
-                    font-size: 9.5pt;
-                }
-
-            .meta-generated-row td {
-                background: #bfbfbf;
-                font-weight: bold;
-                padding: 5px 6px;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 5px 6px;
-                    vertical-align: top;
-                    border: 1px solid #000;
-                }
-
-                .data-table th {
-                    background: #d9d9d9;
-                    text-align: left;
-                    font-weight: bold;
-                }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Loan Follow Up Report", sheetName: "LoanFollowUp")
+        .Column("Member Id", 9)
+        .Column("Member Name", 14)
+        .Column("Loan A/C No.", 9)
+        .Column("FollowUp Date", 9)
+        .Column("Follow Up Person", 13)
+        .Column("Description", 21)
+        .Column("Follow Up By", 13)
+        .Column("Entry Date", 12)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#d9d9d9"
+        })
+        .Sizing(rowMm: 8, headerMm: 9, firstPageExtraMm: 65)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 3px 6px; border: 1px solid #000; vertical-align: top; }");
 
-        <div class="report-title">Loan Follow Up Report</div>
+    if (!string.IsNullOrEmpty(memberName))
+    {
+        table.MetaRow(Fmt.Labeled("Member :", memberName), Fmt.Labeled("Branch Name :", branchName));
+    }
+    else
+    {
+        table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+        table.MetaRow(Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
+    }
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
 
-        <table class="meta-table">
-            @if (isMemberSearch)
-            {
-                <tr>
-                    <td><strong>Member :</strong> @memberName</td>
-                    <td class="text-right"><strong>Branch Name :</strong> @branchName</td>
-                </tr>
-            }
-            else
-            {
-                <tr>
-                    <td><strong>Branch Name :</strong> @branchName</td>
-                    <td></td>
-                </tr>
-                <tr>
-                    <td><strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp; <strong>To Date :</strong> @toDate</td>
-                    <td></td>
-                </tr>
-            }
-            <tr class="meta-generated-row">
-                <td colspan="2">Report Generated On : &nbsp; @generatedOn</td>
-            </tr>
-        </table>
-
-        <table class="data-table" data-sheet-name="LoanFollowUp">
-            <colgroup>
-                <col style="width:9%;" />
-                <col style="width:14%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
-                <col style="width:13%;" />
-                <col style="width:21%;" />
-                <col style="width:13%;" />
-                <col style="width:12%;" />
-            </colgroup>
-            <thead>
-                <tr>
-                    <th>Member Id</th>
-                    <th>Member Name</th>
-                    <th>Loan A/C No.</th>
-                    <th>FollowUp Date</th>
-                    <th>Follow Up Person</th>
-                    <th>Description</th>
-                    <th>Follow Up By</th>
-                    <th>Entry Date</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (rows.Any())
-                {
-                    foreach (var row in rows)
-                    {
-                        <tr>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.LoanAccountNo ?? "")</td>
-                            <td>@(row.FollowUpDateOnBs ?? "")</td>
-                            <td>@(row.FollowUpPerson ?? "")</td>
-                            <td>@(row.Description ?? "")</td>
-                            <td>@(row.FollowUpBy ?? "")</td>
-                            <td>@(row.CreatedOnBs ?? "")</td>
-                        </tr>
-                    }
-                  
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="8" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    foreach (var row in rows)
+    {
+        table.Data(
+            row.MemberId ?? "",
+            row.MemberName ?? "",
+            row.LoanAccountNo ?? "",
+            row.FollowUpDateOnBs ?? "",
+            row.FollowUpPerson ?? "",
+            row.Description ?? "",
+            row.FollowUpBy ?? "",
+            row.CreatedOnBs ?? "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

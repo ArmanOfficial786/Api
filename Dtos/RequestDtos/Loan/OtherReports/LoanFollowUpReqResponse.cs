@@ -7,7 +7,7 @@
         public string? ToDateBs { get; set; }
         public string? BranchId { get; set; }
         public bool VisualReport { get; set; }
-        public string OrderBy { get; set; }
+        public string? OrderBy { get; set; }
     }
 
 

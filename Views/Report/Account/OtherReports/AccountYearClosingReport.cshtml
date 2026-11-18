@@ -1,204 +1,78 @@
-﻿<!-- Views/Report/Account/OthersReport/AccountYearClosingReport.cshtml -->
+﻿@using Microsoft.AspNetCore.Html
 @using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<AccountYearClosingRowDto>) ?? new List<AccountYearClosingRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var fontSize = "9pt";
 
-    // Grouped by branch — rows must arrive pre-sorted by BranchName (see repository's
-    // ORDER BY) since GroupBy preserves first-seen order, not sorted order.
-    var branchGroups = rows.GroupBy(r => r.BranchName ?? "").ToList();
-}
-
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Account Year Closing Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-                font-weight: bold;
-            }
-
-            .branch-row td {
-                font-weight: bold;
-                text-decoration: underline;
-                padding-top: 8px;
-                padding-bottom: 4px;
-                border: none;
-            }
-
-            .branch-row.first-group td {
-                padding-top: 4px;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
         }
+        return fallback;
+    }
 
-        <table class="data-table" data-sheet-name="AccountYearClosing">
-            <colgroup>
-                <col style="width:20%;" />
-                <col style="width:18%;" />
-                <col style="width:18%;" />
-                <col style="width:22%;" />
-                <col style="width:22%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="5">Account Year Closing Report</td>
-                </tr>
+    var rows = (Model["Rows"] as List<AccountYearClosingRowDto>) ?? new List<AccountYearClosingRowDto>();
 
-                <tr class="meta-row">
-                    <td colspan="2"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="3" class="text-right"><strong>Branch Name :</strong> @branchNames</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="5"></td></tr>
+    var branchNames = Text("BranchNames", "All Branches");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
 
-                <tr>
-                    <th>Accounting Year</th>
-                    <th>Closed Date</th>
-                    <th>Voucher No</th>
-                    <th>Status</th>
-                    <th>Closed By</th>
-                </tr>
+    // grouped by branch, in the order the branches first appear:
+    // the repository must return the rows already sorted by BranchName
+    var branchGroups = rows.GroupBy(r => r.BranchName ?? "").ToList();
 
-                @if (branchGroups.Any())
-                {
-                    bool isFirstGroup = true;
-                    foreach (var branchGroup in branchGroups)
-                    {
-                        <tr class="branch-row @(isFirstGroup ? "first-group" : "")">
-                            <td colspan="5">@branchGroup.Key</td>
-                        </tr>
-                        isFirstGroup = false;
+    var table = new ReportTable(Model, title: "Account Year Closing Report", sheetName: "AccountYearClosing")
+        .Column("Accounting Year", 20)
+        .Column("Closed Date", 18)
+        .Column("Voucher No", 18)
+        .Column("Status", 22)
+        .Column("Closed By", 22)
+        .Style(new ReportStyle
+        {
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)   // one text line per row
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            // branch line: bold, underlined, no rules
+            "table.sheet-table tr.r-group td { text-decoration: underline; border-top: 0; border-bottom: 0; }");
 
-                        foreach (var row in branchGroup)
-                        {
-                            <tr class="detail-row">
-                                <td>@(row.AccountYear ?? "")</td>
-                                <td>@(row.ClosedOnBs ?? "")</td>
-                                <td>@(row.VoucherNo ?? "")</td>
-                                <td>@(row.Status ?? "")</td>
-                                <td>@(row.ClosedBy ?? "")</td>
-                            </tr>
-                        }
-                    }
+    // ── title block ──
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Labeled("Branch Name :", branchNames));
 
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">Total Records</td>
-                        <td class="text-right">@totalRecords</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="5" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    // ── rows: one block per branch ──
+    foreach (var branchGroup in branchGroups)
+    {
+        // branch line: one cell spanning all columns
+        table.GroupTitle(branchGroup.Key);
+
+        foreach (var row in branchGroup)
+        {
+            table.Data(
+                row.AccountYear ?? "",
+                row.ClosedOnBs ?? "",
+                row.VoucherNo ?? "",
+                row.Status ?? "",
+                row.ClosedBy ?? "");
+        }
+    }
+
+    // footer: one right-aligned cell spanning all 5 columns
+    if (rows.Count > 0)
+        table.Total($"Total Records : {totalRecords}", 5);
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

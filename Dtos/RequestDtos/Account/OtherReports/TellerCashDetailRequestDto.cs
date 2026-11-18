@@ -8,6 +8,7 @@ namespace NexgenCosysReport.Dtos.RequestDtos.AccountOperation.OthersReport
         public string? TellerId { get; set; }       // single teller/user id, "-1" = All Teller
         public string OrderBy { get; set; } = "Member Id";
         public string ReportType { get; set; } = "D"; // "D" = Detail, "S" = Summary
+        public bool VisualReport { get; set; } = false;
     }
 
     // dt1 — "Auto"/system transactions (TransactionDetailAuto), from sp_6_56_GetTellerCashDetailTransaction

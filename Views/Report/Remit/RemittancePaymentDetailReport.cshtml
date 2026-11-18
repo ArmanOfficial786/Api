@@ -1,233 +1,98 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Remit;
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Remit
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9.5pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    // a missing amount prints 0.00 (same as before)
+    string N(decimal? v) => (v ?? 0m).ToString("N2");
+
     var rows = (Model["Rows"] as List<RemittancePaymentDetailRowDto>) ?? new List<RemittancePaymentDetailRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var remittanceTypeName = Model["RemittanceTypeName"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
+    var remittanceTypeName = Text("RemittanceTypeName", "All");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Grouped by Receiver — Receiver shown once as a bold group header, each
-    // payment row underneath, then a "Total :" subtotal row summing Amount
-    // for that group. Rows must arrive pre-sorted by Receiver since GroupBy
-    // preserves first-seen order, not sorted order.
+    var totalAmount = TotalOr("TotalAmount", rows.Sum(r => r.Amount ?? 0m));
+
+    // grouped by Receiver: the receiver is a bold line, then one row per payment, then a "Total :" line;
+    // rows must arrive pre-sorted by Receiver (the repository's ORDER BY), because GroupBy keeps first-seen order, not sorted order
     var receiverGroups = rows.GroupBy(r => r.Receiver ?? "").ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Remittance Payment Detail Reports</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: "Times New Roman", Times, serif;
-                font-size: 9.5pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .report-title {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 4px 0 10px 0;
-            }
-
-            .meta-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 8px;
-            }
-
-                .meta-table td {
-                    padding: 2px 6px;
-                    font-size: 9.5pt;
-                    white-space: nowrap;
-                    vertical-align: top;
-                }
-
-            .meta-left {
-                text-align: left;
-                width: 50%;
-            }
-
-            .meta-right {
-                text-align: right;
-                width: 50%;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9.5pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 3px 6px;
-                    vertical-align: top;
-                }
-
-                .data-table th {
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                    font-weight: bold;
-                }
-
-            .receiver-row td {
-                font-weight: bold;
-                padding-top: 10px;
-                padding-bottom: 2px;
-                border: none;
-            }
-
-            .receiver-row.first-group td {
-                padding-top: 4px;
-            }
-
-            .detail-row td {
-                border: none;
-            }
-
-            .subtotal-row td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-                padding-top: 3px;
-                padding-bottom: 6px;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Remittance Payment Detail Reports", sheetName: "RemittancePaymentDetail")
+        .Column("Receiver", 14)
+        .Column("Sender", 16)
+        .Column("Payment By", 20)
+        .Column("Payment Amount (Rs)", 16, Align.Right)
+        .Column("Date", 16)
+        .Column("Cash Teller", 18)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            SubTotalBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)   // one text line per row
+        .Css(
+            "body { font-family: \"Times New Roman\", Times, serif; } " +
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; vertical-align: top; }" +
+            // receiver line and payment rows: no rules
+            "table.sheet-table tr.r-group td, table.sheet-table tr.r-data td { border: 0; }");
+
+    // ── title block ──
+    table.MetaRow(
+        Fmt.Labeled("RemittanceType :", remittanceTypeName),
+        Fmt.Join(Fmt.Labeled("From Date:", fromDate), Fmt.Labeled("To Date :", toDate)));
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Labeled("Branch Name :", branchName));
+
+    // ── rows: one group per receiver ──
+    foreach (var group in receiverGroups)
+    {
+        var groupRows = group.ToList();
+
+        table.GroupTitle(group.Key);
+
+        foreach (var row in groupRows)
+        {
+            table.Data(
+                "",
+                row.Sender ?? "",
+                row.PaymentBy ?? "",
+                N(row.Amount),
+                row.Date ?? "",
+                row.CashTeller ?? "");
         }
 
-        <div class="report-title">Remittance Payment Detail Reports</div>
+        // label spans the first 3 columns; the total fills Payment Amount; the last 2 columns stay empty
+        table.SubTotal("Total :", 3, N(groupRows.Sum(r => r.Amount ?? 0m)), "", "");
+    }
 
-        <table class="meta-table">
-            <tr>
-                <td class="meta-left"><strong>RemittanceType :</strong> @remittanceTypeName</td>
-                <td class="meta-right"><strong>From Date:</strong> @fromDate &nbsp;&nbsp;&nbsp; <strong>To Date :</strong> @toDate</td>
-            </tr>
-            <tr>
-                <td class="meta-left"><strong>Report Generated On :</strong> @generatedOn</td>
-                <td class="meta-right"><strong>Branch Name :</strong> @branchName</td>
-            </tr>
-        </table>
-
-        <table class="data-table" data-sheet-name="RemittancePaymentDetail">
-            <colgroup>
-                <col style="width:14%;" />
-                <col style="width:16%;" />
-                <col style="width:20%;" />
-                <col style="width:16%;" />
-                <col style="width:16%;" />
-                <col style="width:18%;" />
-            </colgroup>
-            <tbody>
-                <tr>
-                    <th>Receiver</th>
-                    <th>Sender</th>
-                    <th>Payment By</th>
-                    <th class="text-right">Payment Amount(Rs</th>
-                    <th>Date</th>
-                    <th>Cash Teller</th>
-                </tr>
-
-                @if (receiverGroups.Any())
-                {
-                    bool isFirstGroup = true;
-                    foreach (var group in receiverGroups)
-                    {
-                        var groupRows = group.ToList();
-
-                        <tr class="receiver-row @(isFirstGroup ? "first-group" : "")">
-                            <td colspan="6">@group.Key</td>
-                        </tr>
-                        isFirstGroup = false;
-
-                        foreach (var row in groupRows)
-                        {
-                            <tr class="detail-row">
-                                <td></td>
-                                <td>@(row.Sender ?? "")</td>
-                                <td>@(row.PaymentBy ?? "")</td>
-                                <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "0.00")</td>
-                                <td>@(row.Date ?? "")</td>
-                                <td>@(row.CashTeller ?? "")</td>
-                            </tr>
-                        }
-
-                        <tr class="subtotal-row">
-                            <td colspan="2"></td>
-                            <td class="text-right">Total :</td>
-                            <td class="text-right">@groupRows.Sum(r => r.Amount ?? 0m).ToString("N2")</td>
-                            <td colspan="2"></td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="3" class="text-right">Grand Total</td>
-                        <td class="text-right">@totalAmount.ToString("N2")</td>
-                        <td colspan="2"></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="6" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    // label spans the first 3 columns; the total fills Payment Amount; the last 2 columns stay empty
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", 3, totalAmount.ToString("N2"), "", "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

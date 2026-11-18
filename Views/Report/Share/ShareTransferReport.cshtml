@@ -1,264 +1,106 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Share;
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Share
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+    const int ColumnCount = 9;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
     var rows = (Model["Rows"] as List<ShareTransferRowDto>) ?? new List<ShareTransferRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalMembers = Model.ContainsKey("TotalMembers") ? (Model["TotalMembers"] as int? ?? 0) : 0;
-    var totalNoShare = Model.ContainsKey("TotalNoShare") ? (Model["TotalNoShare"] as decimal? ?? 0) : 0;
-    var totalAmount = Model.ContainsKey("TotalAmount") ? (Model["TotalAmount"] as decimal? ?? 0) : 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var officeName = Model["OfficeName"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var officeName = Text("OfficeName", "All");
     var generatedOn = DateTime.Now.ToString("MM/dd/yyyy");
 
-    // Grouped by the receiving member: member header once, then a list of
-    // share transfers received (from previous owners), then a per-member
-    // subtotal - matches the legacy report exactly.
     var memberGroups = rows
         .GroupBy(r => new { r.MemberId, r.Name })
         .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Share Transfer Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+    var totalNoShare = TotalOr("TotalNoShare", rows.Sum(r => r.TotalNoShare ?? 0));
+    var totalAmount = TotalOr("TotalAmount", rows.Sum(r => r.Amount ?? 0));
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-                text-align: left;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: normal;
-                line-height: 1.2;
-                vertical-align: bottom;
-            }
-
-            /* Member group header row (Member Id + Name only) */
-            .member-header-row td {
-                padding-top: 8px;
-                padding-bottom: 2px;
-                font-weight: bold;
-            }
-
-            /* Transfer rows under a member */
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            /* Per-member subtotal */
-            .member-total-row td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-                padding-top: 4px;
-                padding-bottom: 8px;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                font-weight: bold;
-                padding: 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Share Transfer Report", sheetName: "ShareTransfer")
+        .Column("Member Id", 9)
+        .Column("Member Name", 15)
+        .Column("Old Member Id", 11)
+        .Column("Old Member Name", 15)
+        .Column("User Name", 13)
+        .Column("No Of Share", 9, Align.Right)
+        .Column("Amount (Rs)", 10, Align.Right)
+        .Column("Date", 9)
+        .Column("Share Type", 9)
+        .NoColumnHeader()
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9",
+            GroupBackground = "#fff",
+            SubTotalBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 9, firstPageExtraMm: 60)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { white-space: normal; vertical-align: bottom; line-height: 1.2; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; padding-top: 8px; padding-bottom: 2px; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 1px solid #eee; }\n" +
+            "table.sheet-table tr.r-subtotal td { border-top: 1px solid #000; border-bottom: 0; padding-top: 4px; padding-bottom: 8px; }\n" +
+            "table.sheet-table tr.r-total td { border-top: 2px solid #000; border-bottom: 0; padding: 6px; }");
+
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+        4);
+    table.MetaRow(HtmlString.Empty, Fmt.Labeled("Branch Name :", officeName), 4);
+
+    table.Header();
+
+    foreach (var grp in memberGroups)
+    {
+        table.GroupBy(
+            ReportCell.Left(grp.Key.MemberId ?? ""),
+            ReportCell.Left(grp.Key.Name ?? "", ColumnCount - 1));
+
+        var groupShareTotal = 0m;
+        var groupAmountTotal = 0m;
+
+        foreach (var row in grp)
+        {
+            groupShareTotal += row.TotalNoShare ?? 0;
+            groupAmountTotal += row.Amount ?? 0;
+
+            table.Data(
+                "",
+                "",
+                row.PreviousMemberId ?? "",
+                row.PreviousMemberName ?? "",
+                row.UserName ?? "",
+                row.TotalNoShare?.ToString("N2") ?? "",
+                row.Amount?.ToString("N2") ?? "",
+                row.Date ?? "",
+                row.ShareType ?? "");
         }
 
-        <table class="data-table" data-sheet-name="ShareTransfer">
-            <colgroup>
-                <col style="width:9%;" />
-                <col style="width:15%;" />
-                <col style="width:11%;" />
-                <col style="width:15%;" />
-                <col style="width:13%;" />
-                <col style="width:9%;" />
-                <col style="width:10%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
-            </colgroup>
-            <tbody>
-                <!-- Report Title -->
-                <tr class="meta-title">
-                    <td colspan="9">Share Transfer Report</td>
-                </tr>
+        table.SubTotal(grp.Key.Name ?? "", 5, groupShareTotal.ToString("N2"), groupAmountTotal.ToString("N2"), "", "");
+    }
 
-                <!-- Metadata: Report Generated On + From/To Date on one line, Branch Name on the next -->
-                <tr class="meta-row">
-                    <td colspan="4"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="5">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="4"></td>
-                    <td colspan="5"><strong>Branch Name :</strong> @officeName</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="9"></td></tr>
-
-                <!-- Table Header -->
-                <tr>
-                    <th>Member Id</th>
-                    <th>Member Name</th>
-                    <th>Old Member Id</th>
-                    <th>Old Member Name</th>
-                    <th>User Name</th>
-                    <th class="text-right">No Of Share</th>
-                    <th class="text-right">Amount (Rs)</th>
-                    <th>Date</th>
-                    <th>Share Type</th>
-                </tr>
-
-                @if (memberGroups.Any())
-                {
-                    foreach (var grp in memberGroups)
-                    {
-                        <!-- Member header band -->
-                        <tr class="member-header-row">
-                            <td>@(grp.Key.MemberId ?? "")</td>
-                            <td>@(grp.Key.Name ?? "")</td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                        </tr>
-
-                        <!-- Transfers received by this member -->
-                        var groupShareTotal = 0m;
-                        var groupAmountTotal = 0m;
-                        foreach (var row in grp)
-                        {
-                            groupShareTotal += row.TotalNoShare ?? 0;
-                            groupAmountTotal += row.Amount ?? 0;
-                            <tr class="detail-row">
-                                <td></td>
-                                <td></td>
-                                <td>@(row.PreviousMemberId ?? "")</td>
-                                <td>@(row.PreviousMemberName ?? "")</td>
-                                <td>@(row.UserName ?? "")</td>
-                                <td class="text-right">@(row.TotalNoShare?.ToString("N2") ?? "")</td>
-                                <td class="text-right">@(row.Amount?.ToString("N2") ?? "")</td>
-                                <td>@(row.Date ?? "")</td>
-                                <td>@(row.ShareType ?? "")</td>
-                            </tr>
-                        }
-
-                        <!-- Per-member subtotal -->
-                        <tr class="member-total-row">
-                            <td></td>
-                            <td></td>
-                            <td colspan="2" class="text-right">@(grp.Key.Name ?? "")</td>
-                            <td></td>
-                            <td class="text-right">@groupShareTotal.ToString("N2")</td>
-                            <td class="text-right">@groupAmountTotal.ToString("N2")</td>
-                            <td colspan="2"></td>
-                        </tr>
-                    }
-
-                    <!-- Report-level grand total -->
-                    <tr class="grand-total-row">
-                        <td colspan="5" class="text-right">Grand Total :</td>
-                        <td class="text-right">@totalNoShare.ToString("N2")</td>
-                        <td class="text-right">@totalAmount.ToString("N2")</td>
-                        <td colspan="2"></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="9" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+        table.Total("Grand Total :", 5, totalNoShare.ToString("N2"), totalAmount.ToString("N2"), "", "");
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

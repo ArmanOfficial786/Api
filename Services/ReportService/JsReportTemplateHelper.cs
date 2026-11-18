@@ -25,12 +25,33 @@ namespace NexgenCosysReport.Services.ReportService
             RenderRequest request,
             string format,
             PageSizeSetting? pageSetting,
-            bool suppressFooter = false)
+            bool suppressFooter = false,
+            (double W, double H)? sheet = null)
         {
             switch (format)
             {
                 case "PDF":
                 case "VIEW":
+                    // Visual report: the HTML defines the pages. Exact size, zero margins, no Chrome footer.
+                    if (sheet is { } sz)
+                    {
+                        request.Template.Chrome = new Chrome
+                        {
+                            Width = PageSizeSetting.Mm(sz.W),
+                            Height = PageSizeSetting.Mm(sz.H),
+                            Landscape = false,            // orientation is already baked into width/height
+                            MarginTop = "0",
+                            MarginBottom = "0",
+                            MarginLeft = "0",
+                            MarginRight = "0",
+                            DisplayHeaderFooter = false,
+                            PrintBackground = true,
+                            WaitForJS = true,             // waits for window.JSREPORT_READY_TO_START
+                            WaitForNetworkIddle = true
+                        };
+                        break;
+                    }
+                    //for normal report
                     var opts = pageSetting ?? new PageSizeSetting();
                     var chrome = new Chrome
                     {

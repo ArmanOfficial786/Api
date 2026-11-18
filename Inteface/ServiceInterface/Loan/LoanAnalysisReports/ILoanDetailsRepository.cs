@@ -5,6 +5,6 @@ namespace NexgenCosysReport.Inteface.ServiceInterface.Loan.LoanAnalysisReport
 {
     public interface ILoanDetailsRepository
     {
-        Task<LoanDetailsData> GetReportDataAsync(LoanDetailsRequestDto request);
+        Task<LoanDetailsData> GetReportDataAsync(LoanDetailsRequestDto request, long userId);
     }
 }

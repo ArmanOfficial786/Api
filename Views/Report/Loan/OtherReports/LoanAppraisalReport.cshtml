@@ -1,187 +1,83 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+    const int ColumnCount = 4;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+
+    ReportCell Label(string text) => new ReportCell(text, Align.Left, 1, "info-label");
+    ReportCell Value(string text) => new ReportCell(text, Align.Left, 1, "info-value");
+    ReportCell Line(string text) => new ReportCell(text, Align.Left, ColumnCount, "form-line");
+
     var rows = (Model["Rows"] as List<LoanAppraisalRowDto>) ?? new List<LoanAppraisalRowDto>();
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var branchName = Text("BranchName", "All");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var table = new ReportTable(Model, title: "Loan Appraisal Report", sheetName: "LoanAppraisal")
+        .Column("", 14)
+        .Column("", 36)
+        .Column("", 14)
+        .Column("", 36)
+        .NoColumnHeader()
+        .Style(new ReportStyle
+        {
+            ZebraStripes = false,
+            GroupBackground = "#fff"
+        })
+        .Sizing(rowMm: 9, firstPageExtraMm: 55)
+        .Css(
+            "table.sheet-table tr.r-group td, table.sheet-table tr.r-data td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 4px 8px; }\n" +
+            "table.sheet-table tr.r-group td.info-label, table.sheet-table tr.r-group td.info-value, " +
+            "table.sheet-table tr.r-data td.info-label, table.sheet-table tr.r-data td.info-value " +
+            "{ border: 1px solid #000; }\n" +
+            "table.sheet-table tr.r-group td.info-label, table.sheet-table tr.r-data td.info-label { font-weight: bold; }\n" +
+            "table.sheet-table tr.r-group td.info-value, table.sheet-table tr.r-data td.info-value { font-weight: normal; }\n" +
+            "table.sheet-table tr.r-data td.form-line " +
+            "{ font-weight: bold; height: 10mm; vertical-align: bottom; border-bottom: 1px solid #000; }\n" +
+            "table.sheet-table tr.r-spacer { height: 6mm; }");
+
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    foreach (var row in rows)
+    {
+        table.GroupBy(
+            Label("MemberId"),
+            Value(row.MemberId ?? ""),
+            Label("Member Name"),
+            Value(row.FullName ?? ""));
+
+        table.Data(
+            Label("Account No"),
+            Value(row.LoanAccountNo ?? ""),
+            Label("Loan Type"),
+            Value(row.LoanTypeName ?? ""));
+
+        table.Data(
+            Label("Collateral"),
+            Value(row.CollateralName ?? ""),
+            Label("Collateral Value"),
+            Value(row.CollateralAmount.HasValue ? row.CollateralAmount.Value.ToString("N2") : ""));
+
+        table.Data(
+            Label("Collateral Status"),
+            Value(row.CollateralCondition ?? ""),
+            Label("Collateral Quantity"),
+            Value(row.CollateralQuantity ?? ""));
+
+        table.Data(Line("Checked By:"));
+        table.Data(Line($"Capacity: {row.CapacityToPay ?? ""}"));
+        table.Data(Line($"Character: {row.LoanerCharacter ?? ""}"));
+        table.Data(Line($"Capital: {row.Capital ?? ""}"));
+        table.Data(Line("Condition:"));
+        table.Data(Line($"Decision: {row.ManagerialDecision ?? ""}"));
+
+        table.Spacer();
+    }
 }
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan Appraisal Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .meta-title {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 0;
-            }
-
-            .meta-row {
-                padding: 3px 0;
-                font-size: 9pt;
-            }
-
-            .appraisal-block {
-                margin-bottom: 26px;
-                page-break-inside: avoid;
-                break-inside: avoid;
-            }
-
-            .info-grid {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                margin-top: 8px;
-            }
-
-                .info-grid td {
-                    border: 1px solid #000;
-                    padding: 5px 8px;
-                    vertical-align: middle;
-                }
-
-            .info-label {
-                font-weight: bold;
-                width: 14%;
-            }
-
-            .info-value {
-                width: 36%;
-            }
-
-            .collateral-line {
-                padding: 10px 0;
-                font-size: 9pt;
-            }
-
-                .collateral-line strong {
-                    margin-left: 18px;
-                }
-
-                    .collateral-line strong:first-child {
-                        margin-left: 0;
-                    }
-
-            .form-section {
-                margin-top: 14px;
-            }
-
-            .form-label {
-                font-weight: bold;
-                font-size: 9pt;
-                display: block;
-                margin-bottom: 20px;
-            }
-
-            .form-line {
-                border-bottom: 1px solid #000;
-                height: 4px;
-                margin-bottom: 14px;
-            }
-
-            @@media print {
-                .appraisal-block {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
-        {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
-
-        <div class="meta-title">Loan Appraisal Report</div>
-        <div class="meta-row"><strong>Branch Name :</strong> @branchName</div>
-        <div class="meta-row" style="margin-top:6px;"><strong>Report Generated On :</strong> @generatedOn</div>
-
-        @if (rows.Any())
-        {
-            foreach (var row in rows)
-            {
-                <div class="appraisal-block">
-
-                    <!-- Member / Loan info grid -->
-                    <table class="info-grid">
-                        <tr>
-                            <td class="info-label">MemberId</td>
-                            <td class="info-value">@(row.MemberId ?? "")</td>
-                            <td class="info-label">Member Name</td>
-                            <td class="info-value">@(row.FullName ?? "")</td>
-                        </tr>
-                        <tr>
-                            <td class="info-label">Account No</td>
-                            <td class="info-value">@(row.LoanAccountNo ?? "")</td>
-                            <td class="info-label">Loan Type</td>
-                            <td class="info-value">@(row.LoanTypeName ?? "")</td>
-                        </tr>
-                    </table>
-
-                    <!-- Collateral summary line -->
-                    <div class="collateral-line">
-                        <strong>Collateral :</strong> @(row.CollateralName ?? "")
-                        <strong>Collateral Value :</strong> @(row.CollateralAmount.HasValue ? row.CollateralAmount.Value.ToString("N2") : "")
-                        <strong>Collateral Status :</strong> @(row.CollateralCondition ?? "")
-                        <strong>Collateral Quantity :</strong> @(row.CollateralQuantity ?? "")
-                    </div>
-
-                    <!-- Assessment fill-in sections -->
-                    <div class="form-section">
-                        <span class="form-label">Checked By:</span>
-                        <div class="form-line"></div>
-
-                        <span class="form-label">Capacity: @(row.CapacityToPay ?? "")</span>
-                        <div class="form-line"></div>
-
-                        <span class="form-label">Character: @(row.LoanerCharacter ?? "")</span>
-                        <div class="form-line"></div>
-
-                        <span class="form-label">Capital: @(row.Capital ?? "")</span>
-                        <div class="form-line"></div>
-
-                        <span class="form-label">Condition:</span>
-                        <div class="form-line"></div>
-
-                        <span class="form-label">Decision: @(row.ManagerialDecision ?? "")</span>
-                        <div class="form-line"></div>
-                    </div>
-                </div>
-            }
-        }
-        else
-        {
-            <div class="meta-row text-center">No data found for the selected criteria</div>
-        }
-    </div>
-</body>
-</html>
+@await Html.PartialAsync("_SheetReport", table.Build())

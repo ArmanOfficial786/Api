@@ -1,237 +1,109 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Remit;
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Remit
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<RemitReconcileReportRowDto>) ?? new List<RemitReconcileReportRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalPaid = Model.ContainsKey("TotalPaid") ? (Model["TotalPaid"] as int? ?? 0) : 0;
-    var totalCancelled = Model.ContainsKey("TotalCancelled") ? (Model["TotalCancelled"] as int? ?? 0) : 0;
-    var totalPayoutAmount = Model.ContainsKey("TotalPayoutAmount") ? (Model["TotalPayoutAmount"] as decimal? ?? 0) : 0;
-    var totalPayoutCommission = Model.ContainsKey("TotalPayoutCommission") ? (Model["TotalPayoutCommission"] as decimal? ?? 0) : 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var remittanceGroupName = Model["RemittanceGroupName"]?.ToString() ?? "All";
-    var reportType = Model["ReportType"]?.ToString() ?? "A";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-    var reportTypeLabel = reportType == "P" ? "PAID" : (reportType == "C" ? "CANCEL" : "ALL");
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Online Remittance Reconcile Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var fontSize = "8pt";
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 8pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 8pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 3px 4px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-                text-align: left;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: normal;
-                line-height: 1.2;
-                vertical-align: bottom;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #ccc;
-            }
-
-            .sn-col {
-                text-align: center;
-                color: #555;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
         }
+        return fallback;
+    }
 
-        <table class="data-table" data-sheet-name="RemitReconcileReport">
-            <colgroup>
-                <col style="width:3%;" />
-                <col style="width:8%;" />
-                <col style="width:10%;" />
-                <col style="width:10%;" />
-                <col style="width:7%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
-                <col style="width:8%;" />
-                <col style="width:8%;" />
-                <col style="width:8%;" />
-                <col style="width:8%;" />
-                <col style="width:6%;" />
-                <col style="width:6%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="13">Online Remittance Reconcile Report</td>
-                </tr>
+    // any property type prints as its text; a missing value prints blank (same as before)
+    string S(object? v) => v?.ToString() ?? "";
 
-                <tr class="meta-row">
-                    <td colspan="13"><strong>Branch Name :</strong> @branchName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="13">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Till Date :</strong> @toDate
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Remittance Group :</strong> @remittanceGroupName
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Report Type :</strong> @reportTypeLabel
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="13"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="13"></td></tr>
+    var rows = (Model["Rows"] as List<RemitReconcileReportRowDto>) ?? new List<RemitReconcileReportRowDto>();
 
-                <tr>
-                    <th class="text-center">S.N.</th>
-                    <th>Pin No</th>
-                    <th>Sender</th>
-                    <th>Receiver</th>
-                    <th>Mode</th>
-                    <th class="text-right">Payout Amt</th>
-                    <th class="text-right">Commission</th>
-                    <th>Trans Date</th>
-                    <th>Status</th>
-                    <th>Paid Date</th>
-                    <th>Payment Type</th>
-                    <th>Agent</th>
-                    <th>Branch</th>
-                </tr>
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
+    var remittanceGroupName = Text("RemittanceGroupName", "All");
+    var reportType = Text("ReportType", "A");
+    var reportTypeLabel = reportType == "P" ? "PAID" : (reportType == "C" ? "CANCEL" : "ALL");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-                @if (rows.Any())
-                {
-                    var sn = 0;
-                    foreach (var row in rows)
-                    {
-                        sn++;
-                        <tr class="detail-row">
-                            <td class="sn-col">@sn</td>
-                            <td>@(row.PinNo ?? "")</td>
-                            <td>@(row.SenderName ?? "")</td>
-                            <td>@(row.ReceiverName ?? "")</td>
-                            <td>@(row.TransactionMode ?? "")</td>
-                            <td class="text-right">@(row.PayoutAmount ?? "")</td>
-                            <td class="text-right">@(row.PayoutCommission ?? "")</td>
-                            <td>@(row.TransactionDate ?? "")</td>
-                            <td>@(row.Status ?? "")</td>
-                            <td>@(row.PaidDate ?? "")</td>
-                            <td>@(row.PaymentType ?? "")</td>
-                            <td>@(row.AgentName ?? "")</td>
-                            <td>@(row.AgentBranch ?? "")</td>
-                        </tr>
-                    }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalPaid = (int)TotalOr("TotalPaid", 0);
+    var totalCancelled = (int)TotalOr("TotalCancelled", 0);
+    var totalPayoutAmount = TotalOr("TotalPayoutAmount", 0);
+    var totalPayoutCommission = TotalOr("TotalPayoutCommission", 0);
 
-                    <tr class="grand-total-row">
-                        <td colspan="5" class="text-right">
-                            Total Records: @totalRecords &nbsp;|&nbsp; Paid: @totalPaid &nbsp;|&nbsp; Cancelled: @totalCancelled
-                        </td>
-                        <td class="text-right">@totalPayoutAmount.ToString("N2")</td>
-                        <td class="text-right">@totalPayoutCommission.ToString("N2")</td>
-                        <td colspan="6"></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="13" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    var table = new ReportTable(Model, title: "Online Remittance Reconcile Report", sheetName: "RemitReconcileReport")
+        .Column("S.N.", 3, Align.Center)
+        .Column("Pin No", 8)
+        .Column("Sender", 10)
+        .Column("Receiver", 10)
+        .Column("Mode", 7)
+        .Column("Payout Amt", 9, Align.Right)
+        .Column("Commission", 9, Align.Right)
+        .Column("Trans Date", 8)
+        .Column("Status", 8)
+        .Column("Paid Date", 8)
+        .Column("Payment Type", 8)
+        .Column("Agent", 6)
+        .Column("Branch", 6)
+        .Style(new ReportStyle
+        {
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 10, firstPageExtraMm: 75)   // column titles may wrap to two lines
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 4px; }" +
+            // column titles may wrap and sit at the bottom of the cell, as in the old report
+            "table.sheet-table tr.r-header th { white-space: normal; line-height: 1.2; vertical-align: bottom; }" +
+            "table.sheet-table tr.r-data td { border-bottom: 1px solid #ccc; }" +
+            // serial number in grey
+            "table.sheet-table tr.r-data td:first-child { color: #555; }");
+
+    // ── title block ──
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+    table.MetaRow(Fmt.Join(
+        Fmt.Labeled("From Date :", fromDate),
+        Fmt.Labeled("Till Date :", toDate),
+        Fmt.Labeled("Remittance Group :", remittanceGroupName),
+        Fmt.Labeled("Report Type :", reportTypeLabel)));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    // ── rows ──
+    var sn = 0;
+    foreach (var row in rows)
+    {
+        sn++;
+        table.Data(
+            sn.ToString(),
+            S(row.PinNo),
+            S(row.SenderName),
+            S(row.ReceiverName),
+            S(row.TransactionMode),
+            S(row.PayoutAmount),
+            S(row.PayoutCommission),
+            S(row.TransactionDate),
+            S(row.Status),
+            S(row.PaidDate),
+            S(row.PaymentType),
+            S(row.AgentName),
+            S(row.AgentBranch));
+    }
+
+    // label spans the first 5 columns; the two amounts fill columns 6 and 7; the other 6 columns stay empty
+    if (rows.Count > 0)
+    {
+        table.Total($"Total Records: {totalRecords}  |  Paid: {totalPaid}  |  Cancelled: {totalCancelled}", 5,
+            totalPayoutAmount.ToString("N2"),
+            totalPayoutCommission.ToString("N2"),
+            "", "", "", "", "", "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

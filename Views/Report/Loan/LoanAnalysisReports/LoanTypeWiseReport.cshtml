@@ -1,480 +1,462 @@
-﻿@* Views/Report/Loan/LoanAnalysisReport/LoanTypeWiseReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+﻿@* @using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<LoanTypeWiseRowDto>) ?? new List<LoanTypeWiseRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalDisburseAmount = Model["TotalDisburseAmount"] as decimal? ?? 0;
-    var totalRepaid = Model["TotalRepaid"] as decimal? ?? 0;
-    var totalBalanceAmount = Model["TotalBalanceAmount"] as decimal? ?? 0;
-    var totalOpeningBalance = Model["TotalOpeningBalance"] as decimal? ?? 0;
-    var totalClosingBalance = Model["TotalClosingBalance"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var loanTypeName = Model["LoanTypeName"]?.ToString() ?? "";
-    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "";
-    var collectionCenterName = Model["CollectionCenterName"]?.ToString() ?? "";
-    var collectorName = Model["CollectorName"]?.ToString() ?? "";
-    var loanGuarantee = Model["LoanGuarantee"]?.ToString() ?? "-1";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "-1";
-    var showOpeningBalance = Model["ShowOpeningBalance"] as bool? ?? false;
-    var enableCollectionCenter = Model["EnableCollectionCenter"] as bool? ?? false;
-    var groupByBranch = Model["GroupByBranch"] as bool? ?? false;
-    var groupByMemberGroup = Model["GroupByMemberGroup"] as bool? ?? false;
-    var viewCollector = Model["ViewCollector"] as bool? ?? false;
-    var showDetail = Model["ShowDetail"] as bool? ?? true;
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var fontSize = "7.5pt";
+    var metaFontSize = "8pt";
+
+    string Text(string key) => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? "" : "";
+    bool Flag(string key, bool fallback) => Model.TryGetValue(key, out var fv) && fv is bool fb ? fb : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    var rows = (Model["Rows"] as IEnumerable<LoanTypeWiseRowDto>)?.ToList() ?? new List<LoanTypeWiseRowDto>();
+    var branchName = Text("BranchName");
+    if (branchName == "") branchName = "All";
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var loanTypeName = Text("LoanTypeName");
+    var memberGroupName = Text("MemberGroupName");
+    var collectionCenterName = Text("CollectionCenterName");
+    var collectorName = Text("CollectorName");
+    var loanGuarantee = Text("LoanGuarantee");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var isLoanTypeFiltered = !string.IsNullOrEmpty(loanTypeName);
-    var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName);
-    var isCollectionCenterFiltered = !string.IsNullOrEmpty(collectionCenterName);
-    var isCollectorFiltered = !string.IsNullOrEmpty(collectorName);
+    var showDetail = Flag("ShowDetail", true);
+    var showOpening = Flag("ShowOpeningBalance", false);
+    var viewCollector = Flag("ViewCollector", false);
+    var groupByBranch = Flag("GroupByBranch", false);
+    var groupByMemberGroup = Flag("GroupByMemberGroup", false);
+    var enableCollectionCenter = Flag("EnableCollectionCenter", false);
+
+    var totalRecords = Model.TryGetValue("TotalRecords", out var tr) && tr != null && Convert.ToInt32(tr) > 0
+        ? Convert.ToInt32(tr)
+        : rows.Count;
+    var totalDisburse = TotalOr("TotalDisburseAmount", rows.Sum(x => x.DisburseAmount ?? 0));
+    var totalRepaid = TotalOr("TotalRepaid", rows.Sum(x => x.Repaid ?? 0));
+    var totalBalance = TotalOr("TotalBalanceAmount", rows.Sum(x => x.BalanceAmount ?? 0));
+    var totalOpening = TotalOr("TotalOpeningBalance", rows.Sum(x => x.OpeningBalance ?? 0));
+    var totalClosing = TotalOr("TotalClosingBalance", rows.Sum(x => x.ClosingBalance ?? 0));
+
     var isGuaranteeFiltered = !string.IsNullOrEmpty(loanGuarantee)
         && loanGuarantee != "-1"
         && !loanGuarantee.Equals("All", StringComparison.OrdinalIgnoreCase);
 
-    // Summary rows: one per Loan Type, aggregated across all matching loans —
-    // used when ShowDetail is false (matches the image: Loan Type Name | No.
-    // of Loan | Disburse | Repaid | Balance, no per-member rows at all).
-    var loanTypeSummary = rows
-        .GroupBy(r => r.LoanTypeName ?? "")
-        .Select(g => new
-        {
-            LoanTypeName = g.Key,
-            NoOfLoan = g.Count(),
-            DisburseAmount = g.Sum(r => r.DisburseAmount ?? 0m),
-            Repaid = g.Sum(r => r.Repaid ?? 0m),
-            BalanceAmount = g.Sum(r => r.BalanceAmount ?? 0m),
-            OpeningBalance = g.Sum(r => r.OpeningBalance ?? 0m),
-            ClosingBalance = g.Sum(r => r.ClosingBalance ?? 0m)
-        })
-        .OrderBy(g => g.LoanTypeName)
-        .ToList();
+    var table = new ReportTable(Model,
+        title: showDetail ? "Loan Type Wise Report" : "Loan Type Wise Details Report",
+        sheetName: "LoanTypeWise");
 
-    var summaryColCount = showOpeningBalance ? 6 : 4;
+    if (showDetail)
+    {
+        table.Column("S.N.", 4, Align.Center)
+             .Column("Member Id", 9)
+             .Column("Member Name", 16);
+        if (viewCollector) table.Column("Collector", 12);
+        table.Column("Loan A/c No", 11)
+             .Column("Loan Type", 11)
+             .Column("Disburse Amount", 11, Align.Right)
+             .Column("Repaid", 11, Align.Right)
+             .Column("Balance Amount", 11, Align.Right);
+        if (showOpening)
+            table.Column("Opening Balance", 11, Align.Right)
+                 .Column("Closing Balance", 11, Align.Right);
+    }
+    else
+    {
+        table.Column("Loan Type Name", 34)
+             .Column("No. of Loan", 12, Align.Right)
+             .Column("Disburse", 14, Align.Right)
+             .Column("Repaid", 14, Align.Right)
+             .Column("Balance", 14, Align.Right);
+        if (showOpening)
+            table.Column("Opening Balance", 14, Align.Right)
+                 .Column("Closing Balance", 14, Align.Right);
+    }
+
+    table.Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 75)
+         .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-section td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 3px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            @"
+            table.sheet-table tr.r-data td.negative { color: #CC0000; }
+            table.sheet-table tr.r-data td.positive { color: #006600; }");
+
+    var filters = new List<IHtmlContent>();
+    if (!string.IsNullOrEmpty(loanTypeName)) filters.Add(Fmt.Labeled("Loan Type :", loanTypeName));
+    if (!string.IsNullOrEmpty(memberGroupName)) filters.Add(Fmt.Labeled("Member Group :", memberGroupName));
+    if (!string.IsNullOrEmpty(collectionCenterName)) filters.Add(Fmt.Labeled("Collection Center :", collectionCenterName));
+    if (!string.IsNullOrEmpty(collectorName)) filters.Add(Fmt.Labeled("Collector :", collectorName));
+    if (isGuaranteeFiltered) filters.Add(Fmt.Labeled("Loan Guarantee :", loanGuarantee));
+
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName))
+         .MetaRow(Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
+    if (filters.Count > 0) table.MetaRow(Fmt.Join(filters.ToArray()));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    if (showDetail)
+    {
+        var sn = 0;
+        var currentGroup = "";
+
+        foreach (var row in rows)
+        {
+            string? rowGroup = groupByMemberGroup ? row.GroupName
+                : groupByBranch ? row.OfficeName
+                : enableCollectionCenter ? row.CollectionCenterName
+                : null;
+
+            if (!string.IsNullOrEmpty(rowGroup) && currentGroup != rowGroup)
+            {
+                currentGroup = rowGroup;
+                table.Section(currentGroup);
+            }
+
+            var cells = new List<ReportCell>
+            {
+                ReportCell.Center((++sn).ToString()),
+                ReportCell.Left(row.MemberId ?? ""),
+                ReportCell.Left(row.FullName ?? "")
+            };
+            if (viewCollector) cells.Add(ReportCell.Left(row.CollectorName ?? ""));
+            cells.Add(ReportCell.Left(row.LoanAccountNo ?? ""));
+            cells.Add(ReportCell.Left(row.LoanTypeName ?? ""));
+            cells.Add(ReportCell.Right(Fmt.Amount(row.DisburseAmount)));
+            cells.Add(ReportCell.Right(Fmt.Amount(row.Repaid)));
+            cells.Add(new ReportCell(Fmt.Amount(row.BalanceAmount), Align.Right, 1, row.BalanceAmount > 0 ? "negative" : "positive"));
+            if (showOpening)
+            {
+                cells.Add(ReportCell.Right(Fmt.Amount(row.OpeningBalance)));
+                cells.Add(ReportCell.Right(Fmt.Amount(row.ClosingBalance)));
+            }
+            table.Data(cells.ToArray());
+        }
+
+        if (rows.Count > 0)
+        {
+            var labelSpan = 5 + (viewCollector ? 1 : 0);
+            var columnCount = labelSpan + 3 + (showOpening ? 2 : 0);
+            var totals = new List<string> { Fmt.Amount(totalDisburse), Fmt.Amount(totalRepaid), Fmt.Amount(totalBalance) };
+            if (showOpening)
+            {
+                totals.Add(Fmt.Amount(totalOpening));
+                totals.Add(Fmt.Amount(totalClosing));
+            }
+            table.Total("Grand Total", labelSpan, totals.ToArray());
+            table.Total("Total Records", columnCount - 1, totalRecords.ToString());
+        }
+    }
+    else
+    {
+        var summary = rows
+            .GroupBy(x => x.LoanTypeName ?? "")
+            .Select(g => new
+            {
+                Name = g.Key,
+                Count = g.Count(),
+                Disburse = g.Sum(x => x.DisburseAmount ?? 0m),
+                Repaid = g.Sum(x => x.Repaid ?? 0m),
+                Balance = g.Sum(x => x.BalanceAmount ?? 0m),
+                Opening = g.Sum(x => x.OpeningBalance ?? 0m),
+                Closing = g.Sum(x => x.ClosingBalance ?? 0m)
+            })
+            .OrderBy(g => g.Name)
+            .ToList();
+
+        foreach (var g in summary)
+        {
+            var cells = new List<ReportCell>
+            {
+                ReportCell.Left(g.Name),
+                ReportCell.Right(g.Count.ToString()),
+                ReportCell.Right(Fmt.Amount(g.Disburse)),
+                ReportCell.Right(Fmt.Amount(g.Repaid)),
+                new ReportCell(Fmt.Amount(g.Balance), Align.Right, 1, g.Balance < 0 ? "negative" : null)
+            };
+            if (showOpening)
+            {
+                cells.Add(ReportCell.Right(Fmt.Amount(g.Opening)));
+                cells.Add(ReportCell.Right(Fmt.Amount(g.Closing)));
+            }
+            table.Data(cells.ToArray());
+        }
+
+        if (rows.Count > 0)
+        {
+            var totals = new List<string>
+            {
+                totalRecords.ToString(), Fmt.Amount(totalDisburse), Fmt.Amount(totalRepaid), Fmt.Amount(totalBalance)
+            };
+            if (showOpening)
+            {
+                totals.Add(Fmt.Amount(totalOpening));
+                totals.Add(Fmt.Amount(totalClosing));
+            }
+            table.Total("Grand Total", 1, totals.ToArray());
+        }
+    }
 }
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan Type Wise Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+@await Html.PartialAsync("_SheetReport", table.Build()) *@
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 8pt;
-                background: white;
-                color: #000;
-            }
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
 
-            thead {
-                display: table-row-group;
-            }
 
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 8pt;
-                table-layout: fixed;
-            }
+@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
+@model Dictionary<string, object>
+@{
+    Layout = null;
 
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 3px 4px;
-                    vertical-align: middle;
-                }
+    var fontSize = "7.5pt";
+    var metaFontSize = "8pt";
 
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 8pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .section-header td {
-                background: #e8e8e8;
-                font-weight: bold;
-                font-size: 9pt;
-                padding: 4px 6px;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-            }
-
-            .data-table th {
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-                font-weight: bold;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .detail-row-alt td {
-                background: #f9f9f9;
-                border-bottom: 1px solid #eee;
-            }
-
-            .summary-loantype-row td {
-                padding-left: 20px;
-                border-bottom: 1px solid #000;
-            }
-
-            .sub-total-row td {
-                background: #f0f0f0;
-                font-weight: bold;
-                padding: 4px 6px;
-                border-top: 1px solid #666;
-                border-bottom: 1px solid #666;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .positive {
-                color: #006600;
-            }
-
-            .negative {
-                color: #CC0000;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    string Text(string key) => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? "" : "";
+    bool Flag(string key, bool fallback) => Model.TryGetValue(key, out var fv) && fv is bool fb ? fb : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    var rows = (Model["Rows"] as IEnumerable<LoanTypeWiseRowDto>)?.ToList() ?? new List<LoanTypeWiseRowDto>();
+    var branchName = Text("BranchName");
+    if (branchName == "") branchName = "All";
+    var fromDate = Text("FromDate");
+    if (fromDate == "") fromDate = Text("FromDateBs");
+    var toDate = Text("ToDate");
+    if (toDate == "") toDate = Text("ToDateBs");
+    var loanTypeName = Text("LoanTypeName");
+    var memberGroupName = Text("MemberGroupName");
+    var collectionCenterName = Text("CollectionCenterName");
+    var collectorName = Text("CollectorName");
+    var loanGuarantee = Text("LoanGuarantee");
+    var orderBy = Text("OrderBy");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var showDetail = Flag("ShowDetail", true);
+    var showOpening = Flag("ShowOpeningBalance", false);
+    var viewCollector = Flag("ViewCollector", false);
+    var groupByBranch = Flag("GroupByBranch", false);
+    var groupByMemberGroup = Flag("GroupByMemberGroup", false);
+    var enableCollectionCenter = Flag("EnableCollectionCenter", false);
+
+    var totalRecords = Model.TryGetValue("TotalRecords", out var tr) && tr != null && Convert.ToInt32(tr) > 0
+        ? Convert.ToInt32(tr)
+        : rows.Count;
+    var totalDisburse = TotalOr("TotalDisburseAmount", rows.Sum(x => x.DisburseAmount ?? 0));
+    var totalRepaid = TotalOr("TotalRepaid", rows.Sum(x => x.Repaid ?? 0));
+    var totalBalance = TotalOr("TotalBalanceAmount", rows.Sum(x => x.BalanceAmount ?? 0));
+    var totalOpening = TotalOr("TotalOpeningBalance", rows.Sum(x => x.OpeningBalance ?? 0));
+    var totalClosing = TotalOr("TotalClosingBalance", rows.Sum(x => x.ClosingBalance ?? 0));
+
+    var isGuaranteeFiltered = !string.IsNullOrEmpty(loanGuarantee)
+        && loanGuarantee != "-1"
+        && !loanGuarantee.Equals("All", StringComparison.OrdinalIgnoreCase);
+
+    var activeLevels = (groupByBranch ? 1 : 0) + (enableCollectionCenter ? 1 : 0) + (groupByMemberGroup ? 1 : 0);
+
+    string SectionLabel(string label, string value) => activeLevels > 1 ? label + " : " + value : value;
+
+    var table = new ReportTable(Model,
+        title: showDetail ? "Loan Type Wise Report" : "Loan Type Wise Details Report",
+        sheetName: "LoanTypeWise");
+
+    if (showDetail)
+    {
+        table.Column("S.N.", 4, Align.Center)
+             .Column("Member Id", 9)
+             .Column("Member Name", 16);
+        if (viewCollector) table.Column("Collector", 12);
+        table.Column("Loan A/c No", 11)
+             .Column("Loan Type", 11)
+             .Column("Disburse Amount", 11, Align.Right)
+             .Column("Repaid", 11, Align.Right)
+             .Column("Balance Amount", 11, Align.Right);
+        if (showOpening)
+            table.Column("Opening Balance", 11, Align.Right)
+                 .Column("Closing Balance", 11, Align.Right);
+    }
+    else
+    {
+        table.Column("Loan Type Name", 34)
+             .Column("No. of Loan", 12, Align.Right)
+             .Column("Disburse", 14, Align.Right)
+             .Column("Repaid", 14, Align.Right)
+             .Column("Balance", 14, Align.Right);
+        if (showOpening)
+            table.Column("Opening Balance", 14, Align.Right)
+                 .Column("Closing Balance", 14, Align.Right);
+    }
+
+    table.Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 75)
+         .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-section td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 3px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            @"
+            table.sheet-table tr.r-data td.negative { color: #CC0000; }
+            table.sheet-table tr.r-data td.positive { color: #006600; }");
+
+    var filters = new List<IHtmlContent>();
+    if (!string.IsNullOrEmpty(loanTypeName)) filters.Add(Fmt.Labeled("Loan Type :", loanTypeName));
+    if (!string.IsNullOrEmpty(memberGroupName)) filters.Add(Fmt.Labeled("Member Group :", memberGroupName));
+    if (!string.IsNullOrEmpty(collectionCenterName)) filters.Add(Fmt.Labeled("Collection Center :", collectionCenterName));
+    if (!string.IsNullOrEmpty(collectorName)) filters.Add(Fmt.Labeled("Collector :", collectorName));
+    if (isGuaranteeFiltered) filters.Add(Fmt.Labeled("Loan Guarantee :", loanGuarantee));
+
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName))
+         .MetaRow(Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
+    if (filters.Count > 0) table.MetaRow(Fmt.Join(filters.ToArray()));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    var started = false;
+    string branchKey = "";
+    string centerKey = "";
+    string groupKey = "";
+
+    void Sections(string branch, string center, string group)
+    {
+        var branchChanged = groupByBranch && (!started || branch != branchKey);
+        var centerChanged = enableCollectionCenter && (!started || branchChanged || center != centerKey);
+        var groupChanged = groupByMemberGroup && (!started || branchChanged || centerChanged || group != groupKey);
+
+        if (branchChanged) table.Section(SectionLabel("Branch", branch));
+        if (centerChanged) table.Section(SectionLabel("Collection Center", center));
+        if (groupChanged) table.Section(SectionLabel("Member Group", group));
+
+        branchKey = branch;
+        centerKey = center;
+        groupKey = group;
+        started = true;
+    }
+
+    if (showDetail)
+    {
+        var sn = 0;
+
+        var ordered = rows
+            .OrderBy(x => groupByBranch ? x.OfficeName ?? "" : "")
+            .ThenBy(x => enableCollectionCenter ? x.CollectionCenterName ?? "" : "")
+            .ThenBy(x => groupByMemberGroup ? x.GroupName ?? "" : "")
+            .ToList();
+
+        foreach (var row in ordered)
+        {
+            Sections(row.OfficeName ?? "", row.CollectionCenterName ?? "", row.GroupName ?? "");
+
+            var cells = new List<ReportCell>
+            {
+                ReportCell.Center((++sn).ToString()),
+                ReportCell.Left(row.MemberId ?? ""),
+                ReportCell.Left(row.FullName ?? "")
+            };
+            if (viewCollector) cells.Add(ReportCell.Left(row.CollectorName ?? ""));
+            cells.Add(ReportCell.Left(row.LoanAccountNo ?? ""));
+            cells.Add(ReportCell.Left(row.LoanTypeName ?? ""));
+            cells.Add(ReportCell.Right(Fmt.Amount(row.DisburseAmount)));
+            cells.Add(ReportCell.Right(Fmt.Amount(row.Repaid)));
+            cells.Add(new ReportCell(Fmt.Amount(row.BalanceAmount), Align.Right, 1, row.BalanceAmount > 0 ? "negative" : "positive"));
+            if (showOpening)
+            {
+                cells.Add(ReportCell.Right(Fmt.Amount(row.OpeningBalance)));
+                cells.Add(ReportCell.Right(Fmt.Amount(row.ClosingBalance)));
+            }
+            table.Data(cells.ToArray());
         }
 
-        @if (!showDetail)
+        if (rows.Count > 0)
         {
-            <table class="data-table" data-sheet-name="LoanTypeWise">
-                <colgroup>
-                    <col style="width:40%;" />
-                    <col style="width:15%;" />
-                    <col style="width:15%;" />
-                    <col style="width:15%;" />
-                    @if (showOpeningBalance)
-                    {
-                        <col style="width:7.5%;" />
-                        <col style="width:7.5%;" />
-                    }
-                </colgroup>
-                <tbody>
-                    <tr class="meta-title">
-                        <td colspan="@summaryColCount">Loan Type Wise Details Report</td>
-                    </tr>
-
-                    <tr class="meta-row">
-                        <td colspan="@summaryColCount"><strong>Branch Name:</strong> @branchName</td>
-                    </tr>
-                    <tr class="meta-row">
-                        <td colspan="@summaryColCount">
-                            <strong>From Date :</strong> @fromDate
-                            &nbsp;&nbsp;&nbsp;
-                            <strong>To Date :</strong> @toDate
-                        </td>
-                    </tr>
-                    @if (isLoanTypeFiltered || isMemberGroupFiltered || isCollectionCenterFiltered || isCollectorFiltered || isGuaranteeFiltered)
-                    {
-                        <tr class="meta-row">
-                            <td colspan="@summaryColCount">
-                                @if (isLoanTypeFiltered)
-                                {
-                                    <text><strong>Loan Type :</strong> @loanTypeName &nbsp;&nbsp; </text>
-                                }
-                                @if (isMemberGroupFiltered)
-                                {
-                                    <text><strong>Member Group :</strong> @memberGroupName &nbsp;&nbsp; </text>
-                                }
-                                @if (isCollectionCenterFiltered)
-                                {
-                                    <text><strong>Collection Center :</strong> @collectionCenterName &nbsp;&nbsp; </text>
-                                }
-                                @if (isCollectorFiltered)
-                                {
-                                    <text><strong>Collector :</strong> @collectorName &nbsp;&nbsp; </text>
-                                }
-                                @if (isGuaranteeFiltered)
-                                {
-                                    <text><strong>Loan Guarantee :</strong> @loanGuarantee</text>
-                                }
-                            </td>
-                        </tr>
-                    }
-                    <tr class="meta-row">
-                        <td colspan="@summaryColCount"><strong>Report Generated On :</strong> @generatedOn</td>
-                    </tr>
-                    <tr class="meta-spacer"><td colspan="@summaryColCount"></td></tr>
-
-                    <tr>
-                        <th>Loan Type Name</th>
-                        <th class="text-right">No. of Loan</th>
-                        <th class="text-right">Disburse</th>
-                        <th class="text-right">Repaid</th>
-                        <th class="text-right">Balance</th>
-                        @if (showOpeningBalance)
-                        {
-                            <th class="text-right">Opening Balance</th>
-                            <th class="text-right">Closing Balance</th>
-                        }
-                    </tr>
-
-                    @if (loanTypeSummary.Any())
-                    {
-                        foreach (var g in loanTypeSummary)
-                        {
-                            <tr class="summary-loantype-row">
-                                <td>@g.LoanTypeName</td>
-                                <td class="text-right">@g.NoOfLoan</td>
-                                <td class="text-right">@g.DisburseAmount.ToString("N2")</td>
-                                <td class="text-right">@g.Repaid.ToString("N2")</td>
-                                <td class="text-right @(g.BalanceAmount < 0 ? "negative" : "")">@g.BalanceAmount.ToString("N2")</td>
-                                @if (showOpeningBalance)
-                                {
-                                    <td class="text-right">@g.OpeningBalance.ToString("N2")</td>
-                                    <td class="text-right">@g.ClosingBalance.ToString("N2")</td>
-                                }
-                            </tr>
-                        }
-
-                        <tr class="grand-total-row">
-                            <td class="text-right">Grand Total</td>
-                            <td class="text-right">@totalRecords</td>
-                            <td class="text-right">@totalDisburseAmount.ToString("N2")</td>
-                            <td class="text-right">@totalRepaid.ToString("N2")</td>
-                            <td class="text-right">@totalBalanceAmount.ToString("N2")</td>
-                            @if (showOpeningBalance)
-                            {
-                                <td class="text-right">@totalOpeningBalance.ToString("N2")</td>
-                                <td class="text-right">@totalClosingBalance.ToString("N2")</td>
-                            }
-                        </tr>
-                    }
-                    else
-                    {
-                        <tr>
-                            <td colspan="@summaryColCount" class="text-center">No data found for the selected criteria</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+            var labelSpan = 5 + (viewCollector ? 1 : 0);
+            var columnCount = labelSpan + 3 + (showOpening ? 2 : 0);
+            var totals = new List<string> { Fmt.Amount(totalDisburse), Fmt.Amount(totalRepaid), Fmt.Amount(totalBalance) };
+            if (showOpening)
+            {
+                totals.Add(Fmt.Amount(totalOpening));
+                totals.Add(Fmt.Amount(totalClosing));
+            }
+            table.Total("Grand Total", labelSpan, totals.ToArray());
+            table.Total("Total Records", columnCount - 1, totalRecords.ToString());
         }
-        else
+    }
+    else
+    {
+        var grouped = rows
+            .GroupBy(x => new
+            {
+                Branch = groupByBranch ? x.OfficeName ?? "" : "",
+                Center = enableCollectionCenter ? x.CollectionCenterName ?? "" : "",
+                Group = groupByMemberGroup ? x.GroupName ?? "" : "",
+                Type = x.LoanTypeName ?? ""
+            })
+            .Select(g => new
+            {
+                g.Key.Branch,
+                g.Key.Center,
+                g.Key.Group,
+                Name = g.Key.Type,
+                Count = g.Count(),
+                Disburse = g.Sum(x => x.DisburseAmount ?? 0m),
+                Repaid = g.Sum(x => x.Repaid ?? 0m),
+                Balance = g.Sum(x => x.BalanceAmount ?? 0m),
+                Opening = g.Sum(x => x.OpeningBalance ?? 0m),
+                Closing = g.Sum(x => x.ClosingBalance ?? 0m)
+            });
+
+        var summary = (orderBy == "DisburseAmount"
+                ? grouped.OrderBy(g => g.Branch).ThenBy(g => g.Center).ThenBy(g => g.Group).ThenBy(g => g.Disburse)
+                : grouped.OrderBy(g => g.Branch).ThenBy(g => g.Center).ThenBy(g => g.Group).ThenBy(g => g.Name))
+            .ToList();
+
+        foreach (var g in summary)
         {
-            <table class="data-table" data-sheet-name="LoanTypeWise">
-                <colgroup>
-                    <col style="width:4%;" />
-                    <col style="width:9%;" />
-                    <col style="width:16%;" />
-                    @if (viewCollector)
-                    {
-                        <col style="width:12%;" />
-                    }
-                    <col style="width:11%;" />
-                    <col style="width:11%;" />
-                    <col style="width:11%;" />
-                    <col style="width:11%;" />
-                    @if (showOpeningBalance)
-                    {
-                        <col style="width:11%;" />
-                        <col style="width:11%;" />
-                    }
-                </colgroup>
-                <tbody>
-                    <tr class="meta-title">
-                        <td colspan="10">Loan Type Wise Report</td>
-                    </tr>
+            Sections(g.Branch, g.Center, g.Group);
 
-                    <tr class="meta-row">
-                        <td colspan="5">
-                            <strong>Branch :</strong> @branchName
-                            &nbsp;&nbsp;
-                            <strong>From Date :</strong> @fromDate
-                            &nbsp;&nbsp;
-                            <strong>To Date :</strong> @toDate
-                        </td>
-                        <td colspan="5" class="text-right">
-                            @if (isLoanTypeFiltered)
-                            {
-                                <strong>Loan Type :</strong>
-                                @loanTypeName
-                            }
-                            @if (isGuaranteeFiltered)
-                            {
-                                <text>&nbsp;&nbsp;</text>
-                                <strong>Loan Guarantee :</strong>
-                                @loanGuarantee
-                            }
-                        </td>
-                    </tr>
-                    <tr class="meta-row">
-                        <td colspan="5">
-                            @if (isMemberGroupFiltered)
-                            {
-                                <strong>Member Group :</strong>
-                                @memberGroupName
-                            }
-                            @if (isCollectionCenterFiltered)
-                            {
-                                <text>&nbsp;&nbsp;</text>
-                                <strong>Collection Center :</strong>
-                                @collectionCenterName
-                            }
-                        </td>
-                        <td colspan="5" class="text-right">
-                            @if (isCollectorFiltered)
-                            {
-                                <strong>Collector :</strong>
-                                @collectorName
-                                <text>&nbsp;&nbsp;</text>
-                            }
-                            <strong>Report Generated On :</strong> @generatedOn
-                        </td>
-                    </tr>
-                    <tr class="meta-spacer"><td colspan="10"></td></tr>
-
-                    <tr>
-                        <th class="text-center">S.N.</th>
-                        <th>Member Id</th>
-                        <th>Member Name</th>
-                        @if (viewCollector)
-                        {
-                            <th>Collector</th>
-                        }
-                        <th>Loan A/c No</th>
-                        <th>Loan Type</th>
-                        <th class="text-right">Disburse Amount</th>
-                        <th class="text-right">Repaid</th>
-                        <th class="text-right">Balance Amount</th>
-                        @if (showOpeningBalance)
-                        {
-                            <th class="text-right">Opening Balance</th>
-                            <th class="text-right">Closing Balance</th>
-                        }
-                    </tr>
-
-                    @if (rows.Any())
-                    {
-                        var sn = 0;
-                        var currentGroup = string.Empty;
-
-                        foreach (var row in rows)
-                        {
-                            var rowGroup = groupByMemberGroup ? row.GroupName :
-                                           groupByBranch ? row.OfficeName :
-                                           enableCollectionCenter ? row.CollectionCenterName : null;
-
-                            if (!string.IsNullOrEmpty(rowGroup) && currentGroup != rowGroup)
-                            {
-                                currentGroup = rowGroup;
-                                <tr class="section-header">
-                                    <td colspan="@(10)"><strong>@currentGroup</strong></td>
-                                </tr>
-                            }
-
-                            sn++;
-                            <tr class="@(sn % 2 == 0 ? "detail-row" : "detail-row-alt")">
-                                <td class="text-center">@sn</td>
-                                <td>@(row.MemberId ?? "")</td>
-                                <td>@(row.FullName ?? "")</td>
-                                @if (viewCollector)
-                                {
-                                    <td>@(row.CollectorName ?? "")</td>
-                                }
-                                <td>@(row.LoanAccountNo ?? "")</td>
-                                <td>@(row.LoanTypeName ?? "")</td>
-                                <td class="text-right">@(row.DisburseAmount.HasValue ? row.DisburseAmount.Value.ToString("N2") : "")</td>
-                                <td class="text-right">@(row.Repaid.HasValue ? row.Repaid.Value.ToString("N2") : "")</td>
-                                <td class="text-right @(row.BalanceAmount.HasValue && row.BalanceAmount.Value > 0 ? "negative" : "positive")">@(row.BalanceAmount.HasValue ? row.BalanceAmount.Value.ToString("N2") : "")</td>
-                                @if (showOpeningBalance)
-                                {
-                                    <td class="text-right">@(row.OpeningBalance.HasValue ? row.OpeningBalance.Value.ToString("N2") : "")</td>
-                                    <td class="text-right">@(row.ClosingBalance.HasValue ? row.ClosingBalance.Value.ToString("N2") : "")</td>
-                                }
-                            </tr>
-                        }
-
-                        <tr class="grand-total-row">
-                            <td colspan="@(viewCollector ? 6 : 5)" class="text-right"><strong>Grand Total</strong></td>
-                            <td class="text-right"><strong>@totalDisburseAmount.ToString("N2")</strong></td>
-                            <td class="text-right"><strong>@totalRepaid.ToString("N2")</strong></td>
-                            <td class="text-right"><strong>@totalBalanceAmount.ToString("N2")</strong></td>
-                            @if (showOpeningBalance)
-                            {
-                                <td class="text-right"><strong>@totalOpeningBalance.ToString("N2")</strong></td>
-                                <td class="text-right"><strong>@totalClosingBalance.ToString("N2")</strong></td>
-                            }
-                        </tr>
-                        <tr class="grand-total-row">
-                            <td colspan="@(showOpeningBalance ? 9 : 7)" class="text-right"><strong>Total Records</strong></td>
-                            <td class="text-center"><strong>@totalRecords</strong></td>
-                        </tr>
-                    }
-                    else
-                    {
-                        <tr>
-                            <td colspan="10" class="text-center">No data found for the selected criteria</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
+            var cells = new List<ReportCell>
+            {
+                ReportCell.Left(g.Name),
+                ReportCell.Right(g.Count.ToString()),
+                ReportCell.Right(Fmt.Amount(g.Disburse)),
+                ReportCell.Right(Fmt.Amount(g.Repaid)),
+                new ReportCell(Fmt.Amount(g.Balance), Align.Right, 1, g.Balance < 0 ? "negative" : null)
+            };
+            if (showOpening)
+            {
+                cells.Add(ReportCell.Right(Fmt.Amount(g.Opening)));
+                cells.Add(ReportCell.Right(Fmt.Amount(g.Closing)));
+            }
+            table.Data(cells.ToArray());
         }
-    </div>
-</body>
-</html>
+
+        if (rows.Count > 0)
+        {
+            var totals = new List<string>
+            {
+                totalRecords.ToString(), Fmt.Amount(totalDisburse), Fmt.Amount(totalRepaid), Fmt.Amount(totalBalance)
+            };
+            if (showOpening)
+            {
+                totals.Add(Fmt.Amount(totalOpening));
+                totals.Add(Fmt.Amount(totalClosing));
+            }
+            table.Total("Grand Total", 1, totals.ToArray());
+        }
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

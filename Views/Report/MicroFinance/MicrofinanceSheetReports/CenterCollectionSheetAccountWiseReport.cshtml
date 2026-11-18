@@ -1,198 +1,112 @@
-﻿@* Views/Report/Microfinance/MicrofinanceSheetReports/CenterCollectionSheetAccountWiseReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Microfinance.MicrofinanceSheetReports;
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Microfinance.MicrofinanceSheetReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+    const int ColumnCount = 10;   // number of .Column(...) lines below; every header band below must add up to 10 columns
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    // whole numbers, a missing amount prints 0 (same as before)
+    string N0(decimal? v) => (v ?? 0m).ToString("N0");
+
     var members = (Model["Members"] as List<CenterCollectionSheetAccountMemberDto>) ?? new List<CenterCollectionSheetAccountMemberDto>();
 
-    var totalSaving1 = Model["TotalSaving1"] as decimal? ?? 0;
-    var totalShare = Model["TotalShare"] as decimal? ?? 0;
-    var totalLoan1 = Model["TotalLoan1"] as decimal? ?? 0;
-    var totalLoan2 = Model["TotalLoan2"] as decimal? ?? 0;
-    var totalLoan3 = Model["TotalLoan3"] as decimal? ?? 0;
+    // ── totals (from the controller, or summed from the members) ──
+    var totalSaving1 = TotalOr("TotalSaving1", members.Sum(m => m.Saving1 ?? 0));
+    var totalShare = TotalOr("TotalShare", members.Sum(m => m.Share ?? 0));
+    var totalLoan1 = TotalOr("TotalLoan1", members.Sum(m => m.Loan1 ?? 0));
+    var totalLoan2 = TotalOr("TotalLoan2", members.Sum(m => m.Loan2 ?? 0));
+    var totalLoan3 = TotalOr("TotalLoan3", members.Sum(m => m.Loan3 ?? 0));
 
-    var saving1SchemeName = Model["Saving1SchemeName"]?.ToString() ?? "Saving";
-    var loan1SchemeName = Model["Loan1SchemeName"]?.ToString() ?? "Loan 1";
-    var loan2SchemeName = Model["Loan2SchemeName"]?.ToString() ?? "Loan 2";
-    var loan3SchemeName = Model["Loan3SchemeName"]?.ToString() ?? "Loan 3";
+    var saving1SchemeName = Text("Saving1SchemeName", "Saving");
+    var loan1SchemeName = Text("Loan1SchemeName", "Loan 1");
+    var loan2SchemeName = Text("Loan2SchemeName", "Loan 2");
+    var loan3SchemeName = Text("Loan3SchemeName", "Loan 3");
 
-    var agentName = Model["AgentName"]?.ToString() ?? "-";
-    var meetingDate = Model["MeetingDateBs"]?.ToString() ?? "-";
-    var changedDate = Model["ChangedDateBs"]?.ToString() ?? "-";
-    var nextMeetingDate = Model["NextMeetingDateBs"]?.ToString() ?? "-";
+    var agentName = Text("AgentName", "-");
+    var meetingDate = Text("MeetingDateBs", "-");
+    var changedDate = Text("ChangedDateBs", "-");
+    var nextMeetingDate = Text("NextMeetingDateBs", "-");
 
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Center Collection Sheet</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    // a centred, bold header cell (text, span)
+    ReportCell H(string text, int span = 1) => new(text, Align.Center, span, "sub-head");
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .meta-row td {
-                padding: 4px 6px;
-                font-size: 9pt;
-                font-weight: bold;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    border: 1px solid #000;
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 3px 5px;
-                    vertical-align: middle;
-                }
-
-                .data-table th {
-                    background: #fff;
-                    text-align: center;
-                    font-weight: bold;
-                }
-
-            .name-col {
-                text-align: left;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .highlight-row td {
-                background: #c0c0c0;
-            }
-
-            @@media print {
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Center Collection Sheet", sheetName: "CenterCollectionSheet")
+        .Column("Member Id", 9)
+        .Column("Member Name", 19)
+        .Column("Saving", 9, Align.Right)
+        .Column("Share", 8, Align.Right)
+        .Column("Loan 1 Date", 9, Align.Center)
+        .Column("Loan 1", 9, Align.Right)
+        .Column("Loan 2 Date", 9, Align.Center)
+        .Column("Loan 2", 9, Align.Right)
+        .Column("Loan 3 Date", 9, Align.Center)
+        .Column("Loan 3", 10, Align.Right)
+        .NoColumnHeader()                     // the 3-line header is written below
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)   // one text line per row
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 5px; border: 1px solid #000; }\n" +
+            // the header lines: centred, bold, boxed
+            "table.sheet-table tr.r-group td.sub-head { text-align: center; font-weight: bold; background: #fff; }");
 
-        <table class="data-table" data-sheet-name="CenterCollectionSheet">
-            <colgroup>
-                <col style="width:9%;" />
-                <col style="width:19%;" />
-                <col style="width:9%;" />
-                <col style="width:8%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
-                <col style="width:10%;" />
-            </colgroup>
-            <tbody>
-                <!-- Top meta strip -->
-                <tr class="meta-row">
-                    <td colspan="2">Agent Name : @agentName</td>
-                    <td colspan="3">Meeting Date : @meetingDate</td>
-                    <td colspan="2">Changed Date : @changedDate</td>
-                    <td colspan="3">Next Meeting Date : @nextMeetingDate</td>
-                </tr>
+    // ── title block: one line with the four meeting facts ──
+    table.MetaRow(
+        Fmt.Join(Fmt.Labeled("Agent Name :", agentName), Fmt.Labeled("Meeting Date :", meetingDate)),
+        Fmt.Join(Fmt.Labeled("Changed Date :", changedDate), Fmt.Labeled("Next Meeting Date :", nextMeetingDate)));
 
-                <!-- 3-row header -->
-                <tr>
-                    <th rowspan="3">Member Id</th>
-                    <th rowspan="3">Member Name</th>
-                    <th colspan="1">Saving Balance</th>
-                    <th rowspan="3">Share</th>
-                    <th colspan="6">Loan Disbursement</th>
-                </tr>
-                <tr>
-                    <th>@saving1SchemeName</th>
-                    <th colspan="2">@loan1SchemeName</th>
-                    <th colspan="2">@loan2SchemeName</th>
-                    <th colspan="2">@loan3SchemeName</th>
-                </tr>
-                <tr>
-                    <th></th>
-                    <th>Date</th>
-                    <th>Amount</th>
-                    <th>Date</th>
-                    <th>Amount</th>
-                    <th>Date</th>
-                    <th>Amount</th>
-                </tr>
+    // ── 3-line header (10 columns each) ──
+    // the old header merged cells downwards; here each line is written out, so the labels sit on the last line
+    table.GroupBy(H(""), H(""), H("Saving Balance"), H(""), H("Loan Disbursement", 6));
+    table.GroupBy(H(""), H(""), H(saving1SchemeName), H(""), H(loan1SchemeName, 2), H(loan2SchemeName, 2), H(loan3SchemeName, 2));
+    table.GroupBy(H("Member Id"), H("Member Name"), H(""), H("Share"),
+                  H("Date"), H("Amount"), H("Date"), H("Amount"), H("Date"), H("Amount"));
 
-                @if (members.Any())
-                {
-                    foreach (var row in members)
-                    {
-                        <tr>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td class="name-col">@(row.MemberName ?? "")</td>
-                            <td class="text-right">@(row.Saving1?.ToString("N0") ?? "0")</td>
-                            <td class="text-right">@(row.Share?.ToString("N0") ?? "0")</td>
-                            <td class="text-center">@(string.IsNullOrEmpty(row.Loan1Date) ? "" : row.Loan1Date)</td>
-                            <td class="text-right">@(row.Loan1?.ToString("N0") ?? "0")</td>
-                            <td class="text-center">@(string.IsNullOrEmpty(row.Loan2Date) ? "" : row.Loan2Date)</td>
-                            <td class="text-right">@(row.Loan2?.ToString("N0") ?? "0")</td>
-                            <td class="text-center">@(string.IsNullOrEmpty(row.Loan3Date) ? "" : row.Loan3Date)</td>
-                            <td class="text-right">@(row.Loan3?.ToString("N0") ?? "0")</td>
-                        </tr>
-                    }
+    // ── rows ──
+    foreach (var row in members)
+    {
+        table.Data(
+            row.MemberId ?? "",
+            row.MemberName ?? "",
+            N0(row.Saving1),
+            N0(row.Share),
+            row.Loan1Date ?? "",
+            N0(row.Loan1),
+            row.Loan2Date ?? "",
+            N0(row.Loan2),
+            row.Loan3Date ?? "",
+            N0(row.Loan3));
+    }
 
-                    <tr>
-                        <td colspan="2" class="text-right"><strong>Grand Total</strong></td>
-                        <td class="text-right"><strong>@totalSaving1.ToString("N0")</strong></td>
-                        <td class="text-right"><strong>@totalShare.ToString("N0")</strong></td>
-                        <td></td>
-                        <td class="text-right"><strong>@totalLoan1.ToString("N0")</strong></td>
-                        <td></td>
-                        <td class="text-right"><strong>@totalLoan2.ToString("N0")</strong></td>
-                        <td></td>
-                        <td class="text-right"><strong>@totalLoan3.ToString("N0")</strong></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="10" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    // label spans the first 2 columns; the 8 values fill the rest (the empty ones sit under the loan dates)
+    if (members.Count > 0)
+    {
+        table.Total("Grand Total", 2,
+            N0(totalSaving1), N0(totalShare),
+            "", N0(totalLoan1),
+            "", N0(totalLoan2),
+            "", N0(totalLoan3));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

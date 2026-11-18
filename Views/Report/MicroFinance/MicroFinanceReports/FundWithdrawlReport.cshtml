@@ -1,271 +1,118 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.MicroFinance.MicroFinanceReports
-
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.MicroFinance.MicroFinanceReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "10pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    // amounts always show two decimals, a missing amount prints 0.00 (same as before)
+    string N2(decimal? v) => (v ?? 0m).ToString("N2");
+
     var rows = (Model["Rows"] as List<FundWithdrawlRowDto>) ?? new List<FundWithdrawlRowDto>();
-    var totalCashWithdrawl = Model["TotalCashWithdrawl"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var reportMode = Model["ReportMode"]?.ToString() ?? "1";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var isSummary = reportMode == "1";
-    const int colCount = 7;
+    var totalCashWithdrawl = TotalOr("TotalCashWithdrawl", rows.Sum(r => r.CashWithdrawl ?? 0m));
 
-    // Grouped by Fund Payment Type (alphabetical), rows keep the requested order inside each group
+    // "1" = summary (one line per fund payment type), anything else = detail
+    var isSummary = Text("ReportMode", "1") == "1";
+
+    // grouped by fund payment type (alphabetical); rows keep the requested order inside each group
     var groups = rows
         .GroupBy(r => (r.TypeName ?? "").Trim())
         .OrderBy(g => g.Key)
         .ToList();
 
-    Func<decimal?, string> N2 = v => (v ?? 0m).ToString("N2");
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Fund Withdrawl Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var table = new ReportTable(Model, title: "Fund Withdrawl Report", sheetName: "FundWithdrawl");
 
-            body {
-                font-family: "Times New Roman", Times, serif;
-                font-size: 11pt;
-                background: #fff;
-                color: #000;
-            }
+    // the summary and the detail mode have different columns, so each mode defines its own
+    if (isSummary)
+    {
+        table.Column("Fund Payment Type", 82)
+             .Column("Amount", 18, Align.Right);
+    }
+    else
+    {
+        table.Column("S.N.", 5, Align.Center)
+             .Column("Center Code", 12)
+             .Column("Member Id", 12)
+             .Column("Name", 20)
+             .Column("Address", 20)
+             .Column("Transaction Date", 13)
+             .Column("Amount", 18, Align.Right);
+    }
 
-            .report-container {
-                width: 100%;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    padding: 4px 5px;
-                    vertical-align: middle;
-                    overflow-wrap: anywhere;
-                    word-break: normal;
-                    border: none;
-                }
-
-            /* ── meta block (no borders) ── */
-            .meta-title td {
-                text-align: center;
-                font-size: 16pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 2px 6px 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 5px;
-                font-size: 10.5pt;
-            }
-
-            .meta-row .lbl {
-                font-weight: bold;
-            }
-
-            .meta-row .val {
-                font-weight: normal;
-                padding-left: 14px;
-            }
-
-            .meta-row .gen {
-                font-weight: bold;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 18px;
-            }
-
-            /* ── bordered data cells ── */
-            .data-table th.bd, .data-table td.bd {
-                border: 1px solid #000;
-                background: #fff;
-            }
-
-            .data-table th.bd {
-                font-weight: bold;
-                text-align: left;
-            }
-
-            .summary-row td.bd {
-                font-weight: bold;
-            }
-
-            .group-head td.bd {
-                font-weight: bold;
-            }
-
-            .detail-row td.bd {
-                font-weight: normal;
-                font-size: 10pt;
-            }
-
-            .total-row td.bd {
-                font-weight: bold;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            tr {
-                page-break-inside: avoid;
-                break-inside: avoid;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    table.Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            SubTotalBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)   // one text line per row
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-family: 'Times New Roman', Times, serif; font-size: " + fontSize + "; line-height: 1.25; padding: 1px 5px; border: 1px solid #000; }");
+
+    // ── title block ──
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
+
+    // ── rows ──
+    if (isSummary)
+    {
+        // one line per fund payment type
+        foreach (var grp in groups)
+            table.Data(grp.Key, N2(grp.Sum(r => r.CashWithdrawl ?? 0m)));
+
+        table.Total("Grand Total:", 1, N2(totalCashWithdrawl));
+    }
+    else
+    {
+        // one block per fund payment type (type line, withdrawals, type total)
+        foreach (var grp in groups)
+        {
+            table.GroupTitle($"Fund Payment Type: {grp.Key}");
+
+            var sn = 0;
+            foreach (var row in grp)
+            {
+                sn++;
+                table.Data(
+                    sn.ToString(),
+                    row.CollectionCenterShortCode ?? "",
+                    row.MemberId ?? "",
+                    row.Name ?? "",
+                    row.PermanentAddessDetail ?? "",
+                    row.TransactionOnBs ?? "",
+                    N2(row.CashWithdrawl));
+            }
+
+            // label spans the first 6 columns; the value fills Amount
+            table.SubTotal("Total:", 6, N2(grp.Sum(r => r.CashWithdrawl ?? 0m)));
         }
 
-        <table class="data-table" data-sheet-name="FundWithdrawl">
-            <colgroup>
-                <col style="width:5%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:20%;" />
-                <col style="width:20%;" />
-                <col style="width:13%;" />
-                <col style="width:18%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="@colCount">Fund Withdrawl Report</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="2" class="lbl">Branch Name :</td>
-                    <td colspan="5" class="val">@branchName</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
-                <tr class="meta-row">
-                    <td colspan="3" class="gen">Report Generated On: &nbsp; @generatedOn</td>
-                    <td colspan="4" class="text-right">
-                        <span class="lbl">From Date:</span> <span class="val">@fromDate</span>
-                        &nbsp;&nbsp;
-                        <span class="lbl">To Date:</span> <span class="val">@toDate</span>
-                    </td>
-                </tr>
-
-                @if (isSummary)
-                {
-                    <tr>
-                        <th class="bd" colspan="6">Fund Payment Type</th>
-                        <th class="bd text-right">Amount</th>
-                    </tr>
-
-                    @if (groups.Any())
-                    {
-                        foreach (var grp in groups)
-                        {
-                            <tr class="summary-row">
-                                <td class="bd" colspan="6">@grp.Key</td>
-                                <td class="bd text-right">@N2(grp.Sum(r => r.CashWithdrawl ?? 0m))</td>
-                            </tr>
-                        }
-                        <tr class="total-row">
-                            <td class="bd text-right" colspan="6">Grand Total:</td>
-                            <td class="bd text-right">@N2(totalCashWithdrawl)</td>
-                        </tr>
-                    }
-                    else
-                    {
-                        <tr><td class="bd text-center" colspan="@colCount">No data found for the selected criteria</td></tr>
-                    }
-                }
-                else
-                {
-                    <tr>
-                        <th class="bd text-center">S.N.</th>
-                        <th class="bd">Center Code</th>
-                        <th class="bd">Member Id</th>
-                        <th class="bd">Name</th>
-                        <th class="bd">Address</th>
-                        <th class="bd">Transaction Date</th>
-                        <th class="bd text-right">Amount</th>
-                    </tr>
-
-                    @if (groups.Any())
-                    {
-                        foreach (var grp in groups)
-                        {
-                            <tr class="group-head">
-                                <td class="bd" colspan="@colCount">Fund Payment Type: @grp.Key</td>
-                            </tr>
-
-                            var sn = 0;
-                            foreach (var row in grp)
-                            {
-                                sn++;
-                                <tr class="detail-row">
-                                    <td class="bd text-center">@sn</td>
-                                    <td class="bd">@(row.CollectionCenterShortCode ?? "")</td>
-                                    <td class="bd">@(row.MemberId ?? "")</td>
-                                    <td class="bd">@(row.Name ?? "")</td>
-                                    <td class="bd">@(row.PermanentAddessDetail ?? "")</td>
-                                    <td class="bd">@(row.TransactionOnBs ?? "")</td>
-                                    <td class="bd text-right">@N2(row.CashWithdrawl)</td>
-                                </tr>
-                            }
-
-                            <tr class="total-row">
-                                <td class="bd text-right" colspan="6">Total:</td>
-                                <td class="bd text-right">@N2(grp.Sum(r => r.CashWithdrawl ?? 0m))</td>
-                            </tr>
-                        }
-                        <tr class="total-row">
-                            <td class="bd text-right" colspan="6">Grand Total:</td>
-                            <td class="bd text-right">@N2(totalCashWithdrawl)</td>
-                        </tr>
-                    }
-                    else
-                    {
-                        <tr><td class="bd text-center" colspan="@colCount">No data found for the selected criteria</td></tr>
-                    }
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+        table.Total("Grand Total:", 6, N2(totalCashWithdrawl));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

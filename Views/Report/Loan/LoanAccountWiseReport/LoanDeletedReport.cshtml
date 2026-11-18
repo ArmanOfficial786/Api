@@ -1,210 +1,72 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAccountWiseReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    string Money(decimal? value) => value.HasValue ? value.Value.ToString("N2") : "";
+
     var rows = (Model["Rows"] as List<LoanDeletedRowDto>) ?? new List<LoanDeletedRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var reportType = Model["ReportType"]?.ToString() ?? "All";
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var reportType = Text("ReportType", "All");
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
     var isDateFiltered = reportType.Equals("BtnDate", StringComparison.OrdinalIgnoreCase);
 
     var totalIssueAmount = rows.Sum(r => r.LoanIssueAmount ?? 0m);
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan Deleted Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-                font-weight: bold;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Loan Deleted Report", sheetName: "LoanDeleted")
+        .Column("S.No", 6)
+        .Column("Member ID", 11)
+        .Column("Name", 14)
+        .Column("Account No", 11)
+        .Column("Account Type", 12)
+        .Column("Period", 8)
+        .Column("Issue Amount", 12, Align.Right)
+        .Column("Int Rate", 8, Align.Right)
+        .Column("Issue Date", 9)
+        .Column("Deleted Date", 9)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 65)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 1px solid #eee; }\n" +
+            "table.sheet-table tr.r-total td { border-top: 1px solid #000; border-bottom: 0; padding-top: 5px; padding-bottom: 5px; }");
 
-        <table class="data-table" data-sheet-name="LoanDeleted">
-            <colgroup>
-                <col style="width:6%;" />
-                <col style="width:11%;" />
-                <col style="width:14%;" />
-                <col style="width:11%;" />
-                <col style="width:12%;" />
-                <col style="width:8%;" />
-                <col style="width:12%;" />
-                <col style="width:8%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="10">Loan Deleted Report</td>
-                </tr>
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+    if (isDateFiltered)
+        table.MetaRow(Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
 
-                <tr class="meta-row">
-                    <td colspan="10"><strong>Branch Name:</strong> @branchName</td>
-                </tr>
-                @if (isDateFiltered)
-                {
-                    <tr class="meta-row">
-                        <td colspan="10">
-                            <strong>From Date :</strong> @fromDate
-                            &nbsp;&nbsp;&nbsp;
-                            <strong>To Date :</strong> @toDate
-                        </td>
-                    </tr>
-                }
-                <tr class="meta-row">
-                    <td colspan="10"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="10"></td></tr>
+    var sn = 0;
+    foreach (var row in rows)
+    {
+        table.Data(
+            (++sn).ToString(),
+            row.MemberId ?? "",
+            row.FullName ?? "",
+            row.LoanAccountNo ?? "",
+            row.LoanTypeName ?? "",
+            row.Period ?? "",
+            Money(row.LoanIssueAmount),
+            row.InterestRate ?? "",
+            row.LoanIssueDate ?? "",
+            row.DeletedDateOn.HasValue ? row.DeletedDateOn.Value.ToString("yyyy/MM/dd") : "");
+    }
 
-                <tr>
-                    <th>S.No</th>
-                    <th>Member ID</th>
-                    <th>Name</th>
-                    <th>Account No</th>
-                    <th>Account Type</th>
-                    <th>Period</th>
-                    <th class="text-right">Issue Amount</th>
-                    <th class="text-right">Int Rate</th>
-                    <th>Issue Date</th>
-                    <th>Deleted Date</th>
-                </tr>
-
-                @if (rows.Any())
-                {
-                    var sn = 0;
-                    foreach (var row in rows)
-                    {
-                        sn++;
-                        <tr class="detail-row">
-                            <td>@sn</td>
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.FullName ?? "")</td>
-                            <td>@(row.LoanAccountNo ?? "")</td>
-                            <td>@(row.LoanTypeName ?? "")</td>
-                            <td>@(row.Period ?? "")</td>
-                            <td class="text-right">@(row.LoanIssueAmount.HasValue ? row.LoanIssueAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right">@(row.InterestRate ?? "")</td>
-                            <td>@(row.LoanIssueDate ?? "")</td>
-                            <td>@(row.DeletedDateOn.HasValue ? row.DeletedDateOn.Value.ToString("yyyy/MM/dd") : "")</td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="6" class="text-right">Grand Total:</td>
-                        <td class="text-right">@totalIssueAmount.ToString("N2")</td>
-                        <td colspan="3"></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="10" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+        table.Total("Grand Total:", 6, totalIssueAmount.ToString("N2"), "", "", "");
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

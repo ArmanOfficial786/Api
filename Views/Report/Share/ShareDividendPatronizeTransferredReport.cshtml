@@ -1,203 +1,77 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Share;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Share
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<ShareDividendPatronizeTransferredRowDto>) ?? new List<ShareDividendPatronizeTransferredRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalMembers = Model.ContainsKey("TotalMembers") ? (Model["TotalMembers"] as int? ?? 0) : 0;
-    var totalCashAmount = Model.ContainsKey("TotalCashAmount") ? (Model["TotalCashAmount"] as decimal? ?? 0) : 0;
-    var totalTaxAmount = Model.ContainsKey("TotalTaxAmount") ? (Model["TotalTaxAmount"] as decimal? ?? 0) : 0;
-    var totalBonusShareAmount = Model.ContainsKey("TotalBonusShareAmount") ? (Model["TotalBonusShareAmount"] as decimal? ?? 0) : 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var reportType = Model["ReportType"]?.ToString() ?? "SHARE_DIVIDEND";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var isPatronize = reportType == "PATRONIZE";
+    var fontSize = "8pt";
+    var metaFontSize = "8.5pt";
+
+    string Text(string key, string fallback = "") =>
+        Model.TryGetValue(key, out var value) && value != null ? value.ToString() ?? fallback : fallback;
+
+    decimal Amount(string key) =>
+        Model.TryGetValue(key, out var value) && value != null ? Convert.ToDecimal(value) : 0m;
+
+    var rows = (Model["Rows"] as IEnumerable<ShareDividendPatronizeTransferredRowDto>)?.ToList()
+        ?? new List<ShareDividendPatronizeTransferredRowDto>();
+
+    var totalRecords = Amount("TotalRecords");
+    var totalMembers = Amount("TotalMembers");
+    var totalCashAmount = Amount("TotalCashAmount");
+    var totalTaxAmount = Amount("TotalTaxAmount");
+    var totalBonusShareAmount = Amount("TotalBonusShareAmount");
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var isPatronize = Text("ReportType", "SHARE_DIVIDEND") == "PATRONIZE";
     var reportTitle = isPatronize ? "Patronize Transferred Report" : "Share Dividend Transferred Report";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
+    var table = new ReportTable(Model, title: reportTitle, sheetName: "ShareDividendPatronizeTransferred")
+        .Column("MemberId", 10)
+        .Column("Member Name", 20)
+        .Column("Pan/Vat", 12)
+        .Column("Account No", 14)
+        .Column("Cash Amt", 12, Align.Right)
+        .Column("Bonus Amt", 11, Align.Right)
+        .Column("Tax Amt", 11, Align.Right)
+        .Column("Date", 10)
+        .Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 60)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 4px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }");
+
+    // generated date on the left; from / to dates together on the right
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Join(
+            Fmt.Labeled("From Date :", fromDate),
+            Fmt.Labeled("To Date :", toDate)));
+
+    foreach (var row in rows)
+    {
+        table.Data(
+            row.MemberId ?? "",
+            row.MemberName ?? "",
+            row.PanVatNo ?? "",
+            row.AccountNo ?? "",
+            row.CashAmount?.ToString("N2") ?? "",
+            row.BonusShareAmount?.ToString("N2") ?? "",
+            row.TaxAmount?.ToString("N2") ?? "",
+            row.TransactionOnBs ?? "");
+    }
+
+    if (rows.Count > 0)
+    {
+        table.Total(
+            $"Total Members: {totalMembers:N0}\u00A0\u00A0|\u00A0\u00A0Total Records: {totalRecords:N0}",
+            4,
+            totalCashAmount.ToString("N2"),
+            totalBonusShareAmount.ToString("N2"),
+            totalTaxAmount.ToString("N2"),
+            "");
+    }
 }
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>@reportTitle</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #ccc;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
-        {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
-
-        <table class="data-table" data-sheet-name="ShareDividendPatronizeTransferred">
-            <colgroup>
-                <col style="width:10%;" />
-                <col style="width:20%;" />
-                <col style="width:12%;" />
-                <col style="width:14%;" />
-                <col style="width:12%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:10%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="8">@reportTitle</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="5" class="text-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="8"></td></tr>
-
-                <tr>
-                    <th>MemberId</th>
-                    <th>Member Name</th>
-                    <th>Pan/Vat</th>
-                    <th>Account No</th>
-                    <th class="text-right">Cash Amt</th>
-                    <th class="text-right">Bonus Amt</th>
-                    <th class="text-right">Tax Amt</th>
-                    <th>Date</th>
-                </tr>
-
-                @if (rows.Any())
-                {
-                    foreach (var row in rows)
-                    {
-                        <tr class="detail-row">
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.MemberName ?? "")</td>
-                            <td>@(row.PanVatNo ?? "")</td>
-                            <td>@(row.AccountNo ?? "")</td>
-                            <td class="text-right">@(row.CashAmount?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.BonusShareAmount?.ToString("N2") ?? "")</td>
-                            <td class="text-right">@(row.TaxAmount?.ToString("N2") ?? "")</td>
-                            <td>@(row.TransactionOnBs ?? "")</td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">
-                            Total Members: @totalMembers &nbsp;&nbsp;|&nbsp;&nbsp; Total Records: @totalRecords
-                        </td>
-                        <td class="text-right">@totalCashAmount.ToString("N2")</td>
-                        <td class="text-right">@totalBonusShareAmount.ToString("N2")</td>
-                        <td class="text-right">@totalTaxAmount.ToString("N2")</td>
-                        <td></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="8" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+@await Html.PartialAsync("_SheetReport", table.Build())

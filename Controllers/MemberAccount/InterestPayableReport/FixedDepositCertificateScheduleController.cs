@@ -1,16 +1,12 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestPayableReport;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.InterestPayableReport;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
 {
@@ -20,95 +16,76 @@ namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
     public class FixedDepositCertificateScheduleController : ControllerBase
     {
         private readonly IFixedDepositCertificateScheduleRepository _repository;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
+        private readonly IReportHeaderProvider _headers;
         private readonly IJsReportService _jsReportService;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly CustomHeaderResponse _headerResponse;
-        private readonly IOptions<ReportSettings> _reportSettings;
+        private readonly IReportDataCache _dataCache;
         private readonly ILogger<FixedDepositCertificateScheduleController> _logger;
+        private readonly IReportFileResponse _reportFileResponse;
 
-        // Both Certificate and Schedule report types render through one shared Razor view.
-        private const string ViewPath = "Views/Report/MemberAC/InterestPayableReport/FixedDepositCertificateScheduleReport.cshtml";
+        private static readonly PageSizeSetting PageSetting = PageSizeSetting.A4Portrait;
 
         public FixedDepositCertificateScheduleController(
             IFixedDepositCertificateScheduleRepository repository,
-            ICommonHeaderRepository commonHeaderRepository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
-            IWebHostEnvironment webHostEnvironment,
-            CustomHeaderResponse headerResponse,
-            IOptions<ReportSettings> reportSettings,
-            ILogger<FixedDepositCertificateScheduleController> logger)
+            IReportDataCache dataCache,
+            ILogger<FixedDepositCertificateScheduleController> logger,
+            IReportFileResponse reportFileResponse)
         {
             _repository = repository;
-            _commonHeaderRepository = commonHeaderRepository;
+            _headers = headers;
             _jsReportService = jsReportService;
-            _webHostEnvironment = webHostEnvironment;
-            _headerResponse = headerResponse;
-            _reportSettings = reportSettings;
+            _dataCache = dataCache;
             _logger = logger;
+            _reportFileResponse = reportFileResponse;
         }
 
-        [HttpPost()]
+        [HttpPost]
         public async Task<IActionResult> GenerateReport(
             [FromBody] FixedDepositCertificateScheduleRequestDto request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
+            var reportName = $"FixedDeposit{request?.ReportType}";
+
             try
             {
-                if (request == null || !ModelState.IsValid)
-                {
-                    return NotFound(new { success = false, StatusCode = 400, message = "Invalid request" });
-                }
-
-                var userIdClaim = User.FindFirst("UserId")?.Value
-                                  ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
                 if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                {
                     return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                }
 
-                var reportName = $"FixedDeposit{request.ReportType}";
-                var upperFormat = format.ToUpper();
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                if (request == null || !ModelState.IsValid)
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat,
-                        reportName,
-                        _jsReportService, _logger);
-                }
+                var upperFormat = format.ToUpperInvariant();
+                var page = PageSetting;
 
-                FixedDepositCertificateScheduleData data;
+                var dataKey = ReportCacheKey.ForData(request, reportName, userIdClaim);
+                var reportKey = $"{dataKey}_{page.CacheTag}";
+
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, reportName, pdfView: false,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
 
                 var officeIdClaim = User.FindFirst("OfficeId")?.Value;
-                string? branchIdForHeader = null;
-                if (!string.IsNullOrEmpty(officeIdClaim) && long.TryParse(officeIdClaim, out var officeId))
+                var branchIdForHeader = long.TryParse(officeIdClaim, out var officeId) ? officeId.ToString() : "";
+
+                var headerTask = _headers.GetAsync(branchIdForHeader, ct);
+                var dataTask = _dataCache.GetOrLoadAsync(dataKey, async () =>
                 {
-                    branchIdForHeader = officeId.ToString();
-                }
+                    var loaded = request.ReportType == "Schedule"
+                        ? await _repository.GetScheduleDataAsync(request, userId)
+                        : await _repository.GetCertificateDataAsync(request, userId);
+                    if (loaded == null || loaded.CertificateDetail == null)
+                        return null;
+                    return loaded;
+                }, ct);
+                await Task.WhenAll(headerTask, dataTask);
 
-                Task<FixedDepositCertificateScheduleData> dataTask = request.ReportType == "Schedule"
-                    ? _repository.GetScheduleDataAsync(request, userId)
-                    : _repository.GetCertificateDataAsync(request, userId);
-
-                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
-
-                await Task.WhenAll(dataTask, headerTask);
-
-                data = await dataTask;
-                var headerData = await headerTask;
-
-                if (data.CertificateDetail == null)
-                {
+                var data = await dataTask;
+                if (data == null)
                     return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
-                }
-
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-                await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData, nameof(CommonHeader.CompanyLogo), webRoot));
 
                 var reportData = new Dictionary<string, object>
                 {
@@ -118,55 +95,29 @@ namespace NexgenCosysReport.Controllers.MemberAccount.InterestPayableReport
                     { "TotalInterest", data.TotalInterest },
                     { "TotalTax", data.TotalTax },
                     { "TotalNetAmount", data.TotalNetAmount },
-                    { "HeaderDataSet", headerData },
+                    { "HeaderDataSet", await headerTask },
                     { "AccountNo", data.AccountNo ?? "" },
                     { "MemberId", data.MemberId ?? "" },
                     { "MemberName", data.MemberName ?? "" },
-                    { "ShowHeader", request.ShowHeader },
                     { "ReportType", request.ReportType },
-                    { "Format", upperFormat }
+                    { "Format", upperFormat },
+                    { "PageSetting", page }
                 };
 
-                var htmlContent = await Task.Run(() =>
-                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
-                        reportKey: reportKey,
-                        reportPath: ViewPath,
-                        data: reportData));
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                    reportKey: reportKey,
+                    reportPath: "Views/Report/MemberAC/InterestPayableReport/FixedDepositCertificateScheduleReport.cshtml",
+                    data: reportData, ct: ct);
 
-                if (upperFormat == "VIEW")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = request.ReportType == "Schedule" ? data.TotalRecords : 1
-                    };
-
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
-                }
-
-                return await ReportExportHelper.ExportFromCacheAsync(
-                   reportKey, upperFormat,
-                   reportName,
-                   _jsReportService, _logger);
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, reportName, pdfView: false,
+                    totalRecords: request.ReportType == "Schedule" ? data.TotalRecords : 1,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new
-                {
-                    message = ex.Message,
-                    inner = ex.InnerException?.Message,
-                    stack = ex.StackTrace
-                });
+                _logger.LogError(ex, "Error generating {Report} report", reportName);
+                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }
     }

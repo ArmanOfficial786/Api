@@ -1,268 +1,133 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport;
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.LoanAnalysisReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var summaryRows = (Model["Rows"] as List<CollectorWiseLoanAnalysisSummaryRowDto>) ?? new List<CollectorWiseLoanAnalysisSummaryRowDto>();
-    var totalOpeningBalance = Model["TotalOpeningBalance"] as decimal? ?? 0;
-    var totalOpeningActiveCount = Model["TotalOpeningActiveCount"] as int? ?? 0;
-    var totalDisburseAmount = Model["TotalDisburseAmount"] as decimal? ?? 0;
-    var totalPaymentAmount = Model["TotalPaymentAmount"] as decimal? ?? 0;
-    var totalBalanceAmount = Model["TotalBalanceAmount"] as decimal? ?? 0;
-    var totalBalanceActiveCount = Model["TotalBalanceActiveCount"] as int? ?? 0;
-    var totalClosingBalance = Model["TotalClosingBalance"] as decimal? ?? 0;
-    var totalClosingActiveCount = Model["TotalClosingActiveCount"] as int? ?? 0;
-    var totalGoodAmt = Model["TotalGoodAmt"] as decimal? ?? 0;
-    var totalDueAmt = Model["TotalDueAmt"] as decimal? ?? 0;
-    var totalDue1To365 = Model["TotalDue1To365"] as decimal? ?? 0;
-    var totalDueGt365 = Model["TotalDueGt365"] as decimal? ?? 0;
+    var fontSize = "7.5pt";
 
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
-    var isExcel = format is "EXCEL" or "XLSX";
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    var rows = (Model["Rows"] as List<CollectorWiseLoanAnalysisSummaryRowDto>) ?? new List<CollectorWiseLoanAnalysisSummaryRowDto>();
+    var leafRows = rows.Where(r => !r.IsGroupHeader).ToList();
+    var hasHeaders = rows.Any(r => r.IsGroupHeader);
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Row-level %: amount / that row's ClosingBalance × 100 — verified against
-    // the reference image's figures (e.g. 716,812.41 / 2,455,284.26 = 29.19%).
-    string Pct(decimal amt, decimal closing) => closing == 0 ? "0.00" : (amt / closing * 100m).ToString("N2");
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Collector Wise Loan Analysis Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var totalOpening = TotalOr("TotalOpeningBalance", leafRows.Sum(r => r.OpeningBalance));
+    var totalOpeningCount = (int)TotalOr("TotalOpeningActiveCount", leafRows.Sum(r => r.OpeningActiveCount));
+    var totalDisburse = TotalOr("TotalDisburseAmount", leafRows.Sum(r => r.DisburseAmount));
+    var totalPayment = TotalOr("TotalPaymentAmount", leafRows.Sum(r => r.PaymentAmount));
+    var totalBalance = TotalOr("TotalBalanceAmount", leafRows.Sum(r => r.BalanceAmount));
+    var totalBalanceCount = (int)TotalOr("TotalBalanceActiveCount", leafRows.Sum(r => r.BalanceActiveCount));
+    var totalClosing = TotalOr("TotalClosingBalance", leafRows.Sum(r => r.ClosingBalance));
+    var totalClosingCount = (int)TotalOr("TotalClosingActiveCount", leafRows.Sum(r => r.ClosingActiveCount));
+    var totalGood = TotalOr("TotalGoodAmt", leafRows.Sum(r => r.GoodAmt));
+    var totalDue = TotalOr("TotalDueAmt", leafRows.Sum(r => r.DueAmt));
+    var totalDue1To365 = TotalOr("TotalDue1To365", leafRows.Sum(r => r.Due1To365));
+    var totalDueGt365 = TotalOr("TotalDueGt365", leafRows.Sum(r => r.DueGt365));
 
-            body {
-                font-family: "Times New Roman", Times, serif;
-                font-size: 8.5pt;
-                background: white;
-                color: #000;
-            }
+    string Pct(decimal amount, decimal closing) => closing == 0 ? "0.00" : (amount / closing * 100m).ToString("N2");
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 8.5pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 3px 4px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-size: 13pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 6px 6px 8px;
-            }
-
-            .meta-row td {
-                padding: 2px 6px;
-                font-size: 9pt;
-                font-weight: bold;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                border-top: 1.5px solid #000;
-                border-bottom: 1.5px solid #000;
-                text-align: center;
-                font-weight: bold;
-                background: #fff;
-            }
-
-            .sub-header th {
-                border-top: none;
-                font-weight: bold;
-            }
-
-            .detail-row td {
-                color: #1a3d7c;
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                font-weight: bold;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .pct {
-                font-size: 7.5pt;
-                color: #444;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Collector Wise Loan Analysis Report", sheetName: "CollectorWiseLoanAnalysis")
+        .Column("Loan Type", 12)
+        .Column("Open Bal", 8, Align.Right)
+        .Column("Open Cnt", 5, Align.Center)
+        .Column("Disburse", 9, Align.Right)
+        .Column("Payment", 9, Align.Right)
+        .Column("Bal Amt", 9, Align.Right)
+        .Column("Bal Cnt", 5, Align.Center)
+        .Column("Close Bal", 9, Align.Right)
+        .Column("Close Cnt", 5, Align.Center)
+        .Column("Good Amt", 6, Align.Right)
+        .Column("Good %", 4, Align.Right)
+        .Column("Due Amt", 6, Align.Right)
+        .Column("Due %", 4, Align.Right)
+        .Column("1-365 Amt", 6, Align.Right)
+        .Column("1-365 %", 4, Align.Right)
+        .Column(">365 Amt", 6, Align.Right)
+        .Column(">365 %", 4, Align.Right)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6.5, headerMm: 8, firstPageExtraMm: 75)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 4px; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 1.5px solid #000; border-bottom: 1.5px solid #000; text-align: center; }\n" +
+            "table.sheet-table tr.r-data td { color: #1a3d7c; }\n" +
+            @"
+            table.sheet-table tr.r-data td:first-child {
+                white-space: normal !important;
+                overflow: visible !important;
+                text-overflow: clip !important;
+                overflow-wrap: break-word;
+                height: auto !important;
+                vertical-align: top;
+            }
+            table.sheet-table tr.r-data td.grp { font-weight: bold; color: #000; }
+            table.sheet-table tr.r-data td.lt:first-child { padding-left: 18px; font-size: 7pt; }");
 
-        <table class="data-table" data-sheet-name="CollectorWiseLoanAnalysisSummary">
-            <colgroup>
-                <col style="width:12%;" />
-                <col style="width:8%;" />
-                <col style="width:5%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
-                <col style="width:5%;" />
-                <col style="width:9%;" />
-                <col style="width:5%;" />
-                <col style="width:6%;" />
-                <col style="width:4%;" />
-                <col style="width:6%;" />
-                <col style="width:4%;" />
-                <col style="width:6%;" />
-                <col style="width:4%;" />
-                <col style="width:6%;" />
-                <col style="width:4%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="17">Collector Wise Loan Analysis Report</td>
-                </tr>
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+    table.MetaRow(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
 
-                <tr class="meta-row">
-                    <td colspan="17"><strong>Branch Name :</strong> @branchName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="9"><strong>From Date :</strong>&nbsp;&nbsp;@fromDate</td>
-                    <td colspan="8"><strong>To Date :</strong>&nbsp;&nbsp;@toDate</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="17"><strong>Report Generated On :</strong>&nbsp;&nbsp;@generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="17"></td></tr>
+    foreach (var r in rows)
+    {
+        // collector rows are bold; loan-type rows under a collector are indented
+        string? css = r.IsGroupHeader ? "grp" : (hasHeaders ? "lt" : null);
 
-                <tr>
-                    <th rowspan="2">Loan Type</th>
-                    <th colspan="2">Opening</th>
-                    <th rowspan="2">Disburse<br />Amount</th>
-                    <th rowspan="2">Payment<br />Amount</th>
-                    <th colspan="2">Balance</th>
-                    <th colspan="2">Closing</th>
-                    <th colspan="2">Good Amt</th>
-                    <th colspan="2">Due Amt</th>
-                    <th colspan="2">Due(1-365)</th>
-                    <th colspan="2">Due(&gt;365)</th>
-                </tr>
-                <tr class="sub-header">
-                    <th>Balance</th>
-                    <th>Active<br />Count</th>
-                    <th>Amount</th>
-                    <th>Active<br />Count</th>
-                    <th>Balance</th>
-                    <th>Active<br />Count</th>
-                    <th>Amt</th>
-                    <th>%</th>
-                    <th>Amt</th>
-                    <th>%</th>
-                    <th>Amt</th>
-                    <th>%</th>
-                    <th>Amt</th>
-                    <th>%</th>
-                </tr>
+        ReportCell C(string text, Align align) => new ReportCell(text, align, 1, css);
 
-                @if (summaryRows.Any())
-                {
-                    foreach (var row in summaryRows)
-                    {
-                        <tr class="detail-row">
-                            <td>@(row.GroupName ?? "")</td>
-                            <td class="text-right">@(row.OpeningBalance.ToString("N2"))</td>
-                            <td class="text-center">@(row.OpeningActiveCount)</td>
-                            <td class="text-right">@(row.DisburseAmount.ToString("N2"))</td>
-                            <td class="text-right">@(row.PaymentAmount.ToString("N2"))</td>
-                            <td class="text-right">@(row.BalanceAmount.ToString("N2"))</td>
-                            <td class="text-center">@(row.BalanceActiveCount)</td>
-                            <td class="text-right">@(row.ClosingBalance.ToString("N2"))</td>
-                            <td class="text-center">@(row.ClosingActiveCount)</td>
-                            <td class="text-right">@(row.GoodAmt.ToString("N2"))</td>
-                            <td class="text-right pct">@(Pct(row.GoodAmt, row.ClosingBalance))</td>
-                            <td class="text-right">@(row.DueAmt.ToString("N2"))</td>
-                            <td class="text-right pct">@(Pct(row.DueAmt, row.ClosingBalance))</td>
-                            <td class="text-right">@(row.Due1To365.ToString("N2"))</td>
-                            <td class="text-right pct">@(Pct(row.Due1To365, row.ClosingBalance))</td>
-                            <td class="text-right">@(row.DueGt365.ToString("N2"))</td>
-                            <td class="text-right pct">@(Pct(row.DueGt365, row.ClosingBalance))</td>
-                        </tr>
-                    }
+        table.Data(new[]
+        {
+            C(r.GroupName ?? "", Align.Left),
+            C(Fmt.Amount(r.OpeningBalance), Align.Right),
+            C(r.OpeningActiveCount.ToString(), Align.Center),
+            C(Fmt.Amount(r.DisburseAmount), Align.Right),
+            C(Fmt.Amount(r.PaymentAmount), Align.Right),
+            C(Fmt.Amount(r.BalanceAmount), Align.Right),
+            C(r.BalanceActiveCount.ToString(), Align.Center),
+            C(Fmt.Amount(r.ClosingBalance), Align.Right),
+            C(r.ClosingActiveCount.ToString(), Align.Center),
+            C(Fmt.Amount(r.GoodAmt), Align.Right),
+            C(Pct(r.GoodAmt, r.ClosingBalance), Align.Right),
+            C(Fmt.Amount(r.DueAmt), Align.Right),
+            C(Pct(r.DueAmt, r.ClosingBalance), Align.Right),
+            C(Fmt.Amount(r.Due1To365), Align.Right),
+            C(Pct(r.Due1To365, r.ClosingBalance), Align.Right),
+            C(Fmt.Amount(r.DueGt365), Align.Right),
+            C(Pct(r.DueGt365, r.ClosingBalance), Align.Right)
+        });
+    }
 
-                    <tr class="grand-total-row">
-                        <td>Grand Total :</td>
-                        <td class="text-right">@(totalOpeningBalance.ToString("N2"))</td>
-                        <td class="text-center">@(totalOpeningActiveCount)</td>
-                        <td class="text-right">@(totalDisburseAmount.ToString("N2"))</td>
-                        <td class="text-right">@(totalPaymentAmount.ToString("N2"))</td>
-                        <td class="text-right">@(totalBalanceAmount.ToString("N2"))</td>
-                        <td class="text-center">@(totalBalanceActiveCount)</td>
-                        <td class="text-right">@(totalClosingBalance.ToString("N2"))</td>
-                        <td class="text-center">@(totalClosingActiveCount)</td>
-                        <td class="text-right">@(totalGoodAmt.ToString("N2"))</td>
-                        <td class="text-right pct">@(Pct(totalGoodAmt, totalClosingBalance))</td>
-                        <td class="text-right">@(totalDueAmt.ToString("N2"))</td>
-                        <td class="text-right pct">@(Pct(totalDueAmt, totalClosingBalance))</td>
-                        <td class="text-right">@(totalDue1To365.ToString("N2"))</td>
-                        <td class="text-right pct">@(Pct(totalDue1To365, totalClosingBalance))</td>
-                        <td class="text-right">@(totalDueGt365.ToString("N2"))</td>
-                        <td class="text-right pct">@(Pct(totalDueGt365, totalClosingBalance))</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="17" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total :", 1,
+            Fmt.Amount(totalOpening), totalOpeningCount.ToString(),
+            Fmt.Amount(totalDisburse), Fmt.Amount(totalPayment),
+            Fmt.Amount(totalBalance), totalBalanceCount.ToString(),
+            Fmt.Amount(totalClosing), totalClosingCount.ToString(),
+            Fmt.Amount(totalGood), Pct(totalGood, totalClosing),
+            Fmt.Amount(totalDue), Pct(totalDue, totalClosing),
+            Fmt.Amount(totalDue1To365), Pct(totalDue1To365, totalClosing),
+            Fmt.Amount(totalDueGt365), Pct(totalDueGt365, totalClosing));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

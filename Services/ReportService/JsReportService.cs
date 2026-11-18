@@ -5,8 +5,8 @@ using jsreport.Types;
 using Microsoft.Extensions.Caching.Memory;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Inteface.ReportInterface;
+using NexgenCosysReport.Utils.Caching;
 using NexgenCosysReport.Utils.Report;
-using System.Text;
 
 namespace NexgenCosysReport.Services.ReportService
 {
@@ -17,8 +17,8 @@ namespace NexgenCosysReport.Services.ReportService
         private readonly IRazorRenderService _razorRenderer;
         private readonly IMemoryCache _cache;
 
-        private static readonly TimeSpan CacheSliding = TimeSpan.FromMinutes(30);
-        private static readonly TimeSpan CacheAbsolute = TimeSpan.FromMinutes(60);
+        private static readonly TimeSpan CacheSliding = ReportCachePolicy.HtmlSliding;
+        private static readonly TimeSpan CacheAbsolute = ReportCachePolicy.Freshness;
         private const int RenderTimeoutMs = 600_000;
 
         public JsReportService(
@@ -108,13 +108,19 @@ namespace NexgenCosysReport.Services.ReportService
                 _logger.LogInformation("📦 PDF cache hit — {Key}", reportKey);
                 return cached;
             }
+            //add for visual report
+            (double W, double H)? sheet = null;
+            if (isPdf && SheetHtml.TryReadSize(htmlContent, out var sw, out var sh))
+                sheet = (sw, sh);
+
             // 🔹 For Excel, strip header rows from the HTML before rendering
             if (fmt is "EXCEL" or "XLSX")
             {
-                htmlContent = RemoveHeaderRows(htmlContent);
+                //htmlContent = RemoveHeaderRows(htmlContent);
+                htmlContent = PrepareForExcel(htmlContent);
             }
 
-            var rawBytes = await RenderHtmlToBytesAsync(htmlContent, fmt, pageSetting, ct).ConfigureAwait(false);
+            var rawBytes = await RenderHtmlToBytesAsync(htmlContent, fmt, pageSetting, sheet, ct).ConfigureAwait(false);
             var finalBytes = isPdf ? ReportUtils.CompressPdf(rawBytes, _logger) : rawBytes;
 
             _logger.LogInformation("✅ Exported {Format}: {MB:F2} MB",
@@ -126,50 +132,37 @@ namespace NexgenCosysReport.Services.ReportService
             return finalBytes;
         }
 
-        public async Task<string> ExportReportToRawHtmlAsync(
-        string htmlContent,
-        string? reportKey = null,
-        CancellationToken ct = default)
-        {
-            // Use a separate key so we don't collide with the Razor HTML cache
-            var viewCacheKey = reportKey != null ? $"{reportKey}_VIEW_RAW" : null;
 
-            if (viewCacheKey != null && TryGetCachedHtml(viewCacheKey, out var cachedHtml) && cachedHtml != null)
+        public Task<string> ExportReportToRawHtmlAsync(
+         string htmlContent,
+         string? reportKey = null,
+         PageSizeSetting? pageSetting = null,
+         CancellationToken ct = default)
+        {
+            // No jsreport round trip: Engine.None + Recipe.Html returned this same HTML.
+            // The HTML already contains fixed sheets (one .report-page = one page).
+
+            // Optional guard: warn if this HTML was built for a different page size (stale cache)
+            if (pageSetting != null && SheetHtml.TryReadSize(htmlContent, out var w, out var h))
             {
-                _logger.LogInformation("📦 HTML cache hit — {Key}", viewCacheKey);
-                return cachedHtml;
+
+                if (Math.Abs(w - pageSetting.WidthMm) > 0.01 || Math.Abs(h - pageSetting.HeightMm) > 0.01)
+                {
+                    _logger.LogWarning(
+                        "Visual HTML {Key} was built for {W}x{H}mm but the page setting is {EW}x{EH}mm",
+                        reportKey, w, h, pageSetting.WidthMm, pageSetting.HeightMm);
+                }
             }
 
-            var request = new RenderRequest
-            {
-                Template = new Template
-                {
-                    Content = htmlContent,
-                    Engine = Engine.None,
-                    Recipe = Recipe.Html,
-                    Helpers = null
-                },
-                Options = new RenderOptions { Timeout = RenderTimeoutMs }
-            };
-
-            var result = await _jsReportClient.RenderAsync(request, ct);
-            using var ms = new MemoryStream();
-            await result.Content.CopyToAsync(ms, ct);
-            var finalHtml = Encoding.UTF8.GetString(ms.ToArray());
-
-            if (viewCacheKey != null)
-                CacheHtml(viewCacheKey, finalHtml);
-
-            return finalHtml;
+            return Task.FromResult(htmlContent);
         }
-
 
         // ═══════════════════════════════════════════════════════════════════
         // PRIVATE
         // ═══════════════════════════════════════════════════════════════════
 
         private async Task<byte[]> RenderHtmlToBytesAsync(
-            string html, string format, PageSizeSetting? pageSetting, CancellationToken ct)
+            string html, string format, PageSizeSetting? pageSetting, (double W, double H)? sheet, CancellationToken ct)
         {
             var request = new RenderRequest
             {
@@ -182,7 +175,7 @@ namespace NexgenCosysReport.Services.ReportService
                 Options = new RenderOptions { Timeout = RenderTimeoutMs }
             };
 
-            JsReportTemplateHelper.ConfigureTemplate(request, format, pageSetting);
+            JsReportTemplateHelper.ConfigureTemplate(request, format, pageSetting, sheet: sheet);
 
             // ✅ IReportingService exposes RenderAsync(RenderRequest)
             var result = await _jsReportClient.RenderAsync(request).ConfigureAwait(false);
@@ -205,5 +198,60 @@ namespace NexgenCosysReport.Services.ReportService
             }
             return doc.DocumentNode.OuterHtml;
         }
+
+
+        private static string PrepareForExcel(string html)
+        {
+            var doc = new HtmlDocument();
+            doc.LoadHtml(html);
+
+            // tabular reports: the one visible table; visual reports: the hidden Excel table
+            var table = doc.DocumentNode.SelectSingleNode("//table[contains(@class,'sheet-table')]")
+                        ?? doc.DocumentNode.SelectSingleNode("//div[@id='excelSource']//table");
+
+            if (table != null)
+            {
+                // drop layout-only rows: logo header, page filler, "Page X of N"
+                table.SelectNodes(".//tr[contains(@class,'no-xl')]")?.ToList().ForEach(r => r.Remove());
+                // pictures (member photos) are not exported to Excel
+                table.SelectNodes(".//img")?.ToList().ForEach(img => img.Remove());
+
+                // merge the per-page <tbody> groups into one <tbody>
+                var bodies = table.SelectNodes("./tbody")?.ToList();
+                if (bodies != null && bodies.Count > 1)
+                {
+                    var first = bodies[0];
+                    foreach (var b in bodies.Skip(1))
+                    {
+                        foreach (var tr in b.ChildNodes.Where(c => c.Name == "tr").ToList())
+                            first.AppendChild(tr);
+                        b.Remove();
+                    }
+                }
+
+                // sheet name
+                if (!table.Attributes.Contains("data-sheet-name"))
+                {
+                    var src = doc.GetElementbyId("excelSource");
+                    var name = src?.GetAttributeValue("data-sheet-name", "") ?? "";
+                    if (!string.IsNullOrEmpty(name)) table.SetAttributeValue("data-sheet-name", name);
+                }
+
+                // no scripts (no Chart.js download, no ready-flag wait)
+                doc.DocumentNode.Descendants("script").ToList().ForEach(s => s.Remove());
+
+                var body = doc.DocumentNode.SelectSingleNode("//body");
+                table.Remove();
+                body.RemoveAllChildren();
+                body.AppendChild(table);                 // body = ONLY this table -> one sheet
+                return doc.DocumentNode.OuterHtml;
+            }
+
+            // old-style reports: unchanged behaviour
+            doc.DocumentNode.SelectNodes("//*[contains(@class,'common-header-table')]")
+                ?.ToList().ForEach(n => n.Remove());
+            return doc.DocumentNode.OuterHtml;
+        }
+
     }
 }

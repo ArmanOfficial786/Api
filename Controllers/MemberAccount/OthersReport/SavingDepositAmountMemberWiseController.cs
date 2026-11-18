@@ -1,17 +1,13 @@
-﻿// Controllers/MemberAccount/OthersReport/SavingDepositMemberWiseController.cs
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.MemberAccount.OthersReport;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
+using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
 {
@@ -21,84 +17,80 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
     public class SavingDepositAmountMemberWiseController : ControllerBase
     {
         private readonly ISavingDepositMemberWiseRepository _repository;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
+        private readonly IReportHeaderProvider _headers;
         private readonly IJsReportService _jsReportService;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly CustomHeaderResponse _headerResponse;
-        private readonly IOptions<ReportSettings> _reportSettings;
+        private readonly IReportDataCache _dataCache;
         private readonly ILogger<SavingDepositAmountMemberWiseController> _logger;
-        private readonly IDateConverterService _dateConverter;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        private static readonly PageSizeSetting NPageSetting = PageSizeSetting.A4Portrait;
+        private static readonly PageSizeSetting VPageSetting =
+            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         public SavingDepositAmountMemberWiseController(
             ISavingDepositMemberWiseRepository repository,
-            ICommonHeaderRepository commonHeaderRepository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
-            IWebHostEnvironment webHostEnvironment,
-            CustomHeaderResponse headerResponse,
-            IOptions<ReportSettings> reportSettings,
+            IReportDataCache dataCache,
             ILogger<SavingDepositAmountMemberWiseController> logger,
-            IDateConverterService dateConverter)
+            IReportFileResponse reportFileResponse)
         {
             _repository = repository;
-            _commonHeaderRepository = commonHeaderRepository;
+            _headers = headers;
             _jsReportService = jsReportService;
-            _webHostEnvironment = webHostEnvironment;
-            _headerResponse = headerResponse;
-            _reportSettings = reportSettings;
+            _dataCache = dataCache;
             _logger = logger;
-            _dateConverter = dateConverter;
+            _reportFileResponse = reportFileResponse;
         }
 
         [HttpPost()]
         public async Task<IActionResult> GenerateReport(
             [FromBody] SavingDepositMemberWiseRequestDto request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
             try
             {
-                // Extract userId from JWT
                 var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                {
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out _))
                     return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                }
+
+                if (request == null || !ModelState.IsValid)
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
 
                 var reportName = $"SavingDepositMemberWise_{request.TransactionType}";
-                var upperFormat = format.ToUpper();
-                if (request == null || !ModelState.IsValid)
-                {
-                    return NotFound(new { success = false, StatusCode = 400, message = "Invalid request" });
-                }
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName) + $"_{upperFormat}";
+                var upperFormat = format.ToUpperInvariant();
+                var isVisual = request.VisualReport;
+                var page = isVisual ? VPageSetting : NPageSetting;
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat,
-                        reportName,
-                        _jsReportService, _logger);
-                }
+                var dataKey = ReportCacheKey.ForData(
+                    request, reportName, userIdClaim, nameof(request.VisualReport));
+                var reportKey = $"{dataKey}_{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}";
 
-                var data = await _repository.GetReportDataAsync(request);
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, reportName, pdfView: false,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
 
-                if (!data.Rows.Any())
+                var headerTask = _headers.GetAsync((string?)null, ct);
+                var dataTask = _dataCache.GetOrLoadAsync(dataKey, async () =>
                 {
+                    var loaded = await _repository.GetReportDataAsync(request);
+                    if (loaded == null || !loaded.Rows.Any()) return null;
+                    return loaded;
+                }, ct);
+                await Task.WhenAll(headerTask, dataTask);
+
+                var data = await dataTask;
+                if (data == null)
                     return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
-                }
-                var headerData = await _commonHeaderRepository.GetCommonHeaders();
-
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-                await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData, nameof(CommonHeader.CompanyLogo), webRoot));
 
                 var reportData = new Dictionary<string, object>
                 {
                     { "Rows", data.Rows },
                     { "TotalRecords", data.TotalRecords },
                     { "TotalAmount", data.TotalAmount },
-                    { "HeaderDataSet", headerData },
+                    { "HeaderDataSet", await headerTask },
                     { "FromDate", request.FromDateBs },
                     { "ToDate", request.ToDateBs },
                     { "BranchNames", request.BranchName },
@@ -111,53 +103,26 @@ namespace NexgenCosysReport.Controllers.MemberAccount.OthersReport
                     { "SelectedMemberName", data.SelectedMemberName },
                     { "SavingTypeName", data.SavingTypeName },
                     { "TotalDepositAmount", data.TotalDepositAmount },
-                    { "TotalWithdrawalAmount", data.TotalWithdrawalAmount }
+                    { "TotalWithdrawalAmount", data.TotalWithdrawalAmount },
+                    { "PageSetting", page }
                 };
 
-                string viewPath = request.VisualReport
+                var viewPath = isVisual
                     ? "Views/VisualReport/VSavingDepositMemberWiseReport.cshtml"
                     : "Views/Report/MemberAC/OthersReport/SavingDepositMemberWiseReport.cshtml";
 
-                var htmlContent = await Task.Run(() =>
-                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
-                        reportKey: reportKey,
-                        reportPath: viewPath,
-                        data: reportData));
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                    reportKey: reportKey, reportPath: viewPath, data: reportData, ct: ct);
 
-                if (upperFormat == "VIEW")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.Rows.Count
-                    };
-
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
-                }
-                return await ReportExportHelper.ExportFromCacheAsync(
-                                  reportKey, upperFormat,
-                                  reportName,
-                                  _jsReportService, _logger);
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, reportName, pdfView: false,
+                    totalRecords: data.TotalRecords,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
-
             catch (Exception ex)
             {
-                return StatusCode(500, new
-                {
-                    message = ex.Message,
-                    inner = ex.InnerException?.Message,
-                    stack = ex.StackTrace
-                });
+                _logger.LogError(ex, "Error generating SavingDepositMemberWise report");
+                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }
     }

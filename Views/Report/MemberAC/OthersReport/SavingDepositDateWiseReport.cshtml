@@ -1,258 +1,91 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
-    var rows = (Model["Rows"] as List<SavingDepositDateWiseRowDto>) ?? new List<SavingDepositDateWiseRowDto>();
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var transactionType = Model["TransactionType"]?.ToString() ?? "Deposit"; // "Deposit" or "Withdrawl"
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
 
-    var generatedOn = Model.ContainsKey("ReportGeneratedOnBs") && Model["ReportGeneratedOnBs"] != null
-        ? Model["ReportGeneratedOnBs"].ToString()
-        : DateTime.Now.ToString("yyyy/MM/dd");
+    var fontSize = "8pt";
+    var metaFontSize = "8.5pt";
 
-    // Rows must arrive pre-sorted Date -> SavingType (repository enforces this for
-    // ReportMode == "DateWise" - GroupBy preserves first-seen order, it does not sort)
-    var dateGroups = rows.GroupBy(r => r.Date).ToList();
+    string Text(string key) => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? "" : "";
 
-    var reportTitle = $"Date Wise {transactionType} Report";
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>@reportTitle</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var rows = (Model["Rows"] as IEnumerable<SavingDepositDateWiseRowDto>)?.ToList() ?? new List<SavingDepositDateWiseRowDto>();
+    var branchNames = Text("BranchNames");
+    if (branchNames == "") branchNames = "All Branches";
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    if (fromDate == "-1") fromDate = "";
+    if (toDate == "-1") toDate = "";
+    var transactionType = Text("TransactionType");
+    if (transactionType == "") transactionType = "Deposit";
+    var generatedOn = Text("ReportGeneratedOnBs");
+    if (generatedOn == "") generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9.5pt;
-                background: white;
-                color: #000;
-            }
+    var table = new ReportTable(Model, title: $"Date Wise {transactionType} Report", sheetName: "SavingDepositDateWise")
+        .Column("Date", 10)
+        .Column("Saving Type", 14)
+        .Column("S.N.", 5, Align.Center)
+        .Column("Member Id", 11)
+        .Column("Name", 18)
+        .Column("Bill No.", 9)
+        .Column("Account No", 19)
+        .Column("Amount", 14, Align.Right)
+        .Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 70)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 3px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }");
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
+    table.MetaPair("Branch Name :", branchNames, "Report Generated On :", generatedOn);
+    if (fromDate != "" || toDate != "") table.MetaPair("From Date :", fromDate, "To Date :", toDate);
 
-            .report-title {
-                text-align: center;
-                font-size: 15pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 10px 0 12px 0;
-            }
+    foreach (var dateGroup in rows.GroupBy(r => r.Date))
+    {
+        var dateText = dateGroup.Key?.ToString() ?? "";
+        table.GroupTitle(dateText);
 
-            .meta-table {
-                width: 100%;
-                margin-bottom: 6px;
-                font-size: 9.5pt;
-            }
+        decimal dateTotal = 0;
+        var dateRecords = 0;
 
-                .meta-table td {
-                    padding: 1px 4px;
-                }
-
-                .meta-table .label {
-                    font-weight: bold;
-                    white-space: nowrap;
-                }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9.5pt;
-            }
-
-                .data-table td, .data-table th {
-                    padding: 3px 6px;
-                    border: none;
-                }
-
-                .data-table thead th {
-                    text-align: left;
-                    font-weight: bold;
-                    border-top: 2px solid #000;
-                    border-bottom: 1.5px solid #000;
-                    padding: 5px 6px;
-                }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            /* Date group header row */
-            .date-row td {
-                font-weight: bold;
-                padding-top: 10px;
-            }
-
-            /* Saving type sub-header under a date */
-            .savingtype-header td {
-                font-weight: bold;
-                padding-top: 4px;
-                padding-bottom: 1px;
-            }
-
-            /* Individual numbered transaction rows */
-            .txn-row td {
-                padding-top: 1px;
-                padding-bottom: 1px;
-            }
-
-            /* Saving type subtotal under its group */
-            .savingtype-total td {
-                font-weight: bold;
-                border-top: 1px solid #000;
-                padding-top: 3px;
-                padding-bottom: 3px;
-            }
-
-            /* Per-date "Total Records" summary footer */
-            .date-total td {
-                font-weight: bold;
-                border-top: 1px solid #000;
-                border-bottom: 1px solid #000;
-                padding-top: 4px;
-                padding-bottom: 8px;
-            }
-
-            .grand-total td {
-                font-weight: bold;
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                padding-top: 6px;
-                padding-bottom: 6px;
-            }
-
-            @@media print {
-                .data-table thead {
-                    display: table-header-group;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+        foreach (var stGroup in dateGroup.GroupBy(r => r.SavingType))
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            table.GroupBy(
+                ReportCell.Left(""),
+                ReportCell.Left(stGroup.Key ?? "", 7));
+
+            decimal stTotal = 0;
+            var sn = 0;
+
+            foreach (var row in stGroup)
+            {
+                sn++;
+                dateRecords++;
+                stTotal += row.Amount ?? 0;
+                dateTotal += row.Amount ?? 0;
+
+                table.Data(new[]
+                {
+                    ReportCell.Left(""),
+                    ReportCell.Left(""),
+                    ReportCell.Center(sn.ToString()),
+                    ReportCell.Left(row.MemberId ?? ""),
+                    ReportCell.Left(row.MemberName ?? ""),
+                    ReportCell.Left(""),
+                    ReportCell.Left(row.AccountNo ?? ""),
+                    ReportCell.Right(Fmt.Amount(row.Amount))
+                });
+            }
+
+            table.SubTotal(stGroup.Key ?? "", 7, Fmt.Amount(stTotal));
         }
 
-        <div class="report-title">@reportTitle</div>
+        table.SubTotal($"{dateText}  —  Total Records: {dateRecords}", 7, Fmt.Amount(dateTotal));
+    }
 
-        <table class="meta-table">
-            <tr>
-                <td class="label" style="width:15%;">Report Generated On :</td>
-                <td style="width:25%;">@generatedOn</td>
-                <td class="label" style="width:12%;">From Date :</td>
-                <td style="width:18%;">@(fromDate != "-1" ? fromDate : "")</td>
-                <td class="label" style="width:12%;">To Date :</td>
-                <td style="width:18%;">@(toDate != "-1" ? toDate : "")</td>
-            </tr>
-            <tr>
-                <td></td>
-                <td></td>
-                <td class="label">Branch Name :</td>
-                <td colspan="3">@branchNames</td>
-            </tr>
-        </table>
-
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th style="width:11%;">Date</th>
-                    <th style="width:16%;">Saving Type</th>
-                    <th style="width:12%;">Member Id</th>
-                    <th style="width:18%;">Name</th>
-                    <th style="width:10%;">Bill No.</th>
-                    <th style="width:20%;">Account No</th>
-                    <th style="width:13%;" class="text-right">Amount</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (dateGroups.Any())
-                {
-                    foreach (var dateGroup in dateGroups)
-                    {
-                        <tr class="date-row">
-                            <td colspan="7">@dateGroup.Key</td>
-                        </tr>
-
-                        var savingTypeGroups = dateGroup.GroupBy(r => r.SavingType);
-                        decimal dateTotal = 0;
-                        int dateRecordCount = 0;
-
-                        foreach (var stGroup in savingTypeGroups)
-                        {
-                            <tr class="savingtype-header">
-                                <td></td>
-                                <td colspan="6">@stGroup.Key</td>
-                            </tr>
-
-                            decimal stTotal = 0;
-                            int sn = 0;
-                            foreach (var row in stGroup)
-                            {
-                                sn++;
-                                dateRecordCount++;
-                                stTotal += row.Amount ?? 0;
-                                dateTotal += row.Amount ?? 0;
-
-                                <tr class="txn-row">
-                                    <td></td>
-                                    <td></td>
-                                    <td>@sn</td>
-                                    <td>@row.MemberId</td>
-                                    <td>@row.MemberName</td>
-                                    @* Bill No. has no source field on SavingDepositDateWiseRowDto - left blank *@
-                                    <td></td>
-                                    <td>@row.AccountNo</td>
-                                </tr>
-                                <tr class="txn-row" style="display:none;"></tr>
-                            }
-
-                            <tr class="savingtype-total">
-                                <td></td>
-                                <td colspan="4"></td>
-                                <td class="text-right">@stGroup.Key</td>
-                                <td class="text-right">@stTotal.ToString("N2")</td>
-                            </tr>
-                        }
-
-                        <tr class="date-total">
-                            <td colspan="2" class="text-right">Total Records: @dateRecordCount</td>
-                            <td colspan="3" class="text-center">@dateGroup.Key</td>
-                            <td></td>
-                            <td class="text-right">@dateTotal.ToString("N2")</td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total">
-                        <td colspan="6" class="text-right">Grand Total</td>
-                        <td class="text-right">@rows.Sum(r => r.Amount ?? 0).ToString("N2")</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="7" class="text-center">No @transactionType.ToLower() transactions found for the selected criteria</td></tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", 7, Fmt.Amount(rows.Sum(r => r.Amount ?? 0)));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

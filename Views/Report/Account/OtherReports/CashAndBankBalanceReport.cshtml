@@ -1,20 +1,28 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.OthersReport
-
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Account.OthersReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+    const int ColumnCount = 4;   // number of .Column(...) lines below; section titles span all of them
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+
+    // amounts always show two decimals, a missing amount prints 0.00 (same as before)
+    string N(decimal? v) => (v ?? 0m).ToString("N2");
+
     var bankRows = (Model["BankRows"] as List<CashAndBankBalanceBankRowDto>) ?? new List<CashAndBankBalanceBankRowDto>();
     var tellerRows = (Model["TellerRows"] as List<CashAndBankBalanceTellerRowDto>) ?? new List<CashAndBankBalanceTellerRowDto>();
     var cashRows = (Model["CashRows"] as List<CashAndBankBalanceCashRowDto>) ?? new List<CashAndBankBalanceCashRowDto>();
-    var tillDate = Model["TillDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var isNepali = Model["NepaliReport"] as bool? ?? false;
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var tillDate = Text("TillDate");
+    var branchName = Text("BranchName", "All");
+    var isNepali = Model.TryGetValue("NepaliReport", out var np) && np is bool nepali && nepali;
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Language-specific labels
+    // ── language-specific labels ──
     string title = isNepali ? "रोकड र बैंक शेष विवरण" : "Cash And Bank Balance Report";
     string lblGenerated = isNepali ? "प्रिन्ट मिति :" : "Report Generated On:";
     string lblTillDate = isNepali ? "आज सम्म :" : "Till Date:";
@@ -31,226 +39,76 @@
     string lblCr = isNepali ? "चालु के :" : "Current Day CR :-";
     string lblTodayBal = isNepali ? "चालु मौज्दात :" : "Current Day Balance :-";
     string lblClosing = isNepali ? "शेष मौज्दात :" : "Closing Balance:-";
+    string lblNoBank = isNepali ? "बैंक विवरण फेला परेन" : "No bank records found";
 
-    Func<CashAndBankBalanceBankRowDto, string> bankName = r => isNepali ? (r.BankNameInNepali ?? r.BankName ?? "") : (r.BankName ?? "");
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>@title</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    string BankName(CashAndBankBalanceBankRowDto r) => isNepali ? (r.BankNameInNepali ?? r.BankName ?? "") : (r.BankName ?? "");
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+    // a bold left cell (label) and a right-aligned cell (amount), for the cash and bank blocks
+    ReportCell Label(string text, int span = 1) => new(text, Align.Left, span, "label-cell");
+    ReportCell Value(string text) => new(text, Align.Right);
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                    border: 1px solid #000;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-                border: none;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-                border: none;
-            }
-
-            .section-title td {
-                text-align: center;
-                font-size: 11pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 6px;
-                border: none;
-            }
-
-            .label-cell {
-                font-weight: bold;
-            }
-
-            .value-cell {
-                text-align: right;
-            }
-
-            th {
-                background: #f9f9f9;
-                font-weight: bold;
-                text-align: left;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: title, sheetName: "CashAndBankBalance")
+        .Column("", 25)
+        .Column("", 25, Align.Right)
+        .Column("", 25, Align.Right)
+        .Column("", 25, Align.Right)
+        .NoColumnHeader()                     // every section writes its own header
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9",
+            GroupBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)   // one text line per row
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            // boxed cells, as before
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td { border: 1px solid #000; }\n" +
+            // section titles: centred, underlined, no rules
+            "table.sheet-table tr.r-group td { text-align: center; font-size: 11pt; text-decoration: underline; border: 0; padding-top: 6px; }\n" +
+            ".label-cell { font-weight: bold; }");
+
+    // ── title block ──
+    table.MetaRow(Fmt.Labeled(lblGenerated, generatedOn), Fmt.Labeled(lblTillDate, tillDate));
+    table.MetaRow(Fmt.Labeled(lblBranch, branchName));
+
+    // ── CASH BALANCE: three lines per cash account ──
+    table.GroupBy(ReportCell.Center(lblCashSection, ColumnCount));
+    foreach (var row in cashRows)
+    {
+        table.Data(Label(row.CashName ?? "", 2), Label(lblOpening), Value(N(row.OpeningCashBalance)));
+        table.Data(Label(lblDr), Value(N(row.TodayCashDr)), Label(lblTodayBal), Value(N(row.TodayCashBalance)));
+        table.Data(Label(lblCr), Value(N(row.TodayCashCr)), Label(lblClosing), Value(N(row.ClosingCashBalance)));
+    }
+
+    // ── TELLER BALANCE: a small table with its own header ──
+    table.GroupBy(ReportCell.Center(lblTellerSection, ColumnCount));
+    table.Header(lblTellerName, lblCashIn, lblCashOut, lblCashBal);
+    if (tellerRows.Count > 0)
+    {
+        foreach (var row in tellerRows)
+            table.Data(row.TellerName ?? "", N(row.CashIn), N(row.CashOut), N(row.CashBalance));
+    }
+    else
+    {
+        table.Data("", "", "", "");           // one empty line, as before
+    }
+
+    // ── BANK BALANCE: three lines per bank ──
+    table.GroupBy(ReportCell.Center(lblBankSection, ColumnCount));
+    if (bankRows.Count > 0)
+    {
+        foreach (var row in bankRows)
+        {
+            table.Data(Label(BankName(row), 2), Label(lblOpening), Value(N(row.OpeningBankBalance)));
+            table.Data(Label(lblDr), Value(N(row.TodayBankDr)), Label(lblTodayBal), Value(N(row.TodayBankBalance)));
+            table.Data(Label(lblCr), Value(N(row.TodayBankCr)), Label(lblClosing), Value(N(row.ClosingBankBalance)));
         }
-
-        <table class="data-table" data-sheet-name="CashAndBankBalance">
-            <colgroup>
-                <col style="width:25%;" />
-                <col style="width:25%;" />
-                <col style="width:25%;" />
-                <col style="width:25%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="4">@title</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="2"><strong>@lblGenerated</strong> @generatedOn</td>
-                    <td colspan="2" class="text-right"><strong>@lblTillDate</strong> @tillDate</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="2"><strong>@lblBranch</strong> @branchName</td>
-                    <td colspan="2"></td>
-                </tr>
-
-                <!-- ============ CASH BALANCE ============ -->
-                <tr class="section-title"><td colspan="4">@lblCashSection</td></tr>
-
-                @if (cashRows.Any())
-                {
-                    foreach (var row in cashRows)
-                    {
-                        var name = isNepali ? (row.CashName ?? "") : (row.CashName ?? "");
-                        <tr>
-                            <td colspan="2" class="label-cell">@name</td>
-                            <td class="label-cell">@lblOpening</td>
-                            <td class="value-cell">@(row.OpeningCashBalance?.ToString("N2") ?? "0.00")</td>
-                        </tr>
-                        <tr>
-                            <td class="label-cell">@lblDr</td>
-                            <td class="value-cell">@(row.TodayCashDr?.ToString("N2") ?? "0.00")</td>
-                            <td class="label-cell">@lblTodayBal</td>
-                            <td class="value-cell">@(row.TodayCashBalance?.ToString("N2") ?? "0.00")</td>
-                        </tr>
-                        <tr>
-                            <td class="label-cell">@lblCr</td>
-                            <td class="value-cell">@(row.TodayCashCr?.ToString("N2") ?? "0.00")</td>
-                            <td class="label-cell">@lblClosing</td>
-                            <td class="value-cell">@(row.ClosingCashBalance?.ToString("N2") ?? "0.00")</td>
-                        </tr>
-                    }
-                }
-
-                <!-- ============ TELLER BALANCE ============ -->
-                <tr class="section-title"><td colspan="4">@lblTellerSection</td></tr>
-                <tr>
-                    <th>@lblTellerName</th>
-                    <th class="text-right">@lblCashIn</th>
-                    <th class="text-right">@lblCashOut</th>
-                    <th class="text-right">@lblCashBal</th>
-                </tr>
-                @if (tellerRows.Any())
-                {
-                    foreach (var row in tellerRows)
-                    {
-                        <tr>
-                            <td>@(row.TellerName ?? "")</td>
-                            <td class="text-right">@(row.CashIn?.ToString("N2") ?? "0.00")</td>
-                            <td class="text-right">@(row.CashOut?.ToString("N2") ?? "0.00")</td>
-                            <td class="text-right">@(row.CashBalance?.ToString("N2") ?? "0.00")</td>
-                        </tr>
-                    }
-                }
-                else
-                {
-                    <tr>
-                        <td>&nbsp;</td>
-                        <td>&nbsp;</td>
-                        <td>&nbsp;</td>
-                        <td>&nbsp;</td>
-                    </tr>
-                }
-
-                <!-- ============ BANK BALANCE ============ -->
-                <tr class="section-title"><td colspan="4">@lblBankSection</td></tr>
-
-                @if (bankRows.Any())
-                {
-                    foreach (var row in bankRows)
-                    {
-                        <tr>
-                            <td colspan="2" class="label-cell">@bankName(row)</td>
-                            <td class="label-cell">@lblOpening</td>
-                            <td class="value-cell">@(row.OpeningBankBalance?.ToString("N2") ?? "0.00")</td>
-                        </tr>
-                        <tr>
-                            <td class="label-cell">@lblDr</td>
-                            <td class="value-cell">@(row.TodayBankDr?.ToString("N2") ?? "0.00")</td>
-                            <td class="label-cell">@lblTodayBal</td>
-                            <td class="value-cell">@(row.TodayBankBalance?.ToString("N2") ?? "0.00")</td>
-                        </tr>
-                        <tr>
-                            <td class="label-cell">@lblCr</td>
-                            <td class="value-cell">@(row.TodayBankCr?.ToString("N2") ?? "0.00")</td>
-                            <td class="label-cell">@lblClosing</td>
-                            <td class="value-cell">@(row.ClosingBankBalance?.ToString("N2") ?? "0.00")</td>
-                        </tr>
-                    }
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="4" class="text-center">
-                            @(isNepali ? "बैंक विवरण फेला परेन" : "No bank records found")
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    }
+    else
+    {
+        table.Data(ReportCell.Center(lblNoBank, ColumnCount));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

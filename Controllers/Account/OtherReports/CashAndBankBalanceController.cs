@@ -1,16 +1,12 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Dtos.RequestDtos.Account.OthersReport;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ReportInterface;
 using NexgenCosysReport.Inteface.ServiceInterface.AccountOperation.OthersReport;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
 using NexgenCosysReport.Utils.Report;
 using System.Security.Claims;
-using System.Text.Json;
 
 namespace NexgenCosysReport.Controllers.Account.OtherReports
 {
@@ -19,74 +15,66 @@ namespace NexgenCosysReport.Controllers.Account.OtherReports
     [Authorize]
     public class CashAndBankBalanceController : ControllerBase
     {
-        private readonly ICashAndBankBalanceRepository _repository;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
-        private readonly IJsReportService _jsReportService;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly CustomHeaderResponse _headerResponse;
-        private readonly IOptions<ReportSettings> _reportSettings;
-        private readonly ILogger<CashAndBankBalanceController> _logger;
-        private readonly IDateConverterService _dateConverter;
+        private const string ReportName = "CashAndBankBalance";
 
-        // Single Razor view for both English and Nepali — language is picked
-        // inside the view based on the NepaliReport flag passed in reportData.
+        // one Razor view for both English and Nepali: the language is picked inside the view from the NepaliReport flag
         private const string ViewPath = "Views/Report/Account/OtherReports/CashAndBankBalanceReport.cshtml";
+
+        private readonly ICashAndBankBalanceRepository _repository;
+        private readonly IReportHeaderProvider _headers;
+        private readonly IJsReportService _jsReportService;
+        private readonly IReportDataCache _dataCache;
+        private readonly ILogger<CashAndBankBalanceController> _logger;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        // 4 columns, so A4 portrait is enough
+        private static readonly PageSizeSetting PageSetting = PageSizeSetting.A4Portrait;
 
         public CashAndBankBalanceController(
             ICashAndBankBalanceRepository repository,
-            ICommonHeaderRepository commonHeaderRepository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
-            IWebHostEnvironment webHostEnvironment,
-            CustomHeaderResponse headerResponse,
-            IOptions<ReportSettings> reportSettings,
+            IReportDataCache dataCache,
             ILogger<CashAndBankBalanceController> logger,
-            IDateConverterService dateConverter)
+            IReportFileResponse reportFileResponse)
         {
             _repository = repository;
-            _commonHeaderRepository = commonHeaderRepository;
+            _headers = headers;
             _jsReportService = jsReportService;
-            _webHostEnvironment = webHostEnvironment;
-            _headerResponse = headerResponse;
-            _reportSettings = reportSettings;
+            _dataCache = dataCache;
             _logger = logger;
-            _dateConverter = dateConverter;
+            _reportFileResponse = reportFileResponse;
         }
 
-        [HttpPost()]
+        [HttpPost]
         public async Task<IActionResult> GenerateReport(
             [FromBody] CashAndBankBalanceRequestDto request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
             try
             {
                 var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out var userId))
-                {
+                if (string.IsNullOrEmpty(userIdClaim) || !long.TryParse(userIdClaim, out _))
                     return NotFound(new { success = false, StatusCode = 401, message = "Unauthorized" });
-                }
 
                 if (request == null || !ModelState.IsValid)
-                {
                     return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request" });
-                }
 
-                var reportName = "CashAndBankBalance";
-                var upperFormat = format.ToUpper();
+                var upperFormat = format.ToUpperInvariant();
+                var page = PageSetting;
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                // the DB data is cached once and reused by every export format
+                var dataKey = ReportCacheKey.ForData(request, ReportName, userIdClaim);
+                var reportKey = $"{dataKey}_{page.CacheTag}";
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: false,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
 
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat,
-                        reportName,
-                        _jsReportService, _logger);
-                }
-
-                string? branchIdForHeader = null;
+                // the header shows one branch only when a single numeric branch is selected (same rule as before)
+                var branchIdForHeader = "";
                 if (!string.IsNullOrEmpty(request.BranchId) &&
                     request.BranchId != "-1" &&
                     request.BranchId != "string" &&
@@ -95,23 +83,20 @@ namespace NexgenCosysReport.Controllers.Account.OtherReports
                     branchIdForHeader = request.BranchId;
                 }
 
-                var dataTask = _repository.GetReportDataAsync(request);
-                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
-
-                await Task.WhenAll(dataTask, headerTask);
+                var headerTask = _headers.GetAsync(branchIdForHeader, ct);
+                var dataTask = _dataCache.GetOrLoadAsync(dataKey, async () =>
+                {
+                    var loaded = await _repository.GetReportDataAsync(request);
+                    if (loaded == null ||
+                        (!loaded.BankRows.Any() && !loaded.TellerRows.Any() && !loaded.CashRows.Any()))
+                        return null;
+                    return loaded;
+                }, ct);
+                await Task.WhenAll(headerTask, dataTask);
 
                 var data = await dataTask;
-                var headerData = await headerTask;
-
-                if (!data.BankRows.Any() && !data.TellerRows.Any() && !data.CashRows.Any())
-                {
+                if (data == null)
                     return NotFound(new { success = false, StatusCode = 400, message = "No data found" });
-                }
-
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-
-                await ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData, nameof(CommonHeader.CompanyLogo), webRoot);
 
                 var reportData = new Dictionary<string, object>
                 {
@@ -123,54 +108,27 @@ namespace NexgenCosysReport.Controllers.Account.OtherReports
                     { "TellerBalance", data.TellerBalance },
                     { "FinalBankAmount", data.FinalBankAmount },
                     { "FinalCashAmount", data.FinalCashAmount },
-                    { "HeaderDataSet", headerData },
+                    { "HeaderDataSet", await headerTask },
                     { "TillDate", data.TillDateBs ?? "" },
                     { "BranchName", data.BranchName ?? "All" },
                     { "OrderBy", request.OrderBy ?? "" },
                     { "NepaliReport", data.NepaliReport },
-                    { "Format", upperFormat }
+                    { "Format", upperFormat },
+                    { "PageSetting", page }
                 };
 
-                var htmlContent = await Task.Run(() =>
-                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
-                        reportKey: reportKey,
-                        reportPath: ViewPath,
-                        data: reportData));
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                    reportKey: reportKey, reportPath: ViewPath, data: reportData, ct: ct);
 
-                if (upperFormat == "VIEW")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false,
-                        totalRecord = data.BankRows.Count + data.TellerRows.Count + data.CashRows.Count
-                    };
-
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", $"inline; filename=\"{reportName}.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
-                }
-                return await ReportExportHelper.ExportFromCacheAsync(
-                 reportKey, upperFormat,
-                 reportName,
-                 _jsReportService, _logger);
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: false,
+                    totalRecords: data.BankRows.Count + data.TellerRows.Count + data.CashRows.Count,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error generating CashAndBankBalance report");
-                return StatusCode(500, new
-                {
-                    message = ex.Message,
-                    inner = ex.InnerException?.Message,
-                    stack = ex.StackTrace
-                });
+                _logger.LogError(ex, "Error generating {Report} report", ReportName);
+                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }
     }

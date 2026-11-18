@@ -1,145 +1,63 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.AccountingReport;
-
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.AccountingReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
-
 @{
     Layout = null;
-    var data = Model["RatioData"] as RatioAnalysisData;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "";
-    var isTotalOnly = Model["IsTotalOnly"] as bool? ?? false;
-    var provisionType = Model["ProvisionType"]?.ToString() ?? "";
-    var enable1to30 = Model["Enable1to30Days"] as bool? ?? false;
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fontSize = "8pt";
+    var metaFontSize = "8.5pt";
+
+    string Text(string key, string fallback = "") =>
+        Model.TryGetValue(key, out var value) && value != null ? value.ToString() ?? fallback : fallback;
+
+    bool Flag(string key) =>
+        Model.TryGetValue(key, out var value) && value is bool flag && flag;
+
+    var data = (RatioAnalysisData)Model["RatioData"];
+
+    var branchName = Text("BranchName", "All");
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var provisionType = Text("ProvisionType");
+    var enable1to30Days = Flag("Enable1to30Days");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
     string FormatAmount(decimal amount) =>
         amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
 
-    var grouped = data.Rows.GroupBy(r => r.Category ?? "Other").OrderBy(g => g.Key);
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Ratio Analysis Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var table = new ReportTable(Model, title: "Ratio Analysis Report", sheetName: "RatioAnalysisReport")
+        .Column("SN", 5, Align.Center)
+        .Column("Ratio Name", 70)
+        .Column("Value", 25, Align.Right)
+        .Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 75)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-section td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 4px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            @"
+            table.sheet-table tr.r-section td.text-left { text-align: center !important; }");
 
-            body {
-                margin: 0;
-                padding: 0;
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-            }
+    table.MetaPair("Branch Name :", branchName, "From Date :", fromDate)
+         .MetaPair("Report Generated On :", generatedOn, "To Date :", toDate)
+         .MetaPair("Provision :", provisionType, "1-30 Days :", enable1to30Days ? "Yes" : "No");
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
+    var ratioGroups = data.Rows
+        .GroupBy(row => row.Category ?? "Other")
+        .OrderBy(categoryGroup => categoryGroup.Key);
 
-            /* STOP THEAD REPEATING — without this, browsers/PDF renderers
-                           repeat the entire <thead> (title, meta line, column header
-                           row) on every printed page. Treating it as a normal row
-                           group makes it render once, like any other row group. */
-            thead {
-                display: table-row-group;
-            }
+    var serialNumber = 0;
+    foreach (var categoryGroup in ratioGroups)
+    {
+        table.Section(categoryGroup.Key);
 
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-            }
-
-                .data-table td, .data-table th {
-                    padding: 4px 6px;
-                    border: 1px solid #ddd;
-                }
-
-                .data-table th {
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    background: #f2f2f2;
-                }
-
-            .section-title {
-                background: #e6e6e6;
-                font-weight: bold;
-                text-align: center;
-            }
-
-            .grand-total {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                body {
-                    margin: 0;
-                    padding: 0;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+        foreach (var row in categoryGroup)
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            serialNumber++;
+            table.Data(
+                serialNumber.ToString(),
+                $"{row.RatioName}",
+                FormatAmount(row.Value));
         }
-
-        <table class="data-table">
-            <thead>
-                <tr><th colspan="3" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">Ratio Analysis Report</th></tr>
-                <tr><td colspan="3"><strong>Branch:</strong> @branchName &nbsp;&nbsp;|&nbsp;&nbsp; <strong>From:</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp; <strong>To:</strong> @toDate &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Generated:</strong> @generatedOn &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Provision:</strong> @provisionType &nbsp;&nbsp;|&nbsp;&nbsp; <strong>1-30 Days:</strong> @(enable1to30 ? "Yes" : "No")</td></tr>
-                <tr>
-                    <th style="width:5%;">SN</th>
-                    <th style="width:70%;">Ratio Name</th>
-                    <th style="width:25%;" class="text-right">Value</th>
-                </tr>
-            </thead>
-            <tbody>
-                @{
-                    int sn = 0;
-                    foreach (var group in grouped)
-                    {
-                        <tr class="section-title"><td colspan="3">@group.Key</td></tr>
-                        foreach (var row in group)
-                        {
-                            sn++;
-                            <tr>
-                                <td class="text-center">@sn</td>
-                                <td>@row.RatioName</td>
-                                <td class="text-right">@FormatAmount(row.Value)</td>
-                            </tr>
-                        }
-                    }
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

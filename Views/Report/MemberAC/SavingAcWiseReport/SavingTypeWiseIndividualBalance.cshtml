@@ -1,349 +1,289 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.SavingAcWiseReport;
+﻿@* @using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.SavingAcWiseReport
+@using NexgenCosysReport.Services.ReportService
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    // Raw rows - one per account. The legacy DevExpress report grouped these
-    // by SavingType itself (group-header band = subtotal per type, detail
-    // band = each account underneath). We replicate that here: group by
-    // SavingType, compute the group's Count/Deposit/Withdraw/Balance, then
-    // list each account below it with a continuously-incrementing S.N.
-    var rows = (Model["Rows"] as List<SavingTypeWiseIndividualBalanceRowDto>) ?? new List<SavingTypeWiseIndividualBalanceRowDto>();
-
+    var rows = (Model["Rows"] as List<SavingTypeWiseIndividualBalanceRowDto>) ?? new();
     var totalDeposit = Model["TotalDeposit"] as decimal? ?? 0;
     var totalWithdraw = Model["TotalWithdraw"] as decimal? ?? 0;
     var totalBalance = Model["TotalBalance"] as decimal? ?? 0;
     var totalOpening = Model["TotalOpening"] as decimal? ?? 0;
-    var totalClosing = Model["TotalClosing"] as decimal? ?? 0;
-
     var fromDate = Model["FromDate"]?.ToString() ?? "";
     var toDate = Model["ToDate"]?.ToString() ?? "";
     var branchName = Model["BranchName"]?.ToString() ?? "";
-    var openingBalance = Model["OpeningBalance"] as bool? ?? false;
-    var percentageBalance = Model["PercentageBalance"] as bool? ?? false;
-    var groupByBranch = Model["GroupByBranch"] as bool? ?? false;
-    var groupByCollectionCenter = Model["GroupByCollectionCenter"] as bool? ?? false;
-    var groupByMemberGroup = Model["GroupByMemberGroup"] as bool? ?? false;
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var opening = Model["OpeningBalance"] as bool? ?? false;
+    var pct = Model["PercentageBalance"] as bool? ?? false;
+    var byBranch = Model["GroupByBranch"] as bool? ?? false;
+    var byCC = Model["GroupByCollectionCenter"] as bool? ?? false;
+    var byGroup = Model["GroupByMemberGroup"] as bool? ?? false;
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-    var showHeader = !Model.TryGetValue("ShowHeader", out var shVal) || (shVal is bool sh && sh);
 
-    string FormatAmount(decimal amount) =>
-        amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
+    string Amt(decimal v) => v < 0 ? $"({Math.Abs(v):N2})" : v.ToString("N2");
+    string Dash(string? v) => string.IsNullOrWhiteSpace(v) ? "-" : v;
 
-    string NullDisplay(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? "-" : value;
-
-    // --- Group rows by Saving Type (matches image ordering: alphabetical,
-    //     which also happens to put "1 Year..." / "2 Year..." before "AA"). ---
+    // ── group by saving type: subtotal per type, accounts underneath ──
     var groups = rows
         .GroupBy(r => string.IsNullOrWhiteSpace(r.SavingType) ? "-" : r.SavingType!)
         .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
         .Select(g => new
         {
             SavingType = g.Key,
-            Count = g.Select(r => r.AccountNo)
-                      .Where(a => !string.IsNullOrWhiteSpace(a))
-                      .Distinct()
-                      .Count(),
-            Opening = g.Sum(r => r.Opening),
-            Deposit = g.Sum(r => r.Deposit),
-            Withdraw = g.Sum(r => r.Withdraw),
-            Balance = g.Sum(r => r.Balance),
-            BranchName = g.Select(r => r.BranchName).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
-            CollectionCenterName = g.Select(r => r.CollectionCenterName).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
-            MemberGroupName = g.Select(r => r.MemberGroupName).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
+            Count = g.Select(r => r.AccountNo).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().Count(),
+            Opening = g.Sum(r => r.Opening), Deposit = g.Sum(r => r.Deposit),
+            Withdraw = g.Sum(r => r.Withdraw), Balance = g.Sum(r => r.Balance),
+            Branch = g.Select(r => r.BranchName).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
+            Center = g.Select(r => r.CollectionCenterName).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
+            Grp = g.Select(r => r.MemberGroupName).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v)),
             Accounts = g.ToList()
-        })
-        .ToList();
+        }).ToList();
 
-    decimal grandBalanceForPct = groups.Sum(g => g.Balance);
-    int grandCount = groups.Sum(g => g.Count);
-    int sn = 0;
+    var gBal = groups.Sum(g => g.Balance);
+    var gCount = groups.Sum(g => g.Count);
 
-    // Base columns: S.N., MemberId, AccountNo, Count, Deposit, Withdraw, Balance
-    int colCount = 7;
-    if (openingBalance) colCount++;
-    if (percentageBalance) colCount++;
-    if (groupByBranch) colCount++;
-    if (groupByCollectionCenter) colCount++;
-    if (groupByMemberGroup) colCount++;
+    // ── flat list for pagination: H = group header, A = account, T = grand total ──
+    var lines = new List<(char Kind, int Group, int Item, int Sn)>();
+    var serial = 0;
+    for (var gi = 0; gi < groups.Count; gi++)
+    {
+        lines.Add(('H', gi, -1, 0));
+        for (var ai = 0; ai < groups[gi].Accounts.Count; ai++) lines.Add(('A', gi, ai, ++serial));
+    }
+    if (groups.Count > 0) lines.Add(('T', -1, -1, 0));
 
-    // Columns that appear BEFORE the SavingType label in a group-header row
-    // (S.N., optional Branch/CollectionCenter/MemberGroup) - these get
-    // collapsed into the label's colspan on group rows, since a group row
-    // has no S.N./MemberId/AccountNo of its own.
-    int labelColspan = 3; // S.N. + MemberId + AccountNo
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Saving Type Wise Individual Balance Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    // ── column widths in mm (0 = flexible) ──
+    var widths = new List<double>();
+    if (byBranch) widths.Add(0);
+    if (byCC) widths.Add(0);
+    if (byGroup) widths.Add(0);
+    widths.AddRange(new double[] { 12, 26, 30, 14 });      // S.N., MemberId, AccountNo, Count
+    if (opening) widths.Add(0);
+    widths.AddRange(new double[] { 0, 0, 0 });             // Deposit, Withdrawl, Net Balance
+    if (pct) widths.Add(16);
 
-            body {
-                margin: 0;
-                padding: 0;
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-            }
+    Func<int, IHtmlContent> subheader = @<text>
+        <tr class="meta-title"><td colspan="@item">Savings Type Wise Individual Balance Report</td></tr>
+        <tr class="meta-row"><td colspan="@item"><strong>Branch Name :</strong> @branchName</td></tr>
+        <tr class="meta-row">
+            <td colspan="@item">
+                <strong>Report Generated On:</strong> @generatedOn &nbsp;|&nbsp;
+                <strong>From Date :</strong> @fromDate &nbsp;|&nbsp;
+                <strong>To Date :</strong> @toDate
+                @if (opening) { <text>&nbsp;|&nbsp; <strong>With Opening Balance</strong></text> }
+                @if (pct) { <text>&nbsp;|&nbsp; <strong>With Percentage</strong></text> }
+            </td>
+        </tr>
+        <tr class="meta-spacer"><td colspan="@item"></td></tr>
+    </text>;
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
+    Func<int, IHtmlContent> colHeader = @<tr>
+        @if (byBranch) { <th>Branch</th> }
+        @if (byCC) { <th>Collection Center</th> }
+        @if (byGroup) { <th>Member Group</th> }
+        <th>S.N.</th><th>MemberId</th><th>AccountNo</th><th class="text-right">Count</th>
+        @if (opening) { <th class="text-right">Opening</th> }
+        <th class="text-right">Deposit</th><th class="text-right">Withdrawl</th><th class="text-right">Net Balance</th>
+        @if (pct) { <th class="text-right">%</th> }
+    </tr>;
 
-            /* Stop <thead> from re-printing on every page */
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-            }
-
-                .data-table td, .data-table th {
-                    padding: 4px 6px;
-                }
-
-                .data-table th {
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                }
-
-                .data-table tbody tr td {
-                    border-bottom: 1px solid #eee;
-                }
-
-                .data-table tr,
-                .group-header td,
-                .grand-total td {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-                border: none;
-            }
-
-            .meta-row td {
-                padding: 4px 6px;
-                font-size: 9pt;
-                border: none;
-            }
-
-            .meta-spacer td {
-                height: 8px;
-                border: none;
-            }
-
-            .group-header td {
-                font-weight: bold;
-                border-top: 1px solid #999;
-                border-bottom: 1px solid #999;
-            }
-
-            .grand-total td {
-                border-top: 2px solid #000;
-                font-weight: bold;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                body {
-                    margin: 0;
-                    padding: 0;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel && showHeader)
+    Func<int, IHtmlContent> row = @<text>
+        @{ var ln = lines[item]; }
+        @if (ln.Kind == 'H')
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            var grp = groups[ln.Group];
+            <tr class="group-header">
+                @if (byBranch) { <td>@Dash(grp.Branch)</td> }
+                @if (byCC) { <td>@Dash(grp.Center)</td> }
+                @if (byGroup) { <td>@Dash(grp.Grp)</td> }
+                <td colspan="3">@grp.SavingType</td>
+                <td class="text-right">@grp.Count</td>
+                @if (opening) { <td class="text-right">@Amt(grp.Opening)</td> }
+                <td class="text-right">@Amt(grp.Deposit)</td>
+                <td class="text-right">@Amt(grp.Withdraw)</td>
+                <td class="text-right">@Amt(grp.Balance)</td>
+                @if (pct) { <td class="text-right">@(gBal == 0 ? "0.00%" : (grp.Balance / gBal * 100).ToString("F2") + "%")</td> }
+            </tr>
         }
+        else if (ln.Kind == 'A')
+        {
+            var ac = groups[ln.Group].Accounts[ln.Item];
+            <tr class="detail-row">
+                @if (byBranch) { <td></td> }
+                @if (byCC) { <td></td> }
+                @if (byGroup) { <td></td> }
+                <td class="text-center">@ln.Sn</td>
+                <td><div class="c">@Dash(ac.MemberId)</div></td>
+                <td><div class="c">@Dash(ac.AccountNo)</div></td>
+                <td></td>
+                @if (opening) { <td class="text-right">@Amt(ac.Opening)</td> }
+                <td class="text-right">@Amt(ac.Deposit)</td>
+                <td class="text-right">@Amt(ac.Withdraw)</td>
+                <td class="text-right">@Amt(ac.Balance)</td>
+                @if (pct) { <td></td> }
+            </tr>
+        }
+        else
+        {
+            <tr class="grand-total">
+                @if (byBranch) { <td></td> }
+                @if (byCC) { <td></td> }
+                @if (byGroup) { <td></td> }
+                <td colspan="3">Grand Total</td>
+                <td class="text-right">@gCount</td>
+                @if (opening) { <td class="text-right">@Amt(totalOpening)</td> }
+                <td class="text-right">@Amt(totalDeposit)</td>
+                <td class="text-right">@Amt(totalWithdraw)</td>
+                <td class="text-right">@Amt(totalBalance)</td>
+                @if (pct) { <td class="text-right">100.00%</td> }
+            </tr>
+        }
+    </text>;
 
-        <table class="data-table">
-            <thead>
-                @if (showHeader)
-                {
-                    <tr class="meta-title">
-                        <td colspan="@colCount">Savings Type Wise Individual Balance Report</td>
-                    </tr>
-                    <tr class="meta-row">
-                        <td colspan="@colCount"><strong>Branch Name :</strong> @branchName</td>
-                    </tr>
-                    <tr class="meta-row">
-                        <td colspan="@colCount">
-                            <strong>Report Generated On:</strong> @generatedOn &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>From Date :</strong> @fromDate &nbsp;&nbsp;|&nbsp;&nbsp;
-                            <strong>To Date :</strong> @toDate
-                            @if (openingBalance)
-                            {
-                                <text>&nbsp;&nbsp;|&nbsp;&nbsp; <strong>With Opening Balance</strong></text>
-                            }
-                            @if (percentageBalance)
-                            {
-                                <text>&nbsp;&nbsp;|&nbsp;&nbsp; <strong>With Percentage</strong></text>
-                            }
-                        </td>
-                    </tr>
-                    <tr class="meta-spacer"><td colspan="@colCount"></td></tr>
-                }
-                <tr>
-                    @if (groupByBranch)
-                    {
-                        <th>Branch</th>
-                    }
-                    @if (groupByCollectionCenter)
-                    {
-                        <th>Collection Center</th>
-                    }
-                    @if (groupByMemberGroup)
-                    {
-                        <th>Member Group</th>
-                    }
-                    <th style="width:6%;">S.N.</th>
-                    <th style="width:14%;">MemberId</th>
-                    <th style="width:14%;">AccountNo</th>
-                    <th class="text-right" style="width:8%;">Count</th>
-                    @if (openingBalance)
-                    {
-                        <th class="text-right">Opening</th>
-                    }
-                    <th class="text-right">Deposit</th>
-                    <th class="text-right">Withdrawl</th>
-                    <th class="text-right">Net Balance</th>
-                    @if (percentageBalance)
-                    {
-                        <th class="text-right">%</th>
-                    }
-                </tr>
-            </thead>
-            <tbody>
-                @if (groups.Any())
-                {
-                    foreach (var g in groups)
-                    {
-                        <tr class="group-header">
-                            @if (groupByBranch)
-                            {
-                                <td>@NullDisplay(g.BranchName)</td>
-                            }
-                            @if (groupByCollectionCenter)
-                            {
-                                <td>@NullDisplay(g.CollectionCenterName)</td>
-                            }
-                            @if (groupByMemberGroup)
-                            {
-                                <td>@NullDisplay(g.MemberGroupName)</td>
-                            }
-                            <td colspan="@labelColspan">@g.SavingType</td>
-                            @if (openingBalance)
-                            {
-                                <td class="text-right">@FormatAmount(g.Opening)</td>
-                            }
-                            <td class="text-right">@g.Count</td>
-                            <td class="text-right">@FormatAmount(g.Deposit)</td>
-                            <td class="text-right">@FormatAmount(g.Withdraw)</td>
-                            <td class="text-right">@FormatAmount(g.Balance)</td>
-                            @if (percentageBalance)
-                            {
-                                <td class="text-right">@(grandBalanceForPct == 0 ? "0.00%" : ((g.Balance / grandBalanceForPct) * 100).ToString("F2") + "%")</td>
-                            }
-                        </tr>
-                        foreach (var acc in g.Accounts)
-                        {
-                            sn++;
-                            <tr>
-                                @if (groupByBranch)
-                                {
-                                    <td></td>
-                                }
-                                @if (groupByCollectionCenter)
-                                {
-                                    <td></td>
-                                }
-                                @if (groupByMemberGroup)
-                                {
-                                    <td></td>
-                                }
-                                <td class="text-center">@sn</td>
-                                <td>@NullDisplay(acc.MemberId)</td>
-                                <td>@NullDisplay(acc.AccountNo)</td>
-                                @if (openingBalance)
-                                {
-                                    <td class="text-right">@FormatAmount(acc.Opening)</td>
-                                }
-                                <td></td>
-                                <td class="text-right">@FormatAmount(acc.Deposit)</td>
-                                <td class="text-right">@FormatAmount(acc.Withdraw)</td>
-                                <td class="text-right">@FormatAmount(acc.Balance)</td>
-                                @if (percentageBalance)
-                                {
-                                    <td></td>
-                                }
-                            </tr>
-                        }
-                    }
-                    <tr class="grand-total">
-                        @if (groupByBranch)
-                        {
-                            <td></td>
-                        }
-                        @if (groupByCollectionCenter)
-                        {
-                            <td></td>
-                        }
-                        @if (groupByMemberGroup)
-                        {
-                            <td></td>
-                        }
-                        <td colspan="@labelColspan"><strong>Grand Total</strong></td>
-                        @if (openingBalance)
-                        {
-                            <td class="text-right"><strong>@FormatAmount(totalOpening)</strong></td>
-                        }
-                        <td class="text-right"><strong>@grandCount</strong></td>
-                        <td class="text-right"><strong>@FormatAmount(totalDeposit)</strong></td>
-                        <td class="text-right"><strong>@FormatAmount(totalWithdraw)</strong></td>
-                        <td class="text-right"><strong>@FormatAmount(totalBalance)</strong></td>
-                        @if (percentageBalance)
-                        {
-                            <td class="text-right"><strong>100.00%</strong></td>
-                        }
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="@colCount" class="text-center">No data found</td></tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    var sheet = new SheetReport
+    {
+        Data = Model,
+        Title = "Savings Type Wise Individual Balance Report",
+        SheetName = "SavingTypeWiseIndividualBalance",
+        Cols = widths.ToArray(),
+        RowCount = lines.Count,
+        Row = row,
+        Subheader = subheader,
+        ColHeader = colHeader,
+        KeepWithNext = i => lines[i].Kind == 'H',   // a group header never ends a page
+        RowMm = 7, HeaderMm = 8, FirstPageExtraMm = 70,
+        EmptyText = "No data found"
+    };
+}
+@await Html.PartialAsync("_SheetReport", sheet) *@
+
+
+
+
+
+@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.SavingAcWiseReport
+@using NexgenCosysReport.Services.ReportService.Table
+@model Dictionary<string, object>
+@{
+    Layout = null;
+
+    // ── 1. DATA (set by the controller) ──
+    var accountRows           = (Model["Rows"] as List<SavingTypeWiseIndividualBalanceRowDto>) ?? new();
+    var totalDeposit          = Model["TotalDeposit"] as decimal? ?? 0;
+    var totalWithdraw         = Model["TotalWithdraw"] as decimal? ?? 0;
+    var totalBalance          = Model["TotalBalance"] as decimal? ?? 0;
+    var totalOpening          = Model["TotalOpening"] as decimal? ?? 0;
+    var fromDate              = Model["FromDate"]?.ToString() ?? "";
+    var toDate                = Model["ToDate"]?.ToString() ?? "";
+    var branchName            = Model["BranchName"]?.ToString() ?? "";
+    var showOpeningBalance    = Model["OpeningBalance"] as bool? ?? false;
+    var showPercentage        = Model["PercentageBalance"] as bool? ?? false;
+    var groupByBranch         = Model["GroupByBranch"] as bool? ?? false;
+    var groupByCollectionCenter = Model["GroupByCollectionCenter"] as bool? ?? false;
+    var groupByMemberGroup    = Model["GroupByMemberGroup"] as bool? ?? false;
+    var generatedOn           = DateTime.Now.ToString("yyyy/MM/dd");
+
+    // negative amounts are shown in brackets: (1,234.50)
+    string FormatAmount(decimal amount) => amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
+    string DashIfEmpty(string? text) => string.IsNullOrWhiteSpace(text) ? "-" : text;
+
+    // ── group by saving type: group line with totals, accounts underneath ──
+    var savingTypeGroups = accountRows
+        .GroupBy(accountRow => string.IsNullOrWhiteSpace(accountRow.SavingType) ? "-" : accountRow.SavingType!)
+        .OrderBy(rowsOfSavingType => rowsOfSavingType.Key, StringComparer.OrdinalIgnoreCase)
+        .Select(rowsOfSavingType => new
+        {
+            SavingType       = rowsOfSavingType.Key,
+            AccountCount     = rowsOfSavingType.Select(accountRow => accountRow.AccountNo)
+                                               .Where(accountNo => !string.IsNullOrWhiteSpace(accountNo))
+                                               .Distinct().Count(),
+            Opening          = rowsOfSavingType.Sum(accountRow => accountRow.Opening),
+            Deposit          = rowsOfSavingType.Sum(accountRow => accountRow.Deposit),
+            Withdraw         = rowsOfSavingType.Sum(accountRow => accountRow.Withdraw),
+            Balance          = rowsOfSavingType.Sum(accountRow => accountRow.Balance),
+            BranchName       = rowsOfSavingType.Select(accountRow => accountRow.BranchName).FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)),
+            CollectionCenter = rowsOfSavingType.Select(accountRow => accountRow.CollectionCenterName).FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)),
+            MemberGroup      = rowsOfSavingType.Select(accountRow => accountRow.MemberGroupName).FirstOrDefault(name => !string.IsNullOrWhiteSpace(name)),
+            Accounts         = rowsOfSavingType.ToList()
+        }).ToList();
+
+    var sumOfGroupBalances    = savingTypeGroups.Sum(savingTypeGroup => savingTypeGroup.Balance);
+    var totalAccountCount     = savingTypeGroups.Sum(savingTypeGroup => savingTypeGroup.AccountCount);
+    var leadingColumnCount    = (groupByBranch ? 1 : 0) + (groupByCollectionCenter ? 1 : 0) + (groupByMemberGroup ? 1 : 0);   // optional columns before S.N.
+
+    // ── 2. COLUMNS (optional ones depend on the filters) ──
+    var table = new ReportTable(Model,
+            title: "Savings Type Wise Individual Balance Report",
+            sheetName: "SavingTypeWiseIndividualBalance");
+
+    if (groupByBranch)           table.Column("Branch", 12);
+    if (groupByCollectionCenter) table.Column("Collection Center", 12);
+    if (groupByMemberGroup)      table.Column("Member Group", 12);
+    table.Column("S.N.",      5, Align.Center)
+         .Column("MemberId", 12)
+         .Column("AccountNo", 15)
+         .Column("Count",     7, Align.Right);
+    if (showOpeningBalance)      table.Column("Opening", 12, Align.Right);
+    table.Column("Deposit",     12, Align.Right)
+         .Column("Withdrawl",   12, Align.Right)
+         .Column("Net Balance", 12, Align.Right);
+    if (showPercentage)          table.Column("%", 7, Align.Right);
+
+    table.Sizing(rowMm: 7, headerMm: 8, firstPageExtraMm: 70);
+
+    // ── 3. TITLE BLOCK ──
+    table.MetaPair("Branch Name :", branchName, "From Date :", fromDate)
+         .MetaPair("Report Generated On :", generatedOn, "To Date :", toDate);
+
+    // ── 4. ROWS ──
+    var serialNumber = 0;
+    foreach (var savingTypeGroup in savingTypeGroups)
+    {
+        // group line: optional cells, saving type spanning S.N./MemberId/AccountNo, then the totals
+        var groupCells = new List<ReportCell>();
+        if (groupByBranch)           groupCells.Add(ReportCell.Left(DashIfEmpty(savingTypeGroup.BranchName)));
+        if (groupByCollectionCenter) groupCells.Add(ReportCell.Left(DashIfEmpty(savingTypeGroup.CollectionCenter)));
+        if (groupByMemberGroup)      groupCells.Add(ReportCell.Left(DashIfEmpty(savingTypeGroup.MemberGroup)));
+        groupCells.Add(ReportCell.Left(savingTypeGroup.SavingType, 3));
+        groupCells.Add(ReportCell.Right(savingTypeGroup.AccountCount.ToString()));
+        if (showOpeningBalance)      groupCells.Add(ReportCell.Right(FormatAmount(savingTypeGroup.Opening)));
+        groupCells.Add(ReportCell.Right(FormatAmount(savingTypeGroup.Deposit)));
+        groupCells.Add(ReportCell.Right(FormatAmount(savingTypeGroup.Withdraw)));
+        groupCells.Add(ReportCell.Right(FormatAmount(savingTypeGroup.Balance)));
+        if (showPercentage)
+            groupCells.Add(ReportCell.Right(sumOfGroupBalances == 0
+                ? "0.00%"
+                : (savingTypeGroup.Balance / sumOfGroupBalances * 100).ToString("F2") + "%"));
+        table.GroupBy(groupCells.ToArray());
+
+        // one row per account
+        foreach (var account in savingTypeGroup.Accounts)
+        {
+            var accountValues = new List<string>();
+            for (var columnIndex = 0; columnIndex < leadingColumnCount; columnIndex++) accountValues.Add("");
+            accountValues.Add((++serialNumber).ToString());
+            accountValues.Add(DashIfEmpty(account.MemberId));
+            accountValues.Add(DashIfEmpty(account.AccountNo));
+            accountValues.Add("");                                   // Count is only shown on the group line
+            if (showOpeningBalance) accountValues.Add(FormatAmount(account.Opening));
+            accountValues.Add(FormatAmount(account.Deposit));
+            accountValues.Add(FormatAmount(account.Withdraw));
+            accountValues.Add(FormatAmount(account.Balance));
+            if (showPercentage) accountValues.Add("");
+            table.Data(accountValues.ToArray());
+        }
+    }
+
+    if (savingTypeGroups.Count > 0)
+    {
+        var totalValues = new List<string> { totalAccountCount.ToString() };
+        if (showOpeningBalance) totalValues.Add(FormatAmount(totalOpening));
+        totalValues.Add(FormatAmount(totalDeposit));
+        totalValues.Add(FormatAmount(totalWithdraw));
+        totalValues.Add(FormatAmount(totalBalance));
+        if (showPercentage) totalValues.Add("100.00%");
+        table.Total("Grand Total", leadingColumnCount + 3, totalValues.ToArray());   // label spans the leading columns + S.N./MemberId/AccountNo
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

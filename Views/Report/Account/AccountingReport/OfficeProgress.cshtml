@@ -1,107 +1,83 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.AccountingReport;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.AccountingReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
-
 @{
     Layout = null;
-    var rows = (Model["Rows"] as List<OfficeProgressRowDto>) ?? new List<OfficeProgressRowDto>();
-    var grandTotal = Model["GrandTotal"] as decimal? ?? 0;
-    var tillDate = Model["TillDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "";
-    var reportType = Model["ReportType"]?.ToString() ?? "";
-    var provisionType = Model["ProvisionType"]?.ToString() ?? "";
-    var enable1to30 = Model["Enable1to30Days"] as bool? ?? false;
-    var groupByBranch = Model["GroupByBranch"] as bool? ?? false;
-    var groupByCollectionCenter = Model["GroupByCollectionCenter"] as bool? ?? false;
-    var viewDetail = Model["ViewDetail"] as bool? ?? true;
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fontSize = "8pt";
+    var metaFontSize = "8.5pt";
+
+    string Text(string key, string fallback = "") =>
+        Model.TryGetValue(key, out var value) && value != null ? value.ToString() ?? fallback : fallback;
+
+    bool Flag(string key) =>
+        Model.TryGetValue(key, out var value) && value is bool flag && flag;
+
+    var rows = (Model["Rows"] as IEnumerable<OfficeProgressRowDto>)?.ToList()
+        ?? new List<OfficeProgressRowDto>();
+
+    var grandTotal = Model.TryGetValue("GrandTotal", out var grandTotalValue) && grandTotalValue is decimal grandTotalAmount
+        ? grandTotalAmount
+        : 0m;
+
+    var reportType = Text("ReportType");
+    var branchName = Text("BranchName", "All");
+    var tillDate = Text("TillDate");
+    var provisionType = Text("ProvisionType");
+    var enable1to30Days = Flag("Enable1to30Days");
+    var groupByBranch = Flag("GroupByBranch");
+    var groupByCollectionCenter = Flag("GroupByCollectionCenter");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
     string FormatAmount(decimal amount) =>
         amount < 0 ? $"({Math.Abs(amount):N2})" : amount.ToString("N2");
 
-    int sn = 0;
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Office Progress Report</title>
-    <style>
-            * { margin:0; padding:0; box-sizing:border-box; }
-            body { margin:0; padding:0; font-family:Arial, sans-serif; font-size:9pt; background:white; }
-            .report-container { width:100%; overflow:visible; }
-            .data-table { width:100%; border-collapse:collapse; font-size:9pt; }
-            .data-table td, .data-table th { padding:4px 6px; border:1px solid #ddd; }
-            .data-table th { border-top:2px solid #000; border-bottom:1px solid #000; background:#f2f2f2; }
-            .section-title { background:#e6e6e6; font-weight:bold; text-align:center; }
-            .grand-total { border-top:2px solid #000; border-bottom:2px solid #000; font-weight:bold; background:#f9f9f9; }
-            .text-right { text-align:right !important; }
-            .text-center { text-align:center !important; }
-            .sub-total { font-weight:bold; background:#f0f0f0; }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
-        {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+    var title = string.IsNullOrWhiteSpace(reportType) ? "Office Progress Report" : $"{reportType} Report";
 
-        <table class="data-table">
-            <thead>
-                <tr><th colspan="6" style="text-align:center; font-size:14pt; font-weight:bold; text-decoration:underline;">@reportType Report</th></tr>
-                <tr><td colspan="6"><strong>Branch:</strong> @branchName &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Till Date:</strong> @tillDate &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Generated:</strong> @generatedOn &nbsp;&nbsp;|&nbsp;&nbsp; <strong>Provision:</strong> @provisionType &nbsp;&nbsp;|&nbsp;&nbsp; <strong>1-30 Days:</strong> @(enable1to30 ? "Yes" : "No")</td></tr>
-                <tr>
-                    <th style="width:5%;">SN</th>
-                    @if (groupByBranch)
-                    {
-                        <th style="width:15%;">Branch</th>
-                    }
-                    @if (groupByCollectionCenter)
-                    {
-                        <th style="width:15%;">Collection Center</th>
-                    }
-                    <th style="width:20%;">Member</th>
-                    <th style="width:15%;">Member Id</th>
-                    <th style="width:20%;" class="text-right">Balance</th>
-                    <th style="width:20%;" class="text-right">Amount</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (rows.Any())
-                {
-                    sn = 0;
-                    foreach (var row in rows)
-                    {
-                        sn++;
-                        <tr>
-                            <td class="text-center">@sn</td>
-                            @if (groupByBranch)
-                            {
-                                <td>@row.BranchName</td>
-                            }
-                            @if (groupByCollectionCenter)
-                            {
-                                <td>@row.CollectionCenterName</td>
-                            }
-                            <td>@row.MemberName</td>
-                            <td>@row.MemberId</td>
-                            <td class="text-right">@FormatAmount(row.Balance)</td>
-                            <td class="text-right">@FormatAmount(row.Amount)</td>
-                        </tr>
-                    }
-                    <tr class="grand-total">
-                        <td colspan="@(3 + (groupByBranch ? 1 : 0) + (groupByCollectionCenter ? 1 : 0))" class="text-right"><strong>Total</strong></td>
-                        <td class="text-right"><strong>@FormatAmount(grandTotal)</strong></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="6" class="text-center">No data found</td></tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    var table = new ReportTable(Model, title: title, sheetName: "OfficeProgressReport")
+        .Column("SN", 5, Align.Center);
+
+    if (groupByBranch)
+        table.Column("Branch", 15);
+    if (groupByCollectionCenter)
+        table.Column("Collection Center", 15);
+
+    table
+        .Column("Member", 20)
+        .Column("Member Id", 15)
+        .Column("Balance", 20, Align.Right)
+        .Column("Amount", 20, Align.Right)
+        .Sizing(rowMm: 5.5, headerMm: 8, firstPageExtraMm: 70)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 4px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }");
+
+    table.MetaPair("Branch Name :", branchName, "Till Date :", tillDate)
+         .MetaPair("Report Generated On :", generatedOn, "Provision :", provisionType)
+         .MetaRow(Fmt.Labeled("1-30 Days :", enable1to30Days ? "Yes" : "No"));
+
+    var columnCount = 5 + (groupByBranch ? 1 : 0) + (groupByCollectionCenter ? 1 : 0);
+
+    var serialNumber = 0;
+    foreach (var row in rows)
+    {
+        serialNumber++;
+
+        var values = new List<string> { serialNumber.ToString() };
+        if (groupByBranch)
+            values.Add($"{row.BranchName}");
+        if (groupByCollectionCenter)
+            values.Add($"{row.CollectionCenterName}");
+        values.Add($"{row.MemberName}");
+        values.Add($"{row.MemberId}");
+        values.Add(FormatAmount(row.Balance));
+        values.Add(FormatAmount(row.Amount));
+
+        table.Data(values.ToArray());
+    }
+
+    if (rows.Count > 0)
+        table.Total("Total :", columnCount - 1, FormatAmount(grandTotal));
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

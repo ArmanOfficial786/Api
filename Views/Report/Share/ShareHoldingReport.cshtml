@@ -1,283 +1,119 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Share;
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Share
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+    const int ColumnCount = 11;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
     var rows = (Model["Rows"] as List<ShareHoldingRowDto>) ?? new List<ShareHoldingRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalMembers = Model.ContainsKey("TotalMembers") ? (Model["TotalMembers"] as int? ?? 0) : 0;
-    var totalNoShare = Model.ContainsKey("TotalNoShare") ? (Model["TotalNoShare"] as decimal? ?? 0) : 0;
-    var totalAmount = Model.ContainsKey("TotalAmount") ? (Model["TotalAmount"] as decimal? ?? 0) : 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var officeName = Model["OfficeName"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var officeName = Text("OfficeName", "All");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Grouped by Member — Member Id/Name shown once as a group header, each
-    // holding row underneath shows Share From/To, No of Share, Holding
-    // From/To, No of Days, Amount, Share Type, Group, then a Total row
-    // repeating "Total:" with summed No of Share and Amount. Rows must
-    // arrive pre-sorted by MemberId (see repository's ORDER BY) since
-    // GroupBy preserves first-seen order, not sorted order.
     var memberGroups = rows
         .GroupBy(r => new { r.MemberId, r.MemberName })
         .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Share Holding Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalMembers = (int)TotalOr("TotalMembers", memberGroups.Count);
+    var totalNoShare = TotalOr("TotalNoShare", rows.Sum(r => r.TotalNoShare ?? 0));
+    var totalAmount = TotalOr("TotalAmount", rows.Sum(r => r.Amount ?? 0));
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .report-title {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            /* Own auto-layout table for the subheader so labels never wrap
-                           or overlap — same fix applied throughout this thread. */
-            .meta-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 6px;
-            }
-
-                .meta-table td {
-                    padding: 3px 6px;
-                    font-size: 9pt;
-                    white-space: nowrap;
-                    vertical-align: top;
-                }
-
-            .meta-left {
-                text-align: left;
-                width: 50%;
-            }
-
-            .meta-right {
-                text-align: right;
-                width: 50%;
-            }
-
-            .meta-spacer td {
-                height: 8px;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-                .data-table th {
-                    border-top: none;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                    white-space: normal;
-                    font-weight: bold;
-                }
-
-                    .data-table th.text-right,
-                    .data-table td.text-right {
-                        text-align: right;
-                    }
-
-            .member-row td {
-                font-weight: bold;
-                padding-top: 8px;
-                padding-bottom: 2px;
-                border: none;
-            }
-
-            .member-row.first-group td {
-                padding-top: 2px;
-            }
-
-            .detail-row td {
-                border: none;
-            }
-
-            .subtotal-row td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-                padding-top: 3px;
-                padding-bottom: 6px;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Share Holding Report", sheetName: "ShareHolding")
+        .Column("Member Id", 10)
+        .Column("Member Name", 17)
+        .Column("Share From", 8)
+        .Column("Share To", 8)
+        .Column("No Of Share", 8, Align.Right)
+        .Column("Holding From Date", 10)
+        .Column("Holding To Date", 10)
+        .Column("No of Days", 7, Align.Right)
+        .Column("Amount (Rs.)", 10, Align.Right)
+        .Column("Share Type", 9)
+        .Column("Group", 9)
+        .NoColumnHeader()
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            SubTotalBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 9, firstPageExtraMm: 60)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 0; border-bottom: 1px solid #000; white-space: normal; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; padding-top: 8px; padding-bottom: 2px; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-subtotal td { border-top: 1px solid #000; border-bottom: 0; padding-top: 3px; padding-bottom: 6px; }");
+
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+        5);
+    table.MetaRow(HtmlString.Empty, Fmt.Labeled("Branch Name :", officeName), 5);
+
+    table.Header();
+
+    foreach (var group in memberGroups)
+    {
+        var groupRows = group.ToList();
+
+        table.GroupBy(
+            ReportCell.Left(group.Key.MemberId ?? ""),
+            ReportCell.Left(group.Key.MemberName ?? "", ColumnCount - 1));
+
+        foreach (var row in groupRows)
+        {
+            table.Data(
+                "",
+                "",
+                row.ShareFrom ?? "",
+                row.ShareTO ?? "",
+                row.TotalNoShare?.ToString("N2") ?? "",
+                row.HoldingPeriodFromBs ?? "",
+                row.HoldingPeriodToBs ?? "",
+                row.HoldingNoDays?.ToString("N0") ?? "",
+                row.Amount?.ToString("N2") ?? "",
+                row.ShareType ?? "",
+                row.MemberGroup ?? "");
         }
 
-        <div class="report-title">Share Holding Report</div>
+        table.SubTotal(
+            $"{group.Key.MemberName ?? ""}   Total:", 4,
+            groupRows.Sum(r => r.TotalNoShare ?? 0).ToString("N2"),
+            "", "", "",
+            groupRows.Sum(r => r.Amount ?? 0).ToString("N2"),
+            "", "");
+    }
 
-        <table class="meta-table">
-            <tr>
-                <td class="meta-left"><strong>Report Generated On :</strong> @generatedOn</td>
-                <td class="meta-right"><strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp; <strong>To Date :</strong> @toDate</td>
-            </tr>
-            <tr>
-                <td class="meta-left"></td>
-                <td class="meta-right"><strong>Branch Name :</strong> @officeName</td>
-            </tr>
-            <tr class="meta-spacer"><td colspan="2"></td></tr>
-        </table>
-
-        <table class="data-table" data-sheet-name="ShareHolding">
-            <colgroup>
-                <col style="width:10%;" />
-                <col style="width:17%;" />
-                <col style="width:8%;" />
-                <col style="width:8%;" />
-                <col style="width:8%;" />
-                <col style="width:10%;" />
-                <col style="width:10%;" />
-                <col style="width:7%;" />
-                <col style="width:10%;" />
-                <col style="width:9%;" />
-                <col style="width:9%;" />
-            </colgroup>
-            <tbody>
-                <tr>
-                    <th>Member Id</th>
-                    <th>Member Name</th>
-                    <th>Share From</th>
-                    <th>Share To</th>
-                    <th class="text-right">No Of Share</th>
-                    <th>Holding From Date</th>
-                    <th>Holding To Date</th>
-                    <th class="text-right">No of Days</th>
-                    <th class="text-right">Amount (Rs.)</th>
-                    <th>Share Type</th>
-                    <th>Group</th>
-                </tr>
-
-                @if (memberGroups.Any())
-                {
-                    bool isFirstGroup = true;
-                    foreach (var group in memberGroups)
-                    {
-                        var groupRows = group.ToList();
-
-                        <tr class="member-row @(isFirstGroup ? "first-group" : "")">
-                            <td>@(group.Key.MemberId ?? "")</td>
-                            <td colspan="10">@(group.Key.MemberName ?? "")</td>
-                        </tr>
-                        isFirstGroup = false;
-
-                        foreach (var row in groupRows)
-                        {
-                            <tr class="detail-row">
-                                <td></td>
-                                <td></td>
-                                <td>@(row.ShareFrom ?? "")</td>
-                                <td>@(row.ShareTO ?? "")</td>
-                                <td class="text-right">@(row.TotalNoShare?.ToString("N2") ?? "")</td>
-                                <td>@(row.HoldingPeriodFromBs ?? "")</td>
-                                <td>@(row.HoldingPeriodToBs ?? "")</td>
-                                <td class="text-right">@(row.HoldingNoDays?.ToString("N0") ?? "")</td>
-                                <td class="text-right">@(row.Amount?.ToString("N2") ?? "")</td>
-                                <td>@(row.ShareType ?? "")</td>
-                                <td>@(row.MemberGroup ?? "")</td>
-                            </tr>
-                        }
-
-                        <tr class="subtotal-row">
-                            <td></td>
-                            <td>@(group.Key.MemberName ?? "")</td>
-                            <td colspan="2" class="text-right">Total:</td>
-                            <td class="text-right">@groupRows.Sum(r => r.TotalNoShare ?? 0).ToString("N2")</td>
-                            <td colspan="3"></td>
-                            <td class="text-right">@groupRows.Sum(r => r.Amount ?? 0).ToString("N2")</td>
-                            <td colspan="2"></td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">
-                            Total Members: @totalMembers &nbsp;&nbsp;|&nbsp;&nbsp; Total Records: @totalRecords
-                        </td>
-                        <td class="text-right">@totalNoShare.ToString("N2")</td>
-                        <td colspan="3"></td>
-                        <td class="text-right">@totalAmount.ToString("N2")</td>
-                        <td colspan="2"></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="11" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total(
+            $"Total Members: {totalMembers}   |   Total Records: {totalRecords}", 4,
+            totalNoShare.ToString("N2"),
+            "", "", "",
+            totalAmount.ToString("N2"),
+            "", "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

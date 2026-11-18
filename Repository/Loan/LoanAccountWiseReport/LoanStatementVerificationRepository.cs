@@ -1,5 +1,4 @@
-﻿// Repository/Loan/OtherReports/LoanStatementVerificationRepository.cs
-using Dapper;
+﻿using Dapper;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using NexgenCosysReport.DbContext;
@@ -13,6 +12,9 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
 {
     public class LoanStatementVerificationRepository : ILoanStatementVerificationRepository
     {
+        // Alias returned by sp_7_16_GetLoanStatementVerification (lsv.VerifiedToDateOnBs as PassBookVerifyTill)
+        private const string VerifiedTillColumn = "PassBookVerifyTill";
+
         private readonly AppDbContext _context;
         private readonly IDateConverterService _dateConverter;
         private readonly ILogger<LoanStatementVerificationRepository> _logger;
@@ -27,109 +29,123 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
             _logger = logger;
         }
 
-        // --------------------------------------------------------------
-        // @SqlFilterExpOrder — column names match the SP's final SELECT
-        // Preserves the substring-based natural sort for MemberId and
-        // LoanAccountNo exactly as in the legacy BLL.
-        // --------------------------------------------------------------
-        private static string BuildSqlOrderBy(LoanStatementVerificationRequestDto request)
+        // Same mapping as CLmtLoanIssueReports.GetLoanStatementVerification,
+        // using the SP's real output column names
+        private static string BuildSqlOrderBy(string? orderBy)
         {
-            if (string.IsNullOrEmpty(request.OrderBy) || request.OrderBy == "-1")
+            if (string.IsNullOrWhiteSpace(orderBy) || orderBy == "-1")
                 return string.Empty;
 
-            return request.OrderBy.Trim() switch
+            return orderBy.Trim() switch
             {
                 "Member Name" => " order by MemberName ",
                 "Member Id" => " order by substring(MemberId, 1,(len(MemberId)-charindex('-', MemberId))-1), MemberId  ",
                 "Account No" => " order by substring(LoanAccountNo, 1,(len(LoanAccountNo)-charindex('-', LoanAccountNo))-1), LoanAccountNo",
-                "Verified Till" => " order by PassBookVerifyTill ",
+                "Verified Till" => " order by " + VerifiedTillColumn + " ",
                 "Verified Date" => " order by VerifiedDate ",
                 "Verified By" => " order by VerifiedBy ",
                 _ => string.Empty
             };
         }
 
-        // --------------------------------------------------------------
-        // Guards against injection through the comma-separated branch id
-        // list, same pattern used across the other reports.
-        // --------------------------------------------------------------
-        private static string SanitizeBranchIds(string? branchIds)
+        // "1, 2,3" -> [1,2,3]; ignores "-1", "string" and non-numeric values
+        private static List<long> ParseIds(string? csv)
         {
-            if (string.IsNullOrWhiteSpace(branchIds) || branchIds == "-1" || branchIds == "string")
-                return string.Empty;
+            if (string.IsNullOrWhiteSpace(csv))
+                return new List<long>();
 
-            var validIds = branchIds
+            return csv
                 .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                .Where(id => long.TryParse(id, out _));
-
-            return string.Join(",", validIds);
+                .Select(s => long.TryParse(s, out var id) ? id : 0)
+                .Where(id => id > 0)
+                .Distinct()
+                .ToList();
         }
 
-        public async Task<LoanStatementVerificationData> GetReportDataAsync(LoanStatementVerificationRequestDto request)
+        // Swagger placeholders and blanks mean "not supplied"
+        private static string? CleanText(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            var v = value.Trim();
+            return v == "-1" || v.Equals("string", StringComparison.OrdinalIgnoreCase) ? null : v;
+        }
+
+        public async Task<LoanStatementVerificationData> GetReportDataAsync(
+            LoanStatementVerificationRequestDto request,
+            long userId)
         {
             try
             {
-                var branchIds = SanitizeBranchIds(request.BranchIds);
-
                 var connectionString = _context.Database.GetConnectionString();
                 using var connection = new SqlConnection(connectionString);
                 await connection.OpenAsync();
 
+                // 1. Offices: webform checkbox list = CUsmOffice.GetByUsmUserId(userId)
+                var allowedOfficeIds = (await connection.QueryAsync<long>(
+                    "SELECT DISTINCT UsmOfficeId FROM UsmRelationUserToOffice WHERE UsmUserId = @UserId",
+                    new { UserId = userId })).ToList();
+
+                if (allowedOfficeIds.Count == 0)
+                    throw new UnauthorizedAccessException("User has no office access.");
+
+                var requestedOfficeIds = ParseIds(request.BranchIds);
+                if (requestedOfficeIds.Except(allowedOfficeIds).Any())
+                    throw new UnauthorizedAccessException("You do not have access to one or more selected branches.");
+
+                // Nothing sent = webform "Select All" = all of the user's offices
+                var officeIds = requestedOfficeIds.Count > 0 ? requestedOfficeIds : allowedOfficeIds;
+
                 var sqlFilterExp = new StringBuilder();
                 string? memberName = null;
                 string? collectorName = null;
+                string? fromDateBs = null;
+                string? toDateBs = null;
 
-                // --------------------------------------------------------------
-                // Build filter expression matching legacy BLL:
-                // 1. Member filter (if MemberRegistrationId > 0)
-                // 2. Date range filter (if FromDateBs and ToDateBs provided)
-                // 3. Branch filter
-                // 4. Collector filter
-                // 5. ORDER BY
-                // --------------------------------------------------------------
-                if (request.MemberRegistrationId > 0)
+                var memberId = CleanText(request.MemberId);
+
+                if (memberId != null)
                 {
-                    sqlFilterExp.Append(" And mr.MemMemberRegistrationId = ").Append(request.MemberRegistrationId);
+                    // btnViewByMemberId_Click: member only, no dates, no collector.
+                    // MemberId is text (e.g. MR-01-202): escape quotes and wrap in quotes.
+                    sqlFilterExp.Append(" And MR.MemberId = '").Append(memberId.Replace("'", "''")).Append("'");
 
-                    // Get member name for display
                     memberName = await connection.QueryFirstOrDefaultAsync<string>(
                         @"SELECT FirstName + ' ' +
-                                 CASE WHEN MiddleName = '' THEN '' ELSE MiddleName + ' ' END +
+                                 CASE WHEN ISNULL(MiddleName,'') = '' THEN '' ELSE MiddleName + ' ' END +
                                  LastName
-                          FROM MemMemberRegistration 
-                          WHERE MemMemberRegistrationId = @Id",
-                        new { Id = request.MemberRegistrationId });
+                          FROM MemMemberRegistration
+                          WHERE MemberId = @MemberId",
+                        new { MemberId = memberId });
                 }
-
-                if (!string.IsNullOrEmpty(request.FromDateBs) && !string.IsNullOrEmpty(request.ToDateBs)
-                    && request.FromDateBs != "-1" && request.ToDateBs != "-1")
+                else
                 {
-                    var fromDateAd = await _dateConverter.NepaliToEnglishAsync(request.FromDateBs);
-                    var toDateAd = await _dateConverter.NepaliToEnglishAsync(request.ToDateBs);
+                    // btnViewByDate_Click: dates required, collector optional
+                    fromDateBs = request.FromDateBs;
+                    toDateBs = request.ToDateBs;
 
-                    var fromDateStr = fromDateAd.ToString("yyyy-MM-dd");
-                    var toDateStr = toDateAd.ToString("yyyy-MM-dd");
+                    var fromDateAd = await _dateConverter.NepaliToEnglishAsync(fromDateBs!);
+                    var toDateAd = await _dateConverter.NepaliToEnglishAsync(toDateBs!);
 
-                    sqlFilterExp.Append(" And lsv.VerifiedDateOn between '").Append(fromDateStr)
-                                .Append("' And '").Append(toDateStr).Append("' ");
+                    sqlFilterExp.Append(" And lsv.VerifiedDateOn between '").Append(fromDateAd.ToString("yyyy-MM-dd"))
+                                .Append("' And '").Append(toDateAd.ToString("yyyy-MM-dd")).Append("' ");
+
+                    if (request.CollectorId > 0)
+                    {
+                        sqlFilterExp.Append(" And li.HurCollectorId = ").Append(request.CollectorId);
+
+                        collectorName = await connection.QueryFirstOrDefaultAsync<string>(
+                            "SELECT CollectorFullName FROM HurCollector WHERE HurCollectorId = @Id",
+                            new { Id = request.CollectorId });
+                    }
                 }
 
-                if (!string.IsNullOrEmpty(branchIds))
-                {
-                    sqlFilterExp.Append(" And us.UsmOfficeId in (").Append(branchIds).Append(")");
-                }
+                // Offices (both modes). In the SP, "us" is UsmUser, so this matches the verifier's office, as in the webform.
+                sqlFilterExp.Append(" And us.UsmOfficeId in (").Append(string.Join(",", officeIds)).Append(")");
 
-                if (request.CollectorId != -1)
-                {
-                    sqlFilterExp.Append(" And li.HurCollectorId = ").Append(request.CollectorId);
+                var sqlFilterExpOrder = BuildSqlOrderBy(request.OrderBy);
 
-                    // Get collector name for display
-                    collectorName = await connection.QueryFirstOrDefaultAsync<string>(
-                        "SELECT CollectorFullName FROM HurCollector WHERE HurCollectorId = @Id",
-                        new { Id = request.CollectorId });
-                }
-
-                var sqlFilterExpOrder = BuildSqlOrderBy(request);
+                _logger.LogInformation("SP sp_7_16_GetLoanStatementVerification | exp={Exp} | order={Order}",
+                    sqlFilterExp, sqlFilterExpOrder);
 
                 var parameters = new DynamicParameters();
                 parameters.Add("@SqlFilterExp", sqlFilterExp.ToString(), DbType.String, size: -1);
@@ -142,27 +158,28 @@ namespace NexgenCosysReport.Repository.Loan.OtherReports
                     commandTimeout: 120
                 )).AsList();
 
-                // Get branch names for display
-                string branchName = "All";
-                if (!string.IsNullOrEmpty(branchIds))
-                {
-                    var names = await connection.QueryAsync<string>(
-                        $"SELECT OfficeName FROM UsmOffice WHERE UsmOfficeId IN ({branchIds})");
-                    var nameList = names.Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
-                    branchName = nameList.Count > 0 ? string.Join(", ", nameList) : "All";
-                }
+                // Header: names of the selected offices
+                var names = await connection.QueryAsync<string>(
+                    "SELECT OfficeName FROM UsmOffice WHERE UsmOfficeId IN @Ids",
+                    new { Ids = officeIds });
+                var nameList = names.Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+                var branchName = nameList.Count > 0 ? string.Join(", ", nameList) : "All";
 
                 return new LoanStatementVerificationData
                 {
                     Rows = rows,
                     TotalRecords = rows.Count,
-                    FromDateBs = request.FromDateBs,
-                    ToDateBs = request.ToDateBs,
+                    FromDateBs = fromDateBs,
+                    ToDateBs = toDateBs,
                     BranchName = branchName,
                     MemberName = memberName,
                     CollectorName = collectorName,
                     OrderBy = request.OrderBy
                 };
+            }
+            catch (UnauthorizedAccessException)
+            {
+                throw;
             }
             catch (Exception ex)
             {

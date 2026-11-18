@@ -1,21 +1,26 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.CollectorDetailReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
-    var rows = (Model["Rows"] as List<CollectorWiseCommissionSummaryRowDto>) ?? new List<CollectorWiseCommissionSummaryRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalCollectedAmount = Model["TotalCollectedAmount"] as decimal? ?? 0;
-    var totalCommissionAmount = Model["TotalCommissionAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-    var totalCollectors = Model["TotalCollectors"] as int? ?? 0;
 
-    // Preserve the order collectors first appear in (rows already come pre-ordered from the SP)
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal Dec(string key) => Model.TryGetValue(key, out var dv) && dv != null ? Convert.ToDecimal(dv) : 0m;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        var value = Dec(key);
+        return value != 0 ? value : fallback;
+    }
+
+    var rows = (Model["Rows"] as List<CollectorWiseCommissionSummaryRowDto>) ?? new List<CollectorWiseCommissionSummaryRowDto>();
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchNames = Text("BranchNames", "All Branches");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
     var groups = rows
         .GroupBy(r => r.Collector ?? "")
         .Select(g => new
@@ -26,183 +31,73 @@
             CommissionTotal = g.Sum(r => r.CommissionAmount ?? 0)
         })
         .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Collector Wise Commission Summary Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-            }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalCollectors = (int)TotalOr("TotalCollectors", groups.Count);
+    var totalCollectedAmount = Dec("TotalCollectedAmount");
+    var totalCommissionAmount = Dec("TotalCommissionAmount");
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .report-title {
-                text-align: center;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 10px 0;
-            }
-
-            .meta-row {
-                width: 100%;
-            }
-
-                .meta-row td {
-                    padding: 2px 0;
-                    border: none;
-                }
-
-            .meta-right {
-                text-align: right;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                margin-top: 8px;
-            }
-
-                .data-table td, .data-table th {
-                    padding: 4px 6px;
-                    border: none;
-                }
-
-                .data-table th {
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                }
-
-                .data-table thead {
-                    display: table-row-group;
-                }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .highlight-collected {
-                color: #2e7d32;
-                font-weight: bold;
-            }
-
-            .highlight-commission {
-                color: #1565c0;
-                font-weight: bold;
-            }
-
-            .group-header td {
-                font-weight: bold;
-                padding-top: 10px;
-            }
-
-            .group-total td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-            }
-
-            .grand-total td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-            }
-
-            @@media print {
-                .data-table thead {
-                    display: table-row-group;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Collector Wise Commission Summary Report", sheetName: "CollectorWiseCommissionSummary")
+        .Column("Collector Name", 20)
+        .Column("Type", 30)
+        .Column("Collected Amount", 25, Align.Right)
+        .Column("Commission Amount", 25, Align.Right)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            SubTotalBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 55)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 2px solid #000; border-bottom: 1px solid #000; white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; padding-top: 10px; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-data td.hl-collected { color: #2e7d32; font-weight: bold; }\n" +
+            "table.sheet-table tr.r-data td.hl-commission { color: #1565c0; font-weight: bold; }\n" +
+            "table.sheet-table tr.r-subtotal td { border-top: 1px solid #000; border-bottom: 0; }");
+
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchNames));
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On:", generatedOn),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+        2);
+
+    foreach (var group in groups)
+    {
+        if (!string.IsNullOrWhiteSpace(group.Collector))
+        {
+            table.GroupBy(
+                ReportCell.Left(group.Collector),
+                ReportCell.Left("", 3));
         }
 
-        <div class="report-title">Collector Wise Commission Summary Report</div>
+        foreach (var row in group.Items)
+        {
+            table.Data(
+                ReportCell.Left(""),
+                ReportCell.Left(row.Type ?? ""),
+                new ReportCell(Fmt.Amount(row.CollectedAmount), Align.Right, 1, "hl-collected"),
+                new ReportCell(Fmt.Amount(row.CommissionAmount), Align.Right, 1, "hl-commission"));
+        }
 
-        <table class="meta-row" style="width:100%;">
-            <tr>
-                <td><strong>Branch Name :</strong>&nbsp;&nbsp;@branchNames</td>
-                <td></td>
-            </tr>
-            <tr>
-                <td><strong>Report Generated On:</strong>&nbsp;&nbsp;@generatedOn</td>
-                <td class="meta-right">
-                    <strong>From Date :</strong>&nbsp;&nbsp;@fromDate&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-                    <strong>To Date :</strong>&nbsp;&nbsp;@toDate
-                </td>
-            </tr>
-        </table>
+        table.SubTotal(group.Collector, 2,
+            group.CollectedTotal.ToString("N2"),
+            group.CommissionTotal.ToString("N2"));
+    }
 
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th style="width:20%;">Collector Name</th>
-                    <th style="width:30%;">Type</th>
-                    <th style="width:25%;" class="text-right">Collected Amount</th>
-                    <th style="width:25%;" class="text-right">Commission Amount</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (groups.Any())
-                {
-                    foreach (var grp in groups)
-                    {
-                        if (!string.IsNullOrWhiteSpace(grp.Collector))
-                        {
-                            <tr class="group-header">
-                                <td>@grp.Collector</td>
-                                <td colspan="3"></td>
-                            </tr>
-                        }
-                        foreach (var row in grp.Items)
-                        {
-                            <tr>
-                                <td></td>
-                                <td>@(row.Type ?? "")</td>
-                                <td class="text-right highlight-collected">@(row.CollectedAmount.HasValue ? row.CollectedAmount.Value.ToString("N2") : "")</td>
-                                <td class="text-right highlight-commission">@(row.CommissionAmount.HasValue ? row.CommissionAmount.Value.ToString("N2") : "")</td>
-                            </tr>
-                        }
-                        <tr class="group-total">
-                            <td></td>
-                            <td class="text-right">@(!string.IsNullOrWhiteSpace(grp.Collector) ? grp.Collector : "")</td>
-                            <td class="text-right">@grp.CollectedTotal.ToString("N2")</td>
-                            <td class="text-right">@grp.CommissionTotal.ToString("N2")</td>
-                        </tr>
-                    }
-                    <tr class="grand-total">
-                        <td colspan="2" class="text-right">Grand Total (@totalCollectors Collector@(totalCollectors == 1 ? "" : "s"), @totalRecords Record@(totalRecords == 1 ? "" : "s"))</td>
-                        <td class="text-right">@totalCollectedAmount.ToString("N2")</td>
-                        <td class="text-right">@totalCommissionAmount.ToString("N2")</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="4" style="text-align:center;">No commission summary found for the selected criteria</td></tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total(
+            $"Grand Total ({totalCollectors} Collector{(totalCollectors == 1 ? "" : "s")}, {totalRecords} Record{(totalRecords == 1 ? "" : "s")})",
+            2,
+            totalCollectedAmount.ToString("N2"),
+            totalCommissionAmount.ToString("N2"));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

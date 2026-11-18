@@ -1,220 +1,91 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
-
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    // a missing amount prints blank (same as before); totals always print two decimals
+    string N(decimal? v) => v.HasValue ? v.Value.ToString("N2") : "";
+
     var rows = (Model["Rows"] as List<DayBookVoucherWiseRowDto>) ?? new List<DayBookVoucherWiseRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Grouped by Voucher Date — the date is shown once as a bold header, with all
-    // vouchers on that date listed underneath (Voucher Date column left blank on
-    // detail rows since the header already states it). Rows must arrive pre-sorted
-    // by VoucherDate (see repository's ORDER BY) since GroupBy preserves first-seen
-    // order, not sorted order.
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalAmount = TotalOr("TotalAmount", rows.Sum(r => r.Amount ?? 0));
+
+    // grouped by voucher date, in the order the repository returned the rows:
+    // it must already be sorted by VoucherDate
     var dateGroups = rows.GroupBy(r => r.VoucherDate ?? "").ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Day Book Voucher Wise Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-                font-weight: bold;
-            }
-
-            .date-header-row td {
-                font-weight: bold;
-                padding-top: 10px;
-                padding-bottom: 2px;
-                border: none;
-            }
-
-            .date-header-row.first-group td {
-                padding-top: 4px;
-            }
-
-            .detail-row td {
-                border: none;
-                padding: 3px 6px;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Day Book Voucher Wise Report", sheetName: "DayBookVoucherWise")
+        .Column("Voucher Date", 12)
+        .Column("Voucher No", 14)
+        .Column("Narration", 38)
+        .Column("Voucher Type", 18)
+        .Column("Amount", 18, Align.Right)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 70)   // one text line per row
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            // date line: bold, no rules
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; padding-top: 8px; }\n" +
+            // voucher rows: no rules
+            "table.sheet-table tr.r-data td { border-bottom: 0; }");
+
+    // ── title block ──
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+
+    // ── rows: one block per voucher date (date line, then its vouchers) ──
+    foreach (var group in dateGroups)
+    {
+        // date line: one cell spanning all columns
+        table.GroupTitle(group.Key);
+
+        foreach (var row in group)
+        {
+            table.Data(
+                "",                              // the date is already on the line above
+                row.VoucherNo ?? "",
+                row.Narration ?? "",
+                row.Type ?? "",
+                N(row.Amount));
         }
+    }
 
-        <table class="data-table" data-sheet-name="DayBookVoucherWise">
-            <colgroup>
-                <col style="width:12%;" />
-                <col style="width:14%;" />
-                <col style="width:38%;" />
-                <col style="width:18%;" />
-                <col style="width:18%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="5">Day Book Voucher Wise Report</td>
-                </tr>
-
-                <tr class="meta-row">
-                    <td colspan="2"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="3" class="text-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="2"></td>
-                    <td colspan="3" class="text-right"><strong>Branch Name :</strong> @branchName</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="5"></td></tr>
-
-                <tr>
-                    <th>Voucher Date</th>
-                    <th>Voucher No</th>
-                    <th>Narration</th>
-                    <th>Voucher Type</th>
-                    <th class="text-right">Amount</th>
-                </tr>
-
-                @if (dateGroups.Any())
-                {
-                    bool isFirstGroup = true;
-                    foreach (var group in dateGroups)
-                    {
-                        <tr class="date-header-row @(isFirstGroup ? "first-group" : "")">
-                            <td colspan="5">@group.Key</td>
-                        </tr>
-                        isFirstGroup = false;
-
-                        foreach (var row in group)
-                        {
-                            <tr class="detail-row">
-                                <td></td>
-                                <td>@(row.VoucherNo ?? "")</td>
-                                <td>@(row.Narration ?? "")</td>
-                                <td>@(row.Type ?? "")</td>
-                                <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
-                            </tr>
-                        }
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">Grand Total</td>
-                        <td class="text-right">@totalAmount.ToString("N2")</td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">Total Records</td>
-                        <td class="text-right">@totalRecords</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="5" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    // label spans the first 4 columns; the value fills Amount
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", 4, totalAmount.ToString("N2"));
+        table.Total("Total Records", 4, totalRecords.ToString());
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

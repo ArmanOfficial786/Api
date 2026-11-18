@@ -8,6 +8,7 @@
         public bool SameCompanyName { get; set; } = true;
         public string OrderBy { get; set; } = "-1";
         public bool Type { get; set; }
+        public bool VisualReport { get; set; } = false;
     }
 
     // Columns match sp_6_56_GetTellerCashFromVault / sp_6_56_GetTellerCashToVault SELECT aliases exactly

@@ -1,268 +1,85 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.OthersReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
+
+    var fontSize = "9.5pt";
+    const int ColumnCount = 6;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+
     var rows = (Model["Rows"] as List<SavingAccountDeletedRowDto>) ?? new List<SavingAccountDeletedRowDto>();
-    var totalDeletedAccounts = Model["TotalDeletedAccounts"] as int? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
 
-    var generatedOn = Model.ContainsKey("ReportGeneratedOnBs") && Model["ReportGeneratedOnBs"] != null
-        ? Model["ReportGeneratedOnBs"].ToString()
-        : DateTime.Now.ToString("yyyy/MM/dd");
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchNames = Text("BranchNames", "All");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Rows must arrive pre-sorted by DepositTypeName so GroupBy (which preserves
-    // first-seen order, not sorted order) produces contiguous per-type groups.
+    var totalDeletedAccounts = Model.TryGetValue("TotalDeletedAccounts", out var tda) && tda != null ? Convert.ToInt32(tda) : 0;
+
     var typeGroups = rows.GroupBy(r => r.DepositTypeName).ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Savings Account Deleted Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9.5pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .report-title {
-                text-align: center;
-                font-size: 15pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 10px 0 12px 0;
-            }
-
-            /* Meta section: outer table has 2 cells side by side.
-                           LEFT cell holds Branch Name / Report Generated On stacked, left-aligned.
-                           RIGHT cell holds a nested table pinned to the RIGHT edge via
-                           margin-left:auto (not just text-align, which doesn't move block tables). */
-            .meta-table {
-                width: 100%;
-                margin-bottom: 10px;
-                font-size: 9.5pt;
-                border-bottom: 1.5px solid #000;
-                padding-bottom: 8px;
-            }
-
-                .meta-table > tbody > tr > td {
-                    vertical-align: top;
-                }
-
-            .meta-left {
-                width: 55%;
-            }
-
-                .meta-left table td {
-                    padding: 2px 4px;
-                }
-
-                .meta-left .label {
-                    font-weight: bold;
-                    white-space: nowrap;
-                    width: 150px;
-                }
-
-            .meta-right {
-                width: 45%;
-            }
-
-            .meta-right-table {
-                margin-left: auto;
-                margin-right: 0;
-            }
-
-                .meta-right-table td {
-                    padding: 2px 4px;
-                    white-space: nowrap;
-                }
-
-                .meta-right-table .label {
-                    font-weight: bold;
-                    text-align: left;
-                }
-
-                .meta-right-table .value {
-                    text-align: left;
-                }
-
-            /* No cell grid - only rule lines, matching target design */
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9.5pt;
-            }
-
-                .data-table td, .data-table th {
-                    padding: 3px 6px;
-                    border: none;
-                }
-
-                .data-table thead th {
-                    text-align: left;
-                    font-weight: bold;
-                    border-top: 2px solid #000;
-                    border-bottom: 1.5px solid #000;
-                    padding: 5px 6px;
-                    line-height: 1.3;
-                }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            /* Deposit type group header row - bold plain text, no border, no background,
-                                   extra top spacing before each new group to separate it from the previous
-                                   group's rule line, matching the target image exactly. */
-            .type-row td {
-                font-weight: bold;
-                padding-top: 14px;
-                padding-bottom: 4px;
-                border: none;
-            }
-
-            /* First group right under the column header needs less top spacing */
-            .type-row.first-group td {
-                padding-top: 6px;
-            }
-
-            /* Account rows under a deposit type - no borders except the closing rule */
-            .account-row td {
-                padding-top: 2px;
-                padding-bottom: 2px;
-                border: none;
-            }
-
-            /* Rule line under ONLY the last account row of a group */
-            .account-row.last-in-group td {
-                border-bottom: 1px solid #000;
-                padding-bottom: 4px;
-            }
-
-            .grand-total td {
-                font-weight: bold;
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                padding-top: 6px;
-                padding-bottom: 6px;
-            }
-
-            @@media print {
-                .data-table thead {
-                    display: table-header-group;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Savings Account Deleted Report", sheetName: "SavingAccountDeleted")
+        .Column("Deposit Type", 22)
+        .Column("Member Id", 14)
+        .Column("Member Name", 24)
+        .Column("Account No", 16)
+        .Column("Opened Date", 12)
+        .Column("Deleted Date", 12)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 9, firstPageExtraMm: 55)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.3; padding: 3px 6px; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 2px solid #000; border-bottom: 1.5px solid #000; padding: 5px 6px; white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; padding-top: 14px; padding-bottom: 4px; }\n" +
+            "table.sheet-table tr.r-group td.g-first { padding-top: 6px; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 0; padding-top: 2px; padding-bottom: 2px; }\n" +
+            "table.sheet-table tr.r-data td.last-row { border-bottom: 1px solid #000; padding-bottom: 4px; }\n" +
+            "table.sheet-table tr.r-total td { border-top: 2px solid #000; border-bottom: 2px solid #000; padding-top: 6px; padding-bottom: 6px; }");
+
+    table.MetaRow(
+        Fmt.Labeled("Branch Name :", branchNames),
+        Fmt.Labeled("From Date :", fromDate),
+        3);
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Labeled("To Date :", toDate),
+        3);
+
+    var firstGroup = true;
+    foreach (var typeGroup in typeGroups)
+    {
+        table.GroupBy(new ReportCell(typeGroup.Key ?? "", Align.Left, ColumnCount, firstGroup ? "g-first" : null));
+        firstGroup = false;
+
+        var accounts = typeGroup.ToList();
+        for (var i = 0; i < accounts.Count; i++)
+        {
+            var row = accounts[i];
+            var last = i == accounts.Count - 1 ? "last-row" : null;
+
+            table.Data(
+                new ReportCell("", Align.Left, 1, last),
+                new ReportCell(row.MemberId ?? "", Align.Left, 1, last),
+                new ReportCell(row.MemberName ?? "", Align.Left, 1, last),
+                new ReportCell(row.AccountNo ?? "", Align.Left, 1, last),
+                new ReportCell(row.AccountOpenOnBs ?? "", Align.Left, 1, last),
+                new ReportCell(row.DeletedDate ?? "", Align.Left, 1, last));
         }
+    }
 
-        <div class="report-title">Savings Account Deleted Report</div>
-
-        <table class="meta-table">
-            <tr>
-                <td class="meta-left">
-                    <table>
-                        <tr>
-                            <td class="label">Branch Name :</td>
-                            <td>@branchNames</td>
-                        </tr>
-                        <tr>
-                            <td class="label">Report Generated On :</td>
-                            <td>@generatedOn</td>
-                        </tr>
-                    </table>
-                </td>
-                <td class="meta-right">
-                    <table class="meta-right-table">
-                        <tr>
-                            <td class="label">From Date :</td>
-                            <td class="value">@fromDate</td>
-                        </tr>
-                        <tr>
-                            <td class="label">To Date :</td>
-                            <td class="value">@toDate</td>
-                        </tr>
-                    </table>
-                </td>
-            </tr>
-        </table>
-
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th style="width:22%;">Deposit Type</th>
-                    <th style="width:14%;">Member Id</th>
-                    <th style="width:24%;">Member Name</th>
-                    <th style="width:16%;">Account No</th>
-                    <th style="width:12%;">Opened<br />Date</th>
-                    <th style="width:12%;">Deleted<br />Date</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (typeGroups.Any())
-                {
-                    bool isFirstGroup = true;
-                    foreach (var typeGroup in typeGroups)
-                    {
-                        <tr class="type-row @(isFirstGroup ? "first-group" : "")">
-                            <td colspan="6">@typeGroup.Key</td>
-                        </tr>
-                        isFirstGroup = false;
-
-                        var accountsInGroup = typeGroup.ToList();
-                        for (int i = 0; i < accountsInGroup.Count; i++)
-                        {
-                            var row = accountsInGroup[i];
-                            var isLast = i == accountsInGroup.Count - 1;
-                            <tr class="account-row @(isLast ? "last-in-group" : "")">
-                                <td></td>
-                                <td>@row.MemberId</td>
-                                <td>@row.MemberName</td>
-                                <td>@row.AccountNo</td>
-                                <td>@row.AccountOpenOnBs</td>
-                                <td>@row.DeletedDate</td>
-                            </tr>
-                        }
-                    }
-
-                    <tr class="grand-total">
-                        <td colspan="5" class="text-right">Total Deleted Accounts</td>
-                        <td class="text-right">@totalDeletedAccounts</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr><td colspan="6" class="text-center">No deleted saving accounts found for the selected criteria</td></tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Total Deleted Accounts", ColumnCount - 1, totalDeletedAccounts.ToString());
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

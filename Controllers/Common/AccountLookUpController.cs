@@ -1,8 +1,8 @@
 ﻿// Controllers/Common/AccountLookUpController.cs
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Common;
-using NexgenCosysReport.Repository.Common;
 
 namespace NexgenCosysReport.Controllers.Common
 {
@@ -11,26 +11,31 @@ namespace NexgenCosysReport.Controllers.Common
     public class AccountLookUpController : ControllerBase
     {
         private readonly IAccountLookUp _repo;
+        private readonly ITokenService _tokenService;
         private readonly ILogger<AccountLookUpController> _logger;
 
         public AccountLookUpController(
             IAccountLookUp repo,
-            ILogger<AccountLookUpController> logger)
+            ILogger<AccountLookUpController> logger,
+            ITokenService tokenService)
         {
             _repo = repo;
             _logger = logger;
+            _tokenService = tokenService;
         }
 
         /// <summary>
         /// POST /api/AccountLookUp/search
         /// body: { pageNumber, pageSize, params: [{ key, value, option }], sort: [{ field, order }] }
         /// </summary>
+        [Authorize]
         [HttpPost("search")]
         public async Task<ActionResult<GeneralResponse<List<AccountLookUpDtos>>>> Search([FromBody] Filter? filter)
         {
             try
             {
-                var userId = GetUserId();
+                if (_tokenService.GetUserIdFromPrincipal(User) is not long userId)
+                    return Unauthorized(new { message = "User not authenticated." });
                 var pagination = await _repo.GetAccountListAsync(filter ?? new Filter(), userId);
 
                 return Ok(new GeneralResponse<List<AccountLookUpDtos>>
@@ -64,13 +69,14 @@ namespace NexgenCosysReport.Controllers.Common
                     });
             }
         }
-
+        [Authorize]
         [HttpGet("select/{mamAccountOpeningId:long}")]
         public async Task<ActionResult<GeneralResponse<AccountSelectedDto>>> Select(long mamAccountOpeningId)
         {
             try
             {
-                var userId = GetUserId();
+                if (_tokenService.GetUserIdFromPrincipal(User) is not long userId)
+                    return Unauthorized(new { message = "User not authenticated." });
                 var account = await _repo.GetSelectedAccountAsync(mamAccountOpeningId, userId);
 
                 if (account == null)
@@ -100,13 +106,14 @@ namespace NexgenCosysReport.Controllers.Common
                     });
             }
         }
-
+        [Authorize]
         [HttpGet("validate/{accountNo}")]
         public async Task<ActionResult<GeneralResponse<AccountSelectedDto>>> Validate(string accountNo)
         {
             try
             {
-                var userId = GetUserId();
+                if (_tokenService.GetUserIdFromPrincipal(User) is not long userId)
+                    return Unauthorized(new { message = "User not authenticated." });
                 var result = await _repo.ValidateAccountNoAsync(accountNo, userId);
 
                 if (!result.IsValid)

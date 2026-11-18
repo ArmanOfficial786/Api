@@ -1,25 +1,41 @@
-﻿<!-- Views/Report/Account/OtherReports/VoucherDetailsReport.cshtml -->
+﻿@using Microsoft.AspNetCore.Html
 @using NexgenCosysReport.Dtos.RequestDtos.Account.OtherReports
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    // a missing amount prints blank (same as before); totals always print two decimals
+    string N(decimal? v) => v.HasValue ? v.Value.ToString("N2") : "";
+
+    // one cell with full control (span, alignment, css)
+    ReportCell C(string t, int span = 1, Align a = Align.Left, string? css = null) => new(t, a, span, css);
+
     var rows = (Model["Rows"] as List<VoucherDetailsRowDto>) ?? new List<VoucherDetailsRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalDebitAmount = Model["TotalDebitAmount"] as decimal? ?? 0;
-    var totalCreditAmount = Model["TotalCreditAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchNames = Text("BranchNames", "All Branches");
+    var viewType = Text("ViewType", "None");
+    var isGrouping = string.Equals(viewType, "Grouping", StringComparison.OrdinalIgnoreCase);
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var viewType = Model["ViewType"]?.ToString() ?? "None";
-    var isGrouping = string.Equals(viewType, "Grouping", StringComparison.OrdinalIgnoreCase);
-
-    string Fmt(decimal? v) => v.HasValue ? v.Value.ToString("N2") : "";
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalDebit = TotalOr("TotalDebitAmount", rows.Sum(r => r.DebitAmount ?? 0m));
+    var totalCredit = TotalOr("TotalCreditAmount", rows.Sum(r => r.CreditAmount ?? 0m));
 
     var voucherGroups = !isGrouping
         ? rows.GroupBy(r => r.VoucherNo ?? "").ToList()
@@ -30,296 +46,118 @@
               .OrderBy(g => g.Key.Main).ThenBy(g => g.Key.Sub)
               .ToList()
         : null;
-}
 
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Voucher Details Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
-
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 8px;
-                    vertical-align: top;
-                }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            /* -------- Title / meta -------- */
-            .report-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 15pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 10px 8px 12px 8px;
-            }
-
-            .meta-row td {
-                padding: 2px 8px;
-                font-size: 9pt;
-            }
-
-            .meta-row.meta-last td {
-                padding-bottom: 6px;
-                border-bottom: 1px solid #000;
-            }
-
-            .meta-right {
-                text-align: right;
-            }
-
-            /* -------- Column headers -------- */
-            .column-header-row th {
-                text-align: left;
-                font-weight: bold;
-                border-top: none;
-                border-bottom: 1.5px solid #000;
-                padding: 6px 8px;
-            }
-
-            /* -------- "None" (per-voucher) layout -------- */
-            .voucher-header-row td {
-                border-top: 1px solid #000;
-                padding-top: 6px;
-            }
-
-            .leg-row td {
-                border: none;
-            }
-
-            .narration-ledger-row td {
-                border: none;
-            }
-
-            .voucher-subtotal-row td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-                padding-top: 5px;
-                padding-bottom: 8px;
-            }
-
-            /* -------- "Grouping" (per-ledger) layout -------- */
-            .ledger-header-row td {
-                font-weight: bold;
-                font-size: 9.5pt;
-                padding: 10px 8px 4px 8px;
-                border-bottom: 1px solid #000;
-            }
-
-            .ledger-header-row.first-group td {
-                padding-top: 6px;
-            }
-
-            .ledger-detail-row td {
-                padding: 3px 8px;
-            }
-
-            .ledger-subtotal-row td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-                padding: 5px 8px 8px 8px;
-            }
-
-            /* -------- Grand total -------- */
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 8px;
-            }
-
-            @@media print {
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model,
+            title: "Voucher Details Report" + (isGrouping ? " - Group Wise" : ""),
+            sheetName: "VoucherDetails")
+        .Column("Voucher No", 13)
+        .Column("Voucher Date", 13)
+        .Column(isGrouping ? "Narration" : "Details", 24)
+        .Column("", 24)
+        .Column("Debit(Dr)", 13, Align.Right)
+        .Column("Credit(Cr)", 13, Align.Right)
+        .NoColumnHeader()                      // the column titles are printed below with Header(...) because "Details" spans 2 columns
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            GroupBackground = "#fff",
+            SubTotalBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 75)   // one text line per row
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 8px; }" +
+            // ledger line (grouping layout) is a little bigger
+            "table.sheet-table tr.r-group td { font-size: 9.5pt; }" +
+            // detail lines: no rules
+            "table.sheet-table tr.r-data td { border: 0; }" +
+            // voucher header line and voucher narration / total line (per-voucher layout)
+            "table.sheet-table td.vh { border-top: 1px solid #000 !important; padding-top: 4px; }" +
+            "table.sheet-table td.vs { font-weight: bold; border-top: 1px solid #000 !important; padding-top: 3px; padding-bottom: 3px; }");
+
+    // ── title block ──
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchNames));
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)));
+
+    // ── column titles ──
+    table.Header(
+        C("Voucher No"),
+        C("Voucher Date"),
+        C(isGrouping ? "Narration" : "Details", 2),
+        C("Debit(Dr)", 1, Align.Right),
+        C("Credit(Cr)", 1, Align.Right));
+
+    if (isGrouping)
+    {
+        // ============== GROUPING (ledger-wise) LAYOUT ==============
+        foreach (var ledger in ledgerGroups!)
+        {
+            var ledgerRows = ledger.ToList();
+            var ledgerLabel = string.IsNullOrEmpty(ledger.Key.Sub)
+                ? ledger.Key.Main
+                : $"{ledger.Key.Main} - {ledger.Key.Sub}";
+
+            table.GroupTitle(ledgerLabel);
+
+            foreach (var row in ledgerRows)
+            {
+                table.Data(
+                    C(row.VoucherNo ?? ""),
+                    C(row.VoucherOnBs ?? ""),
+                    C(row.Narration ?? row.NarrationLedger ?? "", 2),
+                    C(N(row.DebitAmount), 1, Align.Right),
+                    C(N(row.CreditAmount), 1, Align.Right));
+            }
+
+            // label spans the first 4 columns; the 2 totals fill Debit and Credit
+            table.SubTotal("Sub Total", 4,
+                ledgerRows.Sum(r => r.DebitAmount ?? 0m).ToString("N2"),
+                ledgerRows.Sum(r => r.CreditAmount ?? 0m).ToString("N2"));
         }
+    }
+    else
+    {
+        // ============== NONE (per-voucher) LAYOUT ==============
+        foreach (var group in voucherGroups!)
+        {
+            var legRows = group.ToList();
+            var first = legRows.First();
 
-        <table class="data-table" data-sheet-name="VoucherDetails">
-            <colgroup>
-                <col style="width:13%;" />
-                <col style="width:13%;" />
-                <col style="width:24%;" />
-                <col style="width:24%;" />
-                <col style="width:13%;" />
-                <col style="width:13%;" />
-            </colgroup>
-            <tbody>
-                <tr class="report-title">
-                    <td colspan="6">Voucher Details Report@(isGrouping ? " - Group Wise" : "")</td>
-                </tr>
+            // voucher header line: number, date, branch
+            table.Data(
+                C(first.VoucherNo ?? "", 1, Align.Left, "vh"),
+                C(first.VoucherOnBs ?? "", 1, Align.Left, "vh"),
+                C(first.OfficeName ?? "", 2, Align.Left, "vh"),
+                C("", 1, Align.Left, "vh"),
+                C("", 1, Align.Left, "vh"));
 
-                <tr class="meta-row">
-                    <td colspan="6"><strong>Branch Name :</strong> @branchNames</td>
-                </tr>
-                <tr class="meta-row meta-last">
-                    <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="3" class="meta-right">
-                        <strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
+            foreach (var row in legRows)
+            {
+                table.Data("", "", row.MainLedger ?? "", row.SubLedger1 ?? "", N(row.DebitAmount), N(row.CreditAmount));
 
-                <tr class="column-header-row">
-                    <th>Voucher No</th>
-                    <th>Voucher Date</th>
-                    <th colspan="2">@(isGrouping ? "Narration" : "Details")</th>
-                    <th class="text-right">Debit(Dr)</th>
-                    <th class="text-right">Credit(Cr)</th>
-                </tr>
+                if (!string.IsNullOrEmpty(row.SubLedger2) || !string.IsNullOrEmpty(row.SubLedger3))
+                    table.Data("", "", row.SubLedger2 ?? "", row.SubLedger3 ?? "", "", "");
 
-                @if (!rows.Any())
-                {
-                    <tr>
-                        <td colspan="6" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-                else if (isGrouping)
-                {
-                    // ============== GROUPING (ledger-wise) LAYOUT ==============
-                    bool isFirstLedger = true;
-                    foreach (var ledger in ledgerGroups!)
-                    {
-                        var ledgerRows = ledger.ToList();
-                        var ledgerLabel = string.IsNullOrEmpty(ledger.Key.Sub)
-                            ? ledger.Key.Main
-                            : $"{ledger.Key.Main} - {ledger.Key.Sub}";
+                table.Data(C("Ledger Narration : " + (row.NarrationLedger ?? ""), 4), C(""), C(""));
+            }
 
-                        <tr class="ledger-header-row @(isFirstLedger ? "first-group" : "")">
-                            <td colspan="6">@ledgerLabel</td>
-                        </tr>
-                        isFirstLedger = false;
+            // voucher narration with the voucher's debit and credit totals
+            table.Data(
+                C("Narration :  " + (first.Narration ?? ""), 4, Align.Left, "vs"),
+                C(legRows.Sum(r => r.DebitAmount ?? 0m).ToString("N2"), 1, Align.Right, "vs"),
+                C(legRows.Sum(r => r.CreditAmount ?? 0m).ToString("N2"), 1, Align.Right, "vs"));
+        }
+    }
 
-                        foreach (var row in ledgerRows)
-                        {
-                            <tr class="ledger-detail-row">
-                                <td>@(row.VoucherNo ?? "")</td>
-                                <td>@(row.VoucherOnBs ?? "")</td>
-                                <td colspan="2">@(row.Narration ?? row.NarrationLedger ?? "")</td>
-                                <td class="text-right">@Fmt(row.DebitAmount)</td>
-                                <td class="text-right">@Fmt(row.CreditAmount)</td>
-                            </tr>
-                        }
-
-                        <tr class="ledger-subtotal-row">
-                            <td colspan="4" class="text-right">Sub Total</td>
-                            <td class="text-right">@ledgerRows.Sum(r => r.DebitAmount ?? 0m).ToString("N2")</td>
-                            <td class="text-right">@ledgerRows.Sum(r => r.CreditAmount ?? 0m).ToString("N2")</td>
-                        </tr>
-                    }
-                }
-                else
-                {
-                    // ============== NONE (per-voucher) LAYOUT ==============
-                    foreach (var group in voucherGroups!)
-                    {
-                        var legRows = group.ToList();
-                        var first = legRows.First();
-
-                        <tr class="voucher-header-row">
-                            <td>@(first.VoucherNo ?? "")</td>
-                            <td>@(first.VoucherOnBs ?? "")</td>
-                            <td colspan="2">@(first.OfficeName ?? "")</td>
-                            <td></td>
-                            <td></td>
-                        </tr>
-
-                        foreach (var row in legRows)
-                        {
-                            <tr class="leg-row">
-                                <td></td>
-                                <td></td>
-                                <td>@(row.MainLedger ?? "")</td>
-                                <td>@(row.SubLedger1 ?? "")</td>
-                                <td class="text-right">@Fmt(row.DebitAmount)</td>
-                                <td class="text-right">@Fmt(row.CreditAmount)</td>
-                            </tr>
-
-                            if (!string.IsNullOrEmpty(row.SubLedger2) || !string.IsNullOrEmpty(row.SubLedger3))
-                            {
-                                <tr class="leg-row">
-                                    <td></td>
-                                    <td></td>
-                                    <td>@(row.SubLedger2 ?? "")</td>
-                                    <td>@(row.SubLedger3 ?? "")</td>
-                                    <td></td>
-                                    <td></td>
-                                </tr>
-                            }
-
-                            <tr class="narration-ledger-row">
-                                <td colspan="4">Ledger Narration : @(row.NarrationLedger ?? "")</td>
-                                <td></td>
-                                <td></td>
-                            </tr>
-                        }
-
-                        <tr class="voucher-subtotal-row">
-                            <td colspan="4">Narration : &nbsp; @(first.Narration ?? "")</td>
-                            <td class="text-right">@legRows.Sum(r => r.DebitAmount ?? 0m).ToString("N2")</td>
-                            <td class="text-right">@legRows.Sum(r => r.CreditAmount ?? 0m).ToString("N2")</td>
-                        </tr>
-                    }
-                }
-
-                @if (rows.Any())
-                {
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">Grand Total</td>
-                        <td class="text-right">@totalDebitAmount.ToString("N2")</td>
-                        <td class="text-right">@totalCreditAmount.ToString("N2")</td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="4" class="text-right">Total Records</td>
-                        <td colspan="2" class="text-center">@totalRecords</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    // label spans the first 4 columns; the values fill the Debit and Credit columns
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", 4, totalDebit.ToString("N2"), totalCredit.ToString("N2"));
+        table.Total("Total Records", 4, totalRecords.ToString(), "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

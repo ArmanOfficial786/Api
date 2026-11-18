@@ -1,14 +1,12 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using NexgenCosysReport.Dtos.ReportDtos;
-using NexgenCosysReport.Dtos.RequestDtos.Common;
 using NexgenCosysReport.Dtos.RequestDtos.Member;
 using NexgenCosysReport.Inteface.ReportInterface;
-using NexgenCosysReport.Inteface.ServiceInterface.Common;
 using NexgenCosysReport.Inteface.ServiceInterface.Member;
-using NexgenCosysReport.Services.ReportService;
+using NexgenCosysReport.Utils.Caching;
+using NexgenCosysReport.Utils.Enum;
 using NexgenCosysReport.Utils.Report;
-using System.Text.Json;
+using System.Security.Claims;
 
 namespace NexgenCosysReport.Controllers.Member
 {
@@ -16,146 +14,110 @@ namespace NexgenCosysReport.Controllers.Member
     [Route("api/[controller]")]
     public class MemberBloodGroupReportController : ControllerBase
     {
+        private const string ReportName = "MemberBloodGroupReport";
+
         private readonly IMemberBloodGroup _bloodGroupReportService;
-        private readonly ICommonHeaderRepository _commonHeaderRepository;
+        private readonly IReportHeaderProvider _headers;
         private readonly IJsReportService _jsReportService;
-        private readonly IWebHostEnvironment _webHostEnvironment;
-        private readonly CustomHeaderResponse _headerResponse;
-        private readonly IOptions<ReportSettings> _reportSettings;
+        private readonly IReportDataCache _dataCache;
         private readonly ILogger<MemberBloodGroupReportController> _logger;
+        private readonly IReportFileResponse _reportFileResponse;
+
+        private static readonly PageSizeSetting NPageSetting = PageSizeSetting.A4Portrait;
+        private static readonly PageSizeSetting VPageSetting =
+            PageSizeSetting.Custom(300, 297, PageUnit.mm, landscape: true);
 
         public MemberBloodGroupReportController(
             IMemberBloodGroup bloodGroupReportService,
-            ICommonHeaderRepository commonHeaderRepository,
+            IReportHeaderProvider headers,
             IJsReportService jsReportService,
-            IWebHostEnvironment webHostEnvironment,
-            IOptions<ReportSettings> reportSettings,
+            IReportDataCache dataCache,
             ILogger<MemberBloodGroupReportController> logger,
-            CustomHeaderResponse headerResponse)
+            IReportFileResponse reportFileResponse)
         {
             _bloodGroupReportService = bloodGroupReportService;
-            _commonHeaderRepository = commonHeaderRepository;
+            _headers = headers;
             _jsReportService = jsReportService;
-            _webHostEnvironment = webHostEnvironment;
-            _reportSettings = reportSettings;
+            _dataCache = dataCache;
             _logger = logger;
-            _headerResponse = headerResponse;
+            _reportFileResponse = reportFileResponse;
         }
 
         [HttpPost]
-        public async Task<ActionResult> GenerateReport(
+        public async Task<IActionResult> GenerateReport(
             [FromBody] MemberBloodGroupReportRequest request,
-            [FromQuery] string format = "VIEW")
+            [FromQuery] string format = "VIEW",
+            CancellationToken ct = default)
         {
             try
             {
-                var reportName = "MemberBloodGroupReport";
-                var upperFormat = format.ToUpper();
-                var response = new GeneralResponse<ReportResponseDtos>();
-
                 if (request == null || !ModelState.IsValid)
-                    return BadRequest(new { success = false, message = "Invalid request. MemberRegistration is required." });
+                    return BadRequest(new { success = false, StatusCode = 400, message = "Invalid request. MemberRegistration is required." });
 
-                var reportKey = ReportUtils.GenerateReportKey(request, reportName);
+                var userIdClaim = User.FindFirst("UserId")?.Value ?? User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "";
 
-                ReportExportHelper.LogCacheState(upperFormat, reportKey,
-                    _jsReportService.TryGetCachedHtml(reportKey, out _), _logger);
+                var upperFormat = format.ToUpperInvariant();
+                var isVisual = request.VisualReport;
+                var page = isVisual ? VPageSetting : NPageSetting;
 
-                if (upperFormat != "VIEW" && _jsReportService.TryGetCachedHtml(reportKey, out _))
-                {
-                    return await ReportExportHelper.ExportFromCacheAsync(
-                        reportKey, upperFormat, reportName,
-                        _jsReportService, _logger);
-                }
+                var dataKey = ReportCacheKey.ForData(
+                    request, ReportName, userIdClaim, nameof(request.VisualReport));
+                var reportKey = $"{dataKey}_{(isVisual ? "VISUAL" : "NORMAL")}_{page.CacheTag}";
 
-                // Parallel calls
-                var dataTask = _bloodGroupReportService.GetMemberBloodGroupReport(request);
-                string? branchIdForHeader = null;
+                var cached = await ReportExportHelper.TryServeAsync(
+                    reportKey, upperFormat, ReportName, pdfView: request.VisualReport,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
+                if (cached != null) return cached;
+
+                var branchIdForHeader = "";
                 if (!request.SameCompanyName && !string.IsNullOrEmpty(request.BranchSelected) &&
                     request.BranchSelected != "-1" && !request.BranchSelected.Contains(','))
                 {
                     branchIdForHeader = request.BranchSelected;
                 }
-                var headerTask = _commonHeaderRepository.GetCommonHeaders(branchIdForHeader ?? "");
 
-                await Task.WhenAll(dataTask, headerTask);
+                var headerTask = _headers.GetAsync(branchIdForHeader, ct);
+                var dataTask = _dataCache.GetOrLoadAsync(dataKey, async () =>
+                {
+                    var loaded = await _bloodGroupReportService.GetMemberBloodGroupReport(request);
+                    if (loaded == null || !loaded.Any())
+                        return null;
+                    return loaded;
+                }, ct);
+                await Task.WhenAll(headerTask, dataTask);
 
                 var data = await dataTask;
-                var headerData = await headerTask;
-
-                if (!data.Any())
-                {
-                    response.isValid = false;
-                    response.statusCode = 404;
-                    response.message = "No data found";
-                    return NotFound(response);
-                }
-
-                var webRoot = ReportUtils.GetWebRootPath(_webHostEnvironment, _reportSettings);
-
-                await Task.Run(() => ReportUtils.ConvertUniqueImagesToBase64Async(
-                    headerData,
-                    nameof(CommonHeader.CompanyLogo),
-                    webRoot));
+                if (data == null)
+                    return NotFound(new { success = false, StatusCode = 404, message = "No data found" });
 
                 var reportData = new Dictionary<string, object>
                 {
                     { "BloodGroupDataSet", data },
-                    { "HeaderDataSet", headerData },
-                    { "TotalRecords", data.Count },
+                    { "HeaderDataSet", await headerTask },
                     { "BranchName", request.BranchName ?? "All" },
-                    { "FromDate", request.FromDate },
-                    { "ToDate", request.ToDate },
+                    { "FromDate", $"{request.FromDate}" },
                     { "Format", upperFormat },
-                    { "BloodGroupOption", request.BloodGroupOption },
-                    { "SameCompanyName", request.SameCompanyName }
+                    { "PageSetting", page }
                 };
 
-                var htmlContent = await Task.Run(() =>
-                    _jsReportService.RenderRazorToHtmlAndCacheAsync(
-                        reportKey: reportKey,
-                        reportPath: request.VisualReport
-                            ? "Views/VisualReport/Member/VMemberBloodGroupReport.cshtml"
-                            : "Views/Report/Member/MemberBloodGroupReport.cshtml",
-                        data: reportData));
+                string viewPath = request.VisualReport
+                    ? "Views/VisualReport/Member/VMemberBloodGroupReport.cshtml"
+                    : "Views/Report/Member/MemberBloodGroupReport.cshtml";
 
-                if (upperFormat == "VIEW")
-                {
-                    var pdfBytes = await _jsReportService.ExportReportToFormatAsync(
-                        htmlContent, "PDF", reportKey);
-                    var totalPages = JsReportService.CountPdfPages(pdfBytes);
+                var html = await _jsReportService.RenderRazorToHtmlAndCacheAsync(
+                    reportKey: reportKey,
+                    reportPath: viewPath,
+                    data: reportData, ct: ct);
 
-                    var pagination = new Pagination
-                    {
-                        currentPage = 1,
-                        totalPages = totalPages,
-                        totalRecord = 0,
-                        pageSize = 1,
-                        hasNextPage = totalPages > 1,
-                        hasPreviousPage = false
-                    };
-
-                    _headerResponse.SetResponseHeaders(true, 200, "Report generated successfully.");
-                    Response.Headers.Append("X-Pagination", JsonSerializer.Serialize(pagination));
-                    Response.Headers.Append("Content-Disposition", "inline; filename=\"MemberDetailSummary.pdf\"");
-
-                    return new FileContentResult(pdfBytes, "application/pdf");
-                }
-
-
-                return await ReportExportHelper.ExportFromCacheAsync(
-                    reportKey, upperFormat, reportName,
-                    _jsReportService, _logger);
+                return await ReportExportHelper.CompleteAsync(
+                    html, reportKey, upperFormat, ReportName, pdfView: request.VisualReport,
+                    totalRecords: data.Count,
+                    _jsReportService, _reportFileResponse, _logger, page, ct);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "MemberBloodGroupReport generation failed");
-                return StatusCode(500, new
-                {
-                    message = ex.Message,
-                    inner = ex.InnerException?.Message,
-                    stack = ex.StackTrace
-                });
+                _logger.LogError(ex, "Error generating {Report} report", ReportName);
+                return StatusCode(500, new { message = ex.Message, inner = ex.InnerException?.Message });
             }
         }
     }

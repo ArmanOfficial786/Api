@@ -1,222 +1,82 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Share;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Share
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<ShareStatementRowDto>) ?? new List<ShareStatementRowDto>();
-    var totalPurchasedAmount = Model.ContainsKey("TotalPurchasedAmount") ? (Model["TotalPurchasedAmount"] as decimal? ?? 0) : 0;
-    var totalReturnedAmount = Model.ContainsKey("TotalReturnedAmount") ? (Model["TotalReturnedAmount"] as decimal? ?? 0) : 0;
-    var closingBalance = Model.ContainsKey("ClosingBalance") ? (Model["ClosingBalance"] as decimal? ?? 0) : 0;
-    var memberId = Model["MemberId"]?.ToString() ?? "";
-    var memberName = Model["MemberName"]?.ToString() ?? "";
-    var address = Model["Address"]?.ToString() ?? "";
-    var phoneNo = Model["PhoneNo"]?.ToString() ?? "";
-    var shareTypeName = Model["ShareTypeName"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Share Statement Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var fontSize = "9pt";
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            .meta-title {
-                text-align: center;
-                font-family: Arial, sans-serif;
-                font-size: 13pt;
-                font-weight: bold;
-                padding: 8px 0;
-            }
-
-            .meta-row {
-                padding: 3px 0;
-                font-size: 9pt;
-            }
-
-            /* Bordered member-info box */
-            .info-grid {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                margin: 10px 0;
-                border: 1px solid #000;
-            }
-
-                .info-grid td {
-                    border: 1px solid #000;
-                    padding: 5px 8px;
-                    vertical-align: middle;
-                }
-
-            .info-label {
-                font-weight: bold;
-                width: 15%;
-            }
-
-            .info-value {
-                width: 35%;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 4px 6px;
-                    vertical-align: top;
-                }
-
-                .data-table th {
-                    background: #f9f9f9;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .date-col {
-                color: #B5651D;
-            }
-
-            .amount-col {
-                color: #1F5C99;
-            }
-
-            .total-row td {
-                border-top: 2px solid #000;
-                font-weight: bold;
-                padding: 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
         }
+        return fallback;
+    }
+    string Money(decimal? value) => value.HasValue ? value.Value.ToString("N2") : "";
 
-        <div class="meta-title">Share Statement Report</div>
-        <div class="meta-row"><strong>Report Generated On :</strong> @generatedOn</div>
+    var rows = (Model["Rows"] as List<ShareStatementRowDto>) ?? new List<ShareStatementRowDto>();
 
-        <!-- Member info box -->
-        <table class="info-grid">
-            <tr>
-                <td class="info-label">Member Id :</td>
-                <td class="info-value">@memberId</td>
-                <td class="info-label">Member Name :</td>
-                <td class="info-value">@memberName</td>
-            </tr>
-            <tr>
-                <td class="info-label">Member Address :</td>
-                <td class="info-value">@address</td>
-                <td class="info-label">Phone No :</td>
-                <td class="info-value">@phoneNo</td>
-            </tr>
-            <tr>
-                <td class="info-label">Share Type :</td>
-                <td class="info-value" colspan="3">@shareTypeName</td>
-            </tr>
-        </table>
+    var memberId = Text("MemberId");
+    var memberName = Text("MemberName");
+    var address = Text("Address");
+    var phoneNo = Text("PhoneNo");
+    var shareTypeName = Text("ShareTypeName", "All");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-        <table class="data-table">
-            <colgroup>
-                <col style="width:6%;" />
-                <col style="width:10%;" />
-                <col style="width:10%;" />
-                <col style="width:44%;" />
-                <col style="width:10%;" />
-                <col style="width:10%;" />
-                <col style="width:10%;" />
-            </colgroup>
-            <tbody>
-                <tr>
-                    <th>S.No</th>
-                    <th>Date</th>
-                    <th>DateOnBs</th>
-                    <th>Description</th>
-                    <th class="text-right">Purchased (Rs)</th>
-                    <th class="text-right">Returned (Rs)</th>
-                    <th class="text-right">Balance (Rs)</th>
-                </tr>
+    var totalPurchasedAmount = TotalOr("TotalPurchasedAmount", rows.Sum(r => r.PurchasedAmount ?? 0));
+    var totalReturnedAmount = TotalOr("TotalReturnedAmount", rows.Sum(r => r.ReturnedAmount ?? 0));
+    var closingBalance = TotalOr("ClosingBalance", rows.LastOrDefault()?.Balance ?? 0);
 
-                @if (rows.Any())
-                {
-                    var sn = 0;
-                    foreach (var row in rows)
-                    {
-                        sn++;
-                        <tr class="detail-row">
-                            <td class="date-col">@sn</td>
-                            <td class="date-col">@(row.DateAd ?? "")</td>
-                            <td class="date-col">@(row.Date ?? "")</td>
-                            <td>@(row.Description ?? "")</td>
-                            <td class="text-right amount-col">@(row.PurchasedAmount.HasValue ? row.PurchasedAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right amount-col">@(row.ReturnedAmount.HasValue ? row.ReturnedAmount.Value.ToString("N2") : "")</td>
-                            <td class="text-right amount-col">@(row.Balance.HasValue ? row.Balance.Value.ToString("N2") : "")</td>
-                        </tr>
-                    }
+    var table = new ReportTable(Model, title: "Share Statement Report", sheetName: "ShareStatement")
+        .Column("S.No", 6)
+        .Column("Date", 10)
+        .Column("DateOnBs", 10)
+        .Column("Description", 44)
+        .Column("Purchased (Rs)", 10, Align.Right)
+        .Column("Returned (Rs)", 10, Align.Right)
+        .Column("Balance (Rs)", 10, Align.Right)
+        .NoColumnHeader()
+        .Style(new ReportStyle
+        {
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 9, firstPageExtraMm: 75)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { white-space: normal; vertical-align: bottom; line-height: 1.2; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 1px solid #eee; }\n" +
+            "table.sheet-table tr.r-total td { border-top: 2px solid #000; border-bottom: 0; padding: 6px; }\n" +
+            ".date-col { color: #B5651D; }\n" +
+            ".amount-col { color: #1F5C99; }");
 
-                    <tr class="total-row">
-                        <td colspan="4" class="text-right">Total :</td>
-                        <td class="text-right">@totalPurchasedAmount.ToString("N2")</td>
-                        <td class="text-right">@totalReturnedAmount.ToString("N2")</td>
-                        <td class="text-right">@closingBalance.ToString("N2")</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+    table.MetaRow(Fmt.Labeled("Member Id :", memberId), Fmt.Labeled("Member Name :", memberName), 3);
+    table.MetaRow(Fmt.Labeled("Member Address :", address), Fmt.Labeled("Phone No :", phoneNo), 3);
+    table.MetaRow(Fmt.Labeled("Share Type :", shareTypeName));
+
+    table.Header();
+
+    var sn = 0;
+    foreach (var row in rows)
+    {
+        table.Data(
+            new ReportCell((++sn).ToString(), Align.Left, 1, "date-col"),
+            new ReportCell(row.DateAd ?? "", Align.Left, 1, "date-col"),
+            new ReportCell(row.Date ?? "", Align.Left, 1, "date-col"),
+            ReportCell.Left(row.Description ?? ""),
+            new ReportCell(Money(row.PurchasedAmount), Align.Right, 1, "amount-col"),
+            new ReportCell(Money(row.ReturnedAmount), Align.Right, 1, "amount-col"),
+            new ReportCell(Money(row.Balance), Align.Right, 1, "amount-col"));
+    }
+
+    if (rows.Count > 0)
+        table.Total("Total :", 4, totalPurchasedAmount.ToString("N2"), totalReturnedAmount.ToString("N2"), closingBalance.ToString("N2"));
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

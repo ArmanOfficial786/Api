@@ -1,358 +1,148 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.InterestExpenseReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
+
+    var fontSize = "7.5pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal Dec(string key) => Model.TryGetValue(key, out var dv) && dv != null ? Convert.ToDecimal(dv) : 0m;
+    string Money(decimal? value) => (value ?? 0m).ToString("N2");
+
     var rows = (Model["Rows"] as List<InterestAndTaxTypeWiseRowDto>) ?? new List<InterestAndTaxTypeWiseRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalInterest = Model["TotalInterest"] as decimal? ?? 0;
-    var totalTax = Model["TotalTax"] as decimal? ?? 0;
-    var totalNetAmount = Model["TotalNetAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "";
-    var reportViewName = Model["ReportViewName"]?.ToString() ?? "Normal";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
-    var generatedOn = Model["GeneratedOn"]?.ToString() ?? DateTime.Now.ToString("yyyy/MM/dd");
-    var totalDepositTypes = Model["TotalDepositTypes"] as int? ?? 0;
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchNames = Text("BranchNames", "All Branches");
+    var reportViewName = Text("ReportViewName", "Normal");
+    var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
+
     var isTaxWise = reportViewName.Contains("Tax");
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Savings Type Wise Interest & Tax Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var columnCount = isTaxWise ? 6 : 5;
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 7.5pt;
-                background: white;
-                color: #000;
-            }
+    string[] Fill(int labelSpan, params string[] values)
+    {
+        var filled = new string[columnCount - labelSpan];
+        for (var i = 0; i < filled.Length; i++)
+            filled[i] = i < values.Length ? values[i] : "";
+        return filled;
+    }
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-                padding: 5px 10px;
-            }
+    var totalInterest = Dec("TotalInterest");
+    var totalTax = Dec("TotalTax");
+    var totalNetAmount = Dec("TotalNetAmount");
+    var totalDepositTypes = (int)Dec("TotalDepositTypes");
+    var totalRecords = (int)Dec("TotalRecords");
 
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 7.5pt;
-                table-layout: fixed;
-            }
+    var table = new ReportTable(Model, title: "Savings Type Wise Interest & Tax Report", sheetName: "InterestAndTaxTypeWise")
+        .Column("Saving Type", 25)
+        .Column("From Date", 15, Align.Center)
+        .Column("Interest (Rs)", 15, Align.Right)
+        .Column("Tax (Rs)", 15, Align.Right)
+        .Column("Net Amount", 15, Align.Right);
 
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 2px 4px;
-                    vertical-align: middle;
-                    border: 1px solid #ccc;
-                }
+    if (isTaxWise)
+        table.Column("Tax (%)", 15, Align.Right);
 
-                .data-table th {
-                    background: #f2f2f2;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    text-align: left;
-                    font-weight: bold;
-                    white-space: nowrap;
-                    font-size: 7.5pt;
-                }
-
-            .report-title {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 12pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 4px 6px;
-            }
-
-            .meta-row td {
-                padding: 2px 4px;
-                font-size: 7.5pt;
-                border: none;
-            }
-
-            .meta-spacer td {
-                height: 4px;
-                border: none;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .text-left {
-                text-align: left !important;
-            }
-
-            /* Group header rows - matches image */
-            .group-header td {
-                font-weight: bold;
-                padding-top: 8px;
-                padding-bottom: 2px;
-                background: #f5f5f5;
-                border-top: 1px solid #999;
-                font-size: 7.5pt;
-            }
-
-            .group-header.first-group td {
-                padding-top: 4px;
-            }
-
-            /* Sub-group header for date grouping */
-            .sub-group-header td {
-                font-weight: bold;
-                padding-left: 15px;
-                padding-top: 4px;
-                padding-bottom: 2px;
-                background: #fafafa;
-                font-size: 7.5pt;
-            }
-
-            .group-subtotal td {
-                border-bottom: 1px solid #000;
-                padding-bottom: 2px;
-                font-weight: bold;
-            }
-
-            .grand-total td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 3px 4px;
-                font-size: 7.5pt;
-            }
-
-            /* Color coding */
-            .highlight-interest {
-                color: #2e7d32;
-                font-weight: bold;
-            }
-
-            .highlight-tax {
-                color: #c62828;
-                font-weight: bold;
-            }
-
-            .highlight-net {
-                color: #1565c0;
-                font-weight: bold;
-            }
-
-            .highlight-percent {
-                color: #f57f17;
-                font-weight: bold;
-            }
-
-            /* Amount formatting */
-            .amount {
-                font-family: 'Courier New', monospace;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-
-                .no-print {
-                    display: none !important;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-        @if (!isExcel)
+    table
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#f2f2f2",
+            GroupBackground = "#f5f5f5",
+            SubTotalBackground = "#f0f0f0",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 5, headerMm: 7, firstPageExtraMm: 55)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 4px; border-left: 1px solid #ccc; border-right: 1px solid #ccc; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 2px solid #000; border-bottom: 1px solid #000; white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-group td.dep-hdr { padding-top: 8px; padding-bottom: 2px; border-top: 1px solid #999; }\n" +
+            "table.sheet-table tr.r-group td.dep-hdr.dep-first { padding-top: 4px; }\n" +
+            "table.sheet-table tr.r-group td.date-hdr { background: #fafafa; padding: 4px 4px 2px 15px; border-top: 0; }\n" +
+            "table.sheet-table tr.r-data td { border-top: 1px solid #ccc; border-bottom: 1px solid #ccc; }\n" +
+            "table.sheet-table tr.r-data td.last-row { border-bottom: 1px solid #000; }\n" +
+            "table.sheet-table tr.r-data td.amt { font-family: 'Courier New', monospace; }\n" +
+            "table.sheet-table tr.r-data td.hl-interest { color: #2e7d32; font-weight: bold; }\n" +
+            "table.sheet-table tr.r-data td.hl-tax { color: #c62828; font-weight: bold; }\n" +
+            "table.sheet-table tr.r-data td.hl-net { color: #1565c0; font-weight: bold; }\n" +
+            "table.sheet-table tr.r-data td.hl-percent { color: #f57f17; font-weight: bold; }\n" +
+            "table.sheet-table tr.r-data td.d-sub { background: #f9f9f9; font-weight: bold; border-bottom: 1px solid #999; }\n" +
+            "table.sheet-table tr.r-subtotal td { border-top: 1px solid #ccc; border-bottom: 2px solid #000; }");
+
+    table.MetaRow(
+        Fmt.Labeled("Branch Name:", branchNames),
+        Fmt.Labeled("Report Generated On:", generatedOn),
+        3);
+    table.MetaRow(Fmt.Join(Fmt.Labeled("From Date:", fromDate), Fmt.Labeled("To Date:", toDate)));
+
+    var firstDeposit = true;
+    foreach (var depositGroup in rows.GroupBy(r => r.DepositTypeName ?? "Uncategorized"))
+    {
+        table.GroupBy(new ReportCell(
+            depositGroup.Key, Align.Left, columnCount,
+            firstDeposit ? "dep-hdr dep-first" : "dep-hdr"));
+        firstDeposit = false;
+
+        foreach (var dateGroup in depositGroup.GroupBy(r => r.Date ?? ""))
+        {
+            table.GroupBy(new ReportCell(dateGroup.Key, Align.Left, columnCount, "date-hdr"));
+
+            var items = dateGroup.ToList();
+            for (var i = 0; i < items.Count; i++)
+            {
+                var row = items[i];
+                var tail = i == items.Count - 1 ? " last-row" : "";
+
+                var cells = new List<ReportCell>
+                {
+                    new ReportCell("", Align.Left, 1, tail.Trim().Length > 0 ? "last-row" : null),
+                    new ReportCell(row.Date ?? "", Align.Center, 1, tail.Trim().Length > 0 ? "last-row" : null),
+                    new ReportCell(Money(row.Interest), Align.Right, 1, "amt hl-interest" + tail),
+                    new ReportCell(Money(row.Tax), Align.Right, 1, "amt hl-tax" + tail),
+                    new ReportCell(Money(row.NetAmount), Align.Right, 1, "amt hl-net" + tail)
+                };
+
+                if (isTaxWise)
+                    cells.Add(new ReportCell(
+                        row.PercentTax.HasValue ? row.PercentTax.Value.ToString("N2") + "%" : "0.00%",
+                        Align.Right, 1, "hl-percent" + tail));
+
+                table.Data(cells.ToArray());
+            }
+
+            var subCells = new List<ReportCell>
+            {
+                new ReportCell("", Align.Left, 1, "d-sub"),
+                new ReportCell("Sub Total", Align.Right, 1, "d-sub"),
+                new ReportCell(dateGroup.Sum(r => r.Interest ?? 0).ToString("N2"), Align.Right, 1, "d-sub"),
+                new ReportCell(dateGroup.Sum(r => r.Tax ?? 0).ToString("N2"), Align.Right, 1, "d-sub"),
+                new ReportCell(dateGroup.Sum(r => r.NetAmount ?? 0).ToString("N2"), Align.Right, 1, "d-sub")
+            };
+
+            if (isTaxWise)
+                subCells.Add(new ReportCell("", Align.Left, 1, "d-sub"));
+
+            table.Data(subCells.ToArray());
         }
 
-        <table class="data-table">
-            <colgroup>
-                <col style="width:25%;" />   <!-- Saving Type -->
-                <col style="width:15%;" />   <!-- From Date / Interest Date -->
-                <col style="width:15%;" />   <!-- To Date / Interest -->
-                <col style="width:15%;" />   <!-- Tax -->
-                <col style="width:15%;" />   <!-- Net Amount -->
-                @if (isTaxWise)
-                {
-                    <col style="width:15%;" /> <!-- Percent Tax -->
-                }
-            </colgroup>
-            <tbody>
-                <!-- Report Title -->
-                <tr>
-                    <td colspan="@(isTaxWise ? 6 : 5)" class="report-title">
-                        Savings Type Wise Interest & Tax Report
-                    </td>
-                </tr>
+        table.SubTotal("Grand Total", 2, Fill(2,
+            depositGroup.Sum(r => r.Interest ?? 0).ToString("N2"),
+            depositGroup.Sum(r => r.Tax ?? 0).ToString("N2"),
+            depositGroup.Sum(r => r.NetAmount ?? 0).ToString("N2")));
+    }
 
-                <!-- Meta Info -->
-                <tr class="meta-row">
-                    <td colspan="3">
-                        <strong>Branch Name:</strong> @branchNames
-                    </td>
-                    <td colspan="@(isTaxWise ? 3 : 2)" class="text-right">
-                        <strong>Report Generated On:</strong> @generatedOn
-                    </td>
-                </tr>
-
-                <!-- Filter info -->
-                <tr class="meta-row">
-                    <td colspan="@(isTaxWise ? 6 : 5)" class="text-left">
-                        <strong>From Date:</strong> @fromDate &nbsp;|&nbsp; <strong>To Date:</strong> @toDate
-                    </td>
-                </tr>
-
-                <tr class="meta-spacer"><td colspan="@(isTaxWise ? 6 : 5)"></td></tr>
-
-                <!-- Column Headers - matches image -->
-                <tr>
-                    <th>Saving Type</th>
-                    <th class="text-center">From Date</th>
-                    <th class="text-right">Interest (Rs)</th>
-                    <th class="text-right">Tax (Rs)</th>
-                    <th class="text-right">Net Amount</th>
-                    @if (isTaxWise)
-                    {
-                        <th class="text-right">Tax (%)</th>
-                    }
-                </tr>
-
-                <!-- Data Rows with Two-Level Grouping -->
-                @if (rows.Any())
-                {
-                    int sn = 0;
-                    // Group by Deposit Type - matches image grouping
-                    var groupedByDeposit = rows.GroupBy(r => r.DepositTypeName ?? "Uncategorized").ToList();
-                    bool isFirstDepositGroup = true;
-
-                    foreach (var depositGroup in groupedByDeposit)
-                    {
-                        // Deposit Type Group Header - matches image "AA", "AA Regular Saving Checking", etc.
-                        <tr class="group-header @(isFirstDepositGroup ? "first-group" : "")">
-                            <td colspan="@(isTaxWise ? 6 : 5)"><strong>@depositGroup.Key</strong></td>
-                        </tr>
-                        isFirstDepositGroup = false;
-
-                        // Group by Date within each Deposit Type
-                        var groupedByDate = depositGroup.GroupBy(r => r.Date ?? "").ToList();
-
-                        foreach (var dateGroup in groupedByDate)
-                        {
-                            // Date Group Header - matches image "Interest Transfer Date" sub-header
-                            <tr class="sub-group-header">
-                                <td colspan="@(isTaxWise ? 6 : 5)"><strong>@dateGroup.Key</strong></td>
-                            </tr>
-
-                            var dateItems = dateGroup.ToList();
-                            for (int i = 0; i < dateItems.Count; i++)
-                            {
-                                var row = dateItems[i];
-                                sn++;
-                                var isLast = i == dateItems.Count - 1;
-
-                                <tr class="@(isLast ? "group-subtotal" : "")">
-                                    <td></td>
-                                    <td class="text-center">@(row.Date ?? "")</td>
-                                    <td class="text-right amount highlight-interest">@(row.Interest.HasValue ? row.Interest.Value.ToString("N2") : "0.00")</td>
-                                    <td class="text-right amount highlight-tax">@(row.Tax.HasValue ? row.Tax.Value.ToString("N2") : "0.00")</td>
-                                    <td class="text-right amount highlight-net">@(row.NetAmount.HasValue ? row.NetAmount.Value.ToString("N2") : "0.00")</td>
-                                    @if (isTaxWise)
-                                    {
-                                        <td class="text-right highlight-percent">@(row.PercentTax.HasValue ? row.PercentTax.Value.ToString("N2") + "%" : "0.00%")</td>
-                                    }
-                                </tr>
-                            }
-
-                            <!-- Date Group Subtotal -->
-                            var dateGroupTotalInterest = dateGroup.Sum(r => r.Interest ?? 0);
-                            var dateGroupTotalTax = dateGroup.Sum(r => r.Tax ?? 0);
-                            var dateGroupTotalNet = dateGroup.Sum(r => r.NetAmount ?? 0);
-
-                            <tr style="border-bottom: 1px solid #999; background: #f9f9f9; font-weight: bold;">
-                                <td></td>
-                                <td class="text-right"><strong>Sub Total</strong></td>
-                                <td class="text-right"><strong>@dateGroupTotalInterest.ToString("N2")</strong></td>
-                                <td class="text-right"><strong>@dateGroupTotalTax.ToString("N2")</strong></td>
-                                <td class="text-right"><strong>@dateGroupTotalNet.ToString("N2")</strong></td>
-                                @if (isTaxWise)
-                                {
-                                    <td></td>
-                                }
-                            </tr>
-                        }
-
-                        <!-- Deposit Group Grand Total -->
-                        var depositTotalInterest = depositGroup.Sum(r => r.Interest ?? 0);
-                        var depositTotalTax = depositGroup.Sum(r => r.Tax ?? 0);
-                        var depositTotalNet = depositGroup.Sum(r => r.NetAmount ?? 0);
-
-                        <tr style="border-bottom: 2px solid #000; background: #f0f0f0; font-weight: bold;">
-                            <td class="text-right"><strong>Grand Total</strong></td>
-                            <td></td>
-                            <td class="text-right"><strong>@depositTotalInterest.ToString("N2")</strong></td>
-                            <td class="text-right"><strong>@depositTotalTax.ToString("N2")</strong></td>
-                            <td class="text-right"><strong>@depositTotalNet.ToString("N2")</strong></td>
-                            @if (isTaxWise)
-                            {
-                                <td></td>
-                            }
-                        </tr>
-                    }
-
-                    <!-- Overall Grand Total -->
-                    <tr class="grand-total">
-                        <td colspan="2" class="text-right"><strong>Overall Total</strong></td>
-                        <td class="text-right"><strong>@totalInterest.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalTax.ToString("N2")</strong></td>
-                        <td class="text-right"><strong>@totalNetAmount.ToString("N2")</strong></td>
-                        @if (isTaxWise)
-                        {
-                            <td></td>
-                        }
-                    </tr>
-                    <tr class="grand-total">
-                        <td colspan="2" class="text-right"><strong>Total Deposit Types</strong></td>
-                        <td class="text-right"><strong>@totalDepositTypes</strong></td>
-                        <td colspan="@(isTaxWise ? 3 : 2)"></td>
-                    </tr>
-                    <tr class="grand-total">
-                        <td colspan="2" class="text-right"><strong>Total Records</strong></td>
-                        <td class="text-right"><strong>@totalRecords</strong></td>
-                        <td colspan="@(isTaxWise ? 3 : 2)"></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="@(isTaxWise ? 6 : 5)" class="text-center">No interest and tax records found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Overall Total", 2, Fill(2,
+            totalInterest.ToString("N2"),
+            totalTax.ToString("N2"),
+            totalNetAmount.ToString("N2")));
+        table.Total("Total Deposit Types", 2, Fill(2, totalDepositTypes.ToString()));
+        table.Total("Total Records", 2, Fill(2, totalRecords.ToString()));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

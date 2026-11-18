@@ -1,210 +1,82 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.ChequeBookReport
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+    const int ColumnCount = 7;
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+
     var rows = (Model["Rows"] as List<ChequeBookLostRowDto>) ?? new List<ChequeBookLostRowDto>();
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchNames = Model["BranchNames"]?.ToString() ?? "All Branches";
-    var memberId = Model["MemberId"]?.ToString() ?? "";
-    var memberName = Model["MemberName"]?.ToString() ?? "";
-    var reportView = Model["ReportView"]?.ToString() ?? "Date";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchNames = Text("BranchNames", "All Branches");
+    var memberId = Text("MemberId");
+    var memberName = Text("MemberName");
+    var reportView = Text("ReportView", "Date");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Grouped by Member — matches the image: Member ID/Name printed once,
-    // then each of that member's lost cheques listed below it.
     var memberGroups = rows
         .GroupBy(r => new { r.MemberId, r.MemberName })
         .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Cheque Lost Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: nowrap;
-            }
-
-            .member-row td {
-                font-weight: bold;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #000;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Cheque Lost Report", sheetName: "ChequeLost")
+        .Column("Member ID", 12)
+        .Column("Member Name", 18)
+        .Column("A/C No.", 14)
+        .Column("Cheque No", 14)
+        .Column("Issue Date", 14)
+        .Column("Lost Date", 14)
+        .Column("Operator", 14)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9",
+            GroupBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 60)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 1px solid #000; }");
+
+    if (reportView == "Member")
+    {
+        table.MetaRow(Fmt.Join(Fmt.Labeled("Member Id :", memberId), Fmt.Labeled("Member Name :", memberName)));
+        table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+    }
+    else
+    {
+        table.MetaRow(Fmt.Labeled("Branch Name :", branchNames));
+        table.MetaRow(
+            Fmt.Labeled("Report Generated On :", generatedOn),
+            Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+            3);
+    }
+
+    foreach (var memberGroup in memberGroups)
+    {
+        table.GroupBy(
+            ReportCell.Left(memberGroup.Key.MemberId ?? ""),
+            ReportCell.Left(memberGroup.Key.MemberName ?? ""),
+            ReportCell.Left("", ColumnCount - 2));
+
+        foreach (var row in memberGroup)
+        {
+            table.Data(
+                "",
+                "",
+                row.AccountNo ?? "",
+                Fmt.Int(row.ChequeNo),
+                row.ChequeIssueDateBs ?? "",
+                row.LostDateBs ?? "",
+                row.Operator ?? "");
         }
-
-        <table class="data-table" data-sheet-name="ChequeLost">
-            <colgroup>
-                <col style="width:12%;" />
-                <col style="width:18%;" />
-                <col style="width:14%;" />
-                <col style="width:14%;" />
-                <col style="width:14%;" />
-                <col style="width:14%;" />
-                <col style="width:14%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="7">Cheque Lost Report</td>
-                </tr>
-
-                @if (reportView == "Member")
-                {
-                    <tr class="meta-row">
-                        <td colspan="7"><strong>Member Id :</strong> @memberId &nbsp;&nbsp;&nbsp;&nbsp; <strong>Member Name :</strong> @memberName</td>
-                    </tr>
-                    <tr class="meta-row">
-                        <td colspan="7"><strong>Report Generated On :</strong> @generatedOn</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr class="meta-row">
-                        <td colspan="7"><strong>Branch Name :</strong> @branchNames</td>
-                    </tr>
-                    <tr class="meta-row">
-                        <td colspan="3"><strong>Report Generated On :</strong> @generatedOn</td>
-                        <td colspan="4" class="text-right">
-                            <strong>From Date :</strong> @fromDate
-                            &nbsp;&nbsp;&nbsp;
-                            <strong>To Date :</strong> @toDate
-                        </td>
-                    </tr>
-                }
-
-                <tr>
-                    <th>Member ID</th>
-                    <th>Member Name</th>
-                    <th>A/C No.</th>
-                    <th>Cheque No</th>
-                    <th>Issue Date</th>
-                    <th>Lost Date</th>
-                    <th>Operator</th>
-                </tr>
-
-                @if (memberGroups.Any())
-                {
-                    foreach (var memberGroup in memberGroups)
-                    {
-                        <tr class="member-row">
-                            <td>@(memberGroup.Key.MemberId ?? "")</td>
-                            <td>@(memberGroup.Key.MemberName ?? "")</td>
-                            <td colspan="5"></td>
-                        </tr>
-
-                        foreach (var row in memberGroup)
-                        {
-                            <tr class="detail-row">
-                                <td></td>
-                                <td></td>
-                                <td>@(row.AccountNo ?? "")</td>
-                                <td>@(row.ChequeNo.HasValue ? row.ChequeNo.Value.ToString() : "")</td>
-                                <td>@(row.ChequeIssueDateBs ?? "")</td>
-                                <td>@(row.LostDateBs ?? "")</td>
-                                <td>@(row.Operator ?? "")</td>
-                            </tr>
-                        }
-                    }
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="7" class="text-center">No cheque book lost records found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

@@ -67,9 +67,9 @@ namespace NexgenCosysReport.Repository.Loan.LoanAnalysisReport
         {
             return selectLoan?.Trim().ToUpper() switch
             {
-                "N" => "Normal",
-                "O" => "Over Draft",
-                _ => "All"
+                "N" => "N",
+                "O" => "O",
+                _ => "-1"
             };
         }
 

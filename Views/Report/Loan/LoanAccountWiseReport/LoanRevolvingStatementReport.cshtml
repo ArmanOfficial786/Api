@@ -1,278 +1,81 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal Dec(string key) => Model.TryGetValue(key, out var dv) && dv != null ? Convert.ToDecimal(dv) : 0m;
+    string Money(decimal? value) => (value ?? 0m).ToString("N2");
+
     var rows = (Model["Rows"] as List<LoanRevolvingStatementRowDto>) ?? new List<LoanRevolvingStatementRowDto>();
-    var totalIssueAmount = Model["TotalIssueAmount"] as decimal? ?? 0;
-    var totalPrincipal = Model["TotalPrincipal"] as decimal? ?? 0;
-    var totalInterest = Model["TotalInterest"] as decimal? ?? 0;
-    var totalFine = Model["TotalFine"] as decimal? ?? 0;
 
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var memberId = Model["MemberId"]?.ToString() ?? "";
-    var memberName = Model["MemberName"]?.ToString() ?? "";
-    var address = Model["Address"]?.ToString() ?? "";
-    var contactNo = Model["ContactNo"]?.ToString() ?? "";
-    var accountNo = Model["AccountNo"]?.ToString() ?? "";
-    var loanTypeName = Model["LoanTypeName"]?.ToString() ?? "";
-    var sanctionAmount = Model["SanctionAmount"] as decimal? ?? 0;
-    var interestRate = Model["InterestRate"] as decimal? ?? 0;
-    var loanIssueAmount = Model["LoanIssueAmount"] as decimal? ?? 0;
-    var loanPeriod = Model["LoanPeriod"]?.ToString() ?? "";
-    var loanIssueOnBs = Model["LoanIssueOnBs"]?.ToString() ?? "";
-    var maturityOnBs = Model["MaturityOnBs"]?.ToString() ?? "";
-
-    var format = Model.ContainsKey("Format") ? Model["Format"]?.ToString() : "VIEW";
-    var isExcel = format is "EXCEL" or "XLSX";
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan Statement Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: "Times New Roman", Times, serif;
-                font-size: 10pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 10pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-size: 13pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 4px 6px 10px;
-            }
-
-            .between-row td {
-                padding: 2px 6px;
-                font-size: 10pt;
-            }
-
-            .between-row .label {
-                font-weight: bold;
-                white-space: nowrap;
-            }
-
-            .meta-spacer td {
-                height: 8px;
-            }
-
-            /* ── Info box: bordered key/value grid ── */
-            .info-box td {
-                border: 1px solid #000;
-                padding: 4px 8px;
-            }
-
-            .info-label {
-                font-weight: bold;
-                width: 15%;
-                white-space: nowrap;
-            }
-
-            .info-value {
-                width: 35%;
-            }
-
-            /* ── Transaction table ── */
-            .txn-header th {
-                border: 1px solid #000;
-                border-top: 2px solid #000;
-                font-weight: bold;
-                text-align: center;
-                background: #fff;
-                padding: 4px 6px;
-            }
-
-            .detail-row td {
-                border: 1px solid #000;
-                padding: 4px 6px;
-                color: #1a3d7c;
-            }
-
-            .total-row td {
-                border: 1px solid #000;
-                font-weight: bold;
-                padding: 4px 6px;
-                color: #000;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Loan Statement Report", sheetName: "LoanStatement")
+        .Column("DateNep", 12)
+        .Column("Description", 28)
+        .Column("Issue Amount", 13, Align.Right)
+        .Column("Principle Amt", 12, Align.Right)
+        .Column("Interest Amt", 11, Align.Right)
+        .Column("Penalty", 11, Align.Right)
+        .Column("Balance Amt", 13, Align.Right)
+        .NoColumnHeader()
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 65)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; border: 1px solid #000; }\n" +
+            "table.sheet-table tr.r-header th { border-top: 2px solid #000; }\n" +
+            "table.sheet-table tr.r-data td { color: #1a3d7c; }\n" +
+            "table.sheet-table tr.r-data td.info-label { color: #000; font-weight: bold; white-space: nowrap; }\n" +
+            "table.sheet-table tr.r-data td.info-value { color: #000; }");
 
-        <table class="data-table" data-sheet-name="LoanStatement">
-            <colgroup>
-                <col style="width:12%;" />
-                <col style="width:28%;" />
-                <col style="width:13%;" />
-                <col style="width:12%;" />
-                <col style="width:11%;" />
-                <col style="width:11%;" />
-                <col style="width:13%;" />
-            </colgroup>
-            <tbody>
-                <!-- Title -->
-                <tr class="meta-title">
-                    <td colspan="7">Loan Statement Report</td>
-                </tr>
+    table.MetaRow(Fmt.Labeled("Statement Between :", $"{fromDate}   -   {toDate}"));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
 
-                <!-- Statement Between -->
-                <tr class="between-row">
-                    <td class="label" colspan="1">Statement Between :</td>
-                    <td colspan="1">@fromDate &nbsp;&nbsp;-&nbsp;&nbsp; @toDate</td>
-                    <td colspan="5"></td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="7"></td></tr>
+    ReportCell Label(string text) => new ReportCell(text, Align.Left, 1, "info-label");
+    ReportCell Value(string text, int span = 1) => new ReportCell(text, Align.Left, span, "info-value");
 
-                <tr class="between-row">
-                    <td class="label" colspan="1">Report Generated On :</td>
-                    <td colspan="6">@generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="7"></td></tr>
+    table.Data(Label("MemberID"), Value(Text("MemberId")), Label("Member Name"), Value(Text("MemberName"), 4));
+    table.Data(Label("Address"), Value(Text("Address")), Label("Contact No"), Value(Text("ContactNo"), 4));
+    table.Data(Label("Account No"), Value(Text("AccountNo")), Label("Loan Type"), Value(Text("LoanTypeName"), 4));
+    table.Data(Label("SanctionAmount"), Value(Dec("SanctionAmount").ToString("N2")), Label("Interest Rate"), Value(Dec("InterestRate").ToString("N2") + " %", 4));
+    table.Data(Label("Loan Issue Amount"), Value(Dec("LoanIssueAmount").ToString("N2")), Label("Loan Period"), Value(Text("LoanPeriod"), 4));
+    table.Data(Label("Loan Issue Date"), Value(Text("LoanIssueOnBs")), Label("Loan Maturity Date"), Value(Text("MaturityOnBs"), 4));
 
-                <!-- Member / Loan info box -->
-                <tr class="info-box">
-                    <td class="info-label">MemberID</td>
-                    <td class="info-value">@memberId</td>
-                    <td class="info-label">Member Name</td>
-                    <td class="info-value" colspan="4">@memberName</td>
-                </tr>
-                <tr class="info-box">
-                    <td class="info-label">Address</td>
-                    <td class="info-value">@address</td>
-                    <td class="info-label">Contact No</td>
-                    <td class="info-value" colspan="4">@contactNo</td>
-                </tr>
-                <tr class="info-box">
-                    <td class="info-label">Account No</td>
-                    <td class="info-value">@accountNo</td>
-                    <td class="info-label">Loan Type</td>
-                    <td class="info-value" colspan="4">@loanTypeName</td>
-                </tr>
-                <tr class="info-box">
-                    <td class="info-label">SanctionAmount</td>
-                    <td class="info-value">@sanctionAmount.ToString("N2")</td>
-                    <td class="info-label">Interest Rate</td>
-                    <td class="info-value" colspan="4">@interestRate.ToString("N2") %</td>
-                </tr>
-                <tr class="info-box">
-                    <td class="info-label">Loan Issue Amount</td>
-                    <td class="info-value">@loanIssueAmount.ToString("N2")</td>
-                    <td class="info-label">Loan Period</td>
-                    <td class="info-value" colspan="4">@loanPeriod</td>
-                </tr>
-                <tr class="info-box">
-                    <td class="info-label">Loan Issue Date</td>
-                    <td class="info-value">@loanIssueOnBs</td>
-                    <td class="info-label">Loan Maturity Date</td>
-                    <td class="info-value" colspan="4">@maturityOnBs</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="7"></td></tr>
+    table.Spacer();
+    table.Header();
 
-                <!-- Transaction table header -->
-                <tr class="txn-header">
-                    <th>DateNep</th>
-                    <th>Description</th>
-                    <th class="text-right">Issue Amount</th>
-                    <th class="text-right">Principle Amt</th>
-                    <th class="text-right">Interest Amt</th>
-                    <th class="text-right">Penalty</th>
-                    <th class="text-right">Balance Amt</th>
-                </tr>
+    foreach (var row in rows)
+    {
+        table.Data(
+            row.DateOnBs ?? "",
+            row.Description ?? "",
+            Money(row.LoanIssueAmount),
+            Money(row.Principal),
+            Money(row.Interest),
+            Money(row.Fine),
+            Money(row.BalanceAmount));
+    }
 
-                @if (rows.Any())
-                {
-                    foreach (var row in rows)
-                    {
-                        <tr class="detail-row">
-                            <td>@(row.DateOnBs ?? "")</td>
-                            <td>@(row.Description ?? "")</td>
-                            <td class="text-right">@(row.LoanIssueAmount?.ToString("N2") ?? "0.00")</td>
-                            <td class="text-right">@(row.Principal?.ToString("N2") ?? "0.00")</td>
-                            <td class="text-right">@(row.Interest?.ToString("N2") ?? "0.00")</td>
-                            <td class="text-right">@(row.Fine?.ToString("N2") ?? "0.00")</td>
-                            <td class="text-right">@(row.BalanceAmount?.ToString("N2") ?? "0.00")</td>
-                        </tr>
-                    }
-
-                    <tr class="total-row">
-                        <td></td>
-                        <td class="text-right">Total:</td>
-                        <td class="text-right">@totalIssueAmount.ToString("N2")</td>
-                        <td class="text-right">@totalPrincipal.ToString("N2")</td>
-                        <td class="text-right">@totalInterest.ToString("N2")</td>
-                        <td class="text-right">@totalFine.ToString("N2")</td>
-                        <td></td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Total:", 2,
+            Dec("TotalIssueAmount").ToString("N2"),
+            Dec("TotalPrincipal").ToString("N2"),
+            Dec("TotalInterest").ToString("N2"),
+            Dec("TotalFine").ToString("N2"),
+            "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

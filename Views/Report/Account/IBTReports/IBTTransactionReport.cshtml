@@ -1,241 +1,89 @@
-﻿@* Views/Report/Account/IBTReports/IBTTransactionReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Account.IBTReports;
+﻿@using NexgenCosysReport.Dtos.RequestDtos.Account.IBTReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
-    var rows = (Model["Rows"] as List<IBTTransactionRowDto>) ?? new List<IBTTransactionRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalCashReceived = Model["TotalCashReceived"] as decimal? ?? 0;
-    var totalCashWithdrawl = Model["TotalCashWithdrawl"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+    var fontSize = "8pt";
+    var metaFontSize = "8.5pt";
+
+    string Text(string key) => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? "" : "";
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
+    var rows = (Model["Rows"] as IEnumerable<IBTTransactionRowDto>)?.ToList() ?? new List<IBTTransactionRowDto>();
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName");
+    if (branchName == "") branchName = "All";
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Alternating shading per member group (not per row) — matches the image,
-    // where consecutive rows for the same MemberId stay the same shade and
-    // the shade flips only when the MemberId changes. Rows must arrive
-    // pre-sorted so a member's rows are contiguous (the default @orderBy is
-    // empty, relying on the SP's own row order — if members aren't grouped
-    // contiguously in a given sort, this striping will look inconsistent).
+    var totalRecords = Model.TryGetValue("TotalRecords", out var tr) && tr != null && Convert.ToInt32(tr) > 0
+        ? Convert.ToInt32(tr)
+        : rows.Count;
+    var totalReceived = TotalOr("TotalCashReceived", rows.Sum(r => r.CashReceived ?? 0));
+    var totalWithdrawl = TotalOr("TotalCashWithdrawl", rows.Sum(r => r.CashWithdrawl ?? 0));
+
+    var table = new ReportTable(Model, title: "IBT Transaction Report", sheetName: "IBTTransaction")
+        .Style(new ReportStyle { ZebraStripes = false })
+        .Column("Member Id", 10)
+        .Column("Member Name", 15)
+        .Column("Deposit Amount", 12, Align.Right)
+        .Column("Withdrawl Amount", 12, Align.Right)
+        .Column("Transaction Date", 11)
+        .Column("Nature Of Transaction", 16)
+        .Column("Transaction OfficeName", 12)
+        .Column("Member OfficeName", 12)
+        .Sizing(rowMm: 6, headerMm: 9, firstPageExtraMm: 70)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 2px 4px; }\n" +
+            "table.sheet-table tr.meta-row td { font-size: " + metaFontSize + "; }\n" +
+            "table.sheet-table tr.r-data td.shaded { background: #cfcfcf; }");
+
+    table.MetaRow(
+            Fmt.Labeled("Branch Name :", branchName),
+            Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)))
+         .MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    // shade flips only when the member changes, so a member's rows keep one shade
     string? currentMemberId = null;
-    bool shadeOn = false;
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>IBT Transaction Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var shadeOn = false;
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .report-title {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            /* Own auto-layout table for the subheader so long labels never
-                           wrap/overlap — same fix applied throughout this thread. */
-            .meta-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 6px;
-            }
-
-                .meta-table td {
-                    padding: 3px 6px;
-                    font-size: 9pt;
-                    white-space: nowrap;
-                    vertical-align: top;
-                }
-
-            .meta-left {
-                text-align: left;
-                width: 50%;
-            }
-
-            .meta-right {
-                text-align: right;
-                width: 50%;
-            }
-
-            .meta-spacer td {
-                height: 8px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: normal;
-                font-weight: bold;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .detail-row-shaded td {
-                background: #cfcfcf;
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    foreach (var row in rows)
+    {
+        if (row.MemberId != currentMemberId)
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            shadeOn = !shadeOn;
+            currentMemberId = row.MemberId;
         }
 
-        <div class="report-title">IBT Transaction Report</div>
+        var css = shadeOn ? "shaded" : null;
 
-        <table class="meta-table">
-            <tr>
-                <td class="meta-left"><strong>Branch Name :</strong> @branchName</td>
-                <td class="meta-right"><strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp; <strong>To Date :</strong> @toDate</td>
-            </tr>
-            <tr>
-                <td class="meta-left"><strong>Report Generated On :</strong> @generatedOn</td>
-                <td class="meta-right"></td>
-            </tr>
-            <tr class="meta-spacer"><td colspan="2"></td></tr>
-        </table>
+        table.Data(new[]
+        {
+            new ReportCell(row.MemberId ?? "", Align.Left, 1, css),
+            new ReportCell(row.FullName ?? "", Align.Left, 1, css),
+            new ReportCell(Fmt.Amount(row.CashReceived ?? 0), Align.Right, 1, css),
+            new ReportCell(Fmt.Amount(row.CashWithdrawl ?? 0), Align.Right, 1, css),
+            new ReportCell(row.TransactionOnBs ?? "", Align.Left, 1, css),
+            new ReportCell(row.Description ?? "", Align.Left, 1, css),
+            new ReportCell(row.TransactionOfficeName ?? "", Align.Left, 1, css),
+            new ReportCell(row.MemMemberRegistrationOfficeName ?? "", Align.Left, 1, css)
+        });
+    }
 
-        <table class="data-table" data-sheet-name="IBTTransaction">
-            <colgroup>
-                <col style="width:10%;" />
-                <col style="width:13%;" />
-                <col style="width:12%;" />
-                <col style="width:12%;" />
-                <col style="width:11%;" />
-                <col style="width:16%;" />
-                <col style="width:13%;" />
-                <col style="width:13%;" />
-            </colgroup>
-            <tbody>
-                <tr>
-                    <th>Member Id</th>
-                    <th>Member Name</th>
-                    <th class="text-right">Deposit Amount</th>
-                    <th class="text-right">Withdrawl Amount</th>
-                    <th>Transaction Date</th>
-                    <th>Nature Of Transaction</th>
-                    <th>Transaction OfficeName</th>
-                    <th>Member OfficeName</th>
-                </tr>
-
-                @if (rows.Any())
-                {
-                    foreach (var row in rows)
-                    {
-                        if (row.MemberId != currentMemberId)
-                        {
-                            shadeOn = !shadeOn;
-                            currentMemberId = row.MemberId;
-                        }
-
-                        <tr class="@(shadeOn ? "detail-row-shaded" : "detail-row")">
-                            <td>@(row.MemberId ?? "")</td>
-                            <td>@(row.FullName ?? "")</td>
-                            <td class="text-right">@(row.CashReceived.HasValue ? row.CashReceived.Value.ToString("N2") : "0.00")</td>
-                            <td class="text-right">@(row.CashWithdrawl.HasValue ? row.CashWithdrawl.Value.ToString("N2") : "0.00")</td>
-                            <td>@(row.TransactionOnBs ?? "")</td>
-                            <td>@(row.Description ?? "")</td>
-                            <td>@(row.TransactionOfficeName ?? "")</td>
-                            <td>@(row.MemMemberRegistrationOfficeName ?? "")</td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="2" class="text-right">Grand Total</td>
-                        <td class="text-right">@totalCashReceived.ToString("N2")</td>
-                        <td class="text-right">@totalCashWithdrawl.ToString("N2")</td>
-                        <td colspan="4"></td>
-                    </tr>
-                    <tr class="grand-total-row">
-                        <td colspan="7" class="text-right">Total Records</td>
-                        <td class="text-right">@totalRecords</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="8" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (rows.Count > 0)
+    {
+        table.Total("Grand Total", 2, Fmt.Amount(totalReceived), Fmt.Amount(totalWithdrawl), "", "", "", "");
+        table.Total("Total Records", 7, totalRecords.ToString());
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

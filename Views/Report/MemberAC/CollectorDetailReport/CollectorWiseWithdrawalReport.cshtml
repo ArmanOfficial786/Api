@@ -1,292 +1,97 @@
 ﻿@using NexgenCosysReport.Dtos.RequestDtos.MemberAccount.CollectorDetailReport
-
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9.5pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal Dec(string key) => Model.TryGetValue(key, out var dv) && dv != null ? Convert.ToDecimal(dv) : 0m;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        var value = Dec(key);
+        return value != 0 ? value : fallback;
+    }
+
     var rows = (Model["Rows"] as List<CollectorWiseWithdrawalRowDto>) ?? new List<CollectorWiseWithdrawalRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalAmount = Model["TotalAmount"] as decimal? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var orderBy = Model["OrderBy"]?.ToString() ?? "";
-    var collectorName = Model["CollectorName"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var collectorName = Text("CollectorName");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    // Company / letterhead details - wire these up to your settings/config source
-    var regNo = Model.ContainsKey("RegNo") ? Model["RegNo"]?.ToString() : "3535345345345";
-    var orgName = Model.ContainsKey("OrgName") ? Model["OrgName"]?.ToString() : "Cosys SACCOS";
-    var address = Model.ContainsKey("Address") ? Model["Address"]?.ToString() : "Pulchwok, Lalitpur";
-    var phoneNo = Model.ContainsKey("PhoneNo") ? Model["PhoneNo"]?.ToString() : "9803391696";
-    var faxNo = Model.ContainsKey("FaxNo") ? Model["FaxNo"]?.ToString() : "01-4243466 , 01-4243466";
-    var email = Model.ContainsKey("Email") ? Model["Email"]?.ToString() : "cosyssoftwareprivate@gmail.com";
-    var website = Model.ContainsKey("Website") ? Model["Website"]?.ToString() : "www.cosys.com.np";
-    var panNo = Model.ContainsKey("PanNo") ? Model["PanNo"]?.ToString() : "4324235325235";
-    var logoUrl = Model.ContainsKey("LogoUrl") ? Model["LogoUrl"]?.ToString() : "/images/logo.png";
-
-    // Group rows by collector, matching the "Collector Name" section layout in the report
     var grouped = rows
         .GroupBy(r => string.IsNullOrEmpty(r.CollectoreName) ? collectorName : r.CollectoreName)
         .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Collector Wise Withdrawal Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9.5pt;
-                color: #000;
-                background: white;
-            }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalAmount = Dec("TotalAmount");
 
-            .report-container {
-                width: 100%;
-                overflow: visible;
-                padding: 10px 20px;
-            }
-
-            /* ---------- Letterhead ---------- */
-            .letterhead-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 6px;
-            }
-
-                .letterhead-table td {
-                    padding: 1px 4px;
-                    vertical-align: top;
-                    font-size: 9.5pt;
-                }
-
-            .logo-cell {
-                width: 14%;
-                text-align: left;
-            }
-
-                .logo-cell img {
-                    height: 55px;
-                    margin-right: 2px;
-                }
-
-            .reg-no {
-                text-align: right;
-                font-size: 9.5pt;
-            }
-
-            .org-name {
-                text-align: center;
-                font-size: 17pt;
-                font-weight: bold;
-            }
-
-            .org-address {
-                text-align: center;
-                font-size: 10.5pt;
-                font-weight: bold;
-            }
-
-            .info-left {
-                width: 43%;
-            }
-
-            .info-right {
-                width: 43%;
-            }
-
-            /* ---------- Title ---------- */
-            .report-title {
-                text-align: center;
-                font-size: 15pt;
-                font-weight: bold;
-                text-decoration: underline;
-                margin: 10px 0 8px 0;
-            }
-
-            /* ---------- Filter / meta info ---------- */
-            .meta-table {
-                width: 100%;
-                border-collapse: collapse;
-                margin-bottom: 10px;
-            }
-
-                .meta-table td {
-                    padding: 2px 4px;
-                    font-size: 9.5pt;
-                }
-
-            .meta-right {
-                text-align: right;
-            }
-
-            /* ---------- Data table ---------- */
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9.5pt;
-            }
-
-                .data-table th {
-                    text-align: left;
-                    font-weight: bold;
-                    border-top: 2px solid #000;
-                    border-bottom: 1px solid #000;
-                    padding: 4px 6px;
-                }
-
-                .data-table td {
-                    padding: 3px 6px;
-                }
-
-            .col-sn {
-                width: 6%;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            .collector-row td {
-                font-weight: bold;
-                padding-top: 8px;
-            }
-
-            .data-row td {
-                padding-left: 18px;
-            }
-
-                .data-row td:first-child {
-                    padding-left: 24px;
-                }
-
-            .subtotal-row td {
-                border-top: 1px solid #000;
-                font-weight: bold;
-            }
-
-            .record-count-row td {
-                padding-left: 24px;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-            }
-
-            @@media print {
-                .data-table thead {
-                    display: table-header-group;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Collector Wise Withdrawl Report", sheetName: "CollectorWiseWithdrawal")
+        .Column("Collector Name", 14)
+        .Column("Member Id", 16)
+        .Column("Member Name", 26)
+        .Column("Account No", 16)
+        .Column("Amount", 14, Align.Right)
+        .Column("Date", 14)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#fff",
+            GroupBackground = "#fff",
+            SubTotalBackground = "#fff",
+            TotalBackground = "#fff"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 55)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-subtotal td, table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            "table.sheet-table tr.r-header th { white-space: nowrap; border-top: 2px solid #000; border-bottom: 1px solid #000; }\n" +
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; padding-top: 8px; }\n" +
+            "table.sheet-table tr.r-data td { border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-data td.sn-cell { padding-left: 24px; }\n" +
+            "table.sheet-table tr.r-subtotal td { border-top: 1px solid #000; border-bottom: 0; }\n" +
+            "table.sheet-table tr.r-total td { border-top: 2px solid #000; border-bottom: 2px solid #000; }");
+
+    table.MetaRow(
+        Fmt.Join(),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+        3);
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On:", generatedOn),
+        Fmt.Labeled("Collector Name :", collectorName),
+        3);
+
+    foreach (var group in grouped)
+    {
+        var groupAmount = group.Sum(r => r.Amount ?? 0);
+
+        table.GroupTitle(group.Key ?? "");
+
+        var sn = 0;
+        foreach (var row in group)
+        {
+            table.Data(
+                new ReportCell((++sn).ToString(), Align.Left, 1, "sn-cell"),
+                ReportCell.Left(row.MemberId ?? ""),
+                ReportCell.Left(row.MemberName ?? ""),
+                ReportCell.Left(row.AccountNo ?? ""),
+                ReportCell.Right(Fmt.Amount(row.Amount)),
+                ReportCell.Left(row.Date ?? ""));
         }
 
-        <div class="report-title">Collector Wise Withdrawl Report</div>
+        table.SubTotal("Total Amount :", 4, groupAmount.ToString("N2"), "");
 
-        <table class="meta-table">
-            <tr>
-                <td></td>
-                <td class="meta-right">
-                    <strong>From Date :</strong> @fromDate &nbsp;&nbsp;&nbsp;&nbsp;
-                    <strong>To Date :</strong> @toDate
-                </td>
-            </tr>
-            <tr>
-                <td><strong>Report Generated On:</strong> @generatedOn</td>
-                <td class="meta-right"><strong>Collector Name :</strong> @collectorName</td>
-            </tr>
-        </table>
+        table.Data(
+            new ReportCell(group.Count().ToString(), Align.Left, 1, "sn-cell"),
+            ReportCell.Left("", 5));
+    }
 
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th class="col-sn">Collector Name</th>
-                    <th>Member Id</th>
-                    <th>Member Name</th>
-                    <th>Account No</th>
-                    <th class="text-right">Amount</th>
-                    <th>Date</th>
-                </tr>
-            </thead>
-            <tbody>
-                @if (grouped.Any())
-                {
-                    foreach (var group in grouped)
-                    {
-                        var groupAmount = group.Sum(r => r.Amount ?? 0);
-                        int sn = 0;
-
-                        <tr class="collector-row">
-                            <td colspan="6">@group.Key</td>
-                        </tr>
-
-                        foreach (var row in group)
-                        {
-                            sn++;
-                            <tr class="data-row">
-                                <td>@sn</td>
-                                <td>@(row.MemberId ?? "")</td>
-                                <td>@(row.MemberName ?? "")</td>
-                                <td>@(row.AccountNo ?? "")</td>
-                                <td class="text-right">@(row.Amount.HasValue ? row.Amount.Value.ToString("N2") : "")</td>
-                                <td>@(row.Date ?? "")</td>
-                            </tr>
-                        }
-
-                        <tr class="subtotal-row">
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td class="text-right"><strong>Total Amount :</strong></td>
-                            <td class="text-right"><strong>@groupAmount.ToString("N2")</strong></td>
-                            <td></td>
-                        </tr>
-                        <tr class="record-count-row">
-                            <td>@group.Count()</td>
-                            <td colspan="5"></td>
-                        </tr>
-                    }
-
-                    @if (grouped.Count > 1)
-                    {
-                        <tr class="grand-total-row">
-                            <td colspan="3" class="text-right">Grand Total</td>
-                            <td class="text-right">Total Records: @totalRecords</td>
-                            <td class="text-right">@totalAmount.ToString("N2")</td>
-                            <td></td>
-                        </tr>
-                    }
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="6" class="text-center">No withdrawal transactions found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    if (grouped.Count > 1)
+    {
+        table.Total("Grand Total", 3, $"Total Records: {totalRecords}", totalAmount.ToString("N2"), "");
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

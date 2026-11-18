@@ -97,11 +97,12 @@ namespace NexgenCosysReport.Services.ReportService
             catch { return 1; }
         }
 
+
         // ═══════════════════════════════════════════════════════════════════
         // PRIVATE
         // ═══════════════════════════════════════════════════════════════════
 
-        private void AppendPaginationHeaders(int totalPages, int? totalRecords)
+        public void AppendPaginationHeaders(int totalPages, int? totalRecords = null)
         {
             var pagination = new Pagination
             {

@@ -1,203 +1,86 @@
-﻿@* Views/Report/Microfinance/CenterDetailReports/CenterMeetingDetailReport.cshtml *@
-@using NexgenCosysReport.Dtos.RequestDtos.Microfinance.CenterDetailReports;
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Microfinance.CenterDetailReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
     var rows = (Model["Rows"] as List<CenterMeetingDetailRowDto>) ?? new List<CenterMeetingDetailRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var collectionCenterName = Model["CollectionCenterName"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
+    var collectionCenterName = Text("CollectionCenterName");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
     var isCollectionCenterFiltered = !string.IsNullOrEmpty(collectionCenterName);
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Center Meeting Detail Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    padding: 5px 6px;
-                    vertical-align: top;
-                    line-height: 1.35;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                vertical-align: middle;
-            }
-
-            .detail-row td {
-                border-bottom: 1px solid #eee;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Center Meeting Detail Report", sheetName: "CenterMeetingDetail")
+        .Column("SN", 6)
+        .Column("Center Code", 12)
+        .Column("Center Name", 20)
+        .Column("Meeting Date", 24)
+        .Column("Changed Meeting Date", 22)
+        .Column("Collector Name", 16)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
-        }
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 7, headerMm: 8, firstPageExtraMm: 75)   // rows are a little taller than the other reports (5 px padding)
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td " +
+            "{ font-size: " + fontSize + "; line-height: 1.35; padding: 3px 6px; vertical-align: top; }" +
+            "table.sheet-table tr.r-header th { vertical-align: middle; }" +
+            "table.sheet-table tr.r-data td { border-bottom: 1px solid #eee; }" +
+            // total line
+            "table.sheet-table td.tt { font-weight: bold; background: #f9f9f9 !important; border-top: 2px solid #000 !important; border-bottom: 2px solid #000 !important; }");
 
-        <table class="data-table" data-sheet-name="CenterMeetingDetail">
-            <colgroup>
-                <col style="width:6%;" />
-                <col style="width:12%;" />
-                <col style="width:20%;" />
-                <col style="width:24%;" />
-                <col style="width:22%;" />
-                <col style="width:16%;" />
-            </colgroup>
-            <tbody>
-                <tr class="meta-title">
-                    <td colspan="6">Center Meeting Detail Report</td>
-                </tr>
+    // ── title block ──
+    // the center is shown next to the branch only when a center is selected
+    table.MetaRow(isCollectionCenterFiltered
+        ? Fmt.Join(Fmt.Labeled("Branch Name :", branchName), Fmt.Labeled("Center :", collectionCenterName))
+        : Fmt.Labeled("Branch Name :", branchName));
+    table.MetaRow(
+        Fmt.Labeled("Report Generated On :", generatedOn),
+        Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("To Date :", toDate)),
+        leftSpan: 2);
 
-                <tr class="meta-row">
-                    <td colspan="6">
-                        <strong>Branch Name :</strong> @branchName
-                        @if (isCollectionCenterFiltered)
-                        {
-                            <text>&nbsp;&nbsp;&nbsp;<strong>Center :</strong> @collectionCenterName</text>
-                        }
-                    </td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="6"></td></tr>
+    // ── rows ──
+    var sn = 0;
+    foreach (var row in rows)
+    {
+        sn++;
+        table.Data(
+            sn.ToString(),
+            row.CenterCode ?? "",
+            row.CenterName ?? "",
+            row.MeetingDate ?? "",
+            row.ChangedDate ?? "",
+            row.CollectorName ?? "");
+    }
 
-                <tr class="meta-row">
-                    <td colspan="2"><strong>Report Generated On :</strong> @generatedOn</td>
-                    <td colspan="4" class="text-right">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;
-                        <strong>To Date :</strong> @toDate
-                    </td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="6"></td></tr>
-
-                <tr>
-                    <th>SN</th>
-                    <th>Center Code</th>
-                    <th>Center Name</th>
-                    <th>Meeting Date</th>
-                    <th>Changed Meeting Date</th>
-                    <th>Collector Name</th>
-                </tr>
-
-                @if (rows.Any())
-                {
-                    var sn = 0;
-                    foreach (var row in rows)
-                    {
-                        sn++;
-                        <tr class="detail-row">
-                            <td>@sn</td>
-                            <td>@(row.CenterCode ?? "")</td>
-                            <td>@(row.CenterName ?? "")</td>
-                            <td>@(row.MeetingDate ?? "")</td>
-                            <td>@(row.ChangedDate ?? "")</td>
-                            <td>@(row.CollectorName ?? "")</td>
-                        </tr>
-                    }
-
-                    <tr class="grand-total-row">
-                        <td colspan="5" class="text-right">Total Records</td>
-                        <td class="text-center">@totalRecords</td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="6" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    // label spans the first 5 columns, right-aligned; the count is centred in the last column (same as before)
+    if (rows.Count > 0)
+    {
+        table.Data(
+            new ReportCell("Total Records", Align.Right, 5, "tt"),
+            new ReportCell(totalRecords.ToString(), Align.Center, 1, "tt"));
+    }
+}
+@await Html.PartialAsync("_SheetReport", table.Build())

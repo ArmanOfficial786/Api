@@ -1,252 +1,97 @@
-﻿@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports;
+﻿@using Microsoft.AspNetCore.Html
+@using NexgenCosysReport.Dtos.RequestDtos.Loan.OtherReports
+@using NexgenCosysReport.Services.ReportService.Table
 @model Dictionary<string, object>
 @{
     Layout = null;
 
+    var fontSize = "9pt";
+    const int ColumnCount = 7;   // number of .Column(...) lines below; the member line spans all of them
+
+    string Text(string key, string fallback = "") => Model.TryGetValue(key, out var sv) && sv != null ? sv.ToString() ?? fallback : fallback;
+    decimal TotalOr(string key, decimal fallback)
+    {
+        if (Model.TryGetValue(key, out var tv) && tv != null)
+        {
+            var dv = Convert.ToDecimal(tv);
+            if (dv != 0) return dv;
+        }
+        return fallback;
+    }
+
     var rows = (Model["Rows"] as List<LoanAccountClosedRowDto>) ?? new List<LoanAccountClosedRowDto>();
-    var totalRecords = Model["TotalRecords"] as int? ?? 0;
-    var totalMembers = Model.ContainsKey("TotalMembers") ? (Model["TotalMembers"] as int? ?? 0) : 0;
-    var fromDate = Model["FromDate"]?.ToString() ?? "";
-    var toDate = Model["ToDate"]?.ToString() ?? "";
-    var branchName = Model["BranchName"]?.ToString() ?? "All";
-    var memberGroupName = Model["MemberGroupName"]?.ToString() ?? "";
-    var format = Model["Format"]?.ToString() ?? "VIEW";
-    var isExcel = format == "EXCEL" || format == "XLSX";
+
+    var fromDate = Text("FromDate");
+    var toDate = Text("ToDate");
+    var branchName = Text("BranchName", "All");
+    var memberGroupName = Text("MemberGroupName");
     var generatedOn = DateTime.Now.ToString("yyyy/MM/dd");
 
-    var isMemberGroupFiltered = !string.IsNullOrEmpty(memberGroupName);
+    // grouped by member: member line once, then that member's closed loans underneath
+    var memberGroups = rows.GroupBy(r => new { r.MemberId, r.FullName }).ToList();
 
-    // Grouped by member, like the legacy report: member header once,
-    // then a numbered list of that member's closed loans underneath.
-    var memberGroups = rows
-        .GroupBy(r => new { r.MemberId, r.FullName })
-        .ToList();
-}
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="utf-8" />
-    <title>Loan Account Closed Report</title>
-    <style>
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    var totalRecords = (int)TotalOr("TotalRecords", rows.Count);
+    var totalMembers = (int)TotalOr("TotalMembers", memberGroups.Count);
 
-            body {
-                font-family: Arial, sans-serif;
-                font-size: 9pt;
-                background: white;
-                color: #000;
-            }
-
-            .report-container {
-                width: 100%;
-                overflow: visible;
-            }
-
-            thead {
-                display: table-row-group;
-            }
-
-            .data-table {
-                width: 100%;
-                border-collapse: collapse;
-                font-size: 9pt;
-                table-layout: fixed;
-            }
-
-                .data-table td, .data-table th {
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    overflow: hidden;
-                    padding: 4px 6px;
-                    vertical-align: middle;
-                }
-
-            .meta-title td {
-                text-align: center;
-                font-family: "Times New Roman", Times, serif;
-                font-size: 14pt;
-                font-weight: bold;
-                text-decoration: underline;
-                padding: 8px 6px;
-            }
-
-            .meta-row td {
-                padding: 3px 6px;
-                font-size: 9pt;
-                text-align: left;
-            }
-
-            .meta-spacer td {
-                height: 6px;
-            }
-
-            .data-table th {
-                background: #f9f9f9;
-                border-top: 2px solid #000;
-                border-bottom: 1px solid #000;
-                text-align: left;
-                white-space: normal;
-                line-height: 1.2;
-                vertical-align: bottom;
-            }
-
-            /* Member group header row (Member Id + Name only) */
-            .member-header-row td {
-                padding-top: 6px;
-                padding-bottom: 2px;
-                font-weight: bold;
-            }
-
-            /* Loan rows under a member, numbered, each with a bottom rule */
-            .detail-row td {
-                border-bottom: 1px solid #ccc;
-            }
-
-            .sn-col {
-                text-align: center;
-                color: #555;
-            }
-
-            .loan-account {
-                color: #1F5C99;
-            }
-
-            .grand-total-row td {
-                border-top: 2px solid #000;
-                border-bottom: 2px solid #000;
-                font-weight: bold;
-                background: #f9f9f9;
-                padding: 5px 6px;
-            }
-
-            .text-right {
-                text-align: right !important;
-            }
-
-            .text-center {
-                text-align: center !important;
-            }
-
-            @@media print {
-                thead {
-                    display: table-row-group;
-                }
-
-                tr {
-                    page-break-inside: avoid;
-                    break-inside: avoid;
-                }
-            }
-    </style>
-</head>
-<body>
-    <div class="report-container">
-
-        @if (!isExcel)
+    var table = new ReportTable(Model, title: "Loan Account Closed Report", sheetName: "LoanAccountClosed")
+        .Column("Member ID", 11)
+        .Column("Name", 20)
+        .Column("", 6, Align.Center)           // serial number of the loan inside its member
+        .Column("A/C No", 14)
+        .Column("Loan Type", 17)
+        .Column("Issue Date", 16)
+        .Column("Closed Date", 16)
+        .Style(new ReportStyle
         {
-            @await Html.PartialAsync("_CommonHeader", Model)
+            ZebraStripes = false,
+            HeaderBackground = "#f9f9f9",
+            GroupBackground = "#fff",
+            TotalBackground = "#f9f9f9"
+        })
+        .Sizing(rowMm: 6, headerMm: 8, firstPageExtraMm: 75)   // one text line per row
+        .Css(
+            "table.sheet-table tr.r-header th, table.sheet-table tr.r-data td, table.sheet-table tr.r-group td, " +
+            "table.sheet-table tr.r-total td " +
+            "{ font-size: " + fontSize + "; line-height: 1.25; padding: 1px 6px; }\n" +
+            // member line: bold, no rules
+            "table.sheet-table tr.r-group td { border-top: 0; border-bottom: 0; }\n" +
+            // closed loan rows: a rule under each
+            "table.sheet-table tr.r-data td { border-bottom: 1px solid #ccc; }\n" +
+            ".sn-col { color: #555; }\n" +
+            ".loan-account { color: #1F5C99; }");
+
+    // ── title block: stacked, left-aligned ──
+    table.MetaRow(Fmt.Labeled("Branch Name :", branchName));
+    table.MetaRow(Fmt.Join(Fmt.Labeled("From Date :", fromDate), Fmt.Labeled("Till Date :", toDate)));
+    if (!string.IsNullOrEmpty(memberGroupName)) table.MetaRow(Fmt.Labeled("Member Group :", memberGroupName));
+    table.MetaRow(Fmt.Labeled("Report Generated On :", generatedOn));
+
+    // ── rows: one block per member ──
+    foreach (var grp in memberGroups)
+    {
+        // member line: id, name, then one empty cell covering the other 5 columns
+        table.GroupBy(
+            ReportCell.Left(grp.Key.MemberId ?? ""),
+            ReportCell.Left(grp.Key.FullName ?? ""),
+            ReportCell.Left("", ColumnCount - 2));
+
+        // that member's closed loans, numbered from 1
+        var sn = 0;
+        foreach (var row in grp)
+        {
+            table.Data(
+                ReportCell.Left(""),
+                ReportCell.Left(""),
+                new ReportCell((++sn).ToString(), Align.Center, 1, "sn-col"),
+                new ReportCell(row.LoanAccountNo ?? "", Align.Left, 1, "loan-account"),
+                ReportCell.Left(row.LoanTypeName ?? ""),
+                ReportCell.Left(row.LoanIssueDate ?? ""),
+                ReportCell.Left(row.CloseDate ?? ""));
         }
+    }
 
-        <table class="data-table" data-sheet-name="LoanAccountClosed">
-            <colgroup>
-                <col style="width:11%;" />
-                <col style="width:20%;" />
-                <col style="width:6%;" />
-                <col style="width:14%;" />
-                <col style="width:17%;" />
-                <col style="width:16%;" />
-                <col style="width:16%;" />
-            </colgroup>
-            <tbody>
-                <!-- Report Title -->
-                <tr class="meta-title">
-                    <td colspan="7">Loan Account Closed Report</td>
-                </tr>
-
-                <!-- Metadata: stacked, left-aligned -->
-                <tr class="meta-row">
-                    <td colspan="7"><strong>Branch Name :</strong> @branchName</td>
-                </tr>
-                <tr class="meta-row">
-                    <td colspan="7">
-                        <strong>From Date :</strong> @fromDate
-                        &nbsp;&nbsp;&nbsp;&nbsp;
-                        <strong>Till Date :</strong> @toDate
-                    </td>
-                </tr>
-                @if (isMemberGroupFiltered)
-                {
-                    <tr class="meta-row">
-                        <td colspan="7"><strong>Member Group :</strong> @memberGroupName</td>
-                    </tr>
-                }
-                <tr class="meta-row">
-                    <td colspan="7"><strong>Report Generated On :</strong> @generatedOn</td>
-                </tr>
-                <tr class="meta-spacer"><td colspan="7"></td></tr>
-
-                <!-- Table Header -->
-                <tr>
-                    <th>Member ID</th>
-                    <th>Name</th>
-                    <th></th>
-                    <th>A/C No</th>
-                    <th>Loan Type</th>
-                    <th>Issue Date</th>
-                    <th>Closed Date</th>
-                </tr>
-
-                @if (memberGroups.Any())
-                {
-                    foreach (var grp in memberGroups)
-                    {
-                        <!-- Member header band -->
-                        <tr class="member-header-row">
-                            <td>@(grp.Key.MemberId ?? "")</td>
-                            <td>@(grp.Key.FullName ?? "")</td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                            <td></td>
-                        </tr>
-
-                        <!-- That member's closed loans, numbered -->
-                        var sn = 0;
-                        foreach (var row in grp)
-                        {
-                            sn++;
-                            <tr class="detail-row">
-                                <td></td>
-                                <td></td>
-                                <td class="sn-col">@sn</td>
-                                <td class="loan-account">@(row.LoanAccountNo ?? "")</td>
-                                <td>@(row.LoanTypeName ?? "")</td>
-                                <td>@(row.LoanIssueDate ?? "")</td>
-                                <td>@(row.CloseDate ?? "")</td>
-                            </tr>
-                        }
-                    }
-
-                    <!-- Footer -->
-                    <tr class="grand-total-row">
-                        <td colspan="7" class="text-right">
-                            <strong>Total Members: @totalMembers &nbsp;&nbsp;&nbsp; Total Closed Loans: @totalRecords</strong>
-                        </td>
-                    </tr>
-                }
-                else
-                {
-                    <tr>
-                        <td colspan="7" class="text-center">No data found for the selected criteria</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
-    </div>
-</body>
-</html>
+    // footer: one cell spanning all 7 columns
+    if (rows.Count > 0)
+        table.Total($"Total Members: {totalMembers}  |  Total Closed Loans: {totalRecords}", ColumnCount);
+}
+@await Html.PartialAsync("_SheetReport", table.Build())
