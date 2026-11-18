@@ -137,11 +137,14 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 // CORS
+var allowedOrigins = builder.Configuration.GetSection("Cors:Origins").Get<string[]>()
+    ?? new[] { "http://localhost:3000", "http://localhost" };
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowReactApp", policy =>
     {
-        policy.WithOrigins("http://localhost:3000", "http://localhost:5106")
+        //policy.WithOrigins("http://localhost:3000", "http://localhost:5106")
+        policy.WithOrigins(allowedOrigins)
               .AllowAnyHeader()
               .AllowAnyMethod()
               .AllowCredentials()
@@ -259,6 +262,7 @@ app.UseAuthorization();
 DapperTypeMaps.Register();
 
 app.MapControllers();
+
 app.Run();
 
 // Generates a stable, collision-safe schema ID for Swagger/OpenAPI.
