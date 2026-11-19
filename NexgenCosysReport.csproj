@@ -13,6 +13,7 @@
 	<ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
 	<UseAppHost>true</UseAppHost>
 	<GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
+	<EnvironmentName>Production</EnvironmentName>
   </PropertyGroup>
 
   <ItemGroup>
