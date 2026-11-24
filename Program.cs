@@ -2,6 +2,7 @@ using jsreport.AspNetCore;
 using jsreport.Binary;
 using jsreport.Local;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Controllers;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +12,7 @@ using NexgenCosysReport.DbContext;
 using NexgenCosysReport.Dtos.ReportDtos;
 using NexgenCosysReport.Extensions;
 using NexgenCosysReport.Inteface.ReportInterface;
+using NexgenCosysReport.Services;
 using NexgenCosysReport.Services.ReportService;
 using NexgenCosysReport.Utils.Caching;
 using NexgenCosysReport.Utils.Report;
@@ -18,12 +20,19 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Initialize jsreport server with error handling
+// AppContext.BaseDirectory is the folder containing your app's DLL and executable. ".." moves up one folder, and then jsreport-runtime is appended.
+var jsReportRuntime = Path.GetFullPath(
+    Path.Combine(AppContext.BaseDirectory, "..", "jsreport-runtime")
+);
+
+Directory.CreateDirectory(jsReportRuntime);
+
 ILocalWebServerReportingService? jsreportServer = null;
 try
 {
     jsreportServer = new LocalReporting()
         .UseBinary(JsReportBinary.GetBinary())
+        .TempDirectory(jsReportRuntime)
         .KillRunningJsReportProcesses()
         .Configure(cfg =>
         {
@@ -45,6 +54,10 @@ if (jsreportServer != null)
 {
     builder.Services.AddJsReport(jsreportServer);
 }
+
+builder.Services
+    .AddHealthChecks()
+    .AddCheck<JsReportHealthCheck>("jsreport");
 
 builder.Services.AddControllersWithViews();
 builder.Services.AddEndpointsApiExplorer();
@@ -203,6 +216,7 @@ builder.Services.AddSingleton<IReportDataCache, ReportDataCache>();
 builder.Services.AddScoped<IReportHeaderProvider, ReportHeaderProvider>();
 builder.Services.AddScoped<CustomHeaderResponse>();
 builder.Services.AddHostedService<ProgressiveTempCleanupService>();
+builder.Services.AddHostedService<JsReportMonitorService>();
 
 
 
@@ -260,7 +274,27 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 DapperTypeMaps.Register();
+app.MapHealthChecks("/health", new HealthCheckOptions
+{
+    ResponseWriter = async (context, report) =>
+    {
+        context.Response.ContentType = "application/json";
 
+        var result = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            status = report.Status.ToString(),
+            checks = report.Entries.Select(e => new
+            {
+                name = e.Key,
+                status = e.Value.Status.ToString(),
+                description = e.Value.Description,
+                error = e.Value.Exception?.Message
+            })
+        });
+
+        await context.Response.WriteAsync(result);
+    }
+});
 app.MapControllers();
 
 app.Run();
